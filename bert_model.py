@@ -13,7 +13,6 @@ from typing import NamedTuple, List
 import copy
 import io
 import json
-import logging
 import math
 import pathlib
 import re
@@ -271,12 +270,9 @@ class BERT(torch.nn.Module):
         super().__init__()
 
         config = BERTConfig(
-                embedding_dim,
-                num_heads,
-                embedding_dropout_probability,
-                attention_dropout_probability,
-                residual_dropout_probability,
-                activation_function,
+            embedding_dim,
+            num_heads,
+            dropout_probability,
         )
 
         # the embedding size is vocab_size + n_special embeddings + n_ctx
@@ -288,7 +284,7 @@ class BERT(torch.nn.Module):
         self.num_output_layers = 1 + num_layers
 
         self.embed = torch.nn.Embedding(embedding_size, embedding_dim)
-        self.drop = torch.nn.Dropout(embedding_dropout_probability)
+        self.drop = torch.nn.Dropout(dropout_probability)
 
         block = Block(n_ctx, config, scale=True)
         self.h = torch.nn.ModuleList([copy.deepcopy(block) for _ in range(num_layers)])
@@ -332,16 +328,13 @@ class BERT(torch.nn.Module):
                      names: List[str] = _PARAMETER_NAMES) -> None:
         # pylint: disable=dangerous-default-value
 
-        logger.info(f"loading weights from {bert_model_path}")
-        # if `file_path` is a URL, redirect to the cache
-
         with tarfile.open(bert_model_path) as tmp:
             num_params_files = len([member for member in tmp.getmembers() if member.name.endswith('.npy')])
             shapesfile = tmp.extractfile('model/params_shapes.json')
             if shapesfile:
                 shapes = json.loads(shapesfile.read())
             else:
-                raise ConfigurationError("unable to find model/params_shapes.json in the archive")
+                raise Exception("unable to find model/params_shapes.json in the archive")
 
             # numpy can't read from a tarfile directly, so we need a workaround
             # https://github.com/numpy/numpy/issues/7989#issuecomment-341656702
