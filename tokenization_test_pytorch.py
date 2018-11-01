@@ -119,3 +119,7 @@ class TokenizationTest(unittest.TestCase):
 
         self.assertFalse(tokenization._is_punctuation(u"A"))
         self.assertFalse(tokenization._is_punctuation(u" "))
+
+
+if __name__ == '__main__':
+    unittest.main()
