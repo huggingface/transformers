@@ -119,7 +119,7 @@ class BERTLayerNorm(nn.Module):
         self.variance_epsilon = variance_epsilon
 
     def forward(self, x):
-        # TODO check it's identical to TF implementation in details
+        # TODO check it's identical to TF implementation in details (epsilon and axes)
         u = x.mean(-1, keepdim=True)
         s = (x - u).pow(2).mean(-1, keepdim=True)
         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
@@ -128,9 +128,7 @@ class BERTLayerNorm(nn.Module):
     #   inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name)
 
 class BERTEmbeddings(nn.Module):
-    def __init__(self, embedding_size, vocab_size,
-                 token_type_vocab_size, max_position_embeddings,
-                 config):
+    def __init__(self, config):
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size)
 
@@ -323,27 +321,32 @@ class BERTEncoder(nn.Module):
         Return:
             float Tensor of shape [batch_size, seq_length, hidden_size]
         """
+        all_encoder_layers = []
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask)
-        return hidden_states
+            all_encoder_layers.append(hidden_states)
+        return all_encoder_layers
 
 
 class BERTPooler(nn.Module):
     def __init__(self, config):
         super(BERTPooler, self).__init__()
-        layer = BERTLayer(n_ctx, cfg, scale=True)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])    
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
 
-    def forward(self, hidden_states, attention_mask):
+    def forward(self, hidden_states):
         """
         Args:
             hidden_states: float Tensor of shape [batch_size, seq_length, hidden_size]
         Return:
-            float Tensor of shape [batch_size, seq_length, hidden_size]
+            float Tensor of shape [batch_size, hidden_size]
         """
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, attention_mask)
-        return hidden_states
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token. We assume that this has been pre-trained
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 
 class BertModel(nn.Module):
@@ -381,14 +384,6 @@ class BertModel(nn.Module):
                 is invalid.
         """
         super(BertModel).__init__()
-        config = copy.deepcopy(config)
-        if not is_training:
-            config.hidden_dropout_prob = 0.0
-            config.attention_probs_dropout_prob = 0.0
-
-        batch_size = input_ids.size(0)
-        seq_length = input_ids.size(1)
-
         self.embeddings = BERTEmbeddings(config)
         self.encoder = BERTEncoder(config)
         self.pooler = BERTPooler(config)
@@ -396,4 +391,6 @@ class BertModel(nn.Module):
     def forward(self, input_ids, token_type_ids, attention_mask):
         embedding_output = self.embeddings(input_ids, token_type_ids)
         all_encoder_layers = self.encoder(embedding_output, attention_mask)
-        return all_encoder_layers
+        sequence_output = all_encoder_layers[-1]
+        pooled_output = self.pooler(sequence_output)
+        return all_encoder_layers, pooled_output
