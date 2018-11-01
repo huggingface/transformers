@@ -22,7 +22,7 @@ SCHEDULES = {
 }
 
 
-class OpenAIAdam(Optimizer):
+class BERTAdam(Optimizer):
     """Implements Open AI version of Adam algorithm with weight decay fix.
     """
     def __init__(self, params, lr, schedule, warmup, t_total,
@@ -43,7 +43,7 @@ class OpenAIAdam(Optimizer):
         defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
                         b1=b1, b2=b2, e=e, l2=l2, vector_l2=vector_l2,
                         max_grad_norm=max_grad_norm)
-        super(OpenAIAdam, self).__init__(params, defaults)
+        super(BERTAdam, self).__init__(params, defaults)
 
     def get_lr(self):
         lr = []

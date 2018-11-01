@@ -20,7 +20,8 @@ from __future__ import print_function
 
 import csv
 import os
-import modeling_pytorch
+from modeling_pytorch import BertConfig, BertModel
+from optimization_pytorch import BERTAdam
 # import optimization
 import tokenization_pytorch
 import torch
@@ -116,10 +117,16 @@ parser.add_argument("--iterations_per_loop",
                     type = int,
                     help = "How many steps to make in each estimator call.")
  
-parser.add_argument("--use_gpu",
-                    default = True,
+parser.add_argument("--no_cuda",
+                    default = False,
                     type = bool,
-                    help = "Whether to use GPU")                    
+                    help = "Whether not to use CUDA when available")
+
+parser.add_argument("--local_rank",
+                    type=int,
+                    default=-1,
+                    help = "local_rank for distributed training on gpus")
+
 ### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###                   
 parser.add_argument("--use_tpu",
                     default = False,
@@ -403,8 +410,8 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
                         segment_ids=segment_ids,
                         label_id=label_id))
     return features
-    
-    
+
+
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
     """Truncates a sequence pair in place to the maximum length."""
 
@@ -420,19 +427,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_a.pop()
         else:
             tokens_b.pop()
-            
 
-def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
-                                 labels, num_labels, use_one_hot_embeddings):
-    raise NotImplementedError()
-
-
-def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
-                    num_train_steps, num_warmup_steps, use_gpu,
-                    use_one_hot_embeddings):
-    raise NotImplementedError()
-    ### ATTENTION - I removed the `use_tpu` argument
-    
 
 def input_fn_builder(features, seq_length, is_training, drop_remainder):
     """Creates an `input_fn` closure to be passed to TPUEstimator.""" ### ATTENTION - To rewrite ###
@@ -477,12 +472,21 @@ def main(_):
         "mnli": MnliProcessor,
         "mrpc": MrpcProcessor,
     }
-    
+
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        n_gpu = torch.cuda.device_count()
+    else:
+        device = torch.device("cuda", args.local_rank)
+        n_gpu = 1
+        print("Initializing the distributed backend: NCCL")
+    print("device", device, "n_gpu", n_gpu)
+
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
-        
-    bert_config = modeling_pytorch.BertConfig.from_json_file(args.bert_config_file)
-    
+
+    bert_config = BertConfig.from_json_file(args.bert_config_file)
+
     if args.max_seq_length > bert_config.max_position_embeddings:
         raise ValueError(
             "Cannot use sequence length %d because the BERT model "
@@ -495,7 +499,7 @@ def main(_):
     os.makedirs(args.output_dir, exist_ok=True)
 
     task_name = args.task_name.lower()
-    
+
     if task_name not in processors:
         raise ValueError("Task not found: %s" % (task_name))
 
@@ -505,51 +509,26 @@ def main(_):
 
     tokenizer = tokenization_pytorch.FullTokenizer(
         vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
-        
-    # tpu_cluster_resolver = None
-    # if FLAGS.use_tpu and FLAGS.tpu_name:
-    #     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-    #         FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
-    # is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-    # run_config = tf.contrib.tpu.RunConfig(
-    #     cluster=tpu_cluster_resolver,
-    #     master=FLAGS.master,
-    #     model_dir=FLAGS.output_dir,
-    #     save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-    #     tpu_config=tf.contrib.tpu.TPUConfig(
-    #         iterations_per_loop=FLAGS.iterations_per_loop,
-    #         num_shards=FLAGS.num_tpu_cores,
-    #         per_host_input_for_training=is_per_host))
-    
     train_examples = None
     num_train_steps = None
-    num_warmup_steps = None
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
         num_train_steps = int(
             len(train_examples) / args.train_batch_size * args.num_train_epochs)
-        num_warmup_steps = int(num_train_steps * args.warmup_proportion)
-    
-    model_fn = model_fn_builder(
-        bert_config=bert_config,
-        num_labels=len(label_list),
-        init_checkpoint=args.init_checkpoint,
-        learning_rate=args.learning_rate,
-        num_train_steps=num_train_steps,
-        num_warmup_steps=num_warmup_steps,
-        use_gpu=args.use_gpu,
-        use_one_hot_embeddings=args.use_gpu) ### TO DO - to check when model_fn is written)
-    
-    # If TPU is not available, this will fall back to normal Estimator on CPU
-    # or GPU. - TO DO
-    # estimator = tf.contrib.tpu.TPUEstimator(
-    #     use_tpu=args.use_tpu,
-    #     model_fn=model_fn,
-    #     config=run_config,
-    #     train_batch_size=args.train_batch_size,
-    #     eval_batch_size=args.eval_batch_size)
-    
+
+    model = BertModel(bert_config)
+    if args.init_checkpoint is not None:
+        model.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
+    model.to(device)
+
+    optimizer = BERTAdam([{'params': [p for n, p in model.named_parameters() if n != 'bias'], 'l2': 0.01},
+                          {'params': [p for n, p in model.named_parameters() if n != 'bias']}
+                         ],
+                         lr=args.learning_rate, schedule='warmup_linear',
+                         warmup=args.warmup_proportion,
+                         t_total=num_train_steps)
+
     if args.do_train:
         train_features = convert_examples_to_features(
             train_examples, label_list, args.max_seq_length, tokenizer)
@@ -567,9 +546,9 @@ def main(_):
             output = model_fn(batch)
             loss = output["loss"]
             loss.backward()
-            
-            
-    
+
+
+
     if args.do_eval:
         eval_examples = processor.get_dev_examples(args.data_dir)
         eval_features = convert_examples_to_features(
@@ -606,4 +585,3 @@ def main(_):
     
 if __name__ == "__main__":
     main()
-    return None
