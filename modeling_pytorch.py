@@ -492,7 +492,7 @@ class BertForQuestionAnswering(nn.Module):
             
             def compute_loss(logits, positions):
                 max_position = positions.max().item()
-                one_hot = torch.FloatTensor(batch_size, max(max_position, seq_length) +1).zero_()
+                one_hot = torch.FloatTensor(batch_size, max(max_position, seq_length) +1, device=input_ids.device).zero_()
                 one_hot = one_hot.scatter(1, positions, 1)
                 one_hot = one_hot[:, :seq_length]
                 log_probs = nn.functional.log_softmax(logits, dim = -1).view(batch_size, seq_length)
