@@ -54,7 +54,14 @@ python run_classifier_pytorch.py \
 ```
 
 
+The data for SQuAD can be downloaded with the following links and should be saved in a `$SQUAD_DIR` directory.
+*   [train-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json)
+*   [dev-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json)
+*   [evaluate-v1.1.py](https://github.com/allenai/bi-att-flow/blob/master/squad/evaluate-v1.1.py)
+
+
 ```shell
+export SQUAD_DIR=/path/to/SQUAD
 python run_squad_pytorch.py \
   --vocab_file=$BERT_BASE_DIR/vocab.txt \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
