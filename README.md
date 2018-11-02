@@ -2,6 +2,64 @@
 
 ## Introduction
 
+This is a PyTorch implementation of the [TensorFlow code](https://github.com/google-research/bert) released by Google AI with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
+
+## Converting the TensorFlow pre-trained models to Pytorch
+
+You can convert the pre-trained weights released by GoogleAI by calling the script `convert_tf_checkpoint_to_pytorch.py`.
+It takes a TensorFlow checkpoint (`bert_model.ckpt`) containg the pre-trained weights and converts it to a `.bin` file readable for PyTorch.
+
+TensorFlow pre-trained models can be found in the [original TensorFlow code](https://github.com/google-research/bert). We give an example with the `BERT-Base Uncased` model:
+
+```shell
+export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
+export BERT_PYTORCH_DIR=/path/to/pytorch/bert/uncased_L-12_H-768_A-12
+
+python3.6 convert_tf_checkpoint_to_pytorch.py \
+  --tf_checkpoint_path=$BERT_BASE_DIR/bert_model.ckpt \
+  --bert_config_file=$BERT_BASE_DIR/bert_config.json \
+  --pytorch_dump_path=$BERT_PYTORCH_DIR/pytorch_model.bin
+```
+
+## Fine-tuning with BERT: running the examples
+
+We showcase the same examples as in the original implementation: fine-tuning on the MRPC classification corpus and the question answering dataset SQUAD.
+
+Before running theses examples you should download the
+[GLUE data](https://gluebenchmark.com/tasks) by running
+[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
+and unpack it to some directory `$GLUE_DIR`. Please also download the `BERT-Base`
+checkpoint, unzip it to some directory `$BERT_BASE_DIR`, and convert it to its PyTorch version as explained in the previous section.
+
+This example code fine-tunes `BERT-Base` on the Microsoft Research Paraphrase
+Corpus (MRPC) corpus and runs in less than 10 minutes on a single K-80.
+
+```shell
+export GLUE_DIR=/path/to/glue
+
+python run_classifier_pytorch.py \
+  --task_name MRPC \
+  --do_train \
+  --do_eval \
+  --do_lower_case \
+  --data_dir $GLUE_DIR/MRPC/ \
+  --vocab_file $BERT_BASE_DIR/vocab.txt \
+  --bert_config_file $BERT_BASE_DIR/bert_config.json \
+  --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
+  --max_seq_length 128 \
+  --train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3.0 \
+  --output_dir /tmp/mrpc_output_pytorch/
+```
+
+
+
+
+
+
+## Introduction
+
 **BERT**, or **B**idirectional **E**mbedding **R**epresentations from
 **T**ransformers, is a new method of pre-training language representations which
 obtains state-of-the-art results on a wide array of Natural Language Processing
