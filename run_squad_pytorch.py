@@ -23,8 +23,6 @@ import logging
 import json
 import math
 import os
-import modeling
-import optimization
 import tokenization
 import six
 import argparse
@@ -57,7 +55,7 @@ parser.add_argument("--predict_file", default=None, type=str,
                     help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
 parser.add_argument("--init_checkpoint", default=None, type=str,
                     help="Initial checkpoint (usually from a pre-trained BERT model).")
-parser.add_argument("--do_lower_case", default=True, type=bool,
+parser.add_argument("--do_lower_case", default=True, action='store_true',
                     help="Whether to lower case the input text. Should be True for uncased "
                          "models and False for cased models.")
 parser.add_argument("--max_seq_length", default=384, type=int,
@@ -68,8 +66,8 @@ parser.add_argument("--doc_stride", default=128, type=int,
 parser.add_argument("--max_query_length", default=64, type=int,
                     help="The maximum number of tokens for the question. Questions longer than this will "
                          "be truncated to this length.")
-parser.add_argument("--do_train", default=False, type=bool, help="Whether to run training.")
-parser.add_argument("--do_predict", default=False, type=bool, help="Whether to run eval on the dev set.")
+parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
 parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
 parser.add_argument("--predict_batch_size", default=8, type=int, help="Total batch size for predictions.")
 parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
@@ -87,19 +85,19 @@ parser.add_argument("--max_answer_length", default=30, type=int,
                          "and end predictions are not conditioned on one another.")
 
 ### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-parser.add_argument("--use_tpu", default=False, type=bool, help="Whether to use TPU or GPU/CPU.")
-parser.add_argument("--tpu_name", default=None, type=str,
-                    help="The Cloud TPU to use for training. This should be either the name used when creating the "
-                         "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
-parser.add_argument("--tpu_zone", default=None, type=str,
-                    help="[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt "
-                         "to automatically detect the GCE project from metadata.")
-parser.add_argument("--gcp_project", default=None, type=str,
-                    help="[Optional] Project name for the Cloud TPU-enabled project. If not specified, we will attempt "
-                         "to automatically detect the GCE project from metadata.")
-parser.add_argument("--master", default=None, type=str, help="[Optional] TensorFlow master URL.")
-parser.add_argument("--num_tpu_cores", default=8, type=int, help="Only used if `use_tpu` is True. "
-                                                                 "Total number of TPU cores to use.")
+# parser.add_argument("--use_tpu", default=False, type=bool, help="Whether to use TPU or GPU/CPU.")
+# parser.add_argument("--tpu_name", default=None, type=str,
+#                     help="The Cloud TPU to use for training. This should be either the name used when creating the "
+#                          "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
+# parser.add_argument("--tpu_zone", default=None, type=str,
+#                     help="[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt "
+#                          "to automatically detect the GCE project from metadata.")
+# parser.add_argument("--gcp_project", default=None, type=str,
+#                     help="[Optional] Project name for the Cloud TPU-enabled project. If not specified, we will attempt "
+#                          "to automatically detect the GCE project from metadata.")
+# parser.add_argument("--master", default=None, type=str, help="[Optional] TensorFlow master URL.")
+# parser.add_argument("--num_tpu_cores", default=8, type=int, help="Only used if `use_tpu` is True. "
+#                                                                  "Total number of TPU cores to use.")
 ### END - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
 
 parser.add_argument("--verbose_logging", default=False, type=bool,
@@ -864,7 +862,7 @@ def main():
             eval_sampler = SequentialSampler(eval_data)
         else:
             eval_sampler = DistributedSampler(eval_data)
-        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
+        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.predict_batch_size)
 
         model.eval()
         all_results = []
