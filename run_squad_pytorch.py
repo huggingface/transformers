@@ -910,8 +910,8 @@ def main():
             #end_logits = [x.item() for x in end_logits]
             end_logits = [x.view(-1).detach().cpu().numpy() for x in end_logits]
             for idx, i in enumerate(unique_id):
-                s = start_logits[idx]
-                e = end_logits[idx]
+                s = [float(x) for x in start_logits[idx]]
+                e = [float(x) for x in end_logits[idx]]
                 all_results.append(
                     RawResult(
                         unique_id=i,
