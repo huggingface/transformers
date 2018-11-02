@@ -24,55 +24,6 @@ import optimization
 import tensorflow as tf
 import argparse
 
-parser = argparse.ArgumentParser()
-
-## Required parameters
-parser.add_argument("--bert_config_file", default=None, type=str, required=True,
-                    help="The config json file corresponding to the pre-trained BERT model. "
-                         "This specifies the model architecture.")
-parser.add_argument("--input_file", default=None, type=str, required=True,
-                    help="Input TF example files (can be a glob or comma separated).")
-parser.add_argument("--output_dir", default=None, type=str, required=True,
-                    help="The output directory where the model checkpoints will be written.")
-
-## Other parameters
-parser.add_argument("--init_checkpoint", default=None, type=str, 
-                    help="Initial checkpoint (usually from a pre-trained BERT model).")
-parser.add_argument("--max_seq_length", default=128, type=int, 
-                    help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
-                         "than this will be truncated, and sequences shorter than this will be padded. "
-                         "Must match data generation.")
-parser.add_argument("--max_predictions_per_seq", default=20, type=int, 
-                    help="Maximum number of masked LM predictions per sequence. Must match data generation.")
-parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
-parser.add_argument("--do_eval", default=False, action='store_true', help="Whether to run eval on the dev set.")
-parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
-parser.add_argument("--eval_batch_size", default=8, type=int, help="Total batch size for eval.")
-parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-parser.add_argument("--num_train_steps", default=100000, type=int, help="Number of training steps.")
-parser.add_argument("--num_warmup_steps", default=10000, type=int, help="Number of warmup steps.")
-parser.add_argument("--save_checkpoints_steps", default=1000, type=int, help="How often to save the model checkpoint.")
-parser.add_argument("--iterations_per_loop", default=1000, type=int, 
-                    help="How many steps to make in each estimator call.")
-parser.add_argument("--max_eval_steps", default=100, type=int, help="Maximum number of eval steps.")
-### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-parser.add_argument("--use_tpu", default=False, action='store_true', help="Whether to use TPU or GPU/CPU.")
-parser.add_argument("--tpu_name", default=None, type=str,
-                    help="The Cloud TPU to use for training. This should be either the name used when creating the "
-                         "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
-parser.add_argument("--tpu_zone", default=None, type=str,
-                    help="[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt "
-                         "to automatically detect the GCE project from metadata.")
-parser.add_argument("--gcp_project", default=None, type=str,
-                    help="[Optional] Project name for the Cloud TPU-enabled project. If not specified, we will attempt "
-                         "to automatically detect the GCE project from metadata.")
-parser.add_argument("--master", default=None, type=str, help="[Optional] TensorFlow master URL.")
-parser.add_argument("--num_tpu_cores", default=8, type=int, 
-                    help="Only used if `use_tpu` is True. Total number of TPU cores to use.")
-### END - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-
-args = parser.parse_args()
-
 
 def model_fn_builder(bert_config, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
@@ -373,6 +324,56 @@ def _decode_record(record, name_to_features):
 
 
 def main(_):
+    parser = argparse.ArgumentParser()
+
+    ## Required parameters
+    parser.add_argument("--bert_config_file", default=None, type=str, required=True,
+                        help="The config json file corresponding to the pre-trained BERT model. "
+                             "This specifies the model architecture.")
+    parser.add_argument("--input_file", default=None, type=str, required=True,
+                        help="Input TF example files (can be a glob or comma separated).")
+    parser.add_argument("--output_dir", default=None, type=str, required=True,
+                        help="The output directory where the model checkpoints will be written.")
+
+    ## Other parameters
+    parser.add_argument("--init_checkpoint", default=None, type=str,
+                        help="Initial checkpoint (usually from a pre-trained BERT model).")
+    parser.add_argument("--max_seq_length", default=128, type=int,
+                        help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
+                             "than this will be truncated, and sequences shorter than this will be padded. "
+                             "Must match data generation.")
+    parser.add_argument("--max_predictions_per_seq", default=20, type=int,
+                        help="Maximum number of masked LM predictions per sequence. Must match data generation.")
+    parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_eval", default=False, action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
+    parser.add_argument("--eval_batch_size", default=8, type=int, help="Total batch size for eval.")
+    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--num_train_steps", default=100000, type=int, help="Number of training steps.")
+    parser.add_argument("--num_warmup_steps", default=10000, type=int, help="Number of warmup steps.")
+    parser.add_argument("--save_checkpoints_steps", default=1000, type=int,
+                        help="How often to save the model checkpoint.")
+    parser.add_argument("--iterations_per_loop", default=1000, type=int,
+                        help="How many steps to make in each estimator call.")
+    parser.add_argument("--max_eval_steps", default=100, type=int, help="Maximum number of eval steps.")
+    ### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
+    parser.add_argument("--use_tpu", default=False, action='store_true', help="Whether to use TPU or GPU/CPU.")
+    parser.add_argument("--tpu_name", default=None, type=str,
+                        help="The Cloud TPU to use for training. This should be either the name used when creating the "
+                             "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
+    parser.add_argument("--tpu_zone", default=None, type=str,
+                        help="[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt "
+                             "to automatically detect the GCE project from metadata.")
+    parser.add_argument("--gcp_project", default=None, type=str,
+                        help="[Optional] Project name for the Cloud TPU-enabled project. If not specified, "
+                             "we will attempt to automatically detect the GCE project from metadata.")
+    parser.add_argument("--master", default=None, type=str, help="[Optional] TensorFlow master URL.")
+    parser.add_argument("--num_tpu_cores", default=8, type=int,
+                        help="Only used if `use_tpu` is True. Total number of TPU cores to use.")
+    ### END - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
+
+    args = parser.parse_args()
+
     tf.logging.set_verbosity(tf.logging.INFO)
 
     if not args.do_train and not args.do_eval:
