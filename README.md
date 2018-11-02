@@ -15,7 +15,7 @@ TensorFlow pre-trained models can be found in the [original TensorFlow code](htt
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 export BERT_PYTORCH_DIR=/path/to/pytorch/bert/uncased_L-12_H-768_A-12
 
-python3.6 convert_tf_checkpoint_to_pytorch.py \
+python convert_tf_checkpoint_to_pytorch.py \
   --tf_checkpoint_path=$BERT_BASE_DIR/bert_model.ckpt \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
   --pytorch_dump_path=$BERT_PYTORCH_DIR/pytorch_model.bin
@@ -53,6 +53,23 @@ python run_classifier_pytorch.py \
   --output_dir /tmp/mrpc_output_pytorch/
 ```
 
+
+```shell
+python run_squad_pytorch.py \
+  --vocab_file=$BERT_BASE_DIR/vocab.txt \
+  --bert_config_file=$BERT_BASE_DIR/bert_config.json \
+  --init_checkpoint=$BERT_PYTORCH_DIR/pytorch_model.bin \
+  --do_train \
+  --train_file=$SQUAD_DIR/train-v1.1.json \
+  --do_predict \
+  --predict_file=$SQUAD_DIR/dev-v1.1.json \
+  --train_batch_size=12 \
+  --learning_rate=5e-5 \
+  --num_train_epochs=2.0 \
+  --max_seq_length=384 \
+  --doc_stride=128 \
+  --output_dir=/tmp/squad_base_pytorch/
+```
 
 
 
