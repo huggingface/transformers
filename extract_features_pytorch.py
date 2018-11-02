@@ -316,7 +316,7 @@ def read_examples(input_file):
     return examples
 
 
-def main(_):
+def main():
     tf.logging.set_verbosity(tf.logging.INFO)
 
     layer_indexes = [int(x) for x in args.layers.split(",")]
@@ -387,4 +387,4 @@ def main(_):
 
 
 if __name__ == "__main__":
-    tf.app.run()
+    main()
