@@ -30,13 +30,13 @@ class TokenizationTest(unittest.TestCase):
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
             "##ing", ","
         ]
-        with tempfile.NamedTemporaryFile(delete=False) as vocab_writer:
+        with open("/tmp/bert_tokenizer_test.txt", "w") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
             vocab_file = vocab_writer.name
 
         tokenizer = tokenization.FullTokenizer(vocab_file)
-        os.unlink(vocab_file)
+        os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
