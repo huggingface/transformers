@@ -39,82 +39,6 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
 
-parser = argparse.ArgumentParser()
-
-## Required parameters
-parser.add_argument("--bert_config_file", default=None, type=str, required=True,
-                    help="The config json file corresponding to the pre-trained BERT model. " 
-                         "This specifies the model architecture.")
-parser.add_argument("--vocab_file", default=None, type=str, required=True,
-                    help="The vocabulary file that the BERT model was trained on.")
-parser.add_argument("--output_dir", default=None, type=str, required=True,
-                    help="The output directory where the model checkpoints will be written.")
-
-## Other parameters
-parser.add_argument("--train_file", default=None, type=str, help="SQuAD json for training. E.g., train-v1.1.json")
-parser.add_argument("--predict_file", default=None, type=str,
-                    help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
-parser.add_argument("--init_checkpoint", default=None, type=str,
-                    help="Initial checkpoint (usually from a pre-trained BERT model).")
-parser.add_argument("--do_lower_case", default=True, action='store_true',
-                    help="Whether to lower case the input text. Should be True for uncased "
-                         "models and False for cased models.")
-parser.add_argument("--max_seq_length", default=384, type=int,
-                    help="The maximum total input sequence length after WordPiece tokenization. "
-                         "Sequences longer than this will be truncated, and sequences shorter than this will be padded.")
-parser.add_argument("--doc_stride", default=128, type=int,
-                    help="When splitting up a long document into chunks, how much stride to take between chunks.")
-parser.add_argument("--max_query_length", default=64, type=int,
-                    help="The maximum number of tokens for the question. Questions longer than this will "
-                         "be truncated to this length.")
-parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
-parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
-parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
-parser.add_argument("--predict_batch_size", default=8, type=int, help="Total batch size for predictions.")
-parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-parser.add_argument("--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform.")
-parser.add_argument("--warmup_proportion", default=0.1, type=float,
-                    help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% "
-                         "of training.")
-parser.add_argument("--save_checkpoints_steps", default=1000, type=int, help="How often to save the model checkpoint.")
-parser.add_argument("--iterations_per_loop", default=1000, type=int,
-                    help="How many steps to make in each estimator call.")
-parser.add_argument("--n_best_size", default=20, type=int,
-                    help="The total number of n-best predictions to generate in the nbest_predictions.json output file.")
-parser.add_argument("--max_answer_length", default=30, type=int,
-                    help="The maximum length of an answer that can be generated. This is needed because the start "
-                         "and end predictions are not conditioned on one another.")
-
-### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-# parser.add_argument("--use_tpu", default=False, action='store_true', help="Whether to use TPU or GPU/CPU.")
-# parser.add_argument("--tpu_name", default=None, type=str,
-#                     help="The Cloud TPU to use for training. This should be either the name used when creating the "
-#                          "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
-# parser.add_argument("--tpu_zone", default=None, type=str,
-#                     help="[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt "
-#                          "to automatically detect the GCE project from metadata.")
-# parser.add_argument("--gcp_project", default=None, type=str,
-#                     help="[Optional] Project name for the Cloud TPU-enabled project. If not specified, we will attempt "
-#                          "to automatically detect the GCE project from metadata.")
-# parser.add_argument("--master", default=None, type=str, help="[Optional] TensorFlow master URL.")
-# parser.add_argument("--num_tpu_cores", default=8, type=int, help="Only used if `use_tpu` is True. "
-#                                                                  "Total number of TPU cores to use.")
-### END - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-
-parser.add_argument("--verbose_logging", default=False, action='store_true',
-                    help="If true, all of the warnings related to data processing will be printed. "
-                         "A number of warnings are expected for a normal SQuAD evaluation.")
-parser.add_argument("--no_cuda",
-                    default = False,
-                    action='store_true',
-                    help = "Whether not to use CUDA when available")
-parser.add_argument("--local_rank",
-                    type=int,
-                    default=-1,
-                    help = "local_rank for distributed training on gpus")
-
-args = parser.parse_args()
-
 
 class SquadExample(object):
     """A single training/test example for simple sequence classification."""
@@ -744,6 +668,85 @@ def _compute_softmax(scores):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+
+    ## Required parameters
+    parser.add_argument("--bert_config_file", default=None, type=str, required=True,
+                        help="The config json file corresponding to the pre-trained BERT model. "
+                             "This specifies the model architecture.")
+    parser.add_argument("--vocab_file", default=None, type=str, required=True,
+                        help="The vocabulary file that the BERT model was trained on.")
+    parser.add_argument("--output_dir", default=None, type=str, required=True,
+                        help="The output directory where the model checkpoints will be written.")
+
+    ## Other parameters
+    parser.add_argument("--train_file", default=None, type=str, help="SQuAD json for training. E.g., train-v1.1.json")
+    parser.add_argument("--predict_file", default=None, type=str,
+                        help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
+    parser.add_argument("--init_checkpoint", default=None, type=str,
+                        help="Initial checkpoint (usually from a pre-trained BERT model).")
+    parser.add_argument("--do_lower_case", default=True, action='store_true',
+                        help="Whether to lower case the input text. Should be True for uncased "
+                             "models and False for cased models.")
+    parser.add_argument("--max_seq_length", default=384, type=int,
+                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
+                             "longer than this will be truncated, and sequences shorter than this will be padded.")
+    parser.add_argument("--doc_stride", default=128, type=int,
+                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
+    parser.add_argument("--max_query_length", default=64, type=int,
+                        help="The maximum number of tokens for the question. Questions longer than this will "
+                             "be truncated to this length.")
+    parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
+    parser.add_argument("--predict_batch_size", default=8, type=int, help="Total batch size for predictions.")
+    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--num_train_epochs", default=3.0, type=float,
+                        help="Total number of training epochs to perform.")
+    parser.add_argument("--warmup_proportion", default=0.1, type=float,
+                        help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% "
+                             "of training.")
+    parser.add_argument("--save_checkpoints_steps", default=1000, type=int,
+                        help="How often to save the model checkpoint.")
+    parser.add_argument("--iterations_per_loop", default=1000, type=int,
+                        help="How many steps to make in each estimator call.")
+    parser.add_argument("--n_best_size", default=20, type=int,
+                        help="The total number of n-best predictions to generate in the nbest_predictions.json "
+                             "output file.")
+    parser.add_argument("--max_answer_length", default=30, type=int,
+                        help="The maximum length of an answer that can be generated. This is needed because the start "
+                             "and end predictions are not conditioned on one another.")
+
+    ### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
+    # parser.add_argument("--use_tpu", default=False, action='store_true', help="Whether to use TPU or GPU/CPU.")
+    # parser.add_argument("--tpu_name", default=None, type=str,
+    #                     help="The Cloud TPU to use for training. This should be either the name used when creating the "
+    #                          "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
+    # parser.add_argument("--tpu_zone", default=None, type=str,
+    #                     help="[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt "
+    #                          "to automatically detect the GCE project from metadata.")
+    # parser.add_argument("--gcp_project", default=None, type=str,
+    #                     help="[Optional] Project name for the Cloud TPU-enabled project. If not specified, we will attempt "
+    #                          "to automatically detect the GCE project from metadata.")
+    # parser.add_argument("--master", default=None, type=str, help="[Optional] TensorFlow master URL.")
+    # parser.add_argument("--num_tpu_cores", default=8, type=int, help="Only used if `use_tpu` is True. "
+    #                                                                  "Total number of TPU cores to use.")
+    ### END - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
+
+    parser.add_argument("--verbose_logging", default=False, action='store_true',
+                        help="If true, all of the warnings related to data processing will be printed. "
+                             "A number of warnings are expected for a normal SQuAD evaluation.")
+    parser.add_argument("--no_cuda",
+                        default=False,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
+    parser.add_argument("--local_rank",
+                        type=int,
+                        default=-1,
+                        help="local_rank for distributed training on gpus")
+
+    args = parser.parse_args()
+
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
