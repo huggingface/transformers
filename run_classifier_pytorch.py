@@ -552,6 +552,7 @@ def main():
             input_ids = input_ids.to(device)
             input_mask = input_mask.float().to(device)
             segment_ids = segment_ids.to(device)
+            label_ids = label_ids.to(device)
 
             tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
 
