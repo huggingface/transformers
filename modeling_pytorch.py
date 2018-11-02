@@ -412,7 +412,8 @@ class BertForSequenceClassification(nn.Module):
     model = modeling.BertModel(config, num_labels)
     logits = model(input_ids, token_type_ids, input_mask)
     ```
-    """    def __init__(self, config, num_labels):
+    """
+    def __init__(self, config, num_labels):
         super(BertForSequenceClassification, self).__init__()
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
