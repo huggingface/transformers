@@ -86,7 +86,7 @@ parser.add_argument("--max_answer_length", default=30, type=int,
                          "and end predictions are not conditioned on one another.")
 
 ### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-# parser.add_argument("--use_tpu", default=False, type=bool, help="Whether to use TPU or GPU/CPU.")
+# parser.add_argument("--use_tpu", default=False, action='store_true', help="Whether to use TPU or GPU/CPU.")
 # parser.add_argument("--tpu_name", default=None, type=str,
 #                     help="The Cloud TPU to use for training. This should be either the name used when creating the "
 #                          "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
@@ -101,7 +101,7 @@ parser.add_argument("--max_answer_length", default=30, type=int,
 #                                                                  "Total number of TPU cores to use.")
 ### END - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
 
-parser.add_argument("--verbose_logging", default=False, type=bool,
+parser.add_argument("--verbose_logging", default=False, action='store_true',
                     help="If true, all of the warnings related to data processing will be printed. "
                          "A number of warnings are expected for a normal SQuAD evaluation.")
 parser.add_argument("--no_cuda",
