@@ -44,8 +44,8 @@ parser.add_argument("--max_seq_length", default=128, type=int,
                          "Must match data generation.")
 parser.add_argument("--max_predictions_per_seq", default=20, type=int, 
                     help="Maximum number of masked LM predictions per sequence. Must match data generation.")
-parser.add_argument("--do_train", default=False, type=bool, help="Whether to run training.")
-parser.add_argument("--do_eval", default=False, type=bool, help="Whether to run eval on the dev set.")
+parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+parser.add_argument("--do_eval", default=False, action='store_true', help="Whether to run eval on the dev set.")
 parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
 parser.add_argument("--eval_batch_size", default=8, type=int, help="Total batch size for eval.")
 parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
@@ -56,7 +56,7 @@ parser.add_argument("--iterations_per_loop", default=1000, type=int,
                     help="How many steps to make in each estimator call.")
 parser.add_argument("--max_eval_steps", default=100, type=int, help="Maximum number of eval steps.")
 ### BEGIN - TO DELETE EVENTUALLY --> NO SENSE IN PYTORCH ###
-parser.add_argument("--use_tpu", default=False, type=bool, help="Whether to use TPU or GPU/CPU.")
+parser.add_argument("--use_tpu", default=False, action='store_true', help="Whether to use TPU or GPU/CPU.")
 parser.add_argument("--tpu_name", default=None, type=str,
                     help="The Cloud TPU to use for training. This should be either the name used when creating the "
                          "Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")

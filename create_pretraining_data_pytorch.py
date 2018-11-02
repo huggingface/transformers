@@ -37,7 +37,7 @@ parser.add_argument("--vocab_file", default=None, type=str, required=True,
                     help="The vocabulary file that the BERT model was trained on.")
 
 ## Other parameters
-parser.add_argument("--do_lower_case", default=True, type=bool, 
+parser.add_argument("--do_lower_case", default=True, action='store_true',
                     help="Whether to lower case the input text. Should be True for uncased "
                          "models and False for cased models.")
 parser.add_argument("--max_seq_length", default=128, type=int, help="Maximum sequence length.")
