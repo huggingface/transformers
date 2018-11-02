@@ -440,7 +440,7 @@ def main():
     else:
         device = torch.device("cuda", args.local_rank)
         n_gpu = 1
-        print("Initializing the distributed backend: NCCL")
+        # print("Initializing the distributed backend: NCCL")
     print("device", device, "n_gpu", n_gpu)
 
     if not args.do_train and not args.do_eval:
