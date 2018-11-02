@@ -349,7 +349,6 @@ class BertModel(nn.Module):
     """BERT model ("Bidirectional Embedding Representations from a Transformer").
 
     Example usage:
-
     ```python
     # Already been converted into WordPiece token ids
     input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
@@ -359,16 +358,10 @@ class BertModel(nn.Module):
     config = modeling.BertConfig(vocab_size=32000, hidden_size=512,
         num_hidden_layers=8, num_attention_heads=6, intermediate_size=1024)
 
-    model = modeling.BertModel(config=config, is_training=True,
-        input_ids=input_ids, input_mask=input_mask, token_type_ids=token_type_ids)
-
-    label_embeddings = tf.get_variable(...)
-    pooled_output = model.get_pooled_output()
-    logits = tf.matmul(pooled_output, label_embeddings)
-    ...
+    model = modeling.BertModel(config=config)
+    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
-
     def __init__(self, config: BertConfig):
         """Constructor for BertModel.
 
@@ -400,7 +393,26 @@ class BertModel(nn.Module):
         return all_encoder_layers, pooled_output
 
 class BertForSequenceClassification(nn.Module):
-    def __init__(self, config, num_labels):
+    """BERT model for classification.
+    This module is composed of the BERT model with a linear layer on top of
+    the pooled output.
+
+    Example usage:
+    ```python
+    # Already been converted into WordPiece token ids
+    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 2, 0]])
+
+    config = modeling.BertConfig(vocab_size=32000, hidden_size=512,
+        num_hidden_layers=8, num_attention_heads=6, intermediate_size=1024)
+
+    num_labels = 2
+
+    model = modeling.BertModel(config, num_labels)
+    logits = model(input_ids, token_type_ids, input_mask)
+    ```
+    """    def __init__(self, config, num_labels):
         super(BertForSequenceClassification, self).__init__()
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
