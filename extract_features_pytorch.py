@@ -249,6 +249,9 @@ def main():
     if args.init_checkpoint is not None:
         model.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
     model.to(device)
+    
+    if n_gpu > 1:
+        model = nn.DataParallel(model)
 
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
