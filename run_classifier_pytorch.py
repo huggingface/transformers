@@ -571,7 +571,7 @@ def main():
 
         model.eval()
         eval_loss, eval_accuracy = 0, 0
-        nb_eval_steps, nb_eval_examples = 0
+        nb_eval_steps, nb_eval_examples = 0, 0
         for input_ids, input_mask, segment_ids, label_ids in eval_dataloader:
             input_ids = input_ids.to(device)
             input_mask = input_mask.float().to(device)
