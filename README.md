@@ -4,12 +4,12 @@
 
 This is an op-for-op PyTorch reimplementation of the [TensorFlow code](https://github.com/google-research/bert) released by Google AI with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
 
-This PyTorch implementation can load any pre-trained TensorFlow BERT checkpoint in the PyTorch model (see below).
+This implementation can load any pre-trained TensorFlow BERT checkpoint in a PyTorch model (see below).
 
 There are a few differences with the TensorFlow model:
 
-- the PyTorch model has multi-GPU and distributed training capabilities (see below),
-- there is not TPU support in the current stable version of PyTorch (0.4.1) and as a consequence, the pre-training script are not included in this repo. TPU support is supposed to be available in PyTorch v1.0 that will be released in the coming weeks. We will update the repository with TPU-adapted pre-training scripts when PyTorch will have TPU support. In the meantime, you can use the TensorFlow version to train a model on TPU and import the checkpoint using the following script.
+- this PyTorch implementation support multi-GPU and distributed training (see below),
+- the current stable version of PyTorch (0.4.1) doesn't support TPU training and as a consequence, the pre-training script are not included in this repo (see below). TPU support is supposed to be available in PyTorch v1.0. We will update the repository with TPU-adapted pre-training scripts at that time. In the meantime, you can use the TensorFlow version to train a model on TPU and import a TensorFlow checkpoint as described below.
 
 ## Loading a TensorFlow checkpoint (in particular Google's pre-trained models) in the Pytorch model
 
@@ -27,6 +27,14 @@ python convert_tf_checkpoint_to_pytorch.py \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
   --pytorch_dump_path=$BERT_BASE_DIR/pytorch_model.bin
 ```
+
+## Multi-GPU and Distributed Training
+
+Multi-GPU is automatically activated in the scripts when multiple GPUs are detected.
+
+Distributed training is activated by suppying a `--local_rank` arguments to the `run_classifier.py` or the `run_squad.py` scripts.
+
+For more information on how to use distributed training with PyTorch, you can read [this simple introduction](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) we wrote earlier this month.
 
 ## Fine-tuning with BERT: running the examples
 
@@ -89,15 +97,14 @@ python run_squad.py \
 
 ## Comparing TensorFlow and PyTorch models
 
-We also include [a small Notebook](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/Comparing%20TF%20and%20PT%20models.ipynb) we used to verify that the conversion of the weights to PyTorch are consistent with the original TensorFlow weights.
-Please follow the instructions in the Notebook to run it.
+We also include [a simple Jupyter Notebook](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/Comparing%20TF%20and%20PT%20models.ipynb) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model (within the rounding errors and the differing backend implementations of the operations, in our case we found a standard deviation of about 4e-7 on the last hidden state of the 12th layer). Please follow the instructions in the Notebook to run it.
 
 ## Note on pre-training
 
-The original TensorFlow code also release two scripts for pre-training BERT: [create_pretraining_data.py](https://github.com/google-research/bert/blob/master/create_pretraining_data.py) and [run_pretraining.py](https://github.com/google-research/bert/blob/master/run_pretraining.py).
+The original TensorFlow code comprise two scripts that can be used for pre-training BERT: [create_pretraining_data.py](https://github.com/google-research/bert/blob/master/create_pretraining_data.py) and [run_pretraining.py](https://github.com/google-research/bert/blob/master/run_pretraining.py).
 As the authors notice, pre-training BERT is particularly expensive and requires TPU to run in a reasonable amout of time (see [here](https://github.com/google-research/bert#pre-training-with-bert)).
 
-We have decided **not** to port these scripts for now and wait for the TPU support on PyTorch (see the recent [official announcement](https://cloud.google.com/blog/products/ai-machine-learning/introducing-pytorch-across-google-cloud)).
+We have decided to wait for the up-coming release of PyTorch v1.0 which is expected support training on TPU for porting these scripts (see the recent [official announcement](https://cloud.google.com/blog/products/ai-machine-learning/introducing-pytorch-across-google-cloud)).
 
 ## Requirements
 
