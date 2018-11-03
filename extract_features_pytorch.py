@@ -268,29 +268,31 @@ def main():
             input_mask = input_mask.float().to(device)
 
             all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
+            all_encoder_layers = all_encoder_layers
 
-            for enc_layers, example_index in zip(all_encoder_layers, example_indices):
+            for b, example_index in enumerate(example_indices):
                 feature = features[example_index.item()]
                 unique_id = int(feature.unique_id)
                 # feature = unique_id_to_feature[unique_id]
                 output_json = collections.OrderedDict()
                 output_json["linex_index"] = unique_id
-                all_features = []
+                all_out_features = []
                 for (i, token) in enumerate(feature.tokens):
                     all_layers = []
                     for (j, layer_index) in enumerate(layer_indexes):
-                        layer_output = enc_layers[int(layer_index)].detach().cpu().numpy()
+                        layer_output = all_encoder_layers[int(layer_index)].detach().cpu().numpy()
+                        layer_output = layer_output[b]
                         layers = collections.OrderedDict()
                         layers["index"] = layer_index
                         layers["values"] = [
-                            round(float(x), 6) for x in layer_output[i:(i + 1)].flat
+                            round(x.item(), 6) for x in layer_output[i]
                         ]
                         all_layers.append(layers)
-                    features = collections.OrderedDict()
-                    features["token"] = token
-                    features["layers"] = all_layers
-                    all_features.append(features)
-                output_json["features"] = all_features
+                    out_features = collections.OrderedDict()
+                    out_features["token"] = token
+                    out_features["layers"] = all_layers
+                    all_out_features.append(out_features)
+                output_json["features"] = all_out_features
                 writer.write(json.dumps(output_json) + "\n")
 
 
