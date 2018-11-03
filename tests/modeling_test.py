@@ -16,15 +16,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import six
+import unittest
 import collections
 import json
 import random
 import re
 
-import modeling_pytorch as modeling
-import six
-import unittest
 import torch
+
+import modeling as modeling
 
 
 class BertModelTest(unittest.TestCase):

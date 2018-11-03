@@ -30,9 +30,9 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-import tokenization_pytorch
-from modeling_pytorch import BertConfig, BertForSequenceClassification
-from optimization_pytorch import BERTAdam
+import tokenization
+from modeling import BertConfig, BertForSequenceClassification
+from optimization import BERTAdam
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -122,9 +122,9 @@ class MrpcProcessor(DataProcessor):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, i)
-            text_a = tokenization_pytorch.convert_to_unicode(line[3])
-            text_b = tokenization_pytorch.convert_to_unicode(line[4])
-            label = tokenization_pytorch.convert_to_unicode(line[0])
+            text_a = tokenization.convert_to_unicode(line[3])
+            text_b = tokenization.convert_to_unicode(line[4])
+            label = tokenization.convert_to_unicode(line[0])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -154,10 +154,10 @@ class MnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, tokenization_pytorch.convert_to_unicode(line[0]))
-            text_a = tokenization_pytorch.convert_to_unicode(line[8])
-            text_b = tokenization_pytorch.convert_to_unicode(line[9])
-            label = tokenization_pytorch.convert_to_unicode(line[-1])
+            guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
+            text_a = tokenization.convert_to_unicode(line[8])
+            text_b = tokenization.convert_to_unicode(line[9])
+            label = tokenization.convert_to_unicode(line[-1])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -185,8 +185,8 @@ class ColaProcessor(DataProcessor):
         examples = []
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
-            text_a = tokenization_pytorch.convert_to_unicode(line[3])
-            label = tokenization_pytorch.convert_to_unicode(line[1])
+            text_a = tokenization.convert_to_unicode(line[3])
+            label = tokenization.convert_to_unicode(line[1])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
@@ -274,7 +274,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join(
-                    [tokenization_pytorch.printable_text(x) for x in tokens]))
+                    [tokenization.printable_text(x) for x in tokens]))
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info(
@@ -477,7 +477,7 @@ def main():
 
     label_list = processor.get_labels()
 
-    tokenizer = tokenization_pytorch.FullTokenizer(
+    tokenizer = tokenization.FullTokenizer(
         vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
 
     train_examples = None

@@ -11,7 +11,7 @@ import tensorflow as tf
 import torch
 import numpy as np
 
-from modeling_pytorch import BertConfig, BertModel
+from modeling import BertConfig, BertModel
 
 parser = argparse.ArgumentParser()
 
