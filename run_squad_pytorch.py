@@ -856,6 +856,7 @@ def main():
                 
                 logger.info("HHHHH Forward")
                 loss, _ = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
+                model.zero_grad()
                 logger.info("HHHHH Backward")
                 loss.backward()
                 logger.info("HHHHH Loading data")

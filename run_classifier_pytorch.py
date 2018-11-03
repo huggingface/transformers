@@ -531,6 +531,7 @@ def main():
                 loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
                 total_tr_loss += loss.item()
                 nb_tr_examples += input_ids.size(0)
+                model.zero_grad()
                 loss.backward()
                 optimizer.step()
                 global_step += 1
