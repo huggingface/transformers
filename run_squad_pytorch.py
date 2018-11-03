@@ -23,7 +23,7 @@ import logging
 import json
 import math
 import os
-import tokenization
+import tokenization_pytorch
 import six
 import argparse
 
@@ -62,9 +62,9 @@ class SquadExample(object):
 
     def __repr__(self):
         s = ""
-        s += "qas_id: %s" % (tokenization.printable_text(self.qas_id))
+        s += "qas_id: %s" % (tokenization_pytorch.printable_text(self.qas_id))
         s += ", question_text: %s" % (
-            tokenization.printable_text(self.question_text))
+            tokenization_pytorch.printable_text(self.question_text))
         s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
         if self.start_position:
             s += ", start_position: %d" % (self.start_position)
@@ -153,7 +153,7 @@ def read_squad_examples(input_file, is_training):
                     # guaranteed to be preserved.
                     actual_text = " ".join(doc_tokens[start_position:(end_position + 1)])
                     cleaned_answer_text = " ".join(
-                        tokenization.whitespace_tokenize(orig_answer_text))
+                        tokenization_pytorch.whitespace_tokenize(orig_answer_text))
                     if actual_text.find(cleaned_answer_text) == -1:
                         logger.warning("Could not find answer: '%s' vs. '%s'",
                                            actual_text, cleaned_answer_text)
@@ -287,7 +287,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 logger.info("example_index: %s" % (example_index))
                 logger.info("doc_span_index: %s" % (doc_span_index))
                 logger.info("tokens: %s" % " ".join(
-                    [tokenization.printable_text(x) for x in tokens]))
+                    [tokenization_pytorch.printable_text(x) for x in tokens]))
                 logger.info("token_to_orig_map: %s" % " ".join(
                     ["%d:%d" % (x, y) for (x, y) in six.iteritems(token_to_orig_map)]))
                 logger.info("token_is_max_context: %s" % " ".join([
@@ -303,7 +303,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     logger.info("start_position: %d" % (start_position))
                     logger.info("end_position: %d" % (end_position))
                     logger.info(
-                        "answer: %s" % (tokenization.printable_text(answer_text)))
+                        "answer: %s" % (tokenization_pytorch.printable_text(answer_text)))
 
             features.append(
                 InputFeatures(
@@ -579,7 +579,7 @@ def get_final_text(pred_text, orig_text, do_lower_case):
     # and `pred_text`, and check if they are the same length. If they are
     # NOT the same length, the heuristic has failed. If they are the same
     # length, we assume the characters are one-to-one aligned.
-    tokenizer = tokenization.BasicTokenizer(do_lower_case=do_lower_case)
+    tokenizer = tokenization_pytorch.BasicTokenizer(do_lower_case=do_lower_case)
 
     tok_text = " ".join(tokenizer.tokenize(orig_text))
 
@@ -780,7 +780,7 @@ def main():
         raise ValueError("Output directory () already exists and is not empty.")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    tokenizer = tokenization.FullTokenizer(
+    tokenizer = tokenization_pytorch.FullTokenizer(
         vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
 
     train_examples = None
