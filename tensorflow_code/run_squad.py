@@ -22,9 +22,9 @@ import collections
 import json
 import math
 import os
-import modeling
-import optimization
-import tokenization
+from tensorflow_code import modeling
+from tensorflow_code import optimization
+from tensorflow_code import tokenization
 import six
 import tensorflow as tf
 
