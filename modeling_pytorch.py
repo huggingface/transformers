@@ -487,7 +487,7 @@ class BertForQuestionAnswering(nn.Module):
                 m.weight.data.normal_(config.initializer_range)
             elif isinstance(m, BERTLayerNorm):
                 m.beta.data.normal_(config.initializer_range)
-                m.gamme.data.normal_(config.initializer_range)
+                m.gamma.data.normal_(config.initializer_range)
             if isinstance(m, nn.Linear):
                 m.bias.data.zero_()
         self.apply(init_weights)
