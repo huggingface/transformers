@@ -1,23 +1,23 @@
-# PyTorch implementation of Google AI's BERT
+# PyTorch implementation of Google AI's BERT model
 
 ## Introduction
 
-This is a PyTorch implementation of the [TensorFlow code](https://github.com/google-research/bert) released by Google AI with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
+This is an op-for-op PyTorch reimplementation of the [TensorFlow code](https://github.com/google-research/bert) released by Google AI with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
 
-It is op-for-op reimplementation that can load any pre-trained TensorFlow checkpoint in a PyTorch model (see below).
+This PyTorch implementation can load any pre-trained TensorFlow BERT checkpoint in the PyTorch model (see below).
 
 There are a few differences with the TensorFlow model:
 
 - the PyTorch model has multi-GPU and distributed training capabilities (see below),
 - there is not TPU support in the current stable version of PyTorch (0.4.1) and as a consequence, the pre-training script are not included in this repo. TPU support is supposed to be available in PyTorch v1.0 that will be released in the coming weeks. We will update the repository with TPU-adapted pre-training scripts when PyTorch will have TPU support. In the meantime, you can use the TensorFlow version to train a model on TPU and import the checkpoint using the following script.
 
-## Converting a TensorFlow checkpoint (in particular Google's pre-trained models) to Pytorch
+## Loading a TensorFlow checkpoint (in particular Google's pre-trained models) in the Pytorch model
 
 You can convert any TensorFlow checkpoint, and in particular the pre-trained weights released by GoogleAI, by using `convert_tf_checkpoint_to_pytorch.py`.
 
-This script takes as input a TensorFlow checkpoint (`bert_model.ckpt`) and converts it in a PyTorch dump as a `.bin` that can be imported using the usual `torch.load()` command.
+This script takes as input a TensorFlow checkpoint (`bert_model.ckpt`) load it in the PyTorch model and save the model in a standard PyTorch model save file that can be imported using the usual `torch.load()` command (see the `run_classifier.py` script for an example).
 
-TensorFlow pre-trained models can be found in the [original TensorFlow code](https://github.com/google-research/bert). Here give an example with the `BERT-Base Uncased` model:
+TensorFlow pre-trained models can be found in the [original TensorFlow code](https://github.com/google-research/bert). Here is an example of the conversion process for a pre-trained `BERT-Base Uncased` model:
 
 ```shell
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
