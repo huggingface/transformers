@@ -745,6 +745,10 @@ def main():
                         type=int,
                         default=-1,
                         help="local_rank for distributed training on gpus")
+    parser.add_argument('--seed', 
+                    type=int, 
+                    default=42,
+                    help="random seed for initialization")
 
     args = parser.parse_args()
 
@@ -756,6 +760,11 @@ def main():
         n_gpu = 1
         # print("Initializing the distributed backend: NCCL")
     print("device", device, "n_gpu", n_gpu)
+
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if n_gpu>0: torch.cuda.manual_seed_all(args.seed)
 
     if not args.do_train and not args.do_predict:
         raise ValueError("At least one of `do_train` or `do_predict` must be True.")
