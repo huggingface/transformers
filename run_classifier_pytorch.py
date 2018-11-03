@@ -451,13 +451,11 @@ def main():
 
     if args.max_seq_length > bert_config.max_position_embeddings:
         raise ValueError(
-            "Cannot use sequence length %d because the BERT model "
-            "was only trained up to sequence length %d" %
-            (args.max_seq_length, bert_config.max_position_embeddings))
+            "Cannot use sequence length {} because the BERT model was only trained up to sequence length {}".format(
+            args.max_seq_length, bert_config.max_position_embeddings))
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-                    raise ValueError(f"Output directory ({args.output_dir}) already exists and is "
-                                     f"not empty.")
+        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     os.makedirs(args.output_dir, exist_ok=True)
 
     task_name = args.task_name.lower()
