@@ -27,8 +27,9 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 def gelu(x):
-    return 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
-    # OpenAI GPT gelu version was : 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+    # OpenAI GPT gelu version :
+    # return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 
 class BertConfig(object):
@@ -157,7 +158,7 @@ class BERTEmbeddings(nn.Module):
         words_embeddings = self.word_embeddings(input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-    
+
         embeddings = words_embeddings + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -196,19 +197,19 @@ class BERTSelfAttention(nn.Module):
         #   T = `to_tensor` sequence length
         #   N = `num_attention_heads`
         #   H = `size_per_head`
-        query_layer = self.query(hidden_states)
-        key_layer = self.key(hidden_states)
-        value_layer = self.value(hidden_states)
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
 
-        query_layer = self.transpose_for_scores(query_layer)
-        key_layer = self.transpose_for_scores(key_layer, is_key_tensor=True)
-        value_layer = self.transpose_for_scores(value_layer)
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer) #, is_key_tensor=True)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
         # `attention_scores` = [B, N, F, T]
-        attention_scores = torch.matmul(query_layer, key_layer)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        attention_scores_no_norm = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores_no_mask = attention_scores_no_norm / math.sqrt(self.attention_head_size)
 
         # TODO clean up this (precompute)
         # MY PYTORCH: w = w * self.b + -1e9 * (1 - self.b)  # TF implem method: mask_attn_weights
@@ -220,20 +221,25 @@ class BERTSelfAttention(nn.Module):
         # adder = (1.0 - attention_mask) * -10000.0
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        attention_scores += attention_mask
+        attention_scores = attention_scores_no_mask + attention_mask
 
         # Normalize the attention scores to probabilities.
         # `attention_probs` = [B, N, F, T]
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs_no_drop = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        attention_probs = self.dropout(attention_probs_no_drop)
 
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
+
+        # aux_attention = attention_probs[0, 0, 0, :].view(1, 128, 1)
+        # aux_attention = aux_attention.permute(0, 2, 1, 3).contiguous().view(1, 128, 768)
+        # aux_attention = key_layer.permute(0, 2, 3, 1).contiguous().view(1, 128, 768)
+        # aux_attention = key_layer.permute(0, 2, 1, 3).contiguous().view(1, 128, 768)
 
         return context_layer
 
@@ -246,7 +252,7 @@ class BERTSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(input_tensor)
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
@@ -259,8 +265,8 @@ class BERTAttention(nn.Module):
         self.output = BERTSelfOutput(config)
 
     def forward(self, input_tensor, attention_mask):
-        attention_output = self.self(input_tensor, attention_mask)
-        attention_output = self.output(attention_output, input_tensor)
+        self_output = self.self(input_tensor, attention_mask)
+        attention_output = self.output(self_output, input_tensor)
         return attention_output
 
 
@@ -388,13 +394,16 @@ class BertModel(nn.Module):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
 
-        attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        attention_mask = (1.0 - attention_mask) * -10000.0
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         embedding_output = self.embeddings(input_ids, token_type_ids)
-        all_encoder_layers = self.encoder(embedding_output, attention_mask)
+        all_encoder_layers = self.encoder(embedding_output, extended_attention_mask)
         sequence_output = all_encoder_layers[-1]
         pooled_output = self.pooler(sequence_output)
+
+        # TODO DEbugging
+        # all_encoder_layers = [attention_mask, embeddings_sum, embedding_output] + all_encoder_layers
         return all_encoder_layers, pooled_output
 
 class BertForSequenceClassification(nn.Module):
