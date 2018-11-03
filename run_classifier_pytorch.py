@@ -507,7 +507,6 @@ def main():
                          t_total=num_train_steps)
 
     global_step = 0
-    total_tr_loss = 0
     if args.do_train:
         train_features = convert_examples_to_features(
             train_examples, label_list, args.max_seq_length, tokenizer)
@@ -529,8 +528,10 @@ def main():
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
-        nb_tr_examples = 0
+        
         for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
+            tr_loss = 0
+            nb_tr_examples, nb_tr_steps = 0, 0
             for input_ids, input_mask, segment_ids, label_ids in tqdm(train_dataloader, desc="Iteration"):
                 input_ids = input_ids.to(device)
                 input_mask = input_mask.float().to(device)
@@ -538,12 +539,14 @@ def main():
                 label_ids = label_ids.to(device)
 
                 loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
-                total_tr_loss += loss.sum().item() # sum() is to account for multi-gpu support.
+                loss = loss.mean() # sum() is to account for multi-gpu support.
+                tr_loss += loss.item()
                 nb_tr_examples += input_ids.size(0)
                 model.zero_grad()
-                loss.sum().backward() # sum() is to account for multi-gpu support.
+                loss.backward()
                 optimizer.step()
                 global_step += 1
+                nb_tr_steps += 1
 
     if args.do_eval:
         eval_examples = processor.get_dev_examples(args.data_dir)
@@ -567,9 +570,8 @@ def main():
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         model.eval()
-        eval_loss = 0
-        eval_accuracy = 0
-        nb_eval_examples = 0
+        eval_loss, eval_accuracy = 0, 0
+        nb_eval_steps, nb_eval_examples = 0
         for input_ids, input_mask, segment_ids, label_ids in eval_dataloader:
             input_ids = input_ids.to(device)
             input_mask = input_mask.float().to(device)
@@ -582,18 +584,19 @@ def main():
             label_ids = label_ids.to('cpu').numpy()
             tmp_eval_accuracy = accuracy(logits, label_ids)
 
-            eval_loss += tmp_eval_loss.sum().item()
+            eval_loss += tmp_eval_loss.mean().item()
             eval_accuracy += tmp_eval_accuracy
 
             nb_eval_examples += input_ids.size(0)
+            nb_eval_steps += 1
 
-        eval_loss = eval_loss / nb_eval_examples #len(eval_dataloader)
+        eval_loss = eval_loss / nb_eval_steps #len(eval_dataloader)
         eval_accuracy = eval_accuracy / nb_eval_examples #len(eval_dataloader)
 
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
                   'global_step': global_step,
-                  'loss': total_tr_loss/nb_tr_examples}#'loss': loss.item()}
+                  'loss': tr_loss/nb_tr_steps}#'loss': loss.item()}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
