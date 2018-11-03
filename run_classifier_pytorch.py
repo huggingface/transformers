@@ -514,7 +514,7 @@ def main():
 
         model.train()
         nb_tr_examples = 0
-        for epoch in trange(args.num_train_epochs, desc="Epoch"):
+        for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
             for input_ids, input_mask, segment_ids, label_ids in tqdm(train_dataloader, desc="Iteration"):
                 input_ids = input_ids.to(device)
                 input_mask = input_mask.float().to(device)
