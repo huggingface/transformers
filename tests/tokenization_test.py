@@ -17,45 +17,44 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import tempfile
+import unittest
 
-from tensorflow_code import tokenization
-import tensorflow as tf
+import tokenization as tokenization
 
 
-class TokenizationTest(tf.test.TestCase):
+class TokenizationTest(unittest.TestCase):
 
     def test_full_tokenizer(self):
         vocab_tokens = [
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
             "##ing", ","
         ]
-        with tempfile.NamedTemporaryFile(delete=False) as vocab_writer:
+        with open("/tmp/bert_tokenizer_test.txt", "w") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
             vocab_file = vocab_writer.name
 
         tokenizer = tokenization.FullTokenizer(vocab_file)
-        os.unlink(vocab_file)
+        os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
-        self.assertAllEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
 
-        self.assertAllEqual(
+        self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     def test_basic_tokenizer_lower(self):
         tokenizer = tokenization.BasicTokenizer(do_lower_case=True)
 
-        self.assertAllEqual(
+        self.assertListEqual(
             tokenizer.tokenize(u" \tHeLLo!how  \n Are yoU?  "),
             ["hello", "!", "how", "are", "you", "?"])
-        self.assertAllEqual(tokenizer.tokenize(u"H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize(u"H\u00E9llo"), ["hello"])
 
     def test_basic_tokenizer_no_lower(self):
         tokenizer = tokenization.BasicTokenizer(do_lower_case=False)
 
-        self.assertAllEqual(
+        self.assertListEqual(
             tokenizer.tokenize(u" \tHeLLo!how  \n Are yoU?  "),
             ["HeLLo", "!", "how", "Are", "yoU", "?"])
 
@@ -70,13 +69,13 @@ class TokenizationTest(tf.test.TestCase):
             vocab[token] = i
         tokenizer = tokenization.WordpieceTokenizer(vocab=vocab)
 
-        self.assertAllEqual(tokenizer.tokenize(""), [])
+        self.assertListEqual(tokenizer.tokenize(""), [])
 
-        self.assertAllEqual(
+        self.assertListEqual(
             tokenizer.tokenize("unwanted running"),
             ["un", "##want", "##ed", "runn", "##ing"])
 
-        self.assertAllEqual(
+        self.assertListEqual(
             tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
     def test_convert_tokens_to_ids(self):
@@ -89,7 +88,7 @@ class TokenizationTest(tf.test.TestCase):
         for (i, token) in enumerate(vocab_tokens):
             vocab[token] = i
 
-        self.assertAllEqual(
+        self.assertListEqual(
             tokenization.convert_tokens_to_ids(
                 vocab, ["un", "##want", "##ed", "runn", "##ing"]), [7, 4, 5, 8, 9])
 
@@ -121,5 +120,5 @@ class TokenizationTest(tf.test.TestCase):
         self.assertFalse(tokenization._is_punctuation(u" "))
 
 
-if __name__ == "__main__":
-    tf.test.main()
+if __name__ == '__main__':
+    unittest.main()
