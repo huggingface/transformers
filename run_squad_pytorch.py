@@ -795,6 +795,9 @@ def main():
     if args.init_checkpoint is not None:
         model.bert.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
     model.to(device)
+    
+    if n_gpu > 1:
+        model = torch.nn.DataParallel(model)
 
     optimizer = BERTAdam([{'params': [p for n, p in model.named_parameters() if n != 'bias'], 'l2': 0.01},
                           {'params': [p for n, p in model.named_parameters() if n == 'bias'], 'l2': 0.}
