@@ -18,15 +18,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import six
 import argparse
 import collections
 import logging
 import json
 import math
 import os
-from tqdm import tqdm, trange
+import six
 import random
+from tqdm import tqdm, trange
 
 import numpy as np
 import torch
