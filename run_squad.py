@@ -739,7 +739,11 @@ def main():
                         type=int, 
                         default=42,
                         help="random seed for initialization")
-
+    parser.add_argument('--gradient_accumulation_steps',
+                        type=int,
+                        default=1,
+                        help="Number of updates steps to accumualte before performing a backward/update pass.")
+    
     args = parser.parse_args()
 
     if args.local_rank == -1 or args.no_cuda:
