@@ -19,7 +19,7 @@ from __future__ import print_function
 import os
 import unittest
 
-import tokenization as tokenization
+import tokenization
 
 
 class TokenizationTest(unittest.TestCase):

@@ -20,7 +20,7 @@ import unittest
 
 import torch
 
-import optimization as optimization
+import optimization
 
 class OptimizationTest(unittest.TestCase):
 
