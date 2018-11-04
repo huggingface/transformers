@@ -756,7 +756,7 @@ def main():
         raise ValueError("Invalid accumulate_gradients parameter: {}, should be >= 1".format(
                             args.accumulate_gradients))
 
-    args.train_batch_size = args.train_batch_size / args.accumulate_gradients
+    args.train_batch_size = int(args.train_batch_size / args.accumulate_gradients)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
