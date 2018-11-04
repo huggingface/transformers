@@ -731,10 +731,14 @@ def main():
                         type=int,
                         default=-1,
                         help="local_rank for distributed training on gpus")
+    parser.add_argument("--accumulate_gradients",
+                        type=int,
+                        default=1,
+                        help="Number of steps to accumulate gradient on (divide the batch_size and accumulate)")
     parser.add_argument('--seed', 
-                    type=int, 
-                    default=42,
-                    help="random seed for initialization")
+                        type=int, 
+                        default=42,
+                        help="random seed for initialization")
 
     args = parser.parse_args()
 
@@ -836,8 +840,8 @@ def main():
 
         model.train()
         for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
-            for input_ids, input_mask, segment_ids, start_positions, end_positions in tqdm(train_dataloader,
-                                                                                           desc="Iteration"):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                input_ids, input_mask, segment_ids, start_positions, end_positions = batch
                 input_ids = input_ids.to(device)
                 input_mask = input_mask.float().to(device)
                 segment_ids = segment_ids.to(device)
@@ -851,10 +855,11 @@ def main():
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
 
-                model.zero_grad()
                 loss.backward()
-                optimizer.step()
-                global_step += 1
+                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    optimizer.step()    # We have accumulated enought gradients
+                    model.zero_grad()
+                    global_step += 1
 
     if args.do_predict:
         eval_examples = read_squad_examples(

@@ -426,7 +426,7 @@ def main():
     parser.add_argument("--accumulate_gradients",
                         type=int,
                         default=1,
-                        help="Number of steps to accumulate gradient on (divide the single step batch_size)")
+                        help="Number of steps to accumulate gradient on (divide the batch_size and accumulate)")
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
@@ -452,10 +452,17 @@ def main():
         # print("Initializing the distributed backend: NCCL")
     print("device", device, "n_gpu", n_gpu)
 
+    if args.accumulate_gradients < 1:
+        raise ValueError("Invalid accumulate_gradients parameter: {}, should be >= 1".format(
+                            args.accumulate_gradients))
+
+    args.batch_size = args.batch_size / args.accumulate_gradients
+
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if n_gpu>0: torch.cuda.manual_seed_all(args.seed)
+    if n_gpu > 0:
+        torch.cuda.manual_seed_all(args.seed)
 
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
@@ -531,11 +538,10 @@ def main():
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
-        
         for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
-            for input_ids, input_mask, segment_ids, label_ids in tqdm(train_dataloader, desc="Iteration"):
+            for step, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 input_ids = input_ids.to(device)
                 input_mask = input_mask.float().to(device)
                 segment_ids = segment_ids.to(device)
@@ -546,12 +552,13 @@ def main():
                     loss = loss.mean() # mean() to average on multi-gpu.
                 tr_loss += loss.item()
                 nb_tr_examples += input_ids.size(0)
-
-                model.zero_grad()
-                loss.backward()
-                optimizer.step()
-                global_step += 1
                 nb_tr_steps += 1
+                loss.backward()
+
+                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    optimizer.step()    # We have accumulated enought gradients
+                    model.zero_grad()
+                    global_step += 1
 
     if args.do_eval:
         eval_examples = processor.get_dev_examples(args.data_dir)
