@@ -435,7 +435,6 @@ class BertForSequenceClassification(nn.Module):
 
         def init_weights(m):
             if isinstance(m, (nn.Linear, nn.Embedding)):
-                print("Initializing {}".format(m))
                 # Slight difference here with the TF version which uses truncated_normal
                 # cf https://github.com/pytorch/pytorch/pull/5617
                 m.weight.data.normal_(config.initializer_range)
@@ -481,7 +480,6 @@ class BertForQuestionAnswering(nn.Module):
 
         def init_weights(m):
             if isinstance(m, (nn.Linear, nn.Embedding)):
-                print("Initializing {}".format(m))
                 # Slight difference here with the TF version which uses truncated_normal for initialization
                 # cf https://github.com/pytorch/pytorch/pull/5617
                 m.weight.data.normal_(config.initializer_range)

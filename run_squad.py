@@ -912,9 +912,9 @@ def main():
 
         model.eval()
         all_results = []
-        logger.info("Start evaulating")
+        logger.info("Start evaluating")
         #for input_ids, input_mask, segment_ids, label_ids, example_index in eval_dataloader:
-        for input_ids, input_mask, segment_ids, example_index in eval_dataloader:
+        for input_ids, input_mask, segment_ids, example_index in tqdm(eval_dataloader, descr="Evaluating"):
             if len(all_results) % 1000 == 0:
                 logger.info("Processing example: %d" % (len(all_results)))
 
