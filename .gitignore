@@ -117,3 +117,6 @@ dmypy.json
 
 # vscode
 .vscode
+
+# TF code
+tensorflow_code
