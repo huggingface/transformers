@@ -70,7 +70,7 @@ An example on how to use this class is given in the `run_classifier.py` script w
 
 ### 3. `BertForQuestionAnswering`
 
-`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` with a token-level classifiers on top of the full sequence of last hidden states.
+`BertForQuestionAnswering` is a fine-tuning model that includes `BertModel` with a token-level classifiers on top of the full sequence of last hidden states.
 
 The token-level classifier takes as input the full sequence of the last hidden state and compute several (e.g. two) scores for each tokens that can for example respectively be the score that a given token is a `start_span` and a `end_span` token (see Figures 3c and 3d in the BERT paper).
 
