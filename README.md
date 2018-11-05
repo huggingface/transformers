@@ -164,9 +164,9 @@ python run_classifier.py \
   --output_dir /tmp/mrpc_output/
 ```
 
-Our test runs on three seeds gave results between 83.6 and 85.6.
+Our test runs on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#squad) gave evaluation results between 82 and 87.
 
-The second example fine-tunes `BERT-Base` on the SQuAD question answering task. This example runs in about 5 hours on a 4-GPU K-80.
+The second example fine-tunes `BERT-Base` on the SQuAD question answering task.
 
 The data for SQuAD can be downloaded with the following links and should be saved in a `$SQUAD_DIR` directory.
 
