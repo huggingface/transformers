@@ -62,7 +62,7 @@ An example on how to use this class is given in the `extract_features.py` script
 
 ### 2. `BertForSequenceClassification`
 
-`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` and a sequence-lavel (sequence or pair of sequences) classifier on top of the `BertModel`.
+`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` and a sequence-level (sequence or pair of sequences) classifier on top of the `BertModel`.
 
 The sequence-level classifier is a linear layer that takes as input the last hidden state of the first character in the input sequence (see Figures 3a and 3b in the BERT paper).
 
@@ -74,13 +74,13 @@ An example on how to use this class is given in the `run_classifier.py` script w
 
 The token-level classifier takes as input the full sequence of the last hidden state and compute several (e.g. two) scores for each tokens that can for example respectively be the score that a given token is a `start_span` and a `end_span` token (see Figures 3c and 3d in the BERT paper).
 
-An example on how to use this class is given in the `run_squad.py` script which can be used to fine-tune a token classifier using BERT, for example for the SQuAS task.
+An example on how to use this class is given in the `run_squad.py` script which can be used to fine-tune a token classifier using BERT, for example for the SQuAD task.
 
 ## Installation, requirements, test
 
 This code was tested on Python 3.5+. The requirements are:
 
-- PyTorch (>= 0.4.0)
+- PyTorch (>= 0.4.1)
 - tqdm
 
 To install the dependencies:
@@ -89,7 +89,9 @@ To install the dependencies:
 pip install -r ./requirements.txt
 ````
 
-A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`). You can run the tests with the command:
+A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`).
+
+You can run the tests with the command:
 ```bash
 pytest -sv ./tests/
 ```
