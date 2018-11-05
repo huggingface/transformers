@@ -24,9 +24,9 @@ Here is an example of the conversion process for a pre-trained `BERT-Base Uncase
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
 python convert_tf_checkpoint_to_pytorch.py \
-  --tf_checkpoint_path=$BERT_BASE_DIR/bert_model.ckpt \
-  --bert_config_file=$BERT_BASE_DIR/bert_config.json \
-  --pytorch_dump_path=$BERT_BASE_DIR/pytorch_model.bin
+  --tf_checkpoint_path $BERT_BASE_DIR/bert_model.ckpt \
+  --bert_config_file $BERT_BASE_DIR/bert_config.json \
+  --pytorch_dump_path $BERT_BASE_DIR/pytorch_model.bin
 ```
 
 You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
@@ -178,17 +178,17 @@ The data for SQuAD can be downloaded with the following links and should be save
 export SQUAD_DIR=/path/to/SQUAD
 
 python run_squad.py \
-  --vocab_file=$BERT_BASE_DIR/vocab.txt \
-  --bert_config_file=$BERT_BASE_DIR/bert_config.json \
-  --init_checkpoint=$BERT_PYTORCH_DIR/pytorch_model.bin \
+  --vocab_file $BERT_BASE_DIR/vocab.txt \
+  --bert_config_file $BERT_BASE_DIR/bert_config.json \
+  --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
   --do_train \
-  --train_file=$SQUAD_DIR/train-v1.1.json \
+  --train_file $SQUAD_DIR/train-v1.1.json \
   --do_predict \
-  --predict_file=$SQUAD_DIR/dev-v1.1.json \
-  --train_batch_size=12 \
-  --learning_rate=5e-5 \
-  --num_train_epochs=2.0 \
-  --max_seq_length=384 \
-  --doc_stride=128 \
-  --output_dir=../debug_squad/
+  --predict_file $SQUAD_DIR/dev-v1.1.json \
+  --train_batch_size 12 \
+  --learning_rate 5e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir ../debug_squad/
 ```
