@@ -62,17 +62,17 @@ An example on how to use this class is given in the `extract_features.py` script
 
 ### 2. `BertForSequenceClassification`
 
-`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` and a sequence (or pair of sequence) classifier on top of the `BertModel`.
+`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` and a sequence-lavel (sequence or pair of sequences) classifier on top of the `BertModel`.
 
-The sequence classifier is a linear layer that takes as input the last hidden state of the first character in the input sequence (see Figures 3a and 3b in the BERT paper).
+The sequence-level classifier is a linear layer that takes as input the last hidden state of the first character in the input sequence (see Figures 3a and 3b in the BERT paper).
 
 An example on how to use this class is given in the `run_classifier.py` script which can be used to fine-tune a single sequence (or pair of sequence) classifier using BERT, for example for the MRPC task.
 
 ### 3. `BertForQuestionAnswering`
 
-`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` with a tokens classifiers on top of the full sequence of last hidden states.
+`BertForSequenceClassification` is a fine-tuning model that includes `BertModel` with a token-level classifiers on top of the full sequence of last hidden states.
 
-The tokens classifier takes as input the full sequence of the last hidden state and compute several (e.g. two) scores for each tokens that can for example respectively be the score that a given token is a `start_span` and a `end_span` token (see Figures 3c and 3d in the BERT paper).
+The token-level classifier takes as input the full sequence of the last hidden state and compute several (e.g. two) scores for each tokens that can for example respectively be the score that a given token is a `start_span` and a `end_span` token (see Figures 3c and 3d in the BERT paper).
 
 An example on how to use this class is given in the `run_squad.py` script which can be used to fine-tune a token classifier using BERT, for example for the SQuAS task.
 
@@ -89,14 +89,14 @@ To install the dependencies:
 pip install -r ./requirements.txt
 ````
 
-A series of tests is included in the [`test` folder](./test) and can be run using `pytest` (install pytest if needed: `pip install pytest`). You can run the tests with the command:
+A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`). You can run the tests with the command:
 ```bash
 pytest -sv ./tests/
 ```
 
 ## Training on large batches: gradient accumulation, multi-GPU and distributed training
 
-BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch size of 32 is recommended).
+BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch size of 32).
 
 To help with fine-tuning these models, we have included three techniques that you can activate in the fine-tuning scripts `run_classifier.py` and `run_squad.py`: gradient-accumulation, multi-gpu and distributed training. For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that I published earlier this month.
 
@@ -128,9 +128,9 @@ We also include [two Jupyter Notebooks](https://github.com/huggingface/pytorch-p
 
 - The first NoteBook ([Comparing TF and PT models.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models.ipynb)) extracts the hidden states of a full sequence on each layers of the TensorFlow and the PyTorch models and computes the sandard deviation between them. In the given example, we get a standard deviation of 1.5e-7 to 9e-7 on the various hidden state of the models.
 
-- The second NoteBook ([Comparing TF and PT models SQuAD predictions.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models%20SQuAD%20predictions.ipynb)) compares the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer and computes the sandard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
+- The second NoteBook ([Comparing TF and PT models SQuAD predictions.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models%20SQuAD%20predictions.ipynb)) compares the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer of the `BertForQuestionAnswering` and computes the sandard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
 
-Please follow the instructions given in the Notebooks to run and modify them.
+Please follow the instructions given in the notebooks to run and modify them. They can also be nice example on how to use the models in a simpler way than the full fine-tuning scripts we provide.
 
 ## Fine-tuning with BERT: running the examples
 
@@ -164,7 +164,7 @@ python run_classifier.py \
   --output_dir /tmp/mrpc_output/
 ```
 
-Our test runs on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#squad) gave evaluation results between 82 and 87.
+Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#squad) gave evaluation results between 82 and 87.
 
 The second example fine-tunes `BERT-Base` on the SQuAD question answering task.
 
