@@ -47,7 +47,7 @@ Here are some details on each class.
 
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
-We detail them here. This model takes as inputs:, token_type_ids=None, 
+We detail them here. This model takes as inputs:
 
 - `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the vocabulary (see the tokens preprocessing logic in the scripts `extract_features.py`, `run_classifier.py` and `run_squad.py`), and
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
