@@ -2,19 +2,21 @@
 
 ## Introduction
 
-This repository contains an op-for-op PyTorch reimplementation of [Google's TensorFlow code for the BERT model](https://github.com/google-research/bert) that was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
+This repository contains an op-for-op PyTorch reimplementation of [Google's TensorFlow repository for the BERT model](https://github.com/google-research/bert) that was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 
-This implementation can load any pre-trained TensorFlow BERT checkpoint (in particular [Google's pre-trained models](https://github.com/google-research/bert)) and a conversion script is provided (see below).
+This implementation can load any pre-trained TensorFlow checkpoint for BERT (in particular [Google's pre-trained models](https://github.com/google-research/bert)) and a conversion script is provided (see below).
 
-## Loading a TensorFlow checkpoint (e.g. Google's pre-trained models)
+The code to use, in addition, [the Multilingual and Chinese models](https://github.com/google-research/bert/blob/master/multilingual.md) will be added latter this week (it's actually just the tokenization code that needs to be updated).
 
-You can convert any TensorFlow checkpoint for BERT (in particular the pre-trained weights released by GoogleAI) in a PyTorch save file by using [`convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py).
+## Loading a TensorFlow checkpoint (e.g. [Google's pre-trained models](https://github.com/google-research/bert#pre-trained-models))
 
-This script takes as input a TensorFlow checkpoint (`bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and create a PyTorch model for this configuration, load the weights from the TensorFlow checpoint in the PyTorch model and save the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in `extract_features.py`, `run_classifier.py` and `run_squad.py`).
+You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py) script.
 
-To run this specific script you will need to have TensorFlow and PyTorch installed (`pip install tensorflow`).
+This script takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and create a PyTorch model for this configuration, load the weights from the TensorFlow checpoint in the PyTorch model and save the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in `extract_features.py`, `run_classifier.py` and `run_squad.py`).
 
-You can find Google's pre-trained models in [Google's TensorFlow repository for BERT](https://github.com/google-research/bert).
+You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow checkpoint (the three files starting with `bert_model.ckpt`) but be sure to keep the configuration file (`bert_config.json`) and the vocabulary file (`vocab.txt`) as these are needed for the PyTorch model too.
+
+To run this specific conversion script you will need to have TensorFlow and PyTorch installed (`pip install tensorflow`). The rest of the repository only requires PyTorch.
 
 Here is an example of the conversion process for a pre-trained `BERT-Base Uncased` model:
 
@@ -27,22 +29,34 @@ python convert_tf_checkpoint_to_pytorch.py \
   --pytorch_dump_path=$BERT_BASE_DIR/pytorch_model.bin
 ```
 
+You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
+
 ## PyTorch models for BERT
 
-This repository contains three PyTorch models that you can find in [`modeling.py`](modeling.py):
+We included three PyTorch models in this repository that you will find in [`modeling.py`](modeling.py):
 
-- `BertModel` - the basic model
-- `BertForSequenceClassification` - the model with a sequence classification head
-- `BertForQuestionAnswering` - the model with a token classification head
+- `BertModel` - the basic BERT Transformer model
+- `BertForSequenceClassification` - the BERT model with a sequence classification head on top
+- `BertForQuestionAnswering` - the BERT model with a token classification head on top
+
+Here are some details on each class.
 
 ### 1. `BertModel`
 
-`BertModel` is the basic BERT model with a layer of token, position and sequence embeddings followed by a series of identical self-attention blocks (12 for BERT-base, 24 for BERT-large).
+`BertModel` is the basic BERT Transformer model with a layer of summed token, position and sequence embeddings followed by a series of identical self-attention blocks (12 for BERT-base, 24 for BERT-large).
 
-This model outputs a tuple of:
+The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
-- `all_encoder_layers`: a list of the full sequences of hidden-states at the end of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), and
-- `pooled_output`: the output of a classifier pretrained on top of the hidden state associated to the first character of the input to classifier the Next-Sentence task (see BERT's paper).
+We detail them here. This model takes as inputs:, token_type_ids=None, 
+
+- `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the vocabulary (see the tokens preprocessing logic in the scripts `extract_features.py`, `run_classifier.py` and `run_squad.py`), and
+- `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 correspond to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
+- `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max input sequence length in the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
+
+This model outputs a tuple composed of:
+
+- `all_encoder_layers`: a list of torch.FloatTensor of size [batch_size, sequence_length, hidden_size] which is a list of the full sequences of hidden-states at the end of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), and
+- `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a classifier pretrained on top of the hidden state associated to the first character of the input (`CLF`) to train on the Next-Sentence task (see BERT's paper).
 
 An example on how to use this class is given in the `extract_features.py` script which can be used to extract the hidden states of the model for a given input.
 
@@ -82,15 +96,15 @@ pytest -sv ./tests/
 
 ## Training on large batches: gradient accumulation, multi-GPU and distributed training
 
-BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch_size of 32 is recommended).
+BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch size of 32 is recommended).
 
-To help fine-tuning, we have included three techniques that you can leverage in the fine-tuning scripts `run_classifier.py` and `run_squad.py`: gradient-accumulation, multi-gpu and distributed training. For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that we published earlier this month.
+To help with fine-tuning these models, we have included three techniques that you can activate in the fine-tuning scripts `run_classifier.py` and `run_squad.py`: gradient-accumulation, multi-gpu and distributed training. For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that I published earlier this month.
 
-Here are the details:
+Here is how to use these techniques in our scripts:
 
-- **Gradient Accumulation**: Gradient accumulation can be used by supplying a integer greater than one to the `--gradient_accumulation_steps` argument. The batch at each step will be divided by this integer and gradient will be accumulated over `gradient_accumulation_steps` steps.
-- **Multi-GPU**: Multi-GPU is automatically activated when several GPUs are detected and the batch are splitted over the GPUs.
-- **Distributed training**: Distributed training can be activated by suppying an integer greater or equal to zero to the `--local_rank` argument. To use Distributed training, you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see the above blog post for more details):
+- **Gradient Accumulation**: Gradient accumulation can be used by supplying a integer greater than 1 to the `--gradient_accumulation_steps` argument. The batch at each step will be divided by this integer and gradient will be accumulated over `gradient_accumulation_steps` steps.
+- **Multi-GPU**: Multi-GPU is automatically activated when several GPUs are detected and the batches are splitted over the GPUs.
+- **Distributed training**: Distributed training can be activated by suppying an integer greater or equal to 0 to the `--local_rank` argument. To use Distributed training, you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see the above blog post for more details):
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
@@ -104,9 +118,19 @@ TPU are not supported by the current stable release of PyTorch (0.4.1). However,
 
 We will add TPU support when this next release is published.
 
-The original TensorFlow code furthe comprises two scripts for pre-training BERT: [create_pretraining_data.py](https://github.com/google-research/bert/blob/master/create_pretraining_data.py) and [run_pretraining.py](https://github.com/google-research/bert/blob/master/run_pretraining.py).
+The original TensorFlow code further comprises two scripts for pre-training BERT: [create_pretraining_data.py](https://github.com/google-research/bert/blob/master/create_pretraining_data.py) and [run_pretraining.py](https://github.com/google-research/bert/blob/master/run_pretraining.py).
 
 Since, pre-training BERT is a particularly expensive operation that basically requires one or several TPUs to be completed in a reasonable amout of time (see details [here](https://github.com/google-research/bert#pre-training-with-bert)) we have decided to wait for the inclusion of TPU support in PyTorch to convert these pre-training scripts.
+
+## Comparing the PyTorch model and the TensorFlow model predictions
+
+We also include [two Jupyter Notebooks](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/notebooks) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model.
+
+- The first NoteBook ([Comparing TF and PT models.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models.ipynb)) extract the hidden states of a full sequence on each layers of the TensorFlow and the PyTorch models and compute the sandard deviation between them. In the given example, we get a standard deviation of 1.5e-7 to 9e-7 on the various hidden state of the models.
+
+- The second NoteBook ([Comparing TF and PT models SQuAD predictions.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models%20SQuAD%20predictions.ipynb)) compare the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer and compute the sandard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
+
+Please follow the instructions given in the Notebooks to run and modify them.
 
 ## Fine-tuning with BERT: running the examples
 
@@ -140,7 +164,9 @@ python run_classifier.py \
   --output_dir /tmp/mrpc_output/
 ```
 
-The next example fine-tunes `BERT-Base` on the SQuAD question answering task. This example runs in about 4 hours on a multi-GPU K-80.
+Our test runs on three seeds gave results between 83.6 and 85.6.
+
+The second example fine-tunes `BERT-Base` on the SQuAD question answering task. This example runs in about 5 hours on a 4-GPU K-80.
 
 The data for SQuAD can be downloaded with the following links and should be saved in a `$SQUAD_DIR` directory.
 
@@ -166,11 +192,3 @@ python run_squad.py \
   --doc_stride=128 \
   --output_dir=../debug_squad/
 ```
-
-## Comparing the PyTorch model and the TensorFlow model predictions
-
-We also include [a simple Jupyter Notebook](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/Comparing%20TF%20and%20PT%20models.ipynb) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model.
-
-This NoteBook extract the full sequence hidden state layers of each model and compute the sandard deviation between them.
-
-In our case we found a standard deviation of about 4e-7 on the last hidden state of the 12th layer. Please follow the instructions in the Notebook to run it.
