@@ -34,6 +34,10 @@ def gelu(x):
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
+def swish(x):
+    return x * torch.sigmoid(x)
+
+
 class BertConfig(object):
     """Configuration class to store the configuration of a `BertModel`.
     """
@@ -60,7 +64,7 @@ class BertConfig(object):
             intermediate_size: The size of the "intermediate" (i.e., feed-forward)
                 layer in the Transformer encoder.
             hidden_act: The non-linear activation function (function or string) in the
-                encoder and pooler.
+                encoder and pooler. If string, "gelu", "relu" and "swish" supported.
             hidden_dropout_prob: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
             attention_probs_dropout_prob: The dropout ratio for the attention
@@ -237,7 +241,8 @@ class BERTIntermediate(nn.Module):
     def __init__(self, config):
         super(BERTIntermediate, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = gelu
+        act2fn = {"gelu": gelu, "relu": torch.nn.ReLU, "swish": swish}
+        self.intermediate_act_fn = act2fn[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -355,7 +360,7 @@ class BertModel(nn.Module):
         all_encoder_layers = self.encoder(embedding_output, extended_attention_mask)
         sequence_output = all_encoder_layers[-1]
         pooled_output = self.pooler(sequence_output)
-        return [embedding_output] + all_encoder_layers, pooled_output
+        return all_encoder_layers, pooled_output
 
 class BertForSequenceClassification(nn.Module):
     """BERT model for classification.
