@@ -26,35 +26,14 @@ import numpy as np
 
 from modeling import BertConfig, BertModel
 
-parser = argparse.ArgumentParser()
 
-## Required parameters
-parser.add_argument("--tf_checkpoint_path",
-                    default = None,
-                    type = str,
-                    required = True,
-                    help = "Path the TensorFlow checkpoint path.")
-parser.add_argument("--bert_config_file",
-                    default = None,
-                    type = str,
-                    required = True,
-                    help = "The config json file corresponding to the pre-trained BERT model. \n"
-                        "This specifies the model architecture.")
-parser.add_argument("--pytorch_dump_path",
-                    default = None,
-                    type = str,
-                    required = True,
-                    help = "Path to the output PyTorch model.")
-
-args = parser.parse_args()
-
-def convert():
+def convert(config_path, ckpt_path, out_path=None):
     # Initialise PyTorch model
-    config = BertConfig.from_json_file(args.bert_config_file)
+    config = BertConfig.from_json_file(config_path)
     model = BertModel(config)
 
     # Load weights from TF model
-    path = args.tf_checkpoint_path
+    path = ckpt_path
     print("Converting TensorFlow checkpoint from {}".format(path))
 
     init_vars = tf.train.list_variables(path)
@@ -99,7 +78,32 @@ def convert():
         pointer.data = torch.from_numpy(array)
 
     # Save pytorch-model
-    torch.save(model.state_dict(), args.pytorch_dump_path)
+    if out_path is not None:
+        torch.save(model.state_dict(), out_path)
+    return model
+
 
 if __name__ == "__main__":
-    convert()
+    parser = argparse.ArgumentParser()
+
+    ## Required parameters
+    parser.add_argument("--tf_checkpoint_path",
+                        default=None,
+                        type=str,
+                        required=True,
+                        help="Path the TensorFlow checkpoint path.")
+    parser.add_argument("--bert_config_file",
+                        default=None,
+                        type=str,
+                        required=True,
+                        help="The config json file corresponding to the pre-trained BERT model. \n"
+                             "This specifies the model architecture.")
+    parser.add_argument("--pytorch_dump_path",
+                        default=None,
+                        type=str,
+                        required=False,
+                        help="Path to the output PyTorch model.")
+
+    args = parser.parse_args()
+    print(args)
+    convert(args.bert_config_file, args.tf_checkpoint_path, args.pytorch_dump_path)
