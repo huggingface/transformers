@@ -166,7 +166,7 @@ python run_classifier.py \
   --output_dir /tmp/mrpc_output/
 ```
 
-Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation results between 82 and 87.
+Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation results between 84% and 88%.
 
 The second example fine-tunes `BERT-Base` on the SQuAD question answering task.
 
