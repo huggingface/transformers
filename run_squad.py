@@ -743,7 +743,7 @@ def main():
                         type=int,
                         default=1,
                         help="Number of updates steps to accumualte before performing a backward/update pass.")
-    
+
     args = parser.parse_args()
 
     if args.local_rank == -1 or args.no_cuda:
@@ -855,22 +855,15 @@ def main():
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
-        for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
+        for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, start_positions, end_positions = batch
-                input_ids = input_ids.to(device)
-                input_mask = input_mask.to(device)
-                segment_ids = segment_ids.to(device)
-                start_positions = start_positions.to(device)
-                end_positions = start_positions.to(device)
-
-                start_positions = start_positions.view(-1, 1)
-                end_positions = end_positions.view(-1, 1)
-
-                loss, _ = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
+                loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
-
+                if args.gradient_accumulation_steps > 1:
+                    loss = loss / args.gradient_accumulation_steps
                 loss.backward()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     optimizer.step()    # We have accumulated enought gradients
@@ -911,24 +904,19 @@ def main():
         for input_ids, input_mask, segment_ids, example_indices in tqdm(eval_dataloader, desc="Evaluating"):
             if len(all_results) % 1000 == 0:
                 logger.info("Processing example: %d" % (len(all_results)))
-
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
-
             with torch.no_grad():
                 batch_start_logits, batch_end_logits = model(input_ids, segment_ids, input_mask)
-
             for i, example_index in enumerate(example_indices):
                 start_logits = batch_start_logits[i].detach().cpu().tolist()
                 end_logits = batch_end_logits[i].detach().cpu().tolist()
-
                 eval_feature = eval_features[example_index.item()]
                 unique_id = int(eval_feature.unique_id)
                 all_results.append(RawResult(unique_id=unique_id,
                                              start_logits=start_logits,
                                              end_logits=end_logits))
-
         output_prediction_file = os.path.join(args.output_dir, "predictions.json")
         output_nbest_file = os.path.join(args.output_dir, "nbest_predictions.json")
         write_predictions(eval_examples, eval_features, all_results,

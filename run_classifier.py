@@ -458,7 +458,6 @@ def main():
         raise ValueError("Task not found: %s" % (task_name))
 
     processor = processors[task_name]()
-
     label_list = processor.get_labels()
 
     tokenizer = tokenization.FullTokenizer(
@@ -515,23 +514,21 @@ def main():
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
-        for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
+        for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
-            for step, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(train_dataloader, desc="Iteration")):
-                input_ids = input_ids.to(device)
-                input_mask = input_mask.to(device)
-                segment_ids = segment_ids.to(device)
-                label_ids = label_ids.to(device)
-
-                loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                batch = tuple(t.to(device) for t in batch)
+                input_ids, input_mask, segment_ids, label_ids = batch
+                loss = model(input_ids, segment_ids, input_mask, label_ids)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
+                if args.gradient_accumulation_steps > 1:
+                    loss = loss / args.gradient_accumulation_steps
+                loss.backward()
                 tr_loss += loss.item()
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
-                loss.backward()
-
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     optimizer.step()    # We have accumulated enought gradients
                     model.zero_grad()
@@ -567,7 +564,8 @@ def main():
             segment_ids = segment_ids.to(device)
             label_ids = label_ids.to(device)
 
-            tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
+            with torch.no_grad():
+                tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
 
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
@@ -579,13 +577,13 @@ def main():
             nb_eval_examples += input_ids.size(0)
             nb_eval_steps += 1
 
-        eval_loss = eval_loss / nb_eval_steps #len(eval_dataloader)
-        eval_accuracy = eval_accuracy / nb_eval_examples #len(eval_dataloader)
+        eval_loss = eval_loss / nb_eval_steps
+        eval_accuracy = eval_accuracy / nb_eval_examples
 
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
                   'global_step': global_step,
-                  'loss': tr_loss/nb_tr_steps}#'loss': loss.item()}
+                  'loss': tr_loss/nb_tr_steps}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
