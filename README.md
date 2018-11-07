@@ -93,7 +93,7 @@ A series of tests is included in the [tests folder](https://github.com/huggingfa
 
 You can run the tests with the command:
 ```bash
-pytest -sv ./tests/
+python -m pytest -sv tests/
 ```
 
 ## Training on large batches: gradient accumulation, multi-GPU and distributed training
