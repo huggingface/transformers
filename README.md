@@ -194,5 +194,3 @@ python run_squad.py \
   --doc_stride 128 \
   --output_dir ../debug_squad/
 ```
-
-There is currently a bug in the `run_squad.py` script that we are investigating. The reported numbers are very low (F1 of 41.8 and exact match of 21.7) even though the correct answer is usually in the n-best predictions. We are investigating that right now on the develop branch, follow [this issue](https://github.com/huggingface/pytorch-pretrained-BERT/issues/3) for more updates.
