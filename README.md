@@ -194,3 +194,8 @@ python run_squad.py \
   --doc_stride 128 \
   --output_dir ../debug_squad/
 ```
+
+Training with the previous hyper-parameters and a batch size 32 (on 4 GPUs) for 2 epochs gave us the following results:
+```bash
+{"f1": 88.19829549714827, "exact_match": 80.75685903500474}
+```
