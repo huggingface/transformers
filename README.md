@@ -184,18 +184,19 @@ python run_squad.py \
   --bert_config_file $BERT_BASE_DIR/bert_config.json \
   --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
   --do_train \
-  --train_file $SQUAD_DIR/train-v1.1.json \
   --do_predict \
+  --do_lower_case
+  --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --train_batch_size 12 \
-  --learning_rate 5e-5 \
+  --learning_rate 3e-5 \
   --num_train_epochs 2.0 \
   --max_seq_length 384 \
   --doc_stride 128 \
   --output_dir ../debug_squad/
 ```
 
-Training with the previous hyper-parameters and a batch size 32 (on 4 GPUs) for 2 epochs gave us the following results:
+Training with the previous hyper-parameters gave us the following results:
 ```bash
-{"f1": 88.19829549714827, "exact_match": 80.75685903500474}
+{"f1": 88.52381567990474, "exact_match": 81.22043519394512}
 ```
