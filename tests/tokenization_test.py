@@ -43,6 +43,13 @@ class TokenizationTest(unittest.TestCase):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
+    def test_chinese(self):
+        tokenizer = tokenization.BasicTokenizer()
+    
+        self.assertListEqual(
+            tokenizer.tokenize(u"ah\u535A\u63A8zz"),
+            [u"ah", u"\u535A", u"\u63A8", u"zz"])  
+
     def test_basic_tokenizer_lower(self):
         tokenizer = tokenization.BasicTokenizer(do_lower_case=True)
 
