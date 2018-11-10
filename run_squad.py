@@ -742,6 +742,10 @@ def main():
                         default=False,
                         action='store_true',
                         help="Whether to perform optimization and keep the optimizer averages on CPU")
+    parser.add_argument('--fp16',
+                        default=False,
+                        action='store_true',
+                        help="Whether to use 16-bit float precision instead of 32-bit")
 
 
     args = parser.parse_args()
@@ -801,11 +805,13 @@ def main():
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True)
         num_train_steps = int(
-            len(train_examples) / args.train_batch_size * args.num_train_epochs)
+            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
     model = BertForQuestionAnswering(bert_config)
     if args.init_checkpoint is not None:
         model.bert.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
+    if args.fp16:
+        model.half()
 
     if not args.optimize_on_cpu:
         model.to(device)
@@ -846,6 +852,12 @@ def main():
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
         all_start_positions = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
+
+        if args.fp16:
+            (all_input_ids, all_input_mask,
+             all_segment_ids, all_start_positions,
+             all_end_positions) = tuple(t.half() for t in (all_input_ids, all_input_mask, all_segment_ids,
+                                                           all_start_positions, all_end_positions))
 
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
                                    all_start_positions, all_end_positions)
@@ -895,6 +907,10 @@ def main():
         all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
         all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+        if args.fp16:
+            (all_input_ids, all_input_mask,
+             all_segment_ids, all_example_index) = tuple(t.half() for t in (all_input_ids, all_input_mask,
+                                                                            all_segment_ids, all_example_index))
 
         eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index)
         if args.local_rank == -1:
