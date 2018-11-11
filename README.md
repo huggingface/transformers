@@ -206,7 +206,7 @@ Training with the previous hyper-parameters gave us the following results:
 
 The options we list above allow to fine-tune BERT-large rather easily on GPU(s) instead of the TPU used by the original implementation.
 
-For example, fine-tuning BERT-large on SQuAD can be done on a server with 4 k-80 (these are pretty old now) in 18 hours. Our results are similar to the TensorFlow implementation results:
+For example, fine-tuning BERT-large on SQuAD can be done on a server with 4 k-80 (these are pretty old now) in 18 hours. Our results are similar to the TensorFlow implementation results (actually slightly higher):
 ```bash
 {"exact_match": 84.56953642384106, "f1": 91.04028647786927}
 ```
