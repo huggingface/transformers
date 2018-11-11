@@ -201,3 +201,21 @@ Training with the previous hyper-parameters gave us the following results:
 ```bash
 {"f1": 88.52381567990474, "exact_match": 81.22043519394512}
 ```
+
+# Fine-tuning BERT-large on GPUs
+
+The options we list above allow to fine-tune BERT-large rather easily on GPU(s) instead of the TPU used by the original implementation.
+
+For example, fine-tuning BERT-large on SQuAD can be done on a server with 4 k-80 (these are pretty old now) in 18 hours. Our results are similar to the TensorFlow implementation results:
+```bash
+{"exact_match": 84.56953642384106, "f1": 91.04028647786927}
+```
+To get these results that we used a combination of:
+- multi-GPU training (automatically activated on a multi-GPU server),
+- 2 steps of gradient accumulation and
+- perform the optimization step on CPU to store Adam's averages in RAM.
+
+Here are the full list of hyper-parameters we used for this run:
+```bash
+python ./run_squad.py --vocab_file $BERT_LARGE_DIR/vocab.txt --bert_config_file $BERT_LARGE_DIR/bert_config.json --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin --do_lower_case --do_train --do_predict --train_file $SQUAD_TRAIN --predict_file $SQUAD_EVAL --learning_rate 3e-5 --num_train_epochs 2 --max_seq_length 384 --doc_stride 128 --output_dir $OUTPUT_DIR/bert_large_bsz_24 --train_batch_size 24 --gradient_accumulation_steps 2 --optimize_on_cpu
+```
