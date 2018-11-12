@@ -186,7 +186,7 @@ python run_squad.py \
   --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
   --do_train \
   --do_predict \
-  --do_lower_case
+  --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --train_batch_size 12 \
