@@ -210,12 +210,12 @@ For example, fine-tuning BERT-large on SQuAD can be done on a server with 4 k-80
 ```bash
 {"exact_match": 84.56953642384106, "f1": 91.04028647786927}
 ```
-To get these results that we used a combination of:
+To get these results we used a combination of:
 - multi-GPU training (automatically activated on a multi-GPU server),
 - 2 steps of gradient accumulation and
 - perform the optimization step on CPU to store Adam's averages in RAM.
 
-Here are the full list of hyper-parameters we used for this run:
+Here are the full list of hyper-parameters for this run:
 ```bash
 python ./run_squad.py \
   --vocab_file $BERT_LARGE_DIR/vocab.txt \
