@@ -186,7 +186,7 @@ python run_squad.py \
   --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
   --do_train \
   --do_predict \
-  --do_lower_case
+  --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --train_batch_size 12 \
@@ -217,5 +217,21 @@ To get these results that we used a combination of:
 
 Here are the full list of hyper-parameters we used for this run:
 ```bash
-python ./run_squad.py --vocab_file $BERT_LARGE_DIR/vocab.txt --bert_config_file $BERT_LARGE_DIR/bert_config.json --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin --do_lower_case --do_train --do_predict --train_file $SQUAD_TRAIN --predict_file $SQUAD_EVAL --learning_rate 3e-5 --num_train_epochs 2 --max_seq_length 384 --doc_stride 128 --output_dir $OUTPUT_DIR/bert_large_bsz_24 --train_batch_size 24 --gradient_accumulation_steps 2 --optimize_on_cpu
+python ./run_squad.py \
+  --vocab_file $BERT_LARGE_DIR/vocab.txt \
+  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
+  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
+  --do_lower_case \
+  --do_train \
+  --do_predict \
+  --train_file $SQUAD_TRAIN \
+  --predict_file $SQUAD_EVAL \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir $OUTPUT_DIR \
+  --train_batch_size 24 \
+  --gradient_accumulation_steps 2 \
+  --optimize_on_cpu
 ```
