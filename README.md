@@ -236,3 +236,31 @@ python ./run_squad.py \
   --gradient_accumulation_steps 2 \
   --optimize_on_cpu
 ```
+
+If you have a recent GPU (starting from NVIDIA Volta series), you should try **16-bit fine-tuning** (FP16).
+
+Here is an example of hyper-parameters for a FP16 run we tried:
+```bash
+python ./run_squad.py \
+  --vocab_file $BERT_LARGE_DIR/vocab.txt \
+  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
+  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
+  --do_lower_case \
+  --do_train \
+  --do_predict \
+  --train_file $SQUAD_TRAIN \
+  --predict_file $SQUAD_EVAL \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir $OUTPUT_DIR \
+  --train_batch_size 24 \
+  --fp16 \
+  --loss_scale 128
+```
+
+The results were similar to the above FP32 results (actually slightly higher):
+```bash
+{"exact_match": 84.65468306527909, "f1": 91.238669287002}
+```
