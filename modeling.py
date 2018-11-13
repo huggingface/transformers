@@ -26,6 +26,10 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+
+ACT2FN = {"gelu": gelu, "relu": torch.nn.ReLU, "swish": swish}
+
+
 def gelu(x):
     """Implementation of the gelu activation function.
         For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
@@ -241,8 +245,8 @@ class BERTIntermediate(nn.Module):
     def __init__(self, config):
         super(BERTIntermediate, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        act2fn = {"gelu": gelu, "relu": torch.nn.ReLU, "swish": swish}
-        self.intermediate_act_fn = act2fn[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
+        self.intermediate_act_fn = ACT2FN[config.hidden_act] \
+            if isinstance(config.hidden_act, str) else config.hidden_act
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
