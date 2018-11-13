@@ -93,26 +93,28 @@ A series of tests is included in the [tests folder](https://github.com/huggingfa
 
 You can run the tests with the command:
 ```bash
-pytest -sv ./tests/
+python -m pytest -sv tests/
 ```
 
 ## Training on large batches: gradient accumulation, multi-GPU and distributed training
 
 BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch size of 32).
 
-To help with fine-tuning these models, we have included three techniques that you can activate in the fine-tuning scripts `run_classifier.py` and `run_squad.py`: gradient-accumulation, multi-gpu and distributed training. For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that I published earlier this month.
+To help with fine-tuning these models, we have included five techniques that you can activate in the fine-tuning scripts `run_classifier.py` and `run_squad.py`: gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training . For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that I published earlier this month.
 
 Here is how to use these techniques in our scripts:
 
 - **Gradient Accumulation**: Gradient accumulation can be used by supplying a integer greater than 1 to the `--gradient_accumulation_steps` argument. The batch at each step will be divided by this integer and gradient will be accumulated over `gradient_accumulation_steps` steps.
 - **Multi-GPU**: Multi-GPU is automatically activated when several GPUs are detected and the batches are splitted over the GPUs.
-- **Distributed training**: Distributed training can be activated by suppying an integer greater or equal to 0 to the `--local_rank` argument. To use Distributed training, you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see the above blog post for more details):
+- **Distributed training**: Distributed training can be activated by supplying an integer greater or equal to 0 to the `--local_rank` argument (see below).
+- **Optimize on CPU**: The Adam optimizer stores 2 moving average of the weights of the model. If you keep them on GPU 1 (typical behavior), your first GPU will have to store 3-times the size of the model. This is not optimal for large models like `BERT-large` and means your batch size is a lot lower than it could be. This option will perform the optimization and store the averages on the CPU/RAM to free more room on the GPU(s). As the most computational intensive operation is usually the backward pass, this doesn't have a significant impact on the training time. Activate this option with `--optimize_on_cpu` on the `run_squad.py` script.
+- **16-bits training**: 16-bits training, also called mixed-precision training, can reduce the memory requirement of your model on the GPU by using half-precision training, basically allowing to double the batch size. If you have a recent GPU (starting from NVIDIA Volta architecture) you should see no decrease in speed. A good introduction to Mixed precision training can be found [here](https://devblogs.nvidia.com/mixed-precision-training-deep-neural-networks/) and a full documentation is [here](https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html). In our scripts, this option can be activated by setting the `--fp16` flag and you can play with loss scaling using the `--loss_scaling` flag (see the previously linked documentation for details on loss scaling). If the loss scaling is too high (`Nan` in the gradients) it will be automatically scaled down until the value is acceptable. The default loss scaling is 128 which behaved nicely in our tests.
 
+Note: To use *Distributed Training*, you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see [the above mentioned blog post]((https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255)) for more details):
 ```bash
 python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
 ```
-
-Where `$THIS_MACHINE_INDEX` is an sequential index assigned to each of your machine (0, 1, 2...) and the machine with rank 0 has an IP adress `192.168.1.1` and an open port `1234`.
+Where `$THIS_MACHINE_INDEX` is an sequential index assigned to each of your machine (0, 1, 2...) and the machine with rank 0 has an IP address `192.168.1.1` and an open port `1234`.
 
 ## TPU support and pretraining scripts
 
@@ -128,9 +130,9 @@ Since, pre-training BERT is a particularly expensive operation that basically re
 
 We also include [two Jupyter Notebooks](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/notebooks) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model.
 
-- The first NoteBook ([Comparing TF and PT models.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models.ipynb)) extracts the hidden states of a full sequence on each layers of the TensorFlow and the PyTorch models and computes the sandard deviation between them. In the given example, we get a standard deviation of 1.5e-7 to 9e-7 on the various hidden state of the models.
+- The first NoteBook ([Comparing TF and PT models.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models.ipynb)) extracts the hidden states of a full sequence on each layers of the TensorFlow and the PyTorch models and computes the standard deviation between them. In the given example, we get a standard deviation of 1.5e-7 to 9e-7 on the various hidden state of the models.
 
-- The second NoteBook ([Comparing TF and PT models SQuAD predictions.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models%20SQuAD%20predictions.ipynb)) compares the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer of the `BertForQuestionAnswering` and computes the sandard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
+- The second NoteBook ([Comparing TF and PT models SQuAD predictions.ipynb](https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/notebooks/Comparing%20TF%20and%20PT%20models%20SQuAD%20predictions.ipynb)) compares the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer of the `BertForQuestionAnswering` and computes the standard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
 
 Please follow the instructions given in the notebooks to run and modify them. They can also be nice example on how to use the models in a simpler way than the full fine-tuning scripts we provide.
 
@@ -138,7 +140,7 @@ Please follow the instructions given in the notebooks to run and modify them. Th
 
 We showcase the same examples as [the original implementation](https://github.com/google-research/bert/): fine-tuning a sequence-level classifier on the MRPC classification corpus and a token-level classifier on the question answering dataset SQuAD.
 
-Before running theses examples you should download the
+Before running these examples you should download the
 [GLUE data](https://gluebenchmark.com/tasks) by running
 [this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
 and unpack it to some directory `$GLUE_DIR`. Please also download the `BERT-Base`
@@ -166,7 +168,7 @@ python run_classifier.py \
   --output_dir /tmp/mrpc_output/
 ```
 
-Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation results between 82 and 87.
+Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation results between 84% and 88%.
 
 The second example fine-tunes `BERT-Base` on the SQuAD question answering task.
 
@@ -184,15 +186,81 @@ python run_squad.py \
   --bert_config_file $BERT_BASE_DIR/bert_config.json \
   --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
   --do_train \
-  --train_file $SQUAD_DIR/train-v1.1.json \
   --do_predict \
+  --do_lower_case \
+  --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --train_batch_size 12 \
-  --learning_rate 5e-5 \
+  --learning_rate 3e-5 \
   --num_train_epochs 2.0 \
   --max_seq_length 384 \
   --doc_stride 128 \
   --output_dir ../debug_squad/
 ```
 
-There is currently a bug in the `run_squad.py` script that we are investigating. The reported numbers are very low (F1 of 41.8 and exact match of 21.7) even though the correct answer is usually in the n-best predictions. We are investigating that right now on the develop branch, follow [this issue](https://github.com/huggingface/pytorch-pretrained-BERT/issues/3) for more updates.
+Training with the previous hyper-parameters gave us the following results:
+```bash
+{"f1": 88.52381567990474, "exact_match": 81.22043519394512}
+```
+
+# Fine-tuning BERT-large on GPUs
+
+The options we list above allow to fine-tune BERT-large rather easily on GPU(s) instead of the TPU used by the original implementation.
+
+For example, fine-tuning BERT-large on SQuAD can be done on a server with 4 k-80 (these are pretty old now) in 18 hours. Our results are similar to the TensorFlow implementation results (actually slightly higher):
+```bash
+{"exact_match": 84.56953642384106, "f1": 91.04028647786927}
+```
+To get these results we used a combination of:
+- multi-GPU training (automatically activated on a multi-GPU server),
+- 2 steps of gradient accumulation and
+- perform the optimization step on CPU to store Adam's averages in RAM.
+
+Here is the full list of hyper-parameters for this run:
+```bash
+python ./run_squad.py \
+  --vocab_file $BERT_LARGE_DIR/vocab.txt \
+  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
+  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
+  --do_lower_case \
+  --do_train \
+  --do_predict \
+  --train_file $SQUAD_TRAIN \
+  --predict_file $SQUAD_EVAL \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir $OUTPUT_DIR \
+  --train_batch_size 24 \
+  --gradient_accumulation_steps 2 \
+  --optimize_on_cpu
+```
+
+If you have a recent GPU (starting from NVIDIA Volta series), you should try **16-bit fine-tuning** (FP16).
+
+Here is an example of hyper-parameters for a FP16 run we tried:
+```bash
+python ./run_squad.py \
+  --vocab_file $BERT_LARGE_DIR/vocab.txt \
+  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
+  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
+  --do_lower_case \
+  --do_train \
+  --do_predict \
+  --train_file $SQUAD_TRAIN \
+  --predict_file $SQUAD_EVAL \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir $OUTPUT_DIR \
+  --train_batch_size 24 \
+  --fp16 \
+  --loss_scale 128
+```
+
+The results were similar to the above FP32 results (actually slightly higher):
+```bash
+{"exact_match": 84.65468306527909, "f1": 91.238669287002}
+```

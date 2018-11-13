@@ -342,8 +342,8 @@ class BertModel(nn.Module):
             token_type_ids = torch.zeros_like(input_ids)
 
         # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, from_seq_length]
-        # So we can broadcast to [batch_size, num_heads, to_seq_length, from_seq_length]
+        # Sizes are [batch_size, 1, 1, to_seq_length]
+        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
@@ -353,7 +353,7 @@ class BertModel(nn.Module):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.float()
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         embedding_output = self.embeddings(input_ids, token_type_ids)
@@ -393,10 +393,10 @@ class BertForSequenceClassification(nn.Module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
                 # Slightly different from the TF version which uses truncated_normal for initialization
                 # cf https://github.com/pytorch/pytorch/pull/5617
-                module.weight.data.normal_(config.initializer_range)
+                module.weight.data.normal_(mean=0.0, std=config.initializer_range)
             elif isinstance(module, BERTLayerNorm):
-                module.beta.data.normal_(config.initializer_range)
-                module.gamma.data.normal_(config.initializer_range)
+                module.beta.data.normal_(mean=0.0, std=config.initializer_range)
+                module.gamma.data.normal_(mean=0.0, std=config.initializer_range)
             if isinstance(module, nn.Linear):
                 module.bias.data.zero_()
         self.apply(init_weights)
@@ -443,10 +443,10 @@ class BertForQuestionAnswering(nn.Module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
                 # Slightly different from the TF version which uses truncated_normal for initialization
                 # cf https://github.com/pytorch/pytorch/pull/5617
-                module.weight.data.normal_(config.initializer_range)
+                module.weight.data.normal_(mean=0.0, std=config.initializer_range)
             elif isinstance(module, BERTLayerNorm):
-                module.beta.data.normal_(config.initializer_range)
-                module.gamma.data.normal_(config.initializer_range)
+                module.beta.data.normal_(mean=0.0, std=config.initializer_range)
+                module.gamma.data.normal_(mean=0.0, std=config.initializer_range)
             if isinstance(module, nn.Linear):
                 module.bias.data.zero_()
         self.apply(init_weights)
@@ -460,11 +460,13 @@ class BertForQuestionAnswering(nn.Module):
         end_logits = end_logits.squeeze(-1)
 
         if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension - if not this is a no-op
-            start_positions = start_positions.squeeze(-1)
-            end_positions = end_positions.squeeze(-1)
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1) + 1
+            ignored_index = start_logits.size(1)
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
 
@@ -472,6 +474,6 @@ class BertForQuestionAnswering(nn.Module):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-            return total_loss, (start_logits, end_logits)
+            return total_loss
         else:
             return start_logits, end_logits

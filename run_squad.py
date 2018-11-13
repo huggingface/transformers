@@ -669,6 +669,31 @@ def _compute_softmax(scores):
         probs.append(score / total_sum)
     return probs
 
+def copy_optimizer_params_to_model(named_params_model, named_params_optimizer):
+    """ Utility function for optimize_on_cpu and 16-bits training.
+        Copy the parameters optimized on CPU/RAM back to the model on GPU
+    """
+    for (name_opti, param_opti), (name_model, param_model) in zip(named_params_optimizer, named_params_model):
+        if name_opti != name_model:
+            logger.error("name_opti != name_model: {} {}".format(name_opti, name_model))
+            raise ValueError
+        param_model.data.copy_(param_opti.data)
+
+def set_optimizer_params_grad(named_params_optimizer, named_params_model, test_nan=False):
+    """ Utility function for optimize_on_cpu and 16-bits training.
+        Copy the gradient of the GPU parameters to the CPU/RAMM copy of the model
+    """
+    is_nan = False
+    for (name_opti, param_opti), (name_model, param_model) in zip(named_params_optimizer, named_params_model):
+        if name_opti != name_model:
+            logger.error("name_opti != name_model: {} {}".format(name_opti, name_model))
+            raise ValueError
+        if test_nan and torch.isnan(param_model.grad).sum() > 0:
+            is_nan = True
+        if param_opti.grad is None:
+            param_opti.grad = torch.nn.Parameter(param_opti.data.new().resize_(*param_opti.data.size()))
+        param_opti.grad.data.copy_(param_model.grad.data)
+    return is_nan
 
 def main():
     parser = argparse.ArgumentParser()
@@ -719,7 +744,6 @@ def main():
     parser.add_argument("--max_answer_length", default=30, type=int,
                         help="The maximum length of an answer that can be generated. This is needed because the start "
                              "and end predictions are not conditioned on one another.")
-
     parser.add_argument("--verbose_logging", default=False, action='store_true',
                         help="If true, all of the warnings related to data processing will be printed. "
                              "A number of warnings are expected for a normal SQuAD evaluation.")
@@ -727,14 +751,6 @@ def main():
                         default=False,
                         action='store_true',
                         help="Whether not to use CUDA when available")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument("--accumulate_gradients",
-                        type=int,
-                        default=1,
-                        help="Number of steps to accumulate gradient on (divide the batch_size and accumulate)")
     parser.add_argument('--seed', 
                         type=int, 
                         default=42,
@@ -742,8 +758,23 @@ def main():
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
                         default=1,
-                        help="Number of updates steps to accumualte before performing a backward/update pass.")
-    
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument("--local_rank",
+                        type=int,
+                        default=-1,
+                        help="local_rank for distributed training on gpus")
+    parser.add_argument('--optimize_on_cpu',
+                        default=False,
+                        action='store_true',
+                        help="Whether to perform optimization and keep the optimizer averages on CPU")
+    parser.add_argument('--fp16',
+                        default=False,
+                        action='store_true',
+                        help="Whether to use 16-bit float precision instead of 32-bit")
+    parser.add_argument('--loss_scale',
+                        type=float, default=128,
+                        help='Loss scaling, positive power of 2 values can improve fp16 convergence.')
+
     args = parser.parse_args()
 
     if args.local_rank == -1 or args.no_cuda:
@@ -754,13 +785,17 @@ def main():
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
-    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+        if args.fp16:
+            logger.info("16-bits training currently not supported in distributed training")
+            args.fp16 = False # (see https://github.com/pytorch/pytorch/pull/13496)
+    logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits trainiing: {}".format(
+        device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
-    if args.accumulate_gradients < 1:
-        raise ValueError("Invalid accumulate_gradients parameter: {}, should be >= 1".format(
-                            args.accumulate_gradients))
+    if args.gradient_accumulation_steps < 1:
+        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
+                            args.gradient_accumulation_steps))
 
-    args.train_batch_size = int(args.train_batch_size / args.accumulate_gradients)
+    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -801,26 +836,36 @@ def main():
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True)
         num_train_steps = int(
-            len(train_examples) / args.train_batch_size * args.num_train_epochs)
+            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
+    # Prepare model
     model = BertForQuestionAnswering(bert_config)
     if args.init_checkpoint is not None:
         model.bert.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
+    if args.fp16:
+        model.half()
     model.to(device)
-
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
+    # Prepare optimizer
+    if args.fp16:
+        param_optimizer = [(n, param.clone().detach().to('cpu').float().requires_grad_()) \
+                            for n, param in model.named_parameters()]
+    elif args.optimize_on_cpu:
+        param_optimizer = [(n, param.clone().detach().to('cpu').requires_grad_()) \
+                            for n, param in model.named_parameters()]
+    else:
+        param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'gamma', 'beta']
-    optimizer_parameters = [
-        {'params': [p for n, p in model.named_parameters() if n not in no_decay], 'weight_decay_rate': 0.01},
-        {'params': [p for n, p in model.named_parameters() if n in no_decay], 'weight_decay_rate': 0.0}
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if n not in no_decay], 'weight_decay_rate': 0.01},
+        {'params': [p for n, p in param_optimizer if n in no_decay], 'weight_decay_rate': 0.0}
         ]
-
-    optimizer = BERTAdam(optimizer_parameters,
+    optimizer = BERTAdam(optimizer_grouped_parameters,
                          lr=args.learning_rate,
                          warmup=args.warmup_proportion,
                          t_total=num_train_steps)
@@ -839,13 +884,11 @@ def main():
         logger.info("  Num split examples = %d", len(train_features))
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_steps)
-
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
         all_start_positions = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
-
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
                                    all_start_positions, all_end_positions)
         if args.local_rank == -1:
@@ -855,25 +898,37 @@ def main():
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
-        for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
+        for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                if n_gpu == 1:
+                    batch = tuple(t.to(device) for t in batch) # multi-gpu does scattering it-self
                 input_ids, input_mask, segment_ids, start_positions, end_positions = batch
-                input_ids = input_ids.to(device)
-                input_mask = input_mask.to(device)
-                segment_ids = segment_ids.to(device)
-                start_positions = start_positions.to(device)
-                end_positions = start_positions.to(device)
-
-                start_positions = start_positions.view(-1, 1)
-                end_positions = end_positions.view(-1, 1)
-
-                loss, _ = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
+                loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
-
+                if args.fp16 and args.loss_scale != 1.0:
+                    # rescale loss for fp16 training
+                    # see https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html
+                    loss = loss * args.loss_scale
+                if args.gradient_accumulation_steps > 1:
+                    loss = loss / args.gradient_accumulation_steps
                 loss.backward()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    optimizer.step()    # We have accumulated enought gradients
+                    if args.fp16 or args.optimize_on_cpu:
+                        if args.fp16 and args.loss_scale != 1.0:
+                            # scale down gradients for fp16 training
+                            for param in model.parameters():
+                                param.grad.data = param.grad.data / args.loss_scale
+                        is_nan = set_optimizer_params_grad(param_optimizer, model.named_parameters(), test_nan=True)
+                        if is_nan:
+                            logger.info("FP16 TRAINING: Nan in gradients, reducing loss scaling")
+                            args.loss_scale = args.loss_scale / 2
+                            model.zero_grad()
+                            continue
+                        optimizer.step()
+                        copy_optimizer_params_to_model(model.named_parameters(), param_optimizer)
+                    else:
+                        optimizer.step()
                     model.zero_grad()
                     global_step += 1
 
@@ -897,7 +952,6 @@ def main():
         all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
         all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-
         eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_example_index)
         if args.local_rank == -1:
             eval_sampler = SequentialSampler(eval_data)
@@ -908,30 +962,22 @@ def main():
         model.eval()
         all_results = []
         logger.info("Start evaluating")
-        for input_ids, input_mask, segment_ids, example_index in tqdm(eval_dataloader, desc="Evaluating"):
+        for input_ids, input_mask, segment_ids, example_indices in tqdm(eval_dataloader, desc="Evaluating"):
             if len(all_results) % 1000 == 0:
                 logger.info("Processing example: %d" % (len(all_results)))
-
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
-
-            start_logits, end_logits = model(input_ids, segment_ids, input_mask)
-
-            unique_id = [int(eval_features[e.item()].unique_id) for e in example_index]
-            start_logits = [x.view(-1).detach().cpu().numpy() for x in start_logits]
-            end_logits = [x.view(-1).detach().cpu().numpy() for x in end_logits]
-            for idx, i in enumerate(unique_id):
-                s = [float(x) for x in start_logits[idx]]
-                e = [float(x) for x in end_logits[idx]]
-                all_results.append(
-                    RawResult(
-                        unique_id=i,
-                        start_logits=s,
-                        end_logits=e
-                    )
-                )
-
+            with torch.no_grad():
+                batch_start_logits, batch_end_logits = model(input_ids, segment_ids, input_mask)
+            for i, example_index in enumerate(example_indices):
+                start_logits = batch_start_logits[i].detach().cpu().tolist()
+                end_logits = batch_end_logits[i].detach().cpu().tolist()
+                eval_feature = eval_features[example_index.item()]
+                unique_id = int(eval_feature.unique_id)
+                all_results.append(RawResult(unique_id=unique_id,
+                                             start_logits=start_logits,
+                                             end_logits=end_logits))
         output_prediction_file = os.path.join(args.output_dir, "predictions.json")
         output_nbest_file = os.path.join(args.output_dir, "nbest_predictions.json")
         write_predictions(eval_examples, eval_features, all_results,
