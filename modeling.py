@@ -277,7 +277,7 @@ class BERTEncoder(nn.Module):
     def __init__(self, config):
         super(BERTEncoder, self).__init__()
         layer = BERTLayer(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])    
+        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states, attention_mask):
         all_encoder_layers = []
@@ -329,6 +329,10 @@ class BertModel(nn.Module):
         self.embeddings = BERTEmbeddings(config)
         self.encoder = BERTEncoder(config)
         self.pooler = BERTPooler(config)
+
+        # the output weights are the same as the input embeddings,
+        # but there is an output-only bias for each token
+        self.output_layer = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None):
         if attention_mask is None:

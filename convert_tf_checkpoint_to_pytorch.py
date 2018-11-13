@@ -68,6 +68,21 @@ def convert():
         arrays.append(array)
 
     for name, array in zip(names, arrays):
+
+        # include the output_layer in the model
+        if (name=="bert/embeddings/word_embeddings"):
+            pointer = model
+            pointer = getattr(pointer, 'output_layer')
+            pointer = getattr(pointer, 'weight')
+            assert pointer.shape == array.shape
+            pointer.data = torch.from_numpy(array)
+        elif (name=="cls/predictions/output_bias"):
+            pointer = model
+            pointer = getattr(pointer, 'output_layer')
+            pointer = getattr(pointer, 'bias')
+            assert pointer.shape == array.shape
+            pointer.data = torch.from_numpy(array)
+
         if not name.startswith("bert"):
             print("Skipping {}".format(name))
             continue
