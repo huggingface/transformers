@@ -34,7 +34,7 @@ class TokenizationTest(unittest.TestCase):
 
             vocab_file = vocab_writer.name
 
-        tokenizer = tokenization.FullTokenizer(vocab_file)
+        tokenizer = tokenization.BertTokenizer(vocab_file)
         os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")

@@ -30,9 +30,9 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-import tokenization
-from modeling import BertConfig, BertForSequenceClassification
-from optimization import BERTAdam
+from pytorch_pretrained_bert.tokenization import printable_text, convert_to_unicode, BertTokenizer
+from pytorch_pretrained_bert.modeling import BertConfig, BertForSequenceClassification
+from pytorch_pretrained_bert.optimization import BERTAdam
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -122,9 +122,9 @@ class MrpcProcessor(DataProcessor):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, i)
-            text_a = tokenization.convert_to_unicode(line[3])
-            text_b = tokenization.convert_to_unicode(line[4])
-            label = tokenization.convert_to_unicode(line[0])
+            text_a = convert_to_unicode(line[3])
+            text_b = convert_to_unicode(line[4])
+            label = convert_to_unicode(line[0])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
@@ -154,14 +154,14 @@ class MnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
-            text_a = tokenization.convert_to_unicode(line[8])
-            text_b = tokenization.convert_to_unicode(line[9])
-            label = tokenization.convert_to_unicode(line[-1])
+            guid = "%s-%s" % (set_type, convert_to_unicode(line[0]))
+            text_a = convert_to_unicode(line[8])
+            text_b = convert_to_unicode(line[9])
+            label = convert_to_unicode(line[-1])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
-        
+
 
 class ColaProcessor(DataProcessor):
     """Processor for the CoLA data set (GLUE version)."""
@@ -185,8 +185,8 @@ class ColaProcessor(DataProcessor):
         examples = []
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
-            text_a = tokenization.convert_to_unicode(line[3])
-            label = tokenization.convert_to_unicode(line[1])
+            text_a = convert_to_unicode(line[3])
+            label = convert_to_unicode(line[1])
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
@@ -273,7 +273,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join(
-                    [tokenization.printable_text(x) for x in tokens]))
+                    [printable_text(x) for x in tokens]))
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info(
@@ -281,11 +281,10 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
             logger.info("label: %s (id = %d)" % (example.label, label_id))
 
         features.append(
-                InputFeatures(
-                        input_ids=input_ids,
-                        input_mask=input_mask,
-                        segment_ids=segment_ids,
-                        label_id=label_id))
+                InputFeatures(input_ids=input_ids,
+                              input_mask=input_mask,
+                              segment_ids=segment_ids,
+                              label_id=label_id))
     return features
 
 
@@ -307,7 +306,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
 
 def accuracy(out, labels):
     outputs = np.argmax(out, axis=1)
-    return np.sum(outputs==labels)
+    return np.sum(outputs == labels)
 
 def copy_optimizer_params_to_model(named_params_model, named_params_optimizer):
     """ Utility function for optimize_on_cpu and 16-bits training.
@@ -497,7 +496,7 @@ def main():
     processor = processors[task_name]()
     label_list = processor.get_labels()
 
-    tokenizer = tokenization.FullTokenizer(
+    tokenizer = BertTokenizer(
         vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
 
     train_examples = None

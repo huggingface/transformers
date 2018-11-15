@@ -8,28 +8,25 @@ This implementation can load any pre-trained TensorFlow checkpoint for BERT (in 
 
 The code to use, in addition, [the Multilingual and Chinese models](https://github.com/google-research/bert/blob/master/multilingual.md) will be added later this week (it's actually just the tokenization code that needs to be updated).
 
-## Loading a TensorFlow checkpoint (e.g. [Google's pre-trained models](https://github.com/google-research/bert#pre-trained-models))
+## Installation, requirements, test
 
-You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py) script.
+This code was tested on Python 3.5+. The requirements are:
 
-This script takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in `extract_features.py`, `run_classifier.py` and `run_squad.py`).
+- PyTorch (>= 0.4.1)
+- tqdm
 
-You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow checkpoint (the three files starting with `bert_model.ckpt`) but be sure to keep the configuration file (`bert_config.json`) and the vocabulary file (`vocab.txt`) as these are needed for the PyTorch model too.
+To install the dependencies:
 
-To run this specific conversion script you will need to have TensorFlow and PyTorch installed (`pip install tensorflow`). The rest of the repository only requires PyTorch.
+````bash
+pip install -r ./requirements.txt
+````
 
-Here is an example of the conversion process for a pre-trained `BERT-Base Uncased` model:
+A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`).
 
-```shell
-export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
-
-python convert_tf_checkpoint_to_pytorch.py \
-  --tf_checkpoint_path $BERT_BASE_DIR/bert_model.ckpt \
-  --bert_config_file $BERT_BASE_DIR/bert_config.json \
-  --pytorch_dump_path $BERT_BASE_DIR/pytorch_model.bin
+You can run the tests with the command:
+```bash
+python -m pytest -sv tests/
 ```
-
-You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
 
 ## PyTorch models for BERT
 
@@ -52,10 +49,15 @@ We detail them here. This model takes as inputs:
 - `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the vocabulary (see the tokens preprocessing logic in the scripts `extract_features.py`, `run_classifier.py` and `run_squad.py`), and
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
 - `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max input sequence length in the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
+- `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
 
 This model outputs a tuple composed of:
 
-- `all_encoder_layers`: a list of torch.FloatTensor of size [batch_size, sequence_length, hidden_size] which is a list of the full sequences of hidden-states at the end of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), and
+- `encoded_layers`: controled by the value of the `output_encoded_layers` argument:
+
+  . `output_all_encoded_layers=True`: outputs a list of the encoded-hidden-states at the end of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size],
+  . `output_all_encoded_layers=False`: outputs only the encoded-hidden-states corresponding to the last attention block,
+
 - `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a classifier pretrained on top of the hidden state associated to the first character of the input (`CLF`) to train on the Next-Sentence task (see BERT's paper).
 
 An example on how to use this class is given in the `extract_features.py` script which can be used to extract the hidden states of the model for a given input.
@@ -76,25 +78,29 @@ The token-level classifier takes as input the full sequence of the last hidden s
 
 An example on how to use this class is given in the `run_squad.py` script which can be used to fine-tune a token classifier using BERT, for example for the SQuAD task.
 
-## Installation, requirements, test
 
-This code was tested on Python 3.5+. The requirements are:
+## Converting a TensorFlow checkpoint in a PyTorch checkpoint
 
-- PyTorch (>= 0.4.1)
-- tqdm
+You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py) script.
 
-To install the dependencies:
+This script takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in `extract_features.py`, `run_classifier.py` and `run_squad.py`).
 
-````bash
-pip install -r ./requirements.txt
-````
+You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow checkpoint (the three files starting with `bert_model.ckpt`) but be sure to keep the configuration file (`bert_config.json`) and the vocabulary file (`vocab.txt`) as these are needed for the PyTorch model too.
 
-A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`).
+To run this specific conversion script you will need to have TensorFlow and PyTorch installed (`pip install tensorflow`). The rest of the repository only requires PyTorch.
 
-You can run the tests with the command:
-```bash
-python -m pytest -sv tests/
+Here is an example of the conversion process for a pre-trained `BERT-Base Uncased` model:
+
+```shell
+export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
+
+python convert_tf_checkpoint_to_pytorch.py \
+  --tf_checkpoint_path $BERT_BASE_DIR/bert_model.ckpt \
+  --bert_config_file $BERT_BASE_DIR/bert_config.json \
+  --pytorch_dump_path $BERT_BASE_DIR/pytorch_model.bin
 ```
+
+You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
 
 ## Training on large batches: gradient accumulation, multi-GPU and distributed training
 
