@@ -19,18 +19,17 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import codecs
 import collections
 import logging
 import json
 import re
 
 import torch
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
+from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-import tokenization
-from modeling import BertConfig, BertModel
+from pytorch_pretrained_bert.tokenization import convert_to_unicode, BertTokenizer
+from pytorch_pretrained_bert.modeling import BertConfig, BertModel
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -171,7 +170,7 @@ def read_examples(input_file):
     unique_id = 0
     with open(input_file, "r") as reader:
         while True:
-            line = tokenization.convert_to_unicode(reader.readline())
+            line = convert_to_unicode(reader.readline())
             if not line:
                 break
             line = line.strip()
@@ -227,13 +226,13 @@ def main():
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
-    logger.info("device", device, "n_gpu", n_gpu, "distributed training", bool(args.local_rank != -1))
+    logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(args.local_rank != -1)))
 
     layer_indexes = [int(x) for x in args.layers.split(",")]
 
     bert_config = BertConfig.from_json_file(args.bert_config_file)
 
-    tokenizer = tokenization.FullTokenizer(
+    tokenizer = BertTokenizer(
         vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
 
     examples = read_examples(args.input_file)
