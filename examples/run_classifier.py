@@ -396,10 +396,6 @@ def main():
                         type=float,
                         help="Proportion of training to perform linear learning rate warmup for. "
                              "E.g., 0.1 = 10%% of training.")
-    parser.add_argument("--save_checkpoints_steps",
-                        default=1000,
-                        type=int,
-                        help="How often to save the model checkpoint.")
     parser.add_argument("--no_cuda",
                         default=False,
                         action='store_true',
