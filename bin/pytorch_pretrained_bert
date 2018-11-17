@@ -1,0 +1,2 @@
+#!/bin/sh
+python -m pytorch_pretrained_bert "$@"

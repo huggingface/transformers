@@ -22,7 +22,7 @@ import random
 
 import torch
 
-import modeling
+from pytorch_pretrained_bert import BertConfig, BertModel
 
 
 class BertModelTest(unittest.TestCase):
@@ -77,8 +77,8 @@ class BertModelTest(unittest.TestCase):
             if self.use_token_type_ids:
                 token_type_ids = BertModelTest.ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
-            config = modeling.BertConfig(
-                vocab_size=self.vocab_size,
+            config = BertConfig(
+                vocab_size_or_config_json_file=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
                 num_attention_heads=self.num_attention_heads,
@@ -90,7 +90,7 @@ class BertModelTest(unittest.TestCase):
                 type_vocab_size=self.type_vocab_size,
                 initializer_range=self.initializer_range)
 
-            model = modeling.BertModel(config=config)
+            model = BertModel(config=config)
 
             all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
 
@@ -112,7 +112,7 @@ class BertModelTest(unittest.TestCase):
         self.run_tester(BertModelTest.BertModelTester(self))
 
     def test_config_to_json_string(self):
-        config = modeling.BertConfig(vocab_size=99, hidden_size=37)
+        config = BertConfig(vocab_size_or_config_json_file=99, hidden_size=37)
         obj = json.loads(config.to_json_string())
         self.assertEqual(obj["vocab_size"], 99)
         self.assertEqual(obj["hidden_size"], 37)
