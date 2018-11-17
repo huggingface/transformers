@@ -1,0 +1,30 @@
+from setuptools import find_packages, setup
+
+setup(
+    name="pytorch_pretrained_bert",
+    version="0.1.2",
+    author="Thomas Wolf, Victor Sanh, Tim Rault, Google AI Language Team Authors",
+    author_email="thomas@huggingface.co",
+    description="PyTorch version of Google AI BERT model with script to load Google pre-trained models",
+    long_description=open("README.md", "r").read(),
+    long_description_content_type="text/markdown",
+    keywords='BERT NLP deep learning google',
+    license='Apache',
+    url="https://github.com/huggingface/pytorch-pretrained-BERT",
+    packages=find_packages(exclude=["*.tests", "*.tests.*",
+                                    "tests.*", "tests"]),
+    install_requires=['torch>=0.4.1',
+                      'numpy',
+                      'boto3',
+                      'requests',
+                      'tqdm'],
+    scripts=["bin/pytorch_pretrained_bert"],
+    python_requires='>=3.5.0',
+    tests_require=['pytest'],
+    classifiers=[
+          'Intended Audience :: Science/Research',
+          'License :: OSI Approved :: Apache Software License',
+          'Programming Language :: Python :: 3',
+          'Topic :: Scientific/Engineering :: Artificial Intelligence',
+    ],
+)
