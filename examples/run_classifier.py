@@ -351,11 +351,6 @@ def main():
                         type=str,
                         required=True,
                         help="The name of the task to train.")
-    parser.add_argument("--vocab_file",
-                        default=None,
-                        type=str,
-                        required=True,
-                        help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--output_dir",
                         default=None,
                         type=str,
