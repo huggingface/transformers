@@ -60,7 +60,7 @@ This package comprises the following classes that can be imported in Python and 
   - `BertTokenizer` - perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
 - One optimizer:
-  - `BERTAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
+  - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
 - A configuration class:
   - `BertConfig` - Configuration class to store the configuration of a `BertModel` with utilisities to read and write from JSON configuration files.
@@ -155,7 +155,7 @@ Here is a detailed documentation of the classes in the package and how to use th
 | [Loading Google AI's pre-trained weigths](#Loading-Google-AIs-pre-trained-weigths-and-PyTorch-dump) | How to load Google AI's pre-trained weight or a PyTorch saved instance |
 | [PyTorch models](#PyTorch-models) | API of the six PyTorch model classes: `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering` |
 | [Tokenizer: `BertTokenizer`](#Tokenizer-BertTokenizer) | API of the `BertTokenizer` class|
-| [Optimizer: `BERTAdam`](#Optimizer-BERTAdam) |  API of the `BERTAdam` class |
+| [Optimizer: `BertAdam`](#Optimizer-BertAdam) |  API of the `BertAdam` class |
 
 ### Loading Google AI's pre-trained weigths and PyTorch dump
 
@@ -294,12 +294,12 @@ and three methods:
 
 Please refer to the doc strings and code in [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) for the details of the `BasicTokenizer` and `WordpieceTokenizer` classes. In general it is recommended to use `BertTokenizer` unless you know what you are doing.
 
-### Optimizer: `BERTAdam`
+### Optimizer: `BertAdam`
 
-`BERTAdam` is a `torch.optimizer` adapted to be closer to the optimizer used in the TensorFlow implementation of Bert. The differences with PyTorch Adam optimizer are the following:
+`BertAdam` is a `torch.optimizer` adapted to be closer to the optimizer used in the TensorFlow implementation of Bert. The differences with PyTorch Adam optimizer are the following:
 
-- BERTAdam implements weight decay fix,
-- BERTAdam doesn't compensate for bias as in the regular Adam optimizer.
+- BertAdam implements weight decay fix,
+- BertAdam doesn't compensate for bias as in the regular Adam optimizer.
 
 The optimizer accepts the following arguments:
 
