@@ -362,11 +362,8 @@ python run_classifier.py \
   --task_name MRPC \
   --do_train \
   --do_eval \
-  --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
-  --vocab_file $BERT_BASE_DIR/vocab.txt \
-  --bert_config_file $BERT_BASE_DIR/bert_config.json \
-  --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
+  --bert_model bert-base-uncased \
   --max_seq_length 128 \
   --train_batch_size 32 \
   --learning_rate 2e-5 \
@@ -388,12 +385,9 @@ The data for SQuAD can be downloaded with the following links and should be save
 export SQUAD_DIR=/path/to/SQUAD
 
 python run_squad.py \
-  --vocab_file $BERT_BASE_DIR/vocab.txt \
-  --bert_config_file $BERT_BASE_DIR/bert_config.json \
-  --init_checkpoint $BERT_PYTORCH_DIR/pytorch_model.bin \
+  --bert_model bert-base-uncased \
   --do_train \
   --do_predict \
-  --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --train_batch_size 12 \
