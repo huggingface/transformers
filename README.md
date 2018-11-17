@@ -46,23 +46,23 @@ python -m pytest -sv tests/
 
 This package comprises the following classes that can be imported in Python and are detailed in the [Doc](#doc) section of this readme:
 
-- Six PyTorch models (`torch.nn.Module`) for Bert with pre-trained weights:
-  - `BertModel` - raw BERT Transformer model (**fully pre-trained**),
-  - `BertForMaskedLM` - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
-  - `BertForNextSentencePrediction` - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
-  - `BertForPreTraining` - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
-  - `BertForSequenceClassification` - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
-  - `BertForQuestionAnswering` - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
+- Six PyTorch models (`torch.nn.Module`) for Bert with pre-trained weights (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
+  - [`BertModel`](./pytorch_pretrained_bert/modeling.py#L535) - raw BERT Transformer model (**fully pre-trained**),
+  - [`BertForMaskedLM`](./pytorch_pretrained_bert/modeling.py#L689) - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
+  - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L750) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
+  - [`BertForPreTraining`](./pytorch_pretrained_bert/modeling.py#L618) - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
+  - [`BertForSequenceClassification`](./pytorch_pretrained_bert/modeling.py#L812) - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
+  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L877) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
 
-- Three tokenizers:
+- Three tokenizers (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
   - `WordpieceTokenizer` - WordPiece tokenization,
   - `BertTokenizer` - perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
-- One optimizer:
+- One optimizer (in the [`optimization.py`](./pytorch_pretrained_bert/optimization.py) file):
   - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
-- A configuration class:
+- A configuration class (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
   - `BertConfig` - Configuration class to store the configuration of a `BertModel` with utilisities to read and write from JSON configuration files.
 
 The repository further comprises:
