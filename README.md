@@ -8,14 +8,14 @@ This implementation is provided with [Google's pre-trained models](https://githu
 
 | Section | Description |
 |-|-|
-| [Installation](##installation) | How to install the package |
-| [Overview](##overview) | Overview of the package |
-| [Usage](##usage) | Quickstart examples |
-| [Doc](##doc) |  Detailed documentation |
-| [Examples](##examples) | Detailed examples on how to fine-tune Bert |
-| [Notebooks](##notebooks) | Introduction on the provided Jupyter Notebooks |
-| [TPU](##tup) | Notes on TPU support and pretraining scripts |
-| [Command-line interface](##Command-line-interface) | Convert a TensorFlow checkpoint in a PyTorch dump |
+| [Installation](#installation) | How to install the package |
+| [Overview](#overview) | Overview of the package |
+| [Usage](#usage) | Quickstart examples |
+| [Doc](#doc) |  Detailed documentation |
+| [Examples](#examples) | Detailed examples on how to fine-tune Bert |
+| [Notebooks](#notebooks) | Introduction on the provided Jupyter Notebooks |
+| [TPU](#tup) | Notes on TPU support and pretraining scripts |
+| [Command-line interface](#Command-line-interface) | Convert a TensorFlow checkpoint in a PyTorch dump |
 
 ## Installation
 
@@ -44,7 +44,7 @@ python -m pytest -sv tests/
 
 ## Overview
 
-This package comprises the following classes that can be imported in Python and are detailed in the [Doc](##doc) section of this readme:
+This package comprises the following classes that can be imported in Python and are detailed in the [Doc](#doc) section of this readme:
 
 - Six PyTorch models (`torch.nn.Module`) for Bert with pre-trained weights:
   - `BertModel` - raw BERT Transformer model (**fully pre-trained**),
@@ -72,22 +72,22 @@ The repository further comprises:
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 task.
 
-  These examples are detailed in the [Examples](##examples) section of this readme.
+  These examples are detailed in the [Examples](#examples) section of this readme.
 
 - Three notebooks that were used to check that the TensorFlow and PyTorch models behave identically (in the [`notebooks` folder](./notebooks)):
   - [`Comparing-TF-and-PT-models.ipynb`](./notebooks/Comparing-TF-and-PT-models.ipynb) - Compare the hidden states predicted by `BertModel`,
   - [`Comparing-TF-and-PT-models-SQuAD.ipynb`](./notebooks/Comparing-TF-and-PT-models-SQuAD.ipynb) - Compare the spans predicted by  `BertForQuestionAnswering` instances,
   - [`Comparing-TF-and-PT-models-MLM-NSP.ipynb`](./notebooks/Comparing-TF-and-PT-models-MLM-NSP.ipynb) - Compare the predictions of the `BertForPretraining` instances.
 
-  These notebooks are detailed in the [Notebooks](##notebooks) section of this readme.
+  These notebooks are detailed in the [Notebooks](#notebooks) section of this readme.
 
 - A command-line interface to convert any TensorFlow checkpoint in a PyTorch dump:
 
-  This CLI is detailed in the [Command-line interface](##Command-line-interface) section of this readme.
+  This CLI is detailed in the [Command-line interface](#Command-line-interface) section of this readme.
 
 ## Usage
 
-Here is a quick-start example using `BertTokenizer`, `BertModel` and `BertForMaskedLM` class with Google AI's pre-trained `Bert base uncased` model. See the [doc section](##doc) below for all the details on these classes.
+Here is a quick-start example using `BertTokenizer`, `BertModel` and `BertForMaskedLM` class with Google AI's pre-trained `Bert base uncased` model. See the [doc section](#doc) below for all the details on these classes.
 
 First let's prepare a tokenized input with `BertTokenizer`
 
@@ -216,7 +216,7 @@ An example on how to use this class is given in the `extract_features.py` script
 - the masked language modeling head, and
 - the next sentence classification head.
 
-*Inputs* comprises the inputs of the [`BertModel`](####-1.-`BertModel`) class plus two optional labels:
+*Inputs* comprises the inputs of the [`BertModel`](#-1.-`BertModel`) class plus two optional labels:
 
 - `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size]
 - `next_sentence_label`: next sentence classification loss: torch.LongTensor of shape [batch_size] with indices selected in [0, 1]. 0 => next sentence is the continuation, 1 => next sentence is a random sentence.
@@ -232,7 +232,7 @@ An example on how to use this class is given in the `extract_features.py` script
 
 `BertForMaskedLM` includes the `BertModel` Transformer followed by the (possibly) pre-trained  masked language modeling head.
 
-*Inputs* comprises the inputs of the [`BertModel`](####-1.-`BertModel`) class plus optional label:
+*Inputs* comprises the inputs of the [`BertModel`](#-1.-`BertModel`) class plus optional label:
 
 - `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size]
 
@@ -245,7 +245,7 @@ An example on how to use this class is given in the `extract_features.py` script
 
 `BertForNextSentencePrediction` includes the `BertModel` Transformer followed by the next sentence classification head.
 
-*Inputs* comprises the inputs of the [`BertModel`](####-1.-`BertModel`) class plus an optional label:
+*Inputs* comprises the inputs of the [`BertModel`](#-1.-`BertModel`) class plus an optional label:
 
 - `next_sentence_label`: next sentence classification loss: torch.LongTensor of shape [batch_size] with indices selected in [0, 1]. 0 => next sentence is the continuation, 1 => next sentence is a random sentence.
 
