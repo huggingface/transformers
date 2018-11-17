@@ -152,10 +152,10 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 | Sub-section | Description |
 |-|-|
-| [Loading Google AI's pre-trained weigths](#Loading-Google-AI's-pre-trained-weigths-and-PyTorch-dump) | How to load Google AI's pre-trained weight or a PyTorch saved instance |
+| [Loading Google AI's pre-trained weigths](#Loading-Google-AIs-pre-trained-weigths-and-PyTorch-dump) | How to load Google AI's pre-trained weight or a PyTorch saved instance |
 | [PyTorch models](#PyTorch-models) | API of the six PyTorch model classes: `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering` |
-| [Tokenizer: `BertTokenizer`](#Tokenizer:-BertTokenizer) | API of the `BertTokenizer` class|
-| [Optimizer: `BERTAdam`](#Optimizer:-BERTAdam) |  API of the `BERTAdam` class |
+| [Tokenizer: `BertTokenizer`](#Tokenizer-BertTokenizer) | API of the `BertTokenizer` class|
+| [Optimizer: `BERTAdam`](#Optimizer-BERTAdam) |  API of the `BERTAdam` class |
 
 ### Loading Google AI's pre-trained weigths and PyTorch dump
 
@@ -315,6 +315,12 @@ The optimizer accepts the following arguments:
 - `max_grad_norm` : Maximum norm for the gradients (-1 means no clipping). Default : 1.0
 
 ## Examples
+
+| Sub-section | Description |
+|-|-|
+| [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
+| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py` and `run_squad.py` |
+| [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
 ### Training large models: introduction, tools and examples
 
