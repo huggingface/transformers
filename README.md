@@ -159,7 +159,7 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 ### Loading Google AI's pre-trained weigths and PyTorch dump
 
-To load Google AI's pre-trained weight or a PyTorch saved instance of `BertForPreTraining`, the PyTorch model classes and the tokenizer can be instantiated as
+To load one of Google AI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated as
 
 ```python
 model = BERT_CLASS.from_pretrain(PRE_TRAINED_MODEL_NAME_OR_PATH)
@@ -180,8 +180,9 @@ where
     - `bert-base-chinese`: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
 
   - a path or url to a pretrained model archive containing:
-      . `bert_config.json` a configuration file for the model
-      . `pytorch_model.bin` a PyTorch dump of a pre-trained instance `BertForPreTraining` (saved with the usual `torch.save()`)
+  
+      - `bert_config.json` a configuration file for the model, and
+      - `pytorch_model.bin` a PyTorch dump of a pre-trained instance `BertForPreTraining` (saved with the usual `torch.save()`)
 
 If `PRE_TRAINED_MODEL_NAME` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
 
@@ -304,15 +305,15 @@ Please refer to the doc strings and code in [`tokenization.py`](./pytorch_pretra
 The optimizer accepts the following arguments:
 
 - `lr` : learning rate
-- `warmup` : portion of t_total for the warmup, -1  means no warmup. Default : -1
+- `warmup` : portion of `t_total` for the warmup, `-1`  means no warmup. Default : `-1`
 - `t_total` : total number of training steps for the learning
-    rate schedule, -1  means constant learning rate. Default : -1
-- `schedule` : schedule to use for the warmup (see above). Default : 'warmup_linear'
-- `b1` : Adams b1. Default : 0.9
-- `b2` : Adams b2. Default : 0.999
-- `e` : Adams epsilon. Default : 1e-6
-- `weight_decay_rate:` Weight decay. Default : 0.01
-- `max_grad_norm` : Maximum norm for the gradients (-1 means no clipping). Default : 1.0
+    rate schedule, `-1`  means constant learning rate. Default : `-1`
+- `schedule` : schedule to use for the warmup (see above). Default : `'warmup_linear'`
+- `b1` : Adams b1. Default : `0.9`
+- `b2` : Adams b2. Default : `0.999`
+- `e` : Adams epsilon. Default : `1e-6`
+- `weight_decay_rate:` Weight decay. Default : `0.01`
+- `max_grad_norm` : Maximum norm for the gradients (`-1` means no clipping). Default : `1.0`
 
 ## Examples
 
@@ -467,21 +468,19 @@ The results were similar to the above FP32 results (actually slightly higher):
 
 ## Notebooks
 
-Comparing the PyTorch model and the TensorFlow model predictions
-
-We also include [three Jupyter Notebooks](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/notebooks) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model.
+We include [three Jupyter Notebooks](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/notebooks) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model.
 
 - The first NoteBook ([Comparing-TF-and-PT-models.ipynb](./notebooks/Comparing-TF-and-PT-models.ipynb)) extracts the hidden states of a full sequence on each layers of the TensorFlow and the PyTorch models and computes the standard deviation between them. In the given example, we get a standard deviation of 1.5e-7 to 9e-7 on the various hidden state of the models.
 
 - The second NoteBook ([Comparing-TF-and-PT-models-SQuAD.ipynb](./notebooks/Comparing-TF-and-PT-models-SQuAD.ipynb)) compares the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer of the `BertForQuestionAnswering` and computes the standard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
 
-- The third NoteBook ([Comparing-TF-and-PT-models-MLM-NSP.ipynb](./notebooks/Comparing-TF-and-PT-models-MLM-NSP.ipynb)) compares the predictions computed by the TensorFlow and the PyTorch models for masked token using the pre-trained masked language modeling model.
+- The third NoteBook ([Comparing-TF-and-PT-models-MLM-NSP.ipynb](./notebooks/Comparing-TF-and-PT-models-MLM-NSP.ipynb)) compares the predictions computed by the TensorFlow and the PyTorch models for masked token language modeling using the pre-trained masked language modeling model.
 
 Please follow the instructions given in the notebooks to run and modify them.
 
 ## Command-line interface
 
-A command-line interface is provided to convert a TensorFlow checkpoint in a PyTorch checkpoint
+A command-line interface is provided to convert a TensorFlow checkpoint in a PyTorch dump of the `BertForPreTraining` class  (see above).
 
 You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py) script.
 
