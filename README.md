@@ -148,7 +148,14 @@ assert predicted_token == 'henson'
 
 ## Doc
 
-Here is a detailed documentation of the classes in the package and how to use them.
+Here is a detailed documentation of the classes in the package and how to use them:
+
+| Sub-section | Description |
+|-|-|
+| [Loading Google AI's pre-trained weigths](#Loading-Google-AI's-pre-trained-weigths-and-PyTorch-dump) | How to load Google AI's pre-trained weight or a PyTorch saved instance |
+| [PyTorch models](#PyTorch-models) | API of the six PyTorch model classes: `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering` |
+| [Tokenizer: `BertTokenizer`](#Tokenizer:-BertTokenizer) | API of the `BertTokenizer` class|
+| [Optimizer: `BERTAdam`](#Optimizer:-BERTAdam) |  API of the `BERTAdam` class |
 
 ### Loading Google AI's pre-trained weigths and PyTorch dump
 
