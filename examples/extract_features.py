@@ -208,6 +208,10 @@ def main():
                         type=int,
                         default=-1,
                         help = "local_rank for distributed training on gpus")
+    parser.add_argument("--no_cuda",
+                        default=False,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
 
     args = parser.parse_args()
 
