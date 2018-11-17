@@ -693,6 +693,8 @@ def set_optimizer_params_grad(named_params_optimizer, named_params_model, test_n
             if param_opti.grad is None:
                 param_opti.grad = torch.nn.Parameter(param_opti.data.new().resize_(*param_opti.data.size()))
             param_opti.grad.data.copy_(param_model.grad.data)
+        else:
+            param_opti.grad = None
     return is_nan
 
 def main():

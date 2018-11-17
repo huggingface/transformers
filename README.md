@@ -395,7 +395,7 @@ python run_squad.py \
   --num_train_epochs 2.0 \
   --max_seq_length 384 \
   --doc_stride 128 \
-  --output_dir ../debug_squad/
+  --output_dir /tmp/debug_squad/
 ```
 
 Training with the previous hyper-parameters gave us the following results:
