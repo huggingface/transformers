@@ -25,7 +25,7 @@ This repo was tested on Python 3.5+ and PyTorch 0.4.1
 
 PyTorch pretrained bert can be installed by pip as follows:
 ```bash
-pip install pytorch_pretrained_bert
+pip install pytorch-pretrained-bert
 ```
 
 ### From source
