@@ -497,9 +497,9 @@ Here is an example of the conversion process for a pre-trained `BERT-Base Uncase
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
 pytorch_pretrained_bert convert_tf_checkpoint_to_pytorch \
-  --tf_checkpoint_path $BERT_BASE_DIR/bert_model.ckpt \
-  --bert_config_file $BERT_BASE_DIR/bert_config.json \
-  --pytorch_dump_path $BERT_BASE_DIR/pytorch_model.bin
+  $BERT_BASE_DIR/bert_model.ckpt \
+  $BERT_BASE_DIR/bert_config.json \
+  $BERT_BASE_DIR/pytorch_model.bin
 ```
 
 You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
