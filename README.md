@@ -99,7 +99,7 @@ from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 # Tokenized input
-tokenized_text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+text = "Who was Jim Henson ? Jim Henson was a puppeteer"
 tokenized_text = tokenizer.tokenize(text)
 
 # Mask a token that we will try to predict back with `BertForMaskedLM`
