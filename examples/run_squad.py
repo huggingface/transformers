@@ -898,7 +898,8 @@ def main():
                         if args.fp16 and args.loss_scale != 1.0:
                             # scale down gradients for fp16 training
                             for param in model.parameters():
-                                param.grad.data = param.grad.data / args.loss_scale
+                                if param.grad is not None:
+                                    param.grad.data = param.grad.data / args.loss_scale
                         is_nan = set_optimizer_params_grad(param_optimizer, model.named_parameters(), test_nan=True)
                         if is_nan:
                             logger.info("FP16 TRAINING: Nan in gradients, reducing loss scaling")
