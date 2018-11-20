@@ -41,8 +41,8 @@ SCHEDULES = {
 }
 
 
-class BERTAdam(Optimizer):
-    """Implements BERT version of Adam algorithm with weight decay fix (and no ).
+class BertAdam(Optimizer):
+    """Implements BERT version of Adam algorithm with weight decay fix.
     Params:
         lr: learning rate
         warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
@@ -73,7 +73,7 @@ class BERTAdam(Optimizer):
         defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
                         b1=b1, b2=b2, e=e, weight_decay_rate=weight_decay_rate,
                         max_grad_norm=max_grad_norm)
-        super(BERTAdam, self).__init__(params, defaults)
+        super(BertAdam, self).__init__(params, defaults)
 
     def get_lr(self):
         lr = []
@@ -89,27 +89,6 @@ class BERTAdam(Optimizer):
                     lr_scheduled = group['lr']
                 lr.append(lr_scheduled)
         return lr
-
-    def to(self, device):
-        """ Move the optimizer state to a specified device"""
-        for state in self.state.values():
-            state['exp_avg'].to(device)
-            state['exp_avg_sq'].to(device)
-
-    def initialize_step(self, initial_step):
-        """Initialize state with a defined step (but we don't have stored averaged).
-        Arguments:
-            initial_step (int): Initial step number.
-        """
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                # State initialization
-                state['step'] = initial_step
-                # Exponential moving average of gradient values
-                state['exp_avg'] = torch.zeros_like(p.data)
-                # Exponential moving average of squared gradient values
-                state['exp_avg_sq'] = torch.zeros_like(p.data)
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -157,7 +136,7 @@ class BERTAdam(Optimizer):
                 # the correct way of using L2 regularization/weight decay with Adam,
                 # since that will interact with the m and v parameters in strange ways.
                 #
-                # Instead we want ot decay the weights in a manner that doesn't interact
+                # Instead we want to decay the weights in a manner that doesn't interact
                 # with the m/v parameters. This is equivalent to adding the square
                 # of the weights to the loss with plain (non-momentum) SGD.
                 if group['weight_decay_rate'] > 0.0:
@@ -175,6 +154,7 @@ class BERTAdam(Optimizer):
                 state['step'] += 1
 
                 # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
+                # No bias correction
                 # bias_correction1 = 1 - beta1 ** state['step']
                 # bias_correction2 = 1 - beta2 ** state['step']
 

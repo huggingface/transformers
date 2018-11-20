@@ -19,18 +19,17 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import codecs
 import collections
 import logging
 import json
 import re
 
 import torch
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
+from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-import tokenization
-from modeling import BertConfig, BertModel
+from pytorch_pretrained_bert.tokenization import convert_to_unicode, BertTokenizer
+from pytorch_pretrained_bert.modeling import BertModel
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -171,7 +170,7 @@ def read_examples(input_file):
     unique_id = 0
     with open(input_file, "r") as reader:
         while True:
-            line = tokenization.convert_to_unicode(reader.readline())
+            line = convert_to_unicode(reader.readline())
             if not line:
                 break
             line = line.strip()
@@ -194,28 +193,25 @@ def main():
 
     ## Required parameters
     parser.add_argument("--input_file", default=None, type=str, required=True)
-    parser.add_argument("--vocab_file", default=None, type=str, required=True, 
-                        help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--output_file", default=None, type=str, required=True)
-    parser.add_argument("--bert_config_file", default=None, type=str, required=True,
-                        help="The config json file corresponding to the pre-trained BERT model. "
-                            "This specifies the model architecture.")
-    parser.add_argument("--init_checkpoint", default=None, type=str, required=True, 
-                        help="Initial checkpoint (usually from a pre-trained BERT model).")
+    parser.add_argument("--bert_model", default=None, type=str, required=True,
+                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
+                             "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
 
     ## Other parameters
     parser.add_argument("--layers", default="-1,-2,-3,-4", type=str)
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                             "than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--do_lower_case", default=True, action='store_true', 
-                        help="Whether to lower case the input text. Should be True for uncased "
-                            "models and False for cased models.")
     parser.add_argument("--batch_size", default=32, type=int, help="Batch size for predictions.")
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
                         help = "local_rank for distributed training on gpus")
+    parser.add_argument("--no_cuda",
+                        default=False,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
 
     args = parser.parse_args()
 
@@ -227,14 +223,11 @@ def main():
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
-    logger.info("device", device, "n_gpu", n_gpu, "distributed training", bool(args.local_rank != -1))
+    logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(args.local_rank != -1)))
 
     layer_indexes = [int(x) for x in args.layers.split(",")]
 
-    bert_config = BertConfig.from_json_file(args.bert_config_file)
-
-    tokenizer = tokenization.FullTokenizer(
-        vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model)
 
     examples = read_examples(args.input_file)
 
@@ -245,9 +238,7 @@ def main():
     for feature in features:
         unique_id_to_feature[feature.unique_id] = feature
 
-    model = BertModel(bert_config)
-    if args.init_checkpoint is not None:
-        model.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
+    model = BertModel.from_pretrained(args.bert_model)
     model.to(device)
 
     if args.local_rank != -1:
