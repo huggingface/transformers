@@ -38,18 +38,6 @@ PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-vocab.txt",
 }
 
-def printable_text(text):
-    """Returns text encoded in a way suitable for print or `tf.logging`."""
-
-    # These functions want `str` for both Python2 and Python3, but in one case
-    # it's a Unicode string and in the other it's a byte string.
-    if isinstance(text, str):
-        return text
-    elif isinstance(text, bytes):
-        return text.decode("utf-8", "ignore")
-    else:
-        raise ValueError("Unsupported string type: %s" % (type(text)))
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
