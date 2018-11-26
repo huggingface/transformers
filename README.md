@@ -421,10 +421,7 @@ To get these results we used a combination of:
 Here is the full list of hyper-parameters for this run:
 ```bash
 python ./run_squad.py \
-  --vocab_file $BERT_LARGE_DIR/vocab.txt \
-  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
-  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
-  --do_lower_case \
+  --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
   --train_file $SQUAD_TRAIN \
@@ -444,10 +441,7 @@ If you have a recent GPU (starting from NVIDIA Volta series), you should try **1
 Here is an example of hyper-parameters for a FP16 run we tried:
 ```bash
 python ./run_squad.py \
-  --vocab_file $BERT_LARGE_DIR/vocab.txt \
-  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
-  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
-  --do_lower_case \
+  --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
   --train_file $SQUAD_TRAIN \
