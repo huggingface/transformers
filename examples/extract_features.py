@@ -28,7 +28,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from pytorch_pretrained_bert.tokenization import convert_to_unicode, BertTokenizer
+from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertModel
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
@@ -170,7 +170,7 @@ def read_examples(input_file):
     unique_id = 0
     with open(input_file, "r") as reader:
         while True:
-            line = convert_to_unicode(reader.readline())
+            line = reader.readline()
             if not line:
                 break
             line = line.strip()

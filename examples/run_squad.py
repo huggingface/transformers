@@ -32,7 +32,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from pytorch_pretrained_bert.tokenization import printable_text, whitespace_tokenize, BasicTokenizer, BertTokenizer
+from pytorch_pretrained_bert.tokenization import whitespace_tokenize, BasicTokenizer, BertTokenizer
 from pytorch_pretrained_bert.modeling import BertForQuestionAnswering
 from pytorch_pretrained_bert.optimization import BertAdam
 
@@ -64,9 +64,9 @@ class SquadExample(object):
 
     def __repr__(self):
         s = ""
-        s += "qas_id: %s" % (printable_text(self.qas_id))
+        s += "qas_id: %s" % (self.qas_id)
         s += ", question_text: %s" % (
-            printable_text(self.question_text))
+            self.question_text)
         s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
         if self.start_position:
             s += ", start_position: %d" % (self.start_position)
@@ -288,8 +288,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 logger.info("unique_id: %s" % (unique_id))
                 logger.info("example_index: %s" % (example_index))
                 logger.info("doc_span_index: %s" % (doc_span_index))
-                logger.info("tokens: %s" % " ".join(
-                    [printable_text(x) for x in tokens]))
+                logger.info("tokens: %s" % " ".join(tokens))
                 logger.info("token_to_orig_map: %s" % " ".join([
                     "%d:%d" % (x, y) for (x, y) in token_to_orig_map.items()]))
                 logger.info("token_is_max_context: %s" % " ".join([
@@ -305,7 +304,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     logger.info("start_position: %d" % (start_position))
                     logger.info("end_position: %d" % (end_position))
                     logger.info(
-                        "answer: %s" % (printable_text(answer_text)))
+                        "answer: %s" % (answer_text))
 
             features.append(
                 InputFeatures(
