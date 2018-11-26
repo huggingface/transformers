@@ -781,7 +781,7 @@ class BertForNextSentencePrediction(PreTrainedBertModel):
     # Already been converted into WordPiece token ids
     input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
     input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 2, 0]])
+    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
 
     config = BertConfig(vocab_size=32000, hidden_size=512,
         num_hidden_layers=8, num_attention_heads=6, intermediate_size=1024)
