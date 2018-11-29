@@ -38,36 +38,14 @@ PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-vocab.txt",
 }
 
-def convert_to_unicode(text):
-    """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
-    if isinstance(text, str):
-        return text
-    elif isinstance(text, bytes):
-        return text.decode("utf-8", "ignore")
-    else:
-        raise ValueError("Unsupported string type: %s" % (type(text)))
-
-
-def printable_text(text):
-    """Returns text encoded in a way suitable for print or `tf.logging`."""
-
-    # These functions want `str` for both Python2 and Python3, but in one case
-    # it's a Unicode string and in the other it's a byte string.
-    if isinstance(text, str):
-        return text
-    elif isinstance(text, bytes):
-        return text.decode("utf-8", "ignore")
-    else:
-        raise ValueError("Unsupported string type: %s" % (type(text)))
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     index = 0
-    with open(vocab_file, "r", encoding="utf8") as reader:
+    with open(vocab_file, "r", encoding="utf-8") as reader:
         while True:
-            token = convert_to_unicode(reader.readline())
+            token = reader.readline()
             if not token:
                 break
             token = token.strip()
@@ -164,7 +142,6 @@ class BasicTokenizer(object):
 
     def tokenize(self, text):
         """Tokenizes a piece of text."""
-        text = convert_to_unicode(text)
         text = self._clean_text(text)
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
@@ -289,8 +266,6 @@ class WordpieceTokenizer(object):
         Returns:
           A list of wordpiece tokens.
         """
-
-        text = convert_to_unicode(text)
 
         output_tokens = []
         for token in whitespace_tokenize(text):

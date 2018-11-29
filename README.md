@@ -142,7 +142,7 @@ predictions = model(tokens_tensor, segments_tensors)
 
 # confirm we were able to predict 'henson'
 predicted_index = torch.argmax(predictions[0, masked_index]).item()
-predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])
+predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
 assert predicted_token == 'henson'
 ```
 
@@ -162,13 +162,12 @@ Here is a detailed documentation of the classes in the package and how to use th
 To load one of Google AI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated as
 
 ```python
-model = BERT_CLASS.from_pretrain(PRE_TRAINED_MODEL_NAME_OR_PATH)
+model = BERT_CLASS.from_pretrain(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None)
 ```
 
 where
 
 - `BERT_CLASS` is either the `BertTokenizer` class (to load the vocabulary) or one of the six PyTorch model classes (to load the pre-trained weights): `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering`, and
-
 - `PRE_TRAINED_MODEL_NAME_OR_PATH` is either:
 
   - the shortcut name of a Google AI's pre-trained model selected in the list:
@@ -184,7 +183,8 @@ where
       - `bert_config.json` a configuration file for the model, and
       - `pytorch_model.bin` a PyTorch dump of a pre-trained instance `BertForPreTraining` (saved with the usual `torch.save()`)
 
-If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
+  If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
+- `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information)
 
 Example:
 ```python
@@ -421,10 +421,7 @@ To get these results we used a combination of:
 Here is the full list of hyper-parameters for this run:
 ```bash
 python ./run_squad.py \
-  --vocab_file $BERT_LARGE_DIR/vocab.txt \
-  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
-  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
-  --do_lower_case \
+  --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
   --train_file $SQUAD_TRAIN \
@@ -444,10 +441,7 @@ If you have a recent GPU (starting from NVIDIA Volta series), you should try **1
 Here is an example of hyper-parameters for a FP16 run we tried:
 ```bash
 python ./run_squad.py \
-  --vocab_file $BERT_LARGE_DIR/vocab.txt \
-  --bert_config_file $BERT_LARGE_DIR/bert_config.json \
-  --init_checkpoint $BERT_LARGE_DIR/pytorch_model.bin \
-  --do_lower_case \
+  --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
   --train_file $SQUAD_TRAIN \
@@ -483,7 +477,7 @@ Please follow the instructions given in the notebooks to run and modify them.
 
 A command-line interface is provided to convert a TensorFlow checkpoint in a PyTorch dump of the `BertForPreTraining` class  (see above).
 
-You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py) script.
+You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`./pytorch_pretrained_bert/convert_tf_checkpoint_to_pytorch.py`](convert_tf_checkpoint_to_pytorch.py) script.
 
 This CLI takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in `extract_features.py`, `run_classifier.py` and `run_squad.py`).
 
