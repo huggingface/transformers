@@ -584,10 +584,17 @@ class BertModel(PreTrainedBertModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, output_all_encoded_layers=True):
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+        else:
+            # truncate the batch to the maximum length between all the examples for a nice speedup
+            max_length = (attention_mask != 0).max(0)[0].nonzero()[-1].item()
+            if max_length < input_ids.shape[1]:
+                input_ids = input_ids[:, :max_length]
+                token_type_ids = token_type_ids[:, :max_length]
+                attention_mask = attention_mask[:, :max_length]
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
