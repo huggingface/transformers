@@ -14,7 +14,7 @@ This implementation is provided with [Google's pre-trained models](https://githu
 | [Doc](#doc) |  Detailed documentation |
 | [Examples](#examples) | Detailed examples on how to fine-tune Bert |
 | [Notebooks](#notebooks) | Introduction on the provided Jupyter Notebooks |
-| [TPU](#tup) | Notes on TPU support and pretraining scripts |
+| [TPU](#tpu) | Notes on TPU support and pretraining scripts |
 | [Command-line interface](#Command-line-interface) | Convert a TensorFlow checkpoint in a PyTorch dump |
 
 ## Installation
