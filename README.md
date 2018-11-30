@@ -14,7 +14,7 @@ This implementation is provided with [Google's pre-trained models](https://githu
 | [Doc](#doc) |  Detailed documentation |
 | [Examples](#examples) | Detailed examples on how to fine-tune Bert |
 | [Notebooks](#notebooks) | Introduction on the provided Jupyter Notebooks |
-| [TPU](#tup) | Notes on TPU support and pretraining scripts |
+| [TPU](#tpu) | Notes on TPU support and pretraining scripts |
 | [Command-line interface](#Command-line-interface) | Convert a TensorFlow checkpoint in a PyTorch dump |
 
 ## Installation
@@ -46,13 +46,14 @@ python -m pytest -sv tests/
 
 This package comprises the following classes that can be imported in Python and are detailed in the [Doc](#doc) section of this readme:
 
-- Six PyTorch models (`torch.nn.Module`) for Bert with pre-trained weights (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
-  - [`BertModel`](./pytorch_pretrained_bert/modeling.py#L535) - raw BERT Transformer model (**fully pre-trained**),
-  - [`BertForMaskedLM`](./pytorch_pretrained_bert/modeling.py#L689) - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
-  - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L750) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
-  - [`BertForPreTraining`](./pytorch_pretrained_bert/modeling.py#L618) - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
-  - [`BertForSequenceClassification`](./pytorch_pretrained_bert/modeling.py#L812) - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
-  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L877) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
+- Seven PyTorch models (`torch.nn.Module`) for Bert with pre-trained weights (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
+  - [`BertModel`](./pytorch_pretrained_bert/modeling.py#L537) - raw BERT Transformer model (**fully pre-trained**),
+  - [`BertForMaskedLM`](./pytorch_pretrained_bert/modeling.py#L691) - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
+  - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L752) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
+  - [`BertForPreTraining`](./pytorch_pretrained_bert/modeling.py#L620) - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
+  - [`BertForSequenceClassification`](./pytorch_pretrained_bert/modeling.py#L814) - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
+  - [`BertForTokenClassification`](./pytorch_pretrained_bert/modeling.py#L880) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**),
+  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L946) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
 
 - Three tokenizers (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
@@ -153,7 +154,7 @@ Here is a detailed documentation of the classes in the package and how to use th
 | Sub-section | Description |
 |-|-|
 | [Loading Google AI's pre-trained weigths](#Loading-Google-AIs-pre-trained-weigths-and-PyTorch-dump) | How to load Google AI's pre-trained weight or a PyTorch saved instance |
-| [PyTorch models](#PyTorch-models) | API of the six PyTorch model classes: `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering` |
+| [PyTorch models](#PyTorch-models) | API of the seven PyTorch model classes: `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering` |
 | [Tokenizer: `BertTokenizer`](#Tokenizer-BertTokenizer) | API of the `BertTokenizer` class|
 | [Optimizer: `BertAdam`](#Optimizer-BertAdam) |  API of the `BertAdam` class |
 
@@ -167,7 +168,7 @@ model = BERT_CLASS.from_pretrain(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None)
 
 where
 
-- `BERT_CLASS` is either the `BertTokenizer` class (to load the vocabulary) or one of the six PyTorch model classes (to load the pre-trained weights): `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification` or `BertForQuestionAnswering`, and
+- `BERT_CLASS` is either the `BertTokenizer` class (to load the vocabulary) or one of the seven PyTorch model classes (to load the pre-trained weights): `BertModel`, `BertForMaskedLM`, `BertForNextSentencePrediction`, `BertForPreTraining`, `BertForSequenceClassification`, `BertForTokenClassification` or `BertForQuestionAnswering`, and
 - `PRE_TRAINED_MODEL_NAME_OR_PATH` is either:
 
   - the shortcut name of a Google AI's pre-trained model selected in the list:
@@ -175,16 +176,22 @@ where
     - `bert-base-uncased`: 12-layer, 768-hidden, 12-heads, 110M parameters
     - `bert-large-uncased`: 24-layer, 1024-hidden, 16-heads, 340M parameters
     - `bert-base-cased`: 12-layer, 768-hidden, 12-heads , 110M parameters
-    - `bert-base-multilingual`: 102 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
+    - `bert-large-cased`: 24-layer, 1024-hidden, 16-heads, 340M parameters
+    - `bert-base-multilingual-uncased`: (Orig, not recommended) 102 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
+    - `bert-base-multilingual-cased`: **(New, recommended)** 104 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `bert-base-chinese`: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
 
   - a path or url to a pretrained model archive containing:
-  
-      - `bert_config.json` a configuration file for the model, and
-      - `pytorch_model.bin` a PyTorch dump of a pre-trained instance `BertForPreTraining` (saved with the usual `torch.save()`)
+
+    - `bert_config.json` a configuration file for the model, and
+    - `pytorch_model.bin` a PyTorch dump of a pre-trained instance `BertForPreTraining` (saved with the usual `torch.save()`)
 
   If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
 - `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information)
+
+`Uncased` means that the text has been lowercased before WordPiece tokenization, e.g., `John Smith` becomes `john smith`. The Uncased model also strips out any accent markers. `Cased` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the [Multilingual README](https://github.com/google-research/bert/blob/master/multilingual.md) or the original TensorFlow repository.
+
+**When using an `uncased model`, make sure to pass `--do_lower_case` to the training scripts. (Or pass `do_lower_case=True` directly to FullTokenizer if you're using your own script.)**
 
 Example:
 ```python
@@ -271,7 +278,13 @@ The sequence-level classifier is a linear layer that takes as input the last hid
 
 An example on how to use this class is given in the `run_classifier.py` script which can be used to fine-tune a single sequence (or pair of sequence) classifier using BERT, for example for the MRPC task.
 
-#### 6. `BertForQuestionAnswering`
+#### 6. `BertForTokenClassification`
+
+`BertForTokenClassification` is a fine-tuning model that includes `BertModel` and a token-level classifier on top of the `BertModel`.
+
+The token-level classifier is a linear layer that takes as input the last hidden state of the sequence.
+
+#### 7. `BertForQuestionAnswering`
 
 `BertForQuestionAnswering` is a fine-tuning model that includes `BertModel` with a token-level classifiers on top of the full sequence of last hidden states.
 
