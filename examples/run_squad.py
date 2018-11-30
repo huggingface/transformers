@@ -878,7 +878,7 @@ def main():
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving train features into cached file %s", cached_train_features_file)
                 with open(cached_train_features_file, "wb") as writer:
-                    train_features = pickle.dump(train_features, writer)
+                    pickle.dump(train_features, writer)
         logger.info("***** Running training *****")
         logger.info("  Num orig examples = %d", len(train_examples))
         logger.info("  Num split examples = %d", len(train_features))
