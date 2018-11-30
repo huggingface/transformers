@@ -478,7 +478,7 @@ class PreTrainedBertModel(nn.Module):
                 "associated to this path or url.".format(
                     pretrained_model_name,
                     ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
-                    pretrained_model_name))
+                    archive_file))
             return None
         if resolved_archive_file == archive_file:
             logger.info("loading archive file {}".format(archive_file))
