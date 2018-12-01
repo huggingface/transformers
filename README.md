@@ -377,6 +377,7 @@ python run_classifier.py \
   --task_name MRPC \
   --do_train \
   --do_eval \
+  --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
   --bert_model bert-base-uncased \
   --max_seq_length 128 \
