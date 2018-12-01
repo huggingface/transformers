@@ -416,7 +416,7 @@ def main():
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
                         default=1,
-                        help="Number of updates steps to accumualte before performing a backward/update pass.")                       
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")                       
     parser.add_argument('--optimize_on_cpu',
                         default=False,
                         action='store_true',
