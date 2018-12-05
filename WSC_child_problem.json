@@ -1,0 +1,6585 @@
+[
+    {
+        "sentences": [],
+        "index": 0
+    },
+    {
+        "index": 1,
+        "sentences": []
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "suitcase"
+                ],
+                "answer1": [
+                    "trophy"
+                ],
+                "sentence": "The trophy doesn't fit into the brown suitcase because the _ is too large.",
+                "correct_answer": [
+                    "trophy"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 2
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "suitcase"
+                ],
+                "answer0": [
+                    "trophy"
+                ],
+                "sentence": "The trophy doesn't fit into the brown suitcase because the _ is too small.",
+                "answer1": [
+                    "suitcase"
+                ],
+                "predict_answer": [
+                    "('suitcase', 0.11347327381372452)"
+                ]
+            }
+        ],
+        "index": 3
+    },
+    {
+        "index": 4,
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Joseph"
+                ],
+                "answer1": [
+                    "she",
+                    "Sandy"
+                ],
+                "sentence": "Sandy made sure to thank Joseph for all the help _ had recieved.",
+                "correct_answer": [
+                    "she",
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('he', 0.7406366467475891)",
+                    "('she', 0.10518506914377213)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Jason"
+                ],
+                "answer1": [
+                    "she",
+                    "Barbara"
+                ],
+                "sentence": "Jason made sure to thank Barbara for all the help _ had recieved.",
+                "correct_answer": [
+                    "he",
+                    "Jason"
+                ],
+                "predict_answer": [
+                    "('he', 0.048722464591264725)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Alan"
+                ],
+                "answer1": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Margaret made sure to thank Alan for all the help _ had given.",
+                "answer0": [
+                    "he",
+                    "Alan"
+                ],
+                "predict_answer": [
+                    "('he', 0.9325869083404541)",
+                    "('alan', 0.0023207857739180326)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Anthony"
+                ],
+                "answer1": [
+                    "she",
+                    "Betty"
+                ],
+                "sentence": "Anthony made sure to thank Betty for all the help _ had given.",
+                "correct_answer": [
+                    "she",
+                    "Betty"
+                ],
+                "predict_answer": [
+                    "('she', 0.9659503102302551)",
+                    "('he', 0.01216080691665411)",
+                    "('betty', 0.0039913468062877655)"
+                ]
+            }
+        ],
+        "index": 5
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Helen"
+                ],
+                "sentence": "Helen tried to call Richard on the phone, but _ wasn't successful.",
+                "answer1": [
+                    "he",
+                    "Richard"
+                ],
+                "answer0": [
+                    "she",
+                    "Helen"
+                ],
+                "predict_answer": [
+                    "('she', 0.9914237856864929)",
+                    "('he', 0.0038644035812467337)",
+                    "('helen', 0.0009239467908628285)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "David"
+                ],
+                "sentence": "David tried to call Susan on the phone, but _ wasn't successful.",
+                "answer1": [
+                    "he",
+                    "David"
+                ],
+                "answer0": [
+                    "she",
+                    "Susan"
+                ],
+                "predict_answer": [
+                    "('he', 0.9934543371200562)",
+                    "('david', 0.001286030514165759)",
+                    "('i', 0.001182014588266611)"
+                ]
+            }
+        ],
+        "index": 6
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Laura tried to call Laura on the phone, but _ wasn't available.",
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "answer0": [
+                    "he",
+                    "George"
+                ],
+                "predict_answer": [
+                    "('she', 0.9155316352844238)",
+                    "('laura', 0.06635821610689163)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "sentence": "Nancy tried to call David on the phone, but _ wasn't available.",
+                "answer1": [
+                    "he",
+                    "David"
+                ],
+                "correct_answer": [
+                    "he",
+                    "David"
+                ],
+                "predict_answer": [
+                    "('he', 0.9035181999206543)",
+                    "('david', 0.08738898485898972)",
+                    "('i', 0.0009818891994655132)"
+                ]
+            }
+        ],
+        "index": 7
+    },
+    {
+        "index": 8,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "lawyer"
+                ],
+                "sentence": "The lawyer asked the witness a question, but the _ was reluctant to repeat it.",
+                "answer1": [
+                    "witness"
+                ],
+                "answer0": [
+                    "lawyer"
+                ],
+                "predict_answer": [
+                    "('lawyer', 0.012273530475795269)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 9,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "witness"
+                ],
+                "answer0": [
+                    "witness"
+                ],
+                "answer1": [
+                    "lawyer"
+                ],
+                "sentence": "The lawyer asked the witness a question, but the _ was reluctant to answer it.",
+                "predict_answer": [
+                    "('witness', 0.8160716891288757)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 10
+    },
+    {
+        "sentences": [],
+        "index": 11
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Barbara"
+                ],
+                "sentence": "Barbara felt vindicated when her longtime rival Jason revealed that _ was the winner of the competition.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Barbara"
+                ],
+                "predict_answer": [
+                    "('he', 0.6649531722068787)",
+                    "('she', 0.2042662799358368)",
+                    "('barbara', 0.04054433852434158)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Joseph"
+                ],
+                "answer0": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "sentence": "Joseph felt vindicated when his longtime rival Wendy revealed that _ was the winner of the competition.",
+                "predict_answer": [
+                    "('he', 0.2658136785030365)",
+                    "('joseph', 0.01945442147552967)"
+                ]
+            }
+        ],
+        "index": 12
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "she",
+                    "Linda"
+                ],
+                "sentence": "Paul felt crushed when his longtime rival Linda revealed that _ was the winner of the competition.",
+                "answer0": [
+                    "he",
+                    "Paul"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Linda"
+                ],
+                "predict_answer": [
+                    "('she', 0.6620962023735046)",
+                    "('he', 0.18752969801425934)",
+                    "('linda', 0.011793829500675201)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Paul"
+                ],
+                "answer0": [
+                    "she",
+                    "Linda"
+                ],
+                "answer1": [
+                    "he",
+                    "Paul"
+                ],
+                "sentence": "Linda felt crushed when her longtime rival Paul revealed that _ was the winner of the competition.",
+                "predict_answer": [
+                    "('he', 0.7634536623954773)",
+                    "('paul', 0.017889229580760002)"
+                ]
+            }
+        ],
+        "index": 13
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "man"
+                ],
+                "sentence": "The man couldn't lift his son because the _ was so weak.",
+                "answer1": [
+                    "son"
+                ],
+                "correct_answer": [
+                    "man"
+                ],
+                "predict_answer": [
+                    "('man', 0.07679838687181473)"
+                ]
+            }
+        ],
+        "index": 14
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "son"
+                ],
+                "sentence": "The man couldn't lift his son because the _ was so heavy.",
+                "answer1": [
+                    "man"
+                ],
+                "answer0": [
+                    "son"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 15
+    },
+    {
+        "index": 16,
+        "sentences": []
+    },
+    {
+        "index": 17,
+        "sentences": []
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Lisa"
+                ],
+                "answer1": [
+                    "she",
+                    "Lisa"
+                ],
+                "sentence": "Lisa couldn't see the stage with Jason in front of her because _ is so short.",
+                "answer0": [
+                    "he",
+                    "Jason"
+                ],
+                "predict_answer": [
+                    "('he', 0.43240872025489807)",
+                    "('she', 0.09838705509901047)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "sentence": "Zack couldn't see the stage with Barbara in front of him because _ is so short.",
+                "answer1": [
+                    "she",
+                    "Barbara"
+                ],
+                "predict_answer": [
+                    "('he', 0.007278269622474909)"
+                ]
+            }
+        ],
+        "index": 18
+    },
+    {
+        "index": 19,
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Jennifer"
+                ],
+                "sentence": "Jennifer couldn't see the stage with Steven in front of her because _ is so tall.",
+                "answer1": [
+                    "he",
+                    "Steven"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Steven"
+                ],
+                "predict_answer": [
+                    "('he', 0.7768917083740234)",
+                    "('steven', 0.1955145299434662)",
+                    "('steve', 0.001455051708035171)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Sarah"
+                ],
+                "sentence": "Tim couldn't see the stage with Sarah in front of him because _ is so tall.",
+                "answer1": [
+                    "he",
+                    "Tim"
+                ],
+                "answer0": [
+                    "she",
+                    "Sarah"
+                ],
+                "predict_answer": [
+                    "('she', 0.7928102612495422)",
+                    "('sarah', 0.139870747923851)",
+                    "('he', 0.04378065466880798)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Sarah"
+                ],
+                "answer0": [
+                    "he",
+                    "Charles"
+                ],
+                "sentence": "Sarah threw his schoolbag down to Charles after _ reached the top of the stairs.",
+                "answer1": [
+                    "she",
+                    "Sarah"
+                ],
+                "predict_answer": [
+                    "('he', 0.271123468875885)",
+                    "('she', 0.06607578694820404)",
+                    "('sarah', 0.00918747391551733)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "John"
+                ],
+                "sentence": "John threw his schoolbag down to Anna after _ reached the top of the stairs.",
+                "answer1": [
+                    "she",
+                    "Anna"
+                ],
+                "correct_answer": [
+                    "he",
+                    "John"
+                ],
+                "predict_answer": [
+                    "('he', 0.09820190817117691)"
+                ]
+            }
+        ],
+        "index": 20
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Tim"
+                ],
+                "answer0": [
+                    "he",
+                    "Tim"
+                ],
+                "answer1": [
+                    "she",
+                    "Barbara"
+                ],
+                "sentence": "Barbara threw his schoolbag down to Tim after _ reached the bottom of the stairs.",
+                "predict_answer": [
+                    "('he', 0.3926193416118622)",
+                    "('tim', 0.013937675394117832)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Sue"
+                ],
+                "sentence": "Thomas threw his schoolbag down to Sue after _ reached the bottom of the stairs.",
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sue"
+                ],
+                "predict_answer": [
+                    "('she', 0.22610318660736084)",
+                    "('he', 0.08578513562679291)",
+                    "('sue', 0.016030754894018173)"
+                ]
+            }
+        ],
+        "index": 21
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Thomas"
+                ],
+                "answer0": [
+                    "he",
+                    "Thomas"
+                ],
+                "answer1": [
+                    "she",
+                    "Sarah"
+                ],
+                "sentence": "Although they ran at about the same speed, Thomas beat Sarah because _ had such a good start.",
+                "predict_answer": [
+                    "('he', 0.28569573163986206)",
+                    "('thomas', 0.004153355024755001)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Anna"
+                ],
+                "sentence": "Although they ran at about the same speed, Anna beat David because _ had such a good start.",
+                "answer1": [
+                    "she",
+                    "Anna"
+                ],
+                "answer0": [
+                    "he",
+                    "David"
+                ],
+                "predict_answer": [
+                    "('he', 0.4596766531467438)",
+                    "('she', 0.2673833966255188)",
+                    "('anna', 0.005865618120878935)"
+                ]
+            }
+        ],
+        "index": 22
+    },
+    {
+        "index": 23,
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Although they ran at about the same speed, Edward beat Sandra because _ had such a bad start.",
+                "correct_answer": [
+                    "she",
+                    "Sandra"
+                ],
+                "predict_answer": [
+                    "('she', 0.724554717540741)",
+                    "('he', 0.143990159034729)"
+                ]
+            },
+            {
+                "sentence": "Although they ran at about the same speed, Vivian beat Thomas because _ had such a bad start.",
+                "answer1": [
+                    "she",
+                    "Vivian"
+                ],
+                "answer0": [
+                    "he",
+                    "Thomas"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Thomas"
+                ],
+                "predict_answer": [
+                    "('he', 0.6983274817466736)",
+                    "('thomas', 0.05843038111925125)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "shelf"
+                ],
+                "sentence": "The sculpture rolled off the shelf because the _ wasn't anchored.",
+                "answer1": [
+                    "sculpture"
+                ],
+                "correct_answer": [
+                    "sculpture"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 24
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "sculpture"
+                ],
+                "sentence": "The sculpture rolled off the shelf because the _ wasn't level.",
+                "answer0": [
+                    "shelf"
+                ],
+                "correct_answer": [
+                    "shelf"
+                ],
+                "predict_answer": [
+                    "('shelf', 0.1008094847202301)"
+                ]
+            }
+        ],
+        "index": 25
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "Jennifer"
+                ],
+                "sentence": "Charles's drawing was hung just above Jennifer's and _'s drawing did look much better with another one below it.",
+                "answer0": [
+                    "Charles"
+                ],
+                "correct_answer": [
+                    "Charles"
+                ],
+                "predict_answer": [
+                    "('charles', 0.06068889796733856)"
+                ]
+            },
+            {
+                "answer0": [
+                    "Sandy"
+                ],
+                "answer1": [
+                    "Richard"
+                ],
+                "sentence": "Sandy's drawing was hung just above Richard's and _'s drawing did look much better with another one below it.",
+                "correct_answer": [
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('sandy', 0.054600633680820465)"
+                ]
+            }
+        ],
+        "index": 26
+    },
+    {
+        "index": 27,
+        "sentences": [
+            {
+                "answer0": [
+                    "Sandy"
+                ],
+                "answer1": [
+                    "David"
+                ],
+                "sentence": "David's drawing was hung just above Sandy's and _'s drawing did look much better with another one above it.",
+                "correct_answer": [
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('sandy', 0.1506769210100174)"
+                ]
+            },
+            {
+                "answer0": [
+                    "Steven"
+                ],
+                "sentence": "Elizabet's drawing was hung just above Steven's and _'s drawing did look much better with another one above it.",
+                "answer1": [
+                    "Elizabet"
+                ],
+                "correct_answer": [
+                    "Steven"
+                ],
+                "predict_answer": [
+                    "('steven', 0.4134158194065094)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 28,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Edward did a lot better than his good friend Wendy on the test because _ had studied so hard.",
+                "answer1": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "he",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('he', 0.30142831802368164)",
+                    "('edward', 0.09300299733877182)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Sandra"
+                ],
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "sentence": "Sandra did a lot better than her good friend William on the test because _ had studied so hard.",
+                "answer1": [
+                    "he",
+                    "William"
+                ],
+                "predict_answer": [
+                    "('she', 0.48953956365585327)",
+                    "('he', 0.23957479000091553)",
+                    "('sandra', 0.0832737609744072)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 29,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Anna did a lot worse than her good friend Edward on the test because _ had studied so hard.",
+                "answer0": [
+                    "she",
+                    "Anna"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('he', 0.15503063797950745)",
+                    "('edward', 0.03234272822737694)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "he",
+                    "Steven"
+                ],
+                "sentence": "Steven did a lot worse than his good friend Wendy on the test because _ had studied so hard.",
+                "answer1": [
+                    "she",
+                    "Wendy"
+                ],
+                "predict_answer": [
+                    "('he', 0.4311935007572174)",
+                    "('she', 0.1971423327922821)",
+                    "('wendy', 0.021256214007735252)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 30,
+        "sentences": [
+            {
+                "answer0": [
+                    "firemen"
+                ],
+                "answer1": [
+                    "police"
+                ],
+                "sentence": "The firemen arrived after the police because the _ were coming from so far away.",
+                "correct_answer": [
+                    "firemen"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 31,
+        "sentences": [
+            {
+                "answer0": [
+                    "police"
+                ],
+                "answer1": [
+                    "firemen"
+                ],
+                "sentence": "The firemen arrived before the police because the _ were coming from so far away.",
+                "correct_answer": [
+                    "police"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Linda"
+                ],
+                "answer0": [
+                    "she",
+                    "Linda"
+                ],
+                "sentence": "Linda was upset with Thomas because the toaster _ had bought from her didn't work.",
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "predict_answer": [
+                    "('he', 0.5002517104148865)",
+                    "('she', 0.04143822193145752)",
+                    "('i', 0.011696399189531803)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Tony"
+                ],
+                "sentence": "Tony was upset with Sandra because the toaster _ had bought from him didn't work.",
+                "answer1": [
+                    "she",
+                    "Sandra"
+                ],
+                "answer0": [
+                    "he",
+                    "Tony"
+                ],
+                "predict_answer": [
+                    "('tony', 0.09419342875480652)",
+                    "('he', 0.01882328651845455)"
+                ]
+            }
+        ],
+        "index": 32
+    },
+    {
+        "index": 33,
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Margaret"
+                ],
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Edward was upset with Margaret because the toaster _ had sold him didn't work.",
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "predict_answer": [
+                    "('margaret', 0.20849426090717316)",
+                    "('she', 0.19078373908996582)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Joseph"
+                ],
+                "sentence": "Barbara was upset with Joseph because the toaster _ had sold her didn't work.",
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "answer0": [
+                    "she",
+                    "Barbara"
+                ],
+                "predict_answer": [
+                    "('he', 0.5141380429267883)",
+                    "('joseph', 0.09080140292644501)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "sentence": "Nancy yelled at Zack because _ was so upset.",
+                "answer1": [
+                    "she",
+                    "Nancy"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Nancy"
+                ],
+                "predict_answer": [
+                    "('he', 0.7093272805213928)",
+                    "('she', 0.25175151228904724)"
+                ]
+            },
+            {
+                "answer1": [
+                    "she",
+                    "Sandra"
+                ],
+                "sentence": "Jason yelled at Sandra because _ was so upset.",
+                "answer0": [
+                    "he",
+                    "Jason"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Jason"
+                ],
+                "predict_answer": [
+                    "('he', 0.04825713112950325)"
+                ]
+            }
+        ],
+        "index": 34
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "answer1": [
+                    "she",
+                    "Sarah"
+                ],
+                "sentence": "Sarah comforted Zack because _ was so upset.",
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('he', 0.9406246542930603)",
+                    "('zack', 0.016362566500902176)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Sandy"
+                ],
+                "answer1": [
+                    "he",
+                    "William"
+                ],
+                "sentence": "William comforted Sandy because _ was so upset.",
+                "answer0": [
+                    "she",
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('she', 0.7809925079345703)",
+                    "('he', 0.1573716402053833)",
+                    "('sandy', 0.04156216233968735)"
+                ]
+            }
+        ],
+        "index": 35
+    },
+    {
+        "sentences": [],
+        "index": 36
+    },
+    {
+        "sentences": [],
+        "index": 37
+    },
+    {
+        "index": 38,
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Sue"
+                ],
+                "answer1": [
+                    "he",
+                    "Zack"
+                ],
+                "sentence": "Zack envies Sue although _ is very successful.",
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('he', 0.024926403537392616)",
+                    "('zack', 0.0019192839972674847)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Linda"
+                ],
+                "sentence": "Linda envies Richard although _ is very successful.",
+                "answer1": [
+                    "he",
+                    "Richard"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Linda"
+                ],
+                "predict_answer": [
+                    "('he', 0.664956271648407)",
+                    "('she', 0.1215711385011673)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Tim"
+                ],
+                "answer0": [
+                    "she",
+                    "Anna"
+                ],
+                "answer1": [
+                    "he",
+                    "Tim"
+                ],
+                "sentence": "Anna envies Tim because _ is very successful.",
+                "predict_answer": [
+                    "('he', 0.8921818733215332)",
+                    "('tim', 0.08102351427078247)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Laura"
+                ],
+                "answer0": [
+                    "he",
+                    "Daniel"
+                ],
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Daniel envies Laura because _ is very successful.",
+                "predict_answer": [
+                    "('she', 0.9139874577522278)",
+                    "('laura', 0.06412641704082489)",
+                    "('he', 0.00780355092138052)"
+                ]
+            }
+        ],
+        "index": 39
+    },
+    {
+        "sentences": [],
+        "index": 40
+    },
+    {
+        "index": 41,
+        "sentences": []
+    },
+    {
+        "index": 42,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "bottle"
+                ],
+                "answer0": [
+                    "cup"
+                ],
+                "sentence": "I poured water from the bottle into the cup until the _ was empty.",
+                "answer1": [
+                    "bottle"
+                ],
+                "predict_answer": [
+                    "('bottle', 0.10395961999893188)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "cup"
+                ],
+                "sentence": "I poured water from the bottle into the cup until the _ was full.",
+                "answer1": [
+                    "cup"
+                ],
+                "answer0": [
+                    "bottle"
+                ],
+                "predict_answer": [
+                    "('cup', 0.18986396491527557)"
+                ]
+            }
+        ],
+        "index": 43
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "she",
+                    "Jennifer"
+                ],
+                "sentence": "Jennifer knows all about Daniel's personal problems because _ is nosy.",
+                "answer0": [
+                    "he",
+                    "Daniel"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Jennifer"
+                ],
+                "predict_answer": [
+                    "('he', 0.5250834822654724)",
+                    "('she', 0.23516221344470978)",
+                    "('jennifer', 0.02504628337919712)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "sentence": "Thomas knows all about Betty's personal problems because _ is nosy.",
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Thomas"
+                ],
+                "predict_answer": [
+                    "('he', 0.2621757984161377)",
+                    "('thomas', 0.018191788345575333)"
+                ]
+            }
+        ],
+        "index": 44
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Brian"
+                ],
+                "answer0": [
+                    "she",
+                    "Wendy"
+                ],
+                "sentence": "Wendy knows all about Brian's personal problems because _ is indiscreet.",
+                "answer1": [
+                    "he",
+                    "Brian"
+                ],
+                "predict_answer": [
+                    "('he', 0.5593927502632141)",
+                    "('brian', 0.3039402663707733)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Helen"
+                ],
+                "sentence": "Brian knows all about Helen's personal problems because _ is indiscreet.",
+                "answer1": [
+                    "he",
+                    "Brian"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Helen"
+                ],
+                "predict_answer": [
+                    "('she', 0.6249805688858032)",
+                    "('helen', 0.18689005076885223)",
+                    "('he', 0.06774366647005081)"
+                ]
+            }
+        ],
+        "index": 45
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Paul"
+                ],
+                "sentence": "Paul explained his theory to Sandra but _ couldn't convince him.",
+                "answer1": [
+                    "he",
+                    "Paul"
+                ],
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "predict_answer": [
+                    "('he', 0.0018479482969269156)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Margaret"
+                ],
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Margaret explained her theory to Edward but _ couldn't convince him.",
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "predict_answer": [
+                    "('she', 0.6406459808349609)",
+                    "('he', 0.020517587661743164)"
+                ]
+            }
+        ],
+        "index": 46
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Daniel"
+                ],
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Daniel explained his theory to Laura but _ couldn't understand him.",
+                "correct_answer": [
+                    "she",
+                    "Laura"
+                ],
+                "predict_answer": [
+                    "('she', 0.9520718455314636)",
+                    "('laura', 0.03763836622238159)",
+                    "('he', 0.0005761314532719553)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Tony"
+                ],
+                "answer0": [
+                    "he",
+                    "Tony"
+                ],
+                "answer1": [
+                    "she",
+                    "Jennifer"
+                ],
+                "sentence": "Jennifer explained her theory to Tony but _ couldn't understand him.",
+                "predict_answer": [
+                    "('tony', 0.4908607006072998)",
+                    "('he', 0.32681161165237427)"
+                ]
+            }
+        ],
+        "index": 47
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "she",
+                    "Donna"
+                ],
+                "sentence": "Tim knew that Donna's son had been in a car accident, so _ told her about it.",
+                "answer0": [
+                    "he",
+                    "Tim"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Tim"
+                ],
+                "predict_answer": [
+                    "('he', 0.9122264981269836)",
+                    "('tim', 0.046287111937999725)",
+                    "('i', 0.011459825560450554)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Thomas"
+                ],
+                "sentence": "Helen knew that Thomas's son had been in a car accident, so _ told his about it.",
+                "answer1": [
+                    "she",
+                    "Helen"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Helen"
+                ],
+                "predict_answer": [
+                    "('she', 0.7794706225395203)",
+                    "('helen', 0.09274931997060776)",
+                    "('he', 0.03558088839054108)"
+                ]
+            }
+        ],
+        "index": 48
+    },
+    {
+        "index": 49,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Laura knew that Zack's son had been in a car accident, because _ told his about it.",
+                "predict_answer": [
+                    "('zack', 0.31911560893058777)",
+                    "('he', 0.1191413402557373)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Helen"
+                ],
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "sentence": "Joseph knew that Helen's son had been in a car accident, because _ told her about it.",
+                "answer0": [
+                    "she",
+                    "Helen"
+                ],
+                "predict_answer": [
+                    "('he', 0.8324087858200073)",
+                    "('helen', 0.0134191382676363)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 50
+    },
+    {
+        "index": 51,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 52
+    },
+    {
+        "index": 53,
+        "sentences": []
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "wall"
+                ],
+                "sentence": "There is a gap in the wall. You can see the garden through the _ .",
+                "answer0": [
+                    "gap"
+                ],
+                "correct_answer": [
+                    "gap"
+                ],
+                "predict_answer": [
+                    "('gap', 0.06364461034536362)"
+                ]
+            }
+        ],
+        "index": 54
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "wall"
+                ],
+                "answer1": [
+                    "wall"
+                ],
+                "sentence": "There is a gap in the wall. You can see the garden behind the _ .",
+                "answer0": [
+                    "gap"
+                ],
+                "predict_answer": [
+                    "('wall', 0.1855088472366333)"
+                ]
+            }
+        ],
+        "index": 55
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "drain"
+                ],
+                "sentence": "The drain is clogged with hair. the _ has to be cleaned.",
+                "answer1": [
+                    "drain"
+                ],
+                "answer0": [
+                    "hair"
+                ],
+                "predict_answer": [
+                    "('drain', 0.10474126785993576)"
+                ]
+            }
+        ],
+        "index": 56
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "hair"
+                ],
+                "sentence": "The drain is clogged with hair. the _ has to be removed.",
+                "answer1": [
+                    "hair"
+                ],
+                "answer0": [
+                    "drain"
+                ],
+                "predict_answer": [
+                    "('hair', 0.35679975152015686)"
+                ]
+            }
+        ],
+        "index": 57
+    },
+    {
+        "index": 58,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "meeting"
+                ],
+                "sentence": "My meeting started at 4:00 and I needed to catch the train at 4:30,  so there wasn't much time. Luckily, the _ was short, so it worked out.",
+                "answer1": [
+                    "train"
+                ],
+                "answer0": [
+                    "meeting"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "train"
+                ],
+                "sentence": "My meeting started at 4:00 and I needed to catch the train at 4:30,  so there wasn't much time. Luckily, the _ was delayed, so it worked out.",
+                "answer1": [
+                    "meeting"
+                ],
+                "answer0": [
+                    "train"
+                ],
+                "predict_answer": [
+                    "('train', 0.2624363899230957)"
+                ]
+            }
+        ],
+        "index": 59
+    },
+    {
+        "index": 60,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "pillar"
+                ],
+                "sentence": "There is a pillar between me and the stage, and I can't see around the _ .",
+                "answer1": [
+                    "pillar"
+                ],
+                "answer0": [
+                    "stage"
+                ],
+                "predict_answer": [
+                    "('pillar', 0.5279375910758972)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "stage"
+                ],
+                "answer1": [
+                    "stage"
+                ],
+                "sentence": "There is a pillar between me and the stage, and I can't see the _ .",
+                "answer0": [
+                    "pillar"
+                ],
+                "predict_answer": [
+                    "('stage', 0.07283679395914078)"
+                ]
+            }
+        ],
+        "index": 61
+    },
+    {
+        "index": 62,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "announcement"
+                ],
+                "answer0": [
+                    "subway"
+                ],
+                "sentence": "They broadcast an announcement, but a subway came into the  station and I couldn't hear the _ .",
+                "answer1": [
+                    "announcement"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "subway"
+                ],
+                "answer1": [
+                    "announcement"
+                ],
+                "sentence": "They broadcast an announcement, but a subway came into the  station and I couldn't hear over the _ .",
+                "correct_answer": [
+                    "subway"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 63
+    },
+    {
+        "index": 64,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "concert"
+                ],
+                "answer0": [
+                    "rain"
+                ],
+                "answer1": [
+                    "concert"
+                ],
+                "sentence": "In the middle of the outdoor concert, the rain started falling, but the _ continued until 10.",
+                "predict_answer": [
+                    "('concert', 0.0404825396835804)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "rain"
+                ],
+                "answer1": [
+                    "rain"
+                ],
+                "sentence": "In the middle of the outdoor concert, the rain started falling, and the _ continued until 10.",
+                "answer0": [
+                    "concert"
+                ],
+                "predict_answer": [
+                    "('rain', 0.22699223458766937)"
+                ]
+            }
+        ],
+        "index": 65
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "rag"
+                ],
+                "sentence": "I used an old rag to clean the knife, and then I put the _ in the trash.",
+                "answer1": [
+                    "knife"
+                ],
+                "correct_answer": [
+                    "rag"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 66
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "rag"
+                ],
+                "sentence": "I used an old rag to clean the knife, and then I put the _ in the drawer.",
+                "answer1": [
+                    "knife"
+                ],
+                "correct_answer": [
+                    "knife"
+                ],
+                "predict_answer": [
+                    "('knife', 0.5724927186965942)"
+                ]
+            }
+        ],
+        "index": 67
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Lisa"
+                ],
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Lisa asked Edward what time the library closes, because _ had forgotten.",
+                "answer0": [
+                    "she",
+                    "Lisa"
+                ],
+                "predict_answer": [
+                    "('he', 0.5979642868041992)",
+                    "('she', 0.17622332274913788)",
+                    "('i', 0.01000593975186348)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "sentence": "Zack asked Elizabet what time the library closes, because _ had forgotten.",
+                "answer1": [
+                    "she",
+                    "Elizabet"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('he', 0.5228093266487122)",
+                    "('zack', 0.013324892148375511)"
+                ]
+            }
+        ],
+        "index": 68
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Amy"
+                ],
+                "answer0": [
+                    "she",
+                    "Amy"
+                ],
+                "sentence": "Tim asked Amy what time the library closes, but _ had forgotten.",
+                "answer1": [
+                    "he",
+                    "Tim"
+                ],
+                "predict_answer": [
+                    "('amy', 0.3908587098121643)",
+                    "('she', 0.3793390095233917)",
+                    "('he', 0.07804994285106659)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Edward"
+                ],
+                "answer0": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Laura asked Edward what time the library closes, but _ had forgotten.",
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('edward', 0.4954814016819)",
+                    "('he', 0.4224836230278015)"
+                ]
+            }
+        ],
+        "index": 69
+    },
+    {
+        "index": 70,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 71
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "pot"
+                ],
+                "sentence": "I couldn't put the pot on the shelf because the _ was too tall.",
+                "answer1": [
+                    "pot"
+                ],
+                "answer0": [
+                    "shelf"
+                ],
+                "predict_answer": [
+                    "('pot', 0.040349528193473816)"
+                ]
+            }
+        ],
+        "index": 72
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "I couldn't put the pot on the shelf because the _ was too high.",
+                "answer1": [
+                    "pot"
+                ],
+                "answer0": [
+                    "shelf"
+                ],
+                "correct_answer": [
+                    "shelf"
+                ],
+                "predict_answer": [
+                    "('shelf', 0.09407572448253632)"
+                ]
+            }
+        ],
+        "index": 73
+    },
+    {
+        "index": 74,
+        "sentences": [
+            {
+                "answer0": [
+                    "building"
+                ],
+                "answer1": [
+                    "map"
+                ],
+                "sentence": "I'm sure that my map will show this building; the _ is very good.",
+                "correct_answer": [
+                    "map"
+                ],
+                "predict_answer": [
+                    "('map', 0.2211541384458542)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "building"
+                ],
+                "sentence": "I'm sure that my map will show this building; the _ is very famous.",
+                "answer1": [
+                    "building"
+                ],
+                "answer0": [
+                    "map"
+                ],
+                "predict_answer": [
+                    "('building', 0.08651192486286163)"
+                ]
+            }
+        ],
+        "index": 75
+    },
+    {
+        "index": 76,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer1": [
+                    "he",
+                    "Paul"
+                ],
+                "sentence": "Wendy paid for Paul's college education. _ is very generous.",
+                "predict_answer": [
+                    "('she', 0.5786277055740356)",
+                    "('wendy', 0.24141250550746918)",
+                    "('he', 0.03483834117650986)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Alan paid for Margaret's college education. _ is very generous.",
+                "answer1": [
+                    "he",
+                    "Alan"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Alan"
+                ],
+                "predict_answer": [
+                    "('alan', 0.7235293984413147)",
+                    "('he', 0.1448742002248764)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 77,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Paul"
+                ],
+                "answer0": [
+                    "she",
+                    "Laura"
+                ],
+                "answer1": [
+                    "he",
+                    "Paul"
+                ],
+                "sentence": "Laura paid for Paul's college education. _ is very grateful.",
+                "predict_answer": [
+                    "('paul', 0.16128899157047272)",
+                    "('he', 0.12017123401165009)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "sentence": "Steven paid for Betty's college education. _ is very grateful.",
+                "answer1": [
+                    "he",
+                    "Steven"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Betty"
+                ],
+                "predict_answer": [
+                    "('she', 0.30353090167045593)",
+                    "('betty', 0.21511046588420868)",
+                    "('he', 0.15812784433364868)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "William paid for Vivian's college education, but now Vivian acts as though it never happened. _ is very hurt.",
+                "answer1": [
+                    "he",
+                    "William"
+                ],
+                "answer0": [
+                    "she",
+                    "Vivian"
+                ],
+                "correct_answer": [
+                    "he",
+                    "William"
+                ],
+                "predict_answer": [
+                    "('william', 0.06715420633554459)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Sue"
+                ],
+                "answer0": [
+                    "she",
+                    "Sue"
+                ],
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "sentence": "Sue paid for Joseph's college education, but now Joseph acts as though it never happened. _ is very hurt.",
+                "predict_answer": [
+                    "('sue', 0.13091105222702026)",
+                    "('he', 0.02477877214550972)"
+                ]
+            }
+        ],
+        "index": 78
+    },
+    {
+        "index": 79,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Brian"
+                ],
+                "answer1": [
+                    "he",
+                    "Brian"
+                ],
+                "sentence": "Amy paid for Brian's college education, but now Brian acts as though it never happened. _ is very ungrateful.",
+                "answer0": [
+                    "she",
+                    "Amy"
+                ],
+                "predict_answer": [
+                    "('brian', 0.505687415599823)",
+                    "('he', 0.15113987028598785)"
+                ]
+            },
+            {
+                "answer1": [
+                    "he",
+                    "George"
+                ],
+                "sentence": "George paid for Wendy's college education, but now Wendy acts as though it never happened. _ is very ungrateful.",
+                "answer0": [
+                    "she",
+                    "Wendy"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "predict_answer": [
+                    "('she', 0.12250462174415588)",
+                    "('wendy', 0.10415688902139664)",
+                    "('he', 0.01698586717247963)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Brian"
+                ],
+                "sentence": "Brian was playing cards with Wendy and was way ahead. If Wendy hadn't had a sudden run of good luck, _ would have won.",
+                "answer0": [
+                    "she",
+                    "Wendy"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Brian"
+                ],
+                "predict_answer": [
+                    "('brian', 0.7091392278671265)",
+                    "('he', 0.04875713214278221)",
+                    "('i', 0.0025269249454140663)"
+                ]
+            },
+            {
+                "sentence": "Betty was playing cards with Jason and was way ahead. If Jason hadn't had a sudden run of good luck, _ would have won.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Betty"
+                ],
+                "predict_answer": [
+                    "('he', 0.4964278042316437)",
+                    "('betty', 0.31088003516197205)",
+                    "('she', 0.07515279948711395)"
+                ]
+            }
+        ],
+        "index": 80
+    },
+    {
+        "index": 81,
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "sentence": "Nancy was playing cards with Richard and was way ahead. If Richard hadn't had a sudden run of good luck, _ would have lost.",
+                "answer1": [
+                    "he",
+                    "Richard"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Richard"
+                ],
+                "predict_answer": [
+                    "('he', 0.7099876999855042)",
+                    "('richard', 0.02896474488079548)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Wendy"
+                ],
+                "sentence": "Charles was playing cards with Wendy and was way ahead. If Wendy hadn't had a sudden run of good luck, _ would have lost.",
+                "answer1": [
+                    "he",
+                    "Charles"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "predict_answer": [
+                    "('she', 0.734163224697113)",
+                    "('he', 0.05124906823039055)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 82,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Betty"
+                ],
+                "answer1": [
+                    "he",
+                    "Anthony"
+                ],
+                "sentence": "Betty can't leave work here until Anthony arrives to replace him. If Anthony had  left home for work on time, _ would be gone by this time.",
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "predict_answer": [
+                    "('betty', 0.6756095886230469)",
+                    "('he', 0.2681519091129303)",
+                    "('she', 0.023015839979052544)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Steven"
+                ],
+                "answer0": [
+                    "he",
+                    "Steven"
+                ],
+                "sentence": "Steven can't leave work here until Sue arrives to replace him. If Sue had  left home for work on time, _ would be gone by this time.",
+                "answer1": [
+                    "she",
+                    "Sue"
+                ],
+                "predict_answer": [
+                    "('steven', 0.550605297088623)",
+                    "('he', 0.0793607234954834)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 83,
+        "sentences": [
+            {
+                "answer1": [
+                    "she",
+                    "Nancy"
+                ],
+                "sentence": "Nancy can't leave work here until George arrives to replace him. If George had  left home for work on time, _ would be here by this time.",
+                "answer0": [
+                    "he",
+                    "George"
+                ],
+                "correct_answer": [
+                    "he",
+                    "George"
+                ],
+                "predict_answer": [
+                    "('he', 0.22480490803718567)",
+                    "('george', 0.014955908991396427)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Nancy"
+                ],
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "answer1": [
+                    "he",
+                    "Daniel"
+                ],
+                "sentence": "Daniel can't leave work here until Nancy arrives to replace him. If Nancy had  left home for work on time, _ would be here by this time.",
+                "predict_answer": [
+                    "('she', 0.21045298874378204)",
+                    "('he', 0.07738353312015533)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 84,
+        "sentences": []
+    },
+    {
+        "index": 85,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 86
+    },
+    {
+        "index": 87,
+        "sentences": []
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "lion"
+                ],
+                "answer0": [
+                    "lion"
+                ],
+                "sentence": "Lion was lying by hare hole waiting for hare, but the _ was too impatient.",
+                "answer1": [
+                    "hare"
+                ],
+                "predict_answer": [
+                    "('lion', 0.10164658725261688)"
+                ]
+            }
+        ],
+        "index": 88
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "lion"
+                ],
+                "sentence": "Lion was lying by rat hole waiting for rat, but the _ was too cautious.",
+                "answer1": [
+                    "rat"
+                ],
+                "correct_answer": [
+                    "rat"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 89
+    },
+    {
+        "index": 90,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 91
+    },
+    {
+        "index": 92,
+        "sentences": []
+    },
+    {
+        "index": 93,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 94
+    },
+    {
+        "sentences": [],
+        "index": 95
+    },
+    {
+        "index": 96,
+        "sentences": [
+            {
+                "answer1": [
+                    "hare"
+                ],
+                "sentence": "Lion ate hare. the _ was hungry.",
+                "answer0": [
+                    "lion"
+                ],
+                "correct_answer": [
+                    "lion"
+                ],
+                "predict_answer": [
+                    "('lion', 0.40701308846473694)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 97,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "rat"
+                ],
+                "sentence": "Tiger ate rat. the _ was tasty.",
+                "answer1": [
+                    "tiger"
+                ],
+                "answer0": [
+                    "rat"
+                ],
+                "predict_answer": [
+                    "('rat', 0.2934774160385132)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 98,
+        "sentences": []
+    },
+    {
+        "index": 99,
+        "sentences": []
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "lion"
+                ],
+                "sentence": "Lion chased rat, which ran up a tree. the _ waited at the bottom.",
+                "answer1": [
+                    "rat"
+                ],
+                "correct_answer": [
+                    "lion"
+                ],
+                "predict_answer": [
+                    "('lion', 0.12225810438394547)"
+                ]
+            }
+        ],
+        "index": 100
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "rabbit"
+                ],
+                "answer0": [
+                    "panther"
+                ],
+                "answer1": [
+                    "rabbit"
+                ],
+                "sentence": "Panther chased rabbit, which ran up a tree. the _ waited at the top.",
+                "predict_answer": []
+            }
+        ],
+        "index": 101
+    },
+    {
+        "index": 102,
+        "sentences": [
+            {
+                "answer0": [
+                    "tree"
+                ],
+                "answer1": [
+                    "roof"
+                ],
+                "sentence": "In the storm, the tree fell down and crashed through the roof of my  house. Now, I have to get the _ removed.",
+                "correct_answer": [
+                    "tree"
+                ],
+                "predict_answer": [
+                    "('tree', 0.27868902683258057)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "roof"
+                ],
+                "sentence": "In the storm, the tree fell down and crashed through the roof of my  house. Now, I have to get the _ repaired.",
+                "answer0": [
+                    "tree"
+                ],
+                "correct_answer": [
+                    "roof"
+                ],
+                "predict_answer": [
+                    "('roof', 0.1584283411502838)"
+                ]
+            }
+        ],
+        "index": 103
+    },
+    {
+        "index": 104,
+        "sentences": [
+            {
+                "answer0": [
+                    "customer"
+                ],
+                "answer1": [
+                    "teller"
+                ],
+                "sentence": "The customer walked into the bank and stabbed the tellers. the _ was immediately taken to the police station.",
+                "correct_answer": [
+                    "customer"
+                ],
+                "predict_answer": [
+                    "('customer', 0.5774991512298584)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "The customer walked into the bank and stabbed the tellers. the _ was immediately taken to the hospital.",
+                "answer1": [
+                    "teller"
+                ],
+                "answer0": [
+                    "customer"
+                ],
+                "correct_answer": [
+                    "teller"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 105
+    },
+    {
+        "sentences": [],
+        "index": 106
+    },
+    {
+        "index": 107,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 108
+    },
+    {
+        "sentences": [],
+        "index": 109
+    },
+    {
+        "index": 110,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Alan"
+                ],
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "answer1": [
+                    "he",
+                    "Alan"
+                ],
+                "sentence": "Alan collapsed on the sidewalk. Soon he saw Betty coming to help. _ was very ill.",
+                "predict_answer": [
+                    "('he', 0.0034148944541811943)",
+                    "('alan', 0.0010596798965707421)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Helen"
+                ],
+                "answer0": [
+                    "he",
+                    "Warren"
+                ],
+                "answer1": [
+                    "she",
+                    "Helen"
+                ],
+                "sentence": "Helen collapsed on the sidewalk. Soon she saw Warren coming to help. _ was very ill.",
+                "predict_answer": [
+                    "('he', 0.7213208079338074)",
+                    "('she', 0.01559060625731945)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 111,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "answer0": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Warren collapsed on the sidewalk. Soon he saw Margaret coming to help. _ was very concerned.",
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "predict_answer": [
+                    "('margaret', 0.5481626987457275)",
+                    "('she', 0.4100223183631897)",
+                    "('he', 0.006124233361333609)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "George"
+                ],
+                "sentence": "Betty collapsed on the sidewalk. Soon she saw George coming to help. _ was very concerned.",
+                "answer1": [
+                    "she",
+                    "Betty"
+                ],
+                "correct_answer": [
+                    "he",
+                    "George"
+                ],
+                "predict_answer": [
+                    "('he', 0.5039348602294922)",
+                    "('george', 0.3654231131076813)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 112
+    },
+    {
+        "index": 113,
+        "sentences": []
+    },
+    {
+        "index": 114,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Warren"
+                ],
+                "answer1": [
+                    "he",
+                    "Zack"
+                ],
+                "sentence": "Warren told Zack many lies about himself, which Zack included in his book. _ should have been more  truthful.",
+                "answer0": [
+                    "he",
+                    "Warren"
+                ],
+                "predict_answer": [
+                    "('he', 0.6371017694473267)",
+                    "('warren', 0.07774429768323898)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Anna"
+                ],
+                "answer0": [
+                    "she",
+                    "Anna"
+                ],
+                "sentence": "Anna told Helen many lies about himself, which Helen included in her book. _ should have been more  truthful.",
+                "answer1": [
+                    "she",
+                    "Helen"
+                ],
+                "predict_answer": [
+                    "('anna', 0.3913864493370056)",
+                    "('she', 0.21768444776535034)",
+                    "('he', 0.1320316642522812)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Charles told Margaret many lies about himself, which Margaret included in her book. _ should have been more  skeptical.",
+                "answer1": [
+                    "he",
+                    "Charles"
+                ],
+                "answer0": [
+                    "she",
+                    "Margaret"
+                ],
+                "predict_answer": [
+                    "('she', 0.2665921747684479)",
+                    "('margaret', 0.1497483253479004)",
+                    "('he', 0.07029581815004349)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Charles"
+                ],
+                "sentence": "Charles told Brian many lies about himself, which Brian included in his book. _ should have been more  skeptical.",
+                "answer1": [
+                    "he",
+                    "Brian"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Brian"
+                ],
+                "predict_answer": [
+                    "('brian', 0.2879785895347595)",
+                    "('i', 0.2868022322654724)",
+                    "('he', 0.23885421454906464)"
+                ]
+            }
+        ],
+        "index": 115
+    },
+    {
+        "sentences": [],
+        "index": 116
+    },
+    {
+        "sentences": [],
+        "index": 117
+    },
+    {
+        "index": 118,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 119
+    },
+    {
+        "index": 120,
+        "sentences": [
+            {
+                "answer0": [
+                    "flute"
+                ],
+                "sentence": "Mary took out her flute and played one of her favorite pieces. She has had the _ since she was a child.",
+                "answer1": [
+                    "piece"
+                ],
+                "correct_answer": [
+                    "flute"
+                ],
+                "predict_answer": [
+                    "('flute', 0.8020106554031372)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 121,
+        "sentences": [
+            {
+                "answer1": [
+                    "piece"
+                ],
+                "sentence": "Mary took out her flute and played one of her favorite pieces. She has loved the _ since she was a child.",
+                "answer0": [
+                    "flute"
+                ],
+                "correct_answer": [
+                    "piece"
+                ],
+                "predict_answer": [
+                    "('piece', 0.11442672461271286)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 122,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "chair"
+                ],
+                "answer1": [
+                    "piano"
+                ],
+                "sentence": "Sam pulled up a chair to the piano, but the _ was broken, so he had to stand instead.",
+                "answer0": [
+                    "chair"
+                ],
+                "predict_answer": [
+                    "('chair', 0.2117273360490799)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "piano"
+                ],
+                "answer1": [
+                    "chair"
+                ],
+                "sentence": "Sam pulled up a chair to the piano, but the _ was broken, so he had to sing instead.",
+                "answer0": [
+                    "piano"
+                ],
+                "predict_answer": [
+                    "('piano', 0.14480875432491302)"
+                ]
+            }
+        ],
+        "index": 123
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "backpack"
+                ],
+                "sentence": "Since it was raining, I carried the newspaper in my backpack to keep the _ dry.",
+                "answer0": [
+                    "newspaper"
+                ],
+                "correct_answer": [
+                    "newspaper"
+                ],
+                "predict_answer": [
+                    "('paper', 0.0607953816652298)"
+                ]
+            }
+        ],
+        "index": 124
+    },
+    {
+        "index": 125,
+        "sentences": [
+            {
+                "sentence": "Since it was raining, I carried the newspaper over my backpack to keep the _ dry.",
+                "answer1": [
+                    "backpack"
+                ],
+                "answer0": [
+                    "newspaper"
+                ],
+                "correct_answer": [
+                    "backpack"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 126,
+        "sentences": [
+            {
+                "answer0": [
+                    "book"
+                ],
+                "answer1": [
+                    "article"
+                ],
+                "sentence": "Sara borrowed the book from the library because she needs it for an article she is working on. She reads the _ when she gets home from work.",
+                "correct_answer": [
+                    "book"
+                ],
+                "predict_answer": [
+                    "('book', 0.03670453652739525)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "book"
+                ],
+                "sentence": "Sara borrowed the book from the library because she needs it for an article she is working on. She writes the _ when she gets home from work.",
+                "answer0": [
+                    "article"
+                ],
+                "correct_answer": [
+                    "article"
+                ],
+                "predict_answer": [
+                    "('article', 0.6547066569328308)"
+                ]
+            }
+        ],
+        "index": 127
+    },
+    {
+        "index": 128,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 129
+    },
+    {
+        "index": 130,
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Alan"
+                ],
+                "answer1": [
+                    "she",
+                    "Susan"
+                ],
+                "sentence": "Alan knocked on Alan's door, but there was no answer. _ was disappointed.",
+                "correct_answer": [
+                    "she",
+                    "Susan"
+                ],
+                "predict_answer": [
+                    "('he', 0.35859277844429016)",
+                    "('she', 0.023758528754115105)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Daniel"
+                ],
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "answer1": [
+                    "he",
+                    "Daniel"
+                ],
+                "sentence": "Daniel knocked on Nancy's door, but there was no answer. _ was disappointed.",
+                "predict_answer": [
+                    "('he', 0.6416463851928711)",
+                    "('daniel', 0.14252397418022156)",
+                    "('i', 0.09325563907623291)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 131,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Sandra"
+                ],
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "sentence": "Steven knocked on Sandra's door, but there was no answer. _ was out.",
+                "answer1": [
+                    "he",
+                    "Steven"
+                ],
+                "predict_answer": [
+                    "('she', 0.5271503925323486)",
+                    "('sandra', 0.07643694430589676)",
+                    "('he', 0.0476907417178154)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Anthony"
+                ],
+                "sentence": "Helen knocked on Anthony's door, but there was no answer. _ was out.",
+                "answer1": [
+                    "she",
+                    "Helen"
+                ],
+                "answer0": [
+                    "he",
+                    "Anthony"
+                ],
+                "predict_answer": [
+                    "('he', 0.27181950211524963)",
+                    "('anthony', 0.21680620312690735)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 132,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Jennifer"
+                ],
+                "sentence": "Jennifer knocked on the door, and Tim answered it. _ invited her to come out.",
+                "answer1": [
+                    "she",
+                    "Jennifer"
+                ],
+                "answer0": [
+                    "he",
+                    "Tim"
+                ],
+                "predict_answer": [
+                    "('he', 0.7193755507469177)",
+                    "('jennifer', 0.04384361952543259)",
+                    "('i', 0.010915023274719715)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "William"
+                ],
+                "answer0": [
+                    "he",
+                    "William"
+                ],
+                "sentence": "William knocked on the door, and Wendy answered it. _ invited her to come out.",
+                "answer1": [
+                    "she",
+                    "Wendy"
+                ],
+                "predict_answer": [
+                    "('he', 0.46884849667549133)",
+                    "('william', 0.4046489894390106)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Jason"
+                ],
+                "answer0": [
+                    "she",
+                    "Donna"
+                ],
+                "sentence": "Donna knocked on the door, and Jason answered it. _ invited her to come in.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "predict_answer": [
+                    "('he', 0.8167014718055725)",
+                    "('jason', 0.017821181565523148)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Susan"
+                ],
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "sentence": "Warren knocked on the door, and Susan answered it. _ invited his to come in.",
+                "answer0": [
+                    "she",
+                    "Susan"
+                ],
+                "predict_answer": [
+                    "('he', 0.27173253893852234)",
+                    "('she', 0.22468051314353943)",
+                    "('susan', 0.009762725792825222)"
+                ]
+            }
+        ],
+        "index": 133
+    },
+    {
+        "index": 134,
+        "sentences": [
+            {
+                "sentence": "Steven took French classes from Laura, because _ was eager to speak it fluently.",
+                "answer1": [
+                    "he",
+                    "Steven"
+                ],
+                "answer0": [
+                    "she",
+                    "Laura"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Steven"
+                ],
+                "predict_answer": [
+                    "('he', 0.6441695690155029)",
+                    "('steven', 0.009201988577842712)"
+                ]
+            },
+            {
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Betty took French classes from Edward, because _ was eager to speak it fluently.",
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Betty"
+                ],
+                "predict_answer": [
+                    "('she', 0.7466631531715393)",
+                    "('he', 0.1466214656829834)",
+                    "('betty', 0.009392493404448032)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 135,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "sentence": "Donna took French classes from Joseph, because _ was known to speak it fluently.",
+                "answer0": [
+                    "she",
+                    "Donna"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Joseph"
+                ],
+                "predict_answer": [
+                    "('he', 0.5144153833389282)",
+                    "('joseph', 0.00840835366398096)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Warren"
+                ],
+                "answer1": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Warren took French classes from Margaret, because _ was known to speak it fluently.",
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "predict_answer": [
+                    "('she', 0.5522677302360535)",
+                    "('he', 0.294617235660553)",
+                    "('margaret', 0.020477693527936935)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 136,
+        "sentences": [
+            {
+                "sentence": "The path to the lake was blocked, so we couldn't use the _ .",
+                "answer1": [
+                    "lake"
+                ],
+                "answer0": [
+                    "path"
+                ],
+                "correct_answer": [
+                    "path"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 137,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "lake"
+                ],
+                "sentence": "The path to the lake was blocked, so we couldn't reach the _ .",
+                "answer1": [
+                    "lake"
+                ],
+                "answer0": [
+                    "path"
+                ],
+                "predict_answer": [
+                    "('lake', 0.08149494975805283)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "sun"
+                ],
+                "answer1": [
+                    "cloud"
+                ],
+                "sentence": "The sun was covered by a thick cloud all morning, but luckily, by the time the picnic started, the _ was out.",
+                "answer0": [
+                    "sun"
+                ],
+                "predict_answer": [
+                    "('sun', 0.5122198462486267)"
+                ]
+            }
+        ],
+        "index": 138
+    },
+    {
+        "index": 139,
+        "sentences": [
+            {
+                "sentence": "The sun was covered by a thick cloud all morning, but luckily, by the time the picnic started, the _ was gone.",
+                "answer1": [
+                    "cloud"
+                ],
+                "answer0": [
+                    "sun"
+                ],
+                "correct_answer": [
+                    "cloud"
+                ],
+                "predict_answer": [
+                    "('cloud', 0.3546683192253113)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 140
+    },
+    {
+        "sentences": [],
+        "index": 141
+    },
+    {
+        "index": 142,
+        "sentences": [
+            {
+                "answer0": [
+                    "shepherds"
+                ],
+                "sentence": "Sam tried to paint a picture of shepherds with sheep, but the _ ended up looking more like golfers.",
+                "answer1": [
+                    "sheep"
+                ],
+                "correct_answer": [
+                    "shepherds"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "shepherds"
+                ],
+                "sentence": "Sam tried to paint a picture of shepherds with sheep, but the _ ended up looking more like dogs.",
+                "answer1": [
+                    "sheep"
+                ],
+                "correct_answer": [
+                    "sheep"
+                ],
+                "predict_answer": [
+                    "('sheep', 0.5611129403114319)"
+                ]
+            }
+        ],
+        "index": 143
+    },
+    {
+        "index": 144,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 145
+    },
+    {
+        "sentences": [],
+        "index": 146
+    },
+    {
+        "index": 147,
+        "sentences": []
+    },
+    {
+        "index": 148,
+        "sentences": [
+            {
+                "answer0": [
+                    "Richard and Joseph"
+                ],
+                "sentence": "Richard and Joseph visited Cooper's grave in 1765. At that date _ had been travelling for five years.",
+                "answer1": [
+                    "Cooper"
+                ],
+                "correct_answer": [
+                    "Richard and Joseph"
+                ],
+                "predict_answer": [
+                    "('joseph', 0.01615786738693714)",
+                    "('richard', 0.006147447042167187)"
+                ]
+            },
+            {
+                "answer0": [
+                    "Cooper"
+                ],
+                "sentence": "Tim and Sarah visited Cooper's grave in 1765. At that date _ had been travelling for five years.",
+                "answer1": [
+                    "Tim and Sarah"
+                ],
+                "correct_answer": [
+                    "Tim and Sarah"
+                ],
+                "predict_answer": [
+                    "('tim', 0.006503878626972437)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 149,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Charles"
+                ],
+                "sentence": "Nancy visited Charles's grave in 1765. At that date _ had been dead for five years.",
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Charles"
+                ],
+                "predict_answer": [
+                    "('he', 0.6949623227119446)",
+                    "('charles', 0.2857755720615387)"
+                ]
+            },
+            {
+                "sentence": "Jason visited Susan's grave in 1765. At that date _ had been dead for five years.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "answer0": [
+                    "she",
+                    "Susan"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Susan"
+                ],
+                "predict_answer": [
+                    "('she', 0.7264055013656616)",
+                    "('susan', 0.24811339378356934)",
+                    "('he', 0.0059508830308914185)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 150,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "he",
+                    "Thomas"
+                ],
+                "answer1": [
+                    "she",
+                    "Wendy"
+                ],
+                "sentence": "Wendy was greatly influenced by Thomas, though _ lived two centuries later.",
+                "predict_answer": [
+                    "('he', 0.6182651519775391)",
+                    "('she', 0.11318593472242355)"
+                ]
+            },
+            {
+                "sentence": "Anthony was greatly influenced by Helen, though _ lived two centuries later.",
+                "answer1": [
+                    "he",
+                    "Anthony"
+                ],
+                "answer0": [
+                    "she",
+                    "Helen"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Anthony"
+                ],
+                "predict_answer": [
+                    "('he', 0.37216272950172424)",
+                    "('anthony', 0.034602269530296326)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Daniel"
+                ],
+                "answer1": [
+                    "she",
+                    "Sarah"
+                ],
+                "sentence": "Daniel was greatly influenced by Sarah, though _ lived two centuries earlier.",
+                "correct_answer": [
+                    "she",
+                    "Sarah"
+                ],
+                "predict_answer": [
+                    "('she', 0.3781730830669403)",
+                    "('he', 0.3609120547771454)",
+                    "('sarah', 0.03844687342643738)"
+                ]
+            },
+            {
+                "sentence": "Helen was greatly influenced by Tony, though _ lived two centuries earlier.",
+                "answer1": [
+                    "she",
+                    "Helen"
+                ],
+                "answer0": [
+                    "he",
+                    "Tony"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Tony"
+                ],
+                "predict_answer": [
+                    "('he', 0.5674793720245361)",
+                    "('tony', 0.027081044390797615)"
+                ]
+            }
+        ],
+        "index": 151
+    },
+    {
+        "index": 152,
+        "sentences": [
+            {
+                "answer0": [
+                    "tree"
+                ],
+                "sentence": "I can't cut that tree down with that axe; the _ is too thick.",
+                "answer1": [
+                    "axe"
+                ],
+                "correct_answer": [
+                    "tree"
+                ],
+                "predict_answer": [
+                    "('tree', 0.025083722546696663)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 153,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "axe"
+                ],
+                "answer0": [
+                    "axe"
+                ],
+                "answer1": [
+                    "tree"
+                ],
+                "sentence": "I can't cut that tree down with that axe; the _ is too small.",
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 154,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "foxes"
+                ],
+                "answer0": [
+                    "foxes"
+                ],
+                "answer1": [
+                    "chickens"
+                ],
+                "sentence": "The foxes are getting in at night and attacking the chickens. I shall have to kill the _ .",
+                "predict_answer": [
+                    "('foxes', 0.1705324798822403)",
+                    "('fox', 0.14699514210224152)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 155,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "chickens"
+                ],
+                "answer0": [
+                    "chickens"
+                ],
+                "answer1": [
+                    "foxes"
+                ],
+                "sentence": "The foxes are getting in at night and attacking the chickens. I shall have to guard the _ .",
+                "predict_answer": [
+                    "('chickens', 0.3232119679450989)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 156,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "panther"
+                ],
+                "answer1": [
+                    "panther"
+                ],
+                "sentence": "Panther are getting in at night and attacking rat. the _ have gotten very bold.",
+                "answer0": [
+                    "rat"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 157,
+        "sentences": [
+            {
+                "sentence": "Weasel are getting in at night and attacking rat. the _ have gotten very nervous.",
+                "answer1": [
+                    "weasel"
+                ],
+                "answer0": [
+                    "rat"
+                ],
+                "correct_answer": [
+                    "rat"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 158,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "eyes"
+                ],
+                "sentence": "Fred covered his eyes with his hands, because the wind was blowing sand around. He opened his _ when the wind stopped.",
+                "answer1": [
+                    "hands"
+                ],
+                "answer0": [
+                    "eyes"
+                ],
+                "predict_answer": [
+                    "('eyes', 0.9919928312301636)",
+                    "('eye', 0.00030546204652637243)"
+                ]
+            },
+            {
+                "answer0": [
+                    "hands"
+                ],
+                "sentence": "Fred covered his eyes with his hands, because the wind was blowing sand around. He opened his _ when the wind stopped.",
+                "answer1": [
+                    "eyes"
+                ],
+                "correct_answer": [
+                    "eyes"
+                ],
+                "predict_answer": [
+                    "('eyes', 0.9919928312301636)",
+                    "('eye', 0.00030546204652637243)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "hands"
+                ],
+                "answer1": [
+                    "hands"
+                ],
+                "sentence": "Fred covered his eyes with his hands, because the wind was blowing sand around. He lowered his _ when the wind stopped.",
+                "answer0": [
+                    "eyes"
+                ],
+                "predict_answer": [
+                    "('hands', 0.04639185965061188)"
+                ]
+            },
+            {
+                "answer0": [
+                    "hands"
+                ],
+                "sentence": "Fred covered his eyes with his hands, because the wind was blowing sand around. He lowered his _ when the wind stopped.",
+                "answer1": [
+                    "eyes"
+                ],
+                "correct_answer": [
+                    "hands"
+                ],
+                "predict_answer": [
+                    "('hands', 0.04639185965061188)"
+                ]
+            }
+        ],
+        "index": 159
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "Terpsichore"
+                ],
+                "answer1": [
+                    "Terpsichore"
+                ],
+                "sentence": "The actress used to be named Terpsichore, but she changed it to Tina a  few years ago, because she figured the _ was too hard to pronounce.",
+                "answer0": [
+                    "Tina"
+                ],
+                "predict_answer": []
+            },
+            {
+                "correct_answer": [
+                    "Terpsichore"
+                ],
+                "answer1": [
+                    "Terpsichore"
+                ],
+                "sentence": "The actress used to be named Terpsichore, but she changed it to Tina a  few years ago, because she figured the _ was too hard to pronounce.",
+                "answer0": [
+                    "Tina"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 160
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "The actress used to be named Terpsichore, but she changed it to Tina a  few years ago, because she figured the _ was easier to pronounce.",
+                "answer1": [
+                    "Tina"
+                ],
+                "answer0": [
+                    "Terpsichore"
+                ],
+                "correct_answer": [
+                    "Tina"
+                ],
+                "predict_answer": []
+            },
+            {
+                "sentence": "The actress used to be named Terpsichore, but she changed it to Tina a  few years ago, because she figured the _ was easier to pronounce.",
+                "answer1": [
+                    "Terpsichore"
+                ],
+                "answer0": [
+                    "Tina"
+                ],
+                "correct_answer": [
+                    "Tina"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 161
+    },
+    {
+        "index": 162,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Linda"
+                ],
+                "answer0": [
+                    "she",
+                    "Linda"
+                ],
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "sentence": "Linda watched TV while Thomas went out to buy groceries. After an hour _ got up.",
+                "predict_answer": [
+                    "('he', 0.24661189317703247)",
+                    "('she', 0.2195778638124466)",
+                    "('linda', 0.04321069270372391)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Edward"
+                ],
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "sentence": "Edward watched TV while Sandra went out to buy groceries. After an hour _ got up.",
+                "answer1": [
+                    "he",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('edward', 0.3404870331287384)",
+                    "('he', 0.21033510565757751)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 163,
+        "sentences": [
+            {
+                "sentence": "Linda watched TV while Zack went out to buy groceries. After an hour _ got back.",
+                "answer1": [
+                    "she",
+                    "Linda"
+                ],
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('he', 0.416255384683609)",
+                    "('zack', 0.1048637256026268)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "answer1": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Thomas watched TV while Margaret went out to buy groceries. After an hour _ got back.",
+                "answer0": [
+                    "he",
+                    "Thomas"
+                ],
+                "predict_answer": [
+                    "('he', 0.22044700384140015)",
+                    "('she', 0.2114291936159134)",
+                    "('margaret', 0.14495952427387238)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "TV"
+                ],
+                "sentence": "Fred was supposed to run the dishwasher, but he put it off,  because he wanted to watch TV. But the show turned out to be boring, so he changed his mind and turned the _ on.",
+                "answer0": [
+                    "dishwasher"
+                ],
+                "correct_answer": [
+                    "dishwasher"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 164
+    },
+    {
+        "index": 165,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "TV"
+                ],
+                "answer0": [
+                    "TV"
+                ],
+                "answer1": [
+                    "dishwasher"
+                ],
+                "sentence": "Fred was supposed to run the dishwasher, but he put it off,  because he wanted to watch TV. But the show turned out to be boring, so he changed his mind and turned the _ off.",
+                "predict_answer": [
+                    "('tv', 0.4638611972332001)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 166,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 167
+    },
+    {
+        "index": 168,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 169
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "country_A"
+                ],
+                "answer1": [
+                    "country_F"
+                ],
+                "sentence": "In July, country_A declared war on country_F. Since country_F's army was much  better equipped and ten times larger, the _ were defeated within weeks.",
+                "correct_answer": [
+                    "country_F"
+                ],
+                "predict_answer": []
+            },
+            {
+                "sentence": "In July, country_D declared war on country_C. Since country_C's army was much  better equipped and ten times larger, the _ were defeated within weeks.",
+                "answer1": [
+                    "country_D"
+                ],
+                "answer0": [
+                    "country_C"
+                ],
+                "correct_answer": [
+                    "country_C"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 170
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "country_C"
+                ],
+                "sentence": "In July, country_A declared war on country_C. Since country_C's army was much  better equipped and ten times larger, the _ were victorious within weeks.",
+                "answer0": [
+                    "country_A"
+                ],
+                "correct_answer": [
+                    "country_C"
+                ],
+                "predict_answer": []
+            },
+            {
+                "answer0": [
+                    "country_C"
+                ],
+                "answer1": [
+                    "country_B"
+                ],
+                "sentence": "In July, country_C declared war on country_B. Since country_B's army was much  better equipped and ten times larger, the _ were victorious within weeks.",
+                "correct_answer": [
+                    "country_B"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 171
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "minnow"
+                ],
+                "sentence": "Look! There is a minnow swimming right below that duck! the _ had better get away to safety fast!",
+                "answer1": [
+                    "duck"
+                ],
+                "answer0": [
+                    "minnow"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 172
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "duck"
+                ],
+                "sentence": "Look! There is a shark swimming right below that duck! the _ had better get away to safety fast!",
+                "answer1": [
+                    "shark"
+                ],
+                "answer0": [
+                    "duck"
+                ],
+                "predict_answer": [
+                    "('duck', 0.049340344965457916)"
+                ]
+            }
+        ],
+        "index": 173
+    },
+    {
+        "index": 174,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 175
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "octopuses"
+                ],
+                "sentence": "Scientists are studying three species of octopuses that have recently been found living in the Indian Ocean. the _ began two years ago.",
+                "answer0": [
+                    "scientists"
+                ],
+                "correct_answer": [
+                    "scientists"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 176
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "fish"
+                ],
+                "sentence": "Biologists are studying three species of fish that have recently been found living in the Indian Ocean. the _ appeared two years ago.",
+                "answer1": [
+                    "biologists"
+                ],
+                "answer0": [
+                    "fish"
+                ],
+                "predict_answer": [
+                    "('fish', 0.00869898684322834)"
+                ]
+            }
+        ],
+        "index": 177
+    },
+    {
+        "index": 178,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "journalists"
+                ],
+                "sentence": "The journalists interviewed the stars of the new movie. the _ were very persistent, so the interview lasted for a long time.",
+                "answer1": [
+                    "stars"
+                ],
+                "answer0": [
+                    "journalists"
+                ],
+                "predict_answer": [
+                    "('journalists', 0.06059985235333443)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 179,
+        "sentences": [
+            {
+                "sentence": "The journalists interviewed the stars of the new movie. the _ were very cooperative, so the interview lasted for a long time.",
+                "answer1": [
+                    "stars"
+                ],
+                "answer0": [
+                    "journalists"
+                ],
+                "correct_answer": [
+                    "stars"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 180,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 181
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "cake"
+                ],
+                "sentence": "I put the cake away in the refrigerator. the _ has a lot of butter in it.",
+                "answer1": [
+                    "refrigerator"
+                ],
+                "answer0": [
+                    "cake"
+                ],
+                "predict_answer": [
+                    "('cake', 0.3875311017036438)"
+                ]
+            }
+        ],
+        "index": 182
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "cake"
+                ],
+                "answer1": [
+                    "refrigerator"
+                ],
+                "sentence": "I put the cake away in the refrigerator. the _ has a lot of leftovers in it.",
+                "correct_answer": [
+                    "refrigerator"
+                ],
+                "predict_answer": [
+                    "('refrigerator', 0.04797044396400452)"
+                ]
+            }
+        ],
+        "index": 183
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "ankles"
+                ],
+                "answer0": [
+                    "ankles"
+                ],
+                "answer1": [
+                    "crutches"
+                ],
+                "sentence": "Sam broke both his ankles and he's walking with crutches. But a month or so from now the _ should be better.",
+                "predict_answer": []
+            }
+        ],
+        "index": 184
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "crutches"
+                ],
+                "answer1": [
+                    "crutches"
+                ],
+                "sentence": "Sam broke both his ankles and he's walking with crutches. But a month or so from now the _ should be unnecessary.",
+                "answer0": [
+                    "ankles"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 185
+    },
+    {
+        "index": 186,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "sponsors"
+                ],
+                "answer1": [
+                    "sponsors"
+                ],
+                "sentence": "When the sponsors of the bill got to the town hall, they were surprised to find that the room was full of opponents. the _ were very much in the minority.",
+                "answer0": [
+                    "opponents"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 187,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "opponents"
+                ],
+                "answer0": [
+                    "sponsors"
+                ],
+                "sentence": "When the sponsors of the bill got to the town hall, they were surprised to find that the room was full of opponents. the _ were very much in the majority.",
+                "answer1": [
+                    "opponents"
+                ],
+                "predict_answer": [
+                    "('opponents', 0.2790956199169159)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 188
+    },
+    {
+        "sentences": [],
+        "index": 189
+    },
+    {
+        "index": 190,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 191
+    },
+    {
+        "index": 192,
+        "sentences": [
+            {
+                "answer0": [
+                    "pin"
+                ],
+                "answer1": [
+                    "carrot"
+                ],
+                "sentence": "I stuck a pin through a carrot. When I pulled the pin out, the _ left a hole.",
+                "correct_answer": [
+                    "pin"
+                ],
+                "predict_answer": [
+                    "('pin', 0.24921917915344238)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 193,
+        "sentences": [
+            {
+                "answer0": [
+                    "pin"
+                ],
+                "answer1": [
+                    "carrot"
+                ],
+                "sentence": "I stuck a pin through a carrot. When I pulled the pin out, the _ had a hole.",
+                "correct_answer": [
+                    "carrot"
+                ],
+                "predict_answer": [
+                    "('carrot', 0.7155035734176636)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "pen"
+                ],
+                "answer1": [
+                    "pen"
+                ],
+                "sentence": "I couldn't find a spoon, so I tried using a pen to stir my  coffee. But that turned out to be a bad idea, because the _ got full of coffee.",
+                "answer0": [
+                    "coffee"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 194
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "coffee"
+                ],
+                "answer1": [
+                    "pen"
+                ],
+                "sentence": "I couldn't find a spoon, so I tried using a pen to stir my  coffee. But that turned out to be a bad idea, because the _ got full of ink.",
+                "correct_answer": [
+                    "coffee"
+                ],
+                "predict_answer": []
+            }
+        ],
+        "index": 195
+    },
+    {
+        "index": 196,
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Sarah"
+                ],
+                "sentence": "Joseph follows Sarah's example in everything. _ admires her hugely.",
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Joseph"
+                ],
+                "predict_answer": [
+                    "('he', 0.5537546873092651)",
+                    "('joseph', 0.2570191025733948)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "sentence": "Wendy follows Steven's example in everything. _ admires him hugely.",
+                "answer1": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "he",
+                    "Steven"
+                ],
+                "predict_answer": [
+                    "('she', 0.9183211326599121)",
+                    "('wendy', 0.020635541528463364)",
+                    "('he', 0.007875232957303524)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "Jason follows Nancy's example in everything. _ influences her hugely.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Nancy"
+                ],
+                "predict_answer": [
+                    "('he', 0.5845361948013306)",
+                    "('nancy', 0.05046235769987106)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "William"
+                ],
+                "answer0": [
+                    "he",
+                    "William"
+                ],
+                "sentence": "Susan follows William's example in everything. _ influences him hugely.",
+                "answer1": [
+                    "she",
+                    "Susan"
+                ],
+                "predict_answer": [
+                    "('he', 0.009786979295313358)"
+                ]
+            }
+        ],
+        "index": 197
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "table"
+                ],
+                "sentence": "The table won't fit through the doorway because the _ is too wide.",
+                "answer1": [
+                    "doorway"
+                ],
+                "correct_answer": [
+                    "table"
+                ],
+                "predict_answer": [
+                    "('table', 0.07816523313522339)"
+                ]
+            }
+        ],
+        "index": 198
+    },
+    {
+        "index": 199,
+        "sentences": [
+            {
+                "answer1": [
+                    "doorway"
+                ],
+                "sentence": "The table won't fit through the doorway because the _ is too narrow.",
+                "answer0": [
+                    "table"
+                ],
+                "correct_answer": [
+                    "doorway"
+                ],
+                "predict_answer": [
+                    "('door', 0.032757170498371124)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 200,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "sweater"
+                ],
+                "sentence": "Grace was happy to trade me her sweater for my jacket. She thinks the _ looks dowdy on her.",
+                "answer1": [
+                    "sweater"
+                ],
+                "answer0": [
+                    "jacket"
+                ],
+                "predict_answer": [
+                    "('sweater', 0.2597585618495941)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 201,
+        "sentences": [
+            {
+                "answer0": [
+                    "jacket"
+                ],
+                "answer1": [
+                    "sweater"
+                ],
+                "sentence": "Grace was happy to trade me her sweater for my jacket. She thinks the _ looks great on her.",
+                "correct_answer": [
+                    "jacket"
+                ],
+                "predict_answer": [
+                    "('jacket', 0.158711239695549)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "her",
+                    "Sue"
+                ],
+                "answer1": [
+                    "him",
+                    "Joseph"
+                ],
+                "sentence": "Sue hired Joseph to take care of _ .",
+                "answer0": [
+                    "her",
+                    "Sue"
+                ],
+                "predict_answer": [
+                    "('her', 0.31521621346473694)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "him",
+                    "Steven"
+                ],
+                "answer0": [
+                    "him",
+                    "Steven"
+                ],
+                "answer1": [
+                    "her",
+                    "Lisa"
+                ],
+                "sentence": "Steven hired Lisa to take care of _ .",
+                "predict_answer": [
+                    "('him', 0.182346373796463)"
+                ]
+            }
+        ],
+        "index": 202
+    },
+    {
+        "index": 203,
+        "sentences": [
+            {
+                "answer0": [
+                    "him",
+                    "Daniel"
+                ],
+                "sentence": "Daniel hired himself out to Wendy to take care of _ .",
+                "answer1": [
+                    "her",
+                    "Wendy"
+                ],
+                "correct_answer": [
+                    "her",
+                    "Wendy"
+                ],
+                "predict_answer": [
+                    "('her', 0.2576196491718292)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "him",
+                    "Jason"
+                ],
+                "answer0": [
+                    "him",
+                    "Jason"
+                ],
+                "sentence": "Sandy hired herself out to Jason to take care of _ .",
+                "answer1": [
+                    "her",
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('him', 0.18760056793689728)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 204,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Sarah"
+                ],
+                "answer0": [
+                    "she",
+                    "Sarah"
+                ],
+                "answer1": [
+                    "he",
+                    "John"
+                ],
+                "sentence": "Sarah promised John to leave, so an hour later _ left.",
+                "predict_answer": [
+                    "('he', 0.48167112469673157)",
+                    "('she', 0.1810036301612854)",
+                    "('sarah', 0.023205213248729706)"
+                ]
+            },
+            {
+                "sentence": "Charles promised Sandy to leave, so an hour later _ left.",
+                "answer1": [
+                    "he",
+                    "Charles"
+                ],
+                "answer0": [
+                    "she",
+                    "Sandy"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Charles"
+                ],
+                "predict_answer": [
+                    "('he', 0.32973024249076843)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 205,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Barbara"
+                ],
+                "sentence": "Charles ordered Barbara to leave, so an hour later _ left.",
+                "answer1": [
+                    "he",
+                    "Charles"
+                ],
+                "answer0": [
+                    "she",
+                    "Barbara"
+                ],
+                "predict_answer": [
+                    "('she', 0.578606903553009)",
+                    "('barbara', 0.25143668055534363)",
+                    "('he', 0.04426297917962074)"
+                ]
+            },
+            {
+                "sentence": "Barbara ordered Warren to leave, so an hour later _ left.",
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "answer0": [
+                    "she",
+                    "Barbara"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Warren"
+                ],
+                "predict_answer": [
+                    "('warren', 0.6983537077903748)",
+                    "('he', 0.22570915520191193)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 206,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Sandy"
+                ],
+                "answer0": [
+                    "he",
+                    "Tony"
+                ],
+                "sentence": "Sam Sandy's biography of the Spartan general Tony conveys a vivid sense of the difficulties _ faced in his research.",
+                "answer1": [
+                    "she",
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('he', 0.76549232006073)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Paul"
+                ],
+                "sentence": "Sam Paul's biography of the Spartan general Elizabet conveys a vivid sense of the difficulties _ faced in his research.",
+                "answer1": [
+                    "he",
+                    "Paul"
+                ],
+                "answer0": [
+                    "she",
+                    "Elizabet"
+                ],
+                "predict_answer": [
+                    "('he', 0.8963407278060913)",
+                    "('paul', 0.01492284331470728)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Tim"
+                ],
+                "sentence": "Sam Tim's biography of the Spartan general Betty conveys a vivid sense of the difficulties _ faced in his childhood.",
+                "answer0": [
+                    "she",
+                    "Betty"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Betty"
+                ],
+                "predict_answer": [
+                    "('he', 0.811923623085022)"
+                ]
+            },
+            {
+                "sentence": "Sam Helen's biography of the Spartan general John conveys a vivid sense of the difficulties _ faced in his childhood.",
+                "answer1": [
+                    "she",
+                    "Helen"
+                ],
+                "answer0": [
+                    "he",
+                    "John"
+                ],
+                "correct_answer": [
+                    "he",
+                    "John"
+                ],
+                "predict_answer": [
+                    "('he', 0.5960222482681274)",
+                    "('john', 0.3090403974056244)"
+                ]
+            }
+        ],
+        "index": 207
+    },
+    {
+        "sentences": [],
+        "index": 208
+    },
+    {
+        "index": 209,
+        "sentences": []
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "she",
+                    "Sarah"
+                ],
+                "sentence": "Sarah knocked on Edward's door but _ did not get an answer.",
+                "answer0": [
+                    "he",
+                    "Edward"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sarah"
+                ],
+                "predict_answer": [
+                    "('she', 0.8838128447532654)",
+                    "('he', 0.04048897325992584)",
+                    "('sarah', 0.01167974341660738)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Brian"
+                ],
+                "sentence": "Brian knocked on Elizabet's door but _ did not get an answer.",
+                "answer1": [
+                    "she",
+                    "Elizabet"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Brian"
+                ],
+                "predict_answer": [
+                    "('he', 0.8556328415870667)",
+                    "('brian', 0.005964962299913168)"
+                ]
+            }
+        ],
+        "index": 210
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Amy"
+                ],
+                "answer1": [
+                    "he",
+                    "John"
+                ],
+                "sentence": "John knocked on Amy's door but _ did not answer.",
+                "correct_answer": [
+                    "she",
+                    "Amy"
+                ],
+                "predict_answer": [
+                    "('she', 0.8225021958351135)",
+                    "('amy', 0.17011375725269318)",
+                    "('he', 0.0012063393369317055)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Jason"
+                ],
+                "sentence": "Sandra knocked on Jason's door but _ did not answer.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "predict_answer": [
+                    "('he', 0.8660941123962402)",
+                    "('jason', 0.12914864718914032)"
+                ]
+            }
+        ],
+        "index": 211
+    },
+    {
+        "sentences": [],
+        "index": 212
+    },
+    {
+        "index": 213,
+        "sentences": []
+    },
+    {
+        "index": 214,
+        "sentences": [
+            {
+                "sentence": "Daniel didn't get angry with Barbara, who had cut his off, because _ stopped and counted to ten.",
+                "answer1": [
+                    "she",
+                    "Barbara"
+                ],
+                "answer0": [
+                    "he",
+                    "Daniel"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Daniel"
+                ],
+                "predict_answer": [
+                    "('he', 0.8774702548980713)",
+                    "('daniel', 0.010538010857999325)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Nancy"
+                ],
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "sentence": "Nancy didn't get angry with Thomas, who had cut her off, because _ stopped and counted to ten.",
+                "predict_answer": [
+                    "('she', 0.8182712197303772)",
+                    "('he', 0.09962272644042969)",
+                    "('nancy', 0.0133684566244483)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 215,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "sentence": "Warren didn't get angry with Elizabet, who had cut his off, because _ stopped and apologized.",
+                "answer0": [
+                    "she",
+                    "Elizabet"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Elizabet"
+                ],
+                "predict_answer": [
+                    "('he', 0.6717868447303772)",
+                    "('she', 0.17876861989498138)",
+                    "('i', 0.015028710477054119)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Thomas"
+                ],
+                "answer0": [
+                    "she",
+                    "Jennifer"
+                ],
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "sentence": "Jennifer didn't get angry with Thomas, who had cut her off, because _ stopped and apologized.",
+                "predict_answer": [
+                    "('he', 0.4539075493812561)",
+                    "('thomas', 0.09374713152647018)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 216
+    },
+    {
+        "index": 217,
+        "sentences": []
+    },
+    {
+        "index": 218,
+        "sentences": [
+            {
+                "answer0": [
+                    "his",
+                    "Edward"
+                ],
+                "answer1": [
+                    "her",
+                    "Barbara"
+                ],
+                "sentence": "Edward took the rear seat while Barbara claimed the front because _’s \"Dibs!\" was slow.",
+                "correct_answer": [
+                    "his",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('edward', 0.12710142135620117)"
+                ]
+            },
+            {
+                "answer0": [
+                    "her",
+                    "Amy"
+                ],
+                "sentence": "Amy took the rear seat while Paul claimed the front because _’s \"Dibs!\" was slow.",
+                "answer1": [
+                    "his",
+                    "Paul"
+                ],
+                "correct_answer": [
+                    "her",
+                    "Amy"
+                ],
+                "predict_answer": [
+                    "('amy', 0.198031485080719)",
+                    "('he', 0.027194619178771973)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "her",
+                    "Lisa"
+                ],
+                "sentence": "Charles took the rear seat while Lisa claimed the front because _’s \"Dibs!\" was quicker.",
+                "answer1": [
+                    "his",
+                    "Charles"
+                ],
+                "correct_answer": [
+                    "her",
+                    "Lisa"
+                ],
+                "predict_answer": [
+                    "('lisa', 0.6405118703842163)"
+                ]
+            },
+            {
+                "sentence": "Jennifer took the rear seat while John claimed the front because _’s \"Dibs!\" was quicker.",
+                "answer1": [
+                    "her",
+                    "Jennifer"
+                ],
+                "answer0": [
+                    "his",
+                    "John"
+                ],
+                "correct_answer": [
+                    "his",
+                    "John"
+                ],
+                "predict_answer": [
+                    "('john', 0.1745947301387787)"
+                ]
+            }
+        ],
+        "index": 219
+    },
+    {
+        "index": 220,
+        "sentences": [
+            {
+                "answer0": [
+                    "his",
+                    "George"
+                ],
+                "answer1": [
+                    "her",
+                    "Elizabet"
+                ],
+                "sentence": "George said \"Check\" to Elizabet as he moved _’s bishop.",
+                "correct_answer": [
+                    "his",
+                    "George"
+                ],
+                "predict_answer": [
+                    "('george', 0.02996806427836418)"
+                ]
+            },
+            {
+                "sentence": "Jennifer said \"Check\" to Joseph as she moved _’s bishop.",
+                "answer1": [
+                    "his",
+                    "Joseph"
+                ],
+                "answer0": [
+                    "her",
+                    "Jennifer"
+                ],
+                "correct_answer": [
+                    "her",
+                    "Jennifer"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 221,
+        "sentences": [
+            {
+                "answer1": [
+                    "her",
+                    "Linda"
+                ],
+                "sentence": "Linda said \"Check\" to Alan as she took _’s bishop.",
+                "answer0": [
+                    "his",
+                    "Alan"
+                ],
+                "correct_answer": [
+                    "his",
+                    "Alan"
+                ],
+                "predict_answer": [
+                    "('alan', 0.5812506079673767)"
+                ]
+            },
+            {
+                "answer0": [
+                    "her",
+                    "Barbara"
+                ],
+                "answer1": [
+                    "his",
+                    "Tony"
+                ],
+                "sentence": "Tony said \"Check\" to Barbara as he took _’s bishop.",
+                "correct_answer": [
+                    "her",
+                    "Barbara"
+                ],
+                "predict_answer": [
+                    "('barbara', 0.087391197681427)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 222,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "William"
+                ],
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "sentence": "As William in the crop duster passed over Nancy, _ could see the landing strip.",
+                "answer1": [
+                    "he",
+                    "William"
+                ],
+                "predict_answer": [
+                    "('he', 0.5236703753471375)",
+                    "('i', 0.06526970118284225)",
+                    "('william', 0.031204648315906525)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "John"
+                ],
+                "sentence": "As Jennifer in the crop duster passed over John, _ could see the landing strip.",
+                "answer1": [
+                    "she",
+                    "Jennifer"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Jennifer"
+                ],
+                "predict_answer": [
+                    "('he', 0.3872276544570923)",
+                    "('she', 0.15959833562374115)",
+                    "('jennifer', 0.04787871986627579)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Amy"
+                ],
+                "answer0": [
+                    "she",
+                    "Amy"
+                ],
+                "answer1": [
+                    "he",
+                    "George"
+                ],
+                "sentence": "As George in the crop duster passed over Amy, _ could see the landing gear.",
+                "predict_answer": [
+                    "('he', 0.4893011450767517)",
+                    "('she', 0.19708749651908875)"
+                ]
+            },
+            {
+                "sentence": "As Sarah in the crop duster passed over Anthony, _ could see the landing gear.",
+                "answer1": [
+                    "she",
+                    "Sarah"
+                ],
+                "answer0": [
+                    "he",
+                    "Anthony"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Anthony"
+                ],
+                "predict_answer": [
+                    "('he', 0.37167438864707947)",
+                    "('anthony', 0.11643248796463013)"
+                ]
+            }
+        ],
+        "index": 223
+    },
+    {
+        "index": 224,
+        "sentences": [
+            {
+                "sentence": "George gave Laura a lift to school so _ wouldn't have to drive alone.",
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "answer0": [
+                    "he",
+                    "George"
+                ],
+                "correct_answer": [
+                    "he",
+                    "George"
+                ],
+                "predict_answer": [
+                    "('he', 0.009024721570312977)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Laura"
+                ],
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Laura gave Zack a lift to school so _ wouldn't have to drive alone.",
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('he', 0.8530251979827881)",
+                    "('she', 0.03285389766097069)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "sentence": "Warren gave Sandy a lift to school so _ wouldn't have to walk.",
+                "answer0": [
+                    "she",
+                    "Sandy"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sandy"
+                ],
+                "predict_answer": [
+                    "('she', 0.5674081444740295)",
+                    "('he', 0.14301574230194092)",
+                    "('sandy', 0.09149236232042313)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Tim"
+                ],
+                "answer1": [
+                    "he",
+                    "Tim"
+                ],
+                "sentence": "Nancy gave Tim a lift to school so _ wouldn't have to walk.",
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "predict_answer": [
+                    "('he', 0.699283242225647)",
+                    "('tim', 0.16143228113651276)",
+                    "('i', 0.054392725229263306)"
+                ]
+            }
+        ],
+        "index": 225
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Joseph"
+                ],
+                "answer1": [
+                    "she",
+                    "Vivian"
+                ],
+                "sentence": "Joseph passed the half-empty plate to Vivian because _ was full.",
+                "correct_answer": [
+                    "he",
+                    "Joseph"
+                ],
+                "predict_answer": [
+                    "('he', 0.016966097056865692)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Susan"
+                ],
+                "sentence": "Susan passed the half-empty plate to Paul because _ was full.",
+                "answer1": [
+                    "he",
+                    "Paul"
+                ],
+                "answer0": [
+                    "she",
+                    "Susan"
+                ],
+                "predict_answer": [
+                    "('he', 0.06839771568775177)",
+                    "('she', 0.03281814232468605)"
+                ]
+            }
+        ],
+        "index": 226
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "she",
+                    "Sarah"
+                ],
+                "answer1": [
+                    "he",
+                    "Joseph"
+                ],
+                "sentence": "Sarah passed the half-empty plate to Joseph because _ was hungry.",
+                "correct_answer": [
+                    "he",
+                    "Joseph"
+                ],
+                "predict_answer": [
+                    "('he', 0.16039039194583893)",
+                    "('joseph', 0.0005361784133128822)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Lisa"
+                ],
+                "answer0": [
+                    "she",
+                    "Lisa"
+                ],
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "sentence": "Warren passed the half-empty plate to Lisa because _ was hungry.",
+                "predict_answer": [
+                    "('he', 0.7289693355560303)",
+                    "('she', 0.2538418471813202)",
+                    "('lisa', 0.0065178521908819675)",
+                    "('i', 0.0014945443253964186)"
+                ]
+            }
+        ],
+        "index": 227
+    },
+    {
+        "index": 228,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "her",
+                    "Anna"
+                ],
+                "answer0": [
+                    "his",
+                    "Jason"
+                ],
+                "sentence": "Anna passed the gameboy to Jason because _’s turn was over.",
+                "answer1": [
+                    "her",
+                    "Anna"
+                ],
+                "predict_answer": [
+                    "('anna', 0.01324396301060915)",
+                    "('he', 0.011031022295355797)"
+                ]
+            },
+            {
+                "sentence": "Tim passed the gameboy to Elizabet because _’s turn was over.",
+                "answer1": [
+                    "his",
+                    "Tim"
+                ],
+                "answer0": [
+                    "her",
+                    "Elizabet"
+                ],
+                "correct_answer": [
+                    "his",
+                    "Tim"
+                ],
+                "predict_answer": [
+                    "('tim', 0.04209316521883011)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "his",
+                    "Tim"
+                ],
+                "sentence": "Tim passed the gameboy to Linda because _’s turn was next.",
+                "answer0": [
+                    "her",
+                    "Linda"
+                ],
+                "correct_answer": [
+                    "her",
+                    "Linda"
+                ],
+                "predict_answer": [
+                    "('linda', 0.5253902673721313)"
+                ]
+            },
+            {
+                "sentence": "Amy passed the gameboy to David because _’s turn was next.",
+                "answer1": [
+                    "her",
+                    "Amy"
+                ],
+                "answer0": [
+                    "his",
+                    "David"
+                ],
+                "correct_answer": [
+                    "his",
+                    "David"
+                ],
+                "predict_answer": [
+                    "('david', 0.5882982015609741)"
+                ]
+            }
+        ],
+        "index": 229
+    },
+    {
+        "index": 230,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "man"
+                ],
+                "answer0": [
+                    "man"
+                ],
+                "sentence": "The man lifted the boy onto the _’s shoulders.",
+                "answer1": [
+                    "boy"
+                ],
+                "predict_answer": [
+                    "('man', 0.2891320288181305)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "boy"
+                ],
+                "sentence": "The man lifted the boy onto the _’s bunk bed.",
+                "answer1": [
+                    "man"
+                ],
+                "correct_answer": [
+                    "boy"
+                ],
+                "predict_answer": [
+                    "('boy', 0.06862542778253555)"
+                ]
+            }
+        ],
+        "index": 231
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "Stretching the _’s back, the woman smiled at the girl.",
+                "answer1": [
+                    "girl"
+                ],
+                "answer0": [
+                    "woman"
+                ],
+                "correct_answer": [
+                    "woman"
+                ],
+                "predict_answer": [
+                    "('woman', 0.09928452223539352)"
+                ]
+            }
+        ],
+        "index": 232
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "girl"
+                ],
+                "answer1": [
+                    "woman"
+                ],
+                "sentence": "Patting the _’s back, the woman smiled at the girl.",
+                "answer0": [
+                    "girl"
+                ],
+                "predict_answer": [
+                    "('girl', 0.580466628074646)"
+                ]
+            }
+        ],
+        "index": 233
+    },
+    {
+        "index": 234,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "his",
+                    "William"
+                ],
+                "answer0": [
+                    "his",
+                    "William"
+                ],
+                "answer1": [
+                    "her",
+                    "Jennifer"
+                ],
+                "sentence": "William cried because Jennifer wouldn't accept _’s toy.",
+                "predict_answer": [
+                    "('william', 0.28518375754356384)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "her",
+                    "Donna"
+                ],
+                "answer1": [
+                    "his",
+                    "Daniel"
+                ],
+                "sentence": "Donna cried because Daniel wouldn't accept _’s toy.",
+                "answer0": [
+                    "her",
+                    "Donna"
+                ],
+                "predict_answer": [
+                    "('donna', 0.0522642619907856)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "his",
+                    "Thomas"
+                ],
+                "answer1": [
+                    "her",
+                    "Sandra"
+                ],
+                "sentence": "Thomas cried because Sandra wouldn't share _’s toy.",
+                "correct_answer": [
+                    "her",
+                    "Sandra"
+                ],
+                "predict_answer": [
+                    "('sandra', 0.3697414696216583)"
+                ]
+            },
+            {
+                "sentence": "Sandy cried because Edward wouldn't share _’s toy.",
+                "answer1": [
+                    "her",
+                    "Sandy"
+                ],
+                "answer0": [
+                    "his",
+                    "Edward"
+                ],
+                "correct_answer": [
+                    "his",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('edward', 0.2621809244155884)"
+                ]
+            }
+        ],
+        "index": 235
+    },
+    {
+        "index": 236,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "her",
+                    "Elizabet"
+                ],
+                "answer0": [
+                    "her",
+                    "Elizabet"
+                ],
+                "answer1": [
+                    "his",
+                    "Charles"
+                ],
+                "sentence": "Elizabet spoke to Charles, breaking _’s silence.",
+                "predict_answer": []
+            },
+            {
+                "correct_answer": [
+                    "his",
+                    "Richard"
+                ],
+                "answer0": [
+                    "his",
+                    "Richard"
+                ],
+                "answer1": [
+                    "her",
+                    "Linda"
+                ],
+                "sentence": "Richard spoke to Linda, breaking _’s silence.",
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "index": 237,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "her",
+                    "Anna"
+                ],
+                "answer0": [
+                    "his",
+                    "George"
+                ],
+                "answer1": [
+                    "her",
+                    "Anna"
+                ],
+                "sentence": "George spoke to Anna, breaking _’s concentration.",
+                "predict_answer": [
+                    "('anna', 0.6880260109901428)"
+                ]
+            },
+            {
+                "answer0": [
+                    "her",
+                    "Sue"
+                ],
+                "answer1": [
+                    "his",
+                    "John"
+                ],
+                "sentence": "Sue spoke to John, breaking _’s concentration.",
+                "correct_answer": [
+                    "his",
+                    "John"
+                ],
+                "predict_answer": [
+                    "('john', 0.6579227447509766)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 238,
+        "sentences": [
+            {
+                "sentence": "When Richard dropped his ice cream, Barbara giggled, so father gave _ a sympathetic look.",
+                "answer1": [
+                    "him",
+                    "Richard"
+                ],
+                "answer0": [
+                    "her",
+                    "Barbara"
+                ],
+                "correct_answer": [
+                    "him",
+                    "Richard"
+                ],
+                "predict_answer": [
+                    "('him', 0.07683444768190384)"
+                ]
+            },
+            {
+                "sentence": "When Laura dropped his ice cream, George giggled, so father gave _ a sympathetic look.",
+                "answer1": [
+                    "him",
+                    "George"
+                ],
+                "answer0": [
+                    "her",
+                    "Laura"
+                ],
+                "correct_answer": [
+                    "her",
+                    "Laura"
+                ],
+                "predict_answer": [
+                    "('her', 0.6329046487808228)",
+                    "('laura', 0.043091803789138794)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "When Betty dropped his ice cream, Zack giggled, so father gave _ a stern look.",
+                "answer1": [
+                    "her",
+                    "Betty"
+                ],
+                "answer0": [
+                    "him",
+                    "Zack"
+                ],
+                "correct_answer": [
+                    "him",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('him', 0.18042778968811035)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "her",
+                    "Wendy"
+                ],
+                "sentence": "When Edward dropped his ice cream, Wendy giggled, so father gave _ a stern look.",
+                "answer1": [
+                    "her",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "him",
+                    "Edward"
+                ],
+                "predict_answer": [
+                    "('her', 0.8198440074920654)"
+                ]
+            }
+        ],
+        "index": 239
+    },
+    {
+        "index": 240,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "his",
+                    "Daniel"
+                ],
+                "sentence": "As Daniel carried Lisa up the long winding steps, _’s legs ached.",
+                "answer1": [
+                    "his",
+                    "Daniel"
+                ],
+                "answer0": [
+                    "her",
+                    "Lisa"
+                ],
+                "predict_answer": [
+                    "('daniel', 0.010760288685560226)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "her",
+                    "Jennifer"
+                ],
+                "answer1": [
+                    "his",
+                    "Alan"
+                ],
+                "sentence": "As Jennifer carried Alan up the long winding steps, _’s legs ached.",
+                "answer0": [
+                    "her",
+                    "Jennifer"
+                ],
+                "predict_answer": [
+                    "('jennifer', 0.08475897461175919)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 241,
+        "sentences": [
+            {
+                "sentence": "As Helen carried Tony up the long winding steps, _’s legs dangled.",
+                "answer1": [
+                    "his",
+                    "Tony"
+                ],
+                "answer0": [
+                    "her",
+                    "Helen"
+                ],
+                "correct_answer": [
+                    "his",
+                    "Tony"
+                ],
+                "predict_answer": [
+                    "('tony', 0.9062219262123108)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "her",
+                    "Laura"
+                ],
+                "answer0": [
+                    "her",
+                    "Laura"
+                ],
+                "answer1": [
+                    "his",
+                    "Jason"
+                ],
+                "sentence": "As Jason carried Laura up the long winding steps, _’s legs dangled.",
+                "predict_answer": [
+                    "('laura', 0.957050085067749)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 242,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "father"
+                ],
+                "answer1": [
+                    "boy"
+                ],
+                "sentence": "The father carried the sleeping boy in the _’s arms",
+                "answer0": [
+                    "father"
+                ],
+                "predict_answer": [
+                    "('father', 0.05535516142845154)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 243,
+        "sentences": [
+            {
+                "answer0": [
+                    "father"
+                ],
+                "answer1": [
+                    "boy"
+                ],
+                "sentence": "The father carried the sleeping boy in the _’s bassinet.",
+                "correct_answer": [
+                    "boy"
+                ],
+                "predict_answer": []
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "woman"
+                ],
+                "sentence": "The woman held the girl against the _’s chest",
+                "answer1": [
+                    "woman"
+                ],
+                "answer0": [
+                    "girl"
+                ],
+                "predict_answer": [
+                    "('man', 0.3209798336029053)",
+                    "('woman', 0.2691500186920166)"
+                ]
+            }
+        ],
+        "index": 244
+    },
+    {
+        "index": 245,
+        "sentences": [
+            {
+                "answer0": [
+                    "woman"
+                ],
+                "sentence": "The woman held the girl against the _’s will.",
+                "answer1": [
+                    "girl"
+                ],
+                "correct_answer": [
+                    "girl"
+                ],
+                "predict_answer": [
+                    "('girl', 0.20693272352218628)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 246,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 247
+    },
+    {
+        "sentences": [],
+        "index": 248
+    },
+    {
+        "sentences": [],
+        "index": 249
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "she",
+                    "Barbara"
+                ],
+                "sentence": "Barbara had to stop Tim from toying with the injured bird. _ is very compassionate.",
+                "answer0": [
+                    "he",
+                    "Tim"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Barbara"
+                ],
+                "predict_answer": [
+                    "('she', 0.2222612351179123)",
+                    "('barbara', 0.164112389087677)",
+                    "('he', 0.14515681564807892)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Susan"
+                ],
+                "sentence": "Thomas had to stop Susan from toying with the injured bird. _ is very compassionate.",
+                "answer1": [
+                    "he",
+                    "Thomas"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Thomas"
+                ],
+                "predict_answer": [
+                    "('thomas', 0.18792453408241272)",
+                    "('he', 0.16811326146125793)"
+                ]
+            }
+        ],
+        "index": 250
+    },
+    {
+        "index": 251,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Steven"
+                ],
+                "sentence": "Nancy had to stop Steven from toying with the injured bird. _ is very cruel.",
+                "answer1": [
+                    "he",
+                    "Steven"
+                ],
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "predict_answer": [
+                    "('he', 0.36566635966300964)",
+                    "('steven', 0.33409571647644043)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "answer0": [
+                    "he",
+                    "Steven"
+                ],
+                "sentence": "Steven had to stop Margaret from toying with the injured bird. _ is very cruel.",
+                "answer1": [
+                    "she",
+                    "Margaret"
+                ],
+                "predict_answer": [
+                    "('she', 0.2695368528366089)",
+                    "('margaret', 0.24018117785453796)",
+                    "('he', 0.23057128489017487)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 252,
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Edward"
+                ],
+                "sentence": "Linda got free tickets to the play, but she gave them to Edward, even though _ was particularly eager to see it.",
+                "answer1": [
+                    "she",
+                    "Linda"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Linda"
+                ],
+                "predict_answer": [
+                    "('he', 0.7854437232017517)",
+                    "('she', 0.06069730594754219)",
+                    "('i', 0.017783932387828827)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Richard"
+                ],
+                "sentence": "Richard got free tickets to the play, but he gave them to Donna, even though _ was particularly eager to see it.",
+                "answer1": [
+                    "she",
+                    "Donna"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Richard"
+                ],
+                "predict_answer": [
+                    "('he', 0.03830172121524811)",
+                    "('i', 0.0027808917220681906)",
+                    "('richard', 0.0016671265475451946)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "answer0": [
+                    "he",
+                    "Tony"
+                ],
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Laura got free tickets to the play, but she gave them to Tony, because _ was particularly eager to see it.",
+                "correct_answer": [
+                    "he",
+                    "Tony"
+                ],
+                "predict_answer": [
+                    "('he', 0.8912720680236816)",
+                    "('tony', 0.04384276270866394)"
+                ]
+            },
+            {
+                "sentence": "Tony got free tickets to the play, but he gave them to Donna, because _ was particularly eager to see it.",
+                "answer1": [
+                    "he",
+                    "Tony"
+                ],
+                "answer0": [
+                    "she",
+                    "Donna"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Donna"
+                ],
+                "predict_answer": [
+                    "('she', 0.8941590785980225)",
+                    "('donna', 0.08835938572883606)",
+                    "('he', 0.00905828271061182)"
+                ]
+            }
+        ],
+        "index": 253
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Brian"
+                ],
+                "sentence": "Nancy got free tickets to the play, but she gave them to Brian, because _ was not particularly eager to see it.",
+                "answer0": [
+                    "she",
+                    "Nancy"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Nancy"
+                ],
+                "predict_answer": [
+                    "('he', 0.8708980083465576)",
+                    "('she', 0.058253951370716095)",
+                    "('nancy', 0.0011689732782542706)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Anthony"
+                ],
+                "sentence": "Anthony got free tickets to the play, but he gave them to Donna, because _ was not particularly eager to see it.",
+                "answer1": [
+                    "she",
+                    "Donna"
+                ],
+                "answer0": [
+                    "he",
+                    "Anthony"
+                ],
+                "predict_answer": [
+                    "('he', 0.01395109947770834)"
+                ]
+            }
+        ],
+        "index": 254
+    },
+    {
+        "index": 255,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Warren"
+                ],
+                "sentence": "Sue gave Warren candy because _ wasn't hungry.",
+                "answer0": [
+                    "she",
+                    "Sue"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sue"
+                ],
+                "predict_answer": [
+                    "('he', 0.7369248867034912)",
+                    "('she', 0.17393557727336884)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Jason"
+                ],
+                "answer0": [
+                    "she",
+                    "Lisa"
+                ],
+                "sentence": "Jason gave Lisa candy because _ wasn't hungry.",
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "predict_answer": [
+                    "('he', 0.13145074248313904)"
+                ]
+            }
+        ]
+    },
+    {
+        "index": 256,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "she",
+                    "Anna"
+                ],
+                "sentence": "Tim gave Anna candy because _ was hungry.",
+                "answer1": [
+                    "she",
+                    "Anna"
+                ],
+                "answer0": [
+                    "he",
+                    "Tim"
+                ],
+                "predict_answer": [
+                    "('she', 0.6514219641685486)",
+                    "('he', 0.2944078743457794)",
+                    "('anna', 0.03929780051112175)"
+                ]
+            },
+            {
+                "answer0": [
+                    "she",
+                    "Sandy"
+                ],
+                "answer1": [
+                    "he",
+                    "George"
+                ],
+                "sentence": "Sandy gave George candy because _ was hungry.",
+                "correct_answer": [
+                    "he",
+                    "George"
+                ],
+                "predict_answer": [
+                    "('he', 0.8200734853744507)",
+                    "('george', 0.051928937435150146)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [],
+        "index": 257
+    },
+    {
+        "sentences": [],
+        "index": 258
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "David"
+                ],
+                "answer1": [
+                    "she",
+                    "Sue"
+                ],
+                "sentence": "David asked Sue for a favor but _ was refused.",
+                "answer0": [
+                    "he",
+                    "David"
+                ],
+                "predict_answer": [
+                    "('he', 0.006763171870261431)"
+                ]
+            },
+            {
+                "answer0": [
+                    "he",
+                    "Richard"
+                ],
+                "answer1": [
+                    "she",
+                    "Margaret"
+                ],
+                "sentence": "Margaret asked Richard for a favor but _ was refused.",
+                "correct_answer": [
+                    "she",
+                    "Margaret"
+                ],
+                "predict_answer": [
+                    "('he', 0.4502429962158203)"
+                ]
+            }
+        ],
+        "index": 259
+    },
+    {
+        "index": 260,
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Paul"
+                ],
+                "answer0": [
+                    "he",
+                    "Paul"
+                ],
+                "answer1": [
+                    "she",
+                    "Donna"
+                ],
+                "sentence": "Donna asked Paul for a favor but _ refused.",
+                "predict_answer": [
+                    "('he', 0.6808046698570251)",
+                    "('paul', 0.3073040246963501)"
+                ]
+            },
+            {
+                "sentence": "Edward asked Sandra for a favor but _ refused.",
+                "answer1": [
+                    "she",
+                    "Sandra"
+                ],
+                "answer0": [
+                    "he",
+                    "Edward"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sandra"
+                ],
+                "predict_answer": [
+                    "('she', 0.8678044080734253)",
+                    "('sandra', 0.12292787432670593)",
+                    "('he', 0.00022212337353266776)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Paul"
+                ],
+                "sentence": "Paul ceded the presidency to Vivian because _ was less popular.",
+                "answer1": [
+                    "she",
+                    "Vivian"
+                ],
+                "answer0": [
+                    "he",
+                    "Paul"
+                ],
+                "predict_answer": [
+                    "('he', 0.41399651765823364)",
+                    "('paul', 0.009766652248799801)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Wendy"
+                ],
+                "sentence": "Wendy ceded the presidency to David because _ was less popular.",
+                "answer1": [
+                    "she",
+                    "Wendy"
+                ],
+                "answer0": [
+                    "he",
+                    "David"
+                ],
+                "predict_answer": [
+                    "('he', 0.6327939033508301)",
+                    "('she', 0.14804618060588837)",
+                    "('wendy', 0.005006785038858652)"
+                ]
+            }
+        ],
+        "index": 261
+    },
+    {
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Tony"
+                ],
+                "sentence": "Amy ceded the presidency to Tony because _ was more popular.",
+                "answer0": [
+                    "she",
+                    "Amy"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Tony"
+                ],
+                "predict_answer": [
+                    "('he', 0.6786284446716309)",
+                    "('tony', 0.07445264607667923)"
+                ]
+            },
+            {
+                "sentence": "Alan ceded the presidency to Sue because _ was more popular.",
+                "answer1": [
+                    "she",
+                    "Sue"
+                ],
+                "answer0": [
+                    "he",
+                    "Alan"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sue"
+                ],
+                "predict_answer": [
+                    "('he', 0.3821156620979309)",
+                    "('sue', 0.270222008228302)",
+                    "('she', 0.1479203999042511)"
+                ]
+            }
+        ],
+        "index": 262
+    },
+    {
+        "index": 263,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "Jason"
+                ],
+                "sentence": "Jason did not pass the ball to Anna although _ saw that she was open.",
+                "answer0": [
+                    "she",
+                    "Anna"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Jason"
+                ],
+                "predict_answer": [
+                    "('he', 0.957568883895874)",
+                    "('jason', 0.01760447584092617)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Laura"
+                ],
+                "answer1": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Laura did not pass the ball to Warren although _ saw that she was open.",
+                "answer0": [
+                    "he",
+                    "Warren"
+                ],
+                "predict_answer": [
+                    "('he', 0.5131456851959229)",
+                    "('she', 0.15729857981204987)",
+                    "('laura', 0.018030956387519836)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "correct_answer": [
+                    "he",
+                    "Zack"
+                ],
+                "answer0": [
+                    "he",
+                    "Zack"
+                ],
+                "sentence": "Lisa did not pass the ball to Zack although _ was open.",
+                "answer1": [
+                    "she",
+                    "Lisa"
+                ],
+                "predict_answer": [
+                    "('he', 0.11699602752923965)",
+                    "('zack', 0.0031216409988701344)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "she",
+                    "Laura"
+                ],
+                "answer0": [
+                    "she",
+                    "Laura"
+                ],
+                "sentence": "Zack did not pass the ball to Laura although _ was open.",
+                "answer1": [
+                    "he",
+                    "Zack"
+                ],
+                "predict_answer": [
+                    "('she', 0.15807804465293884)",
+                    "('he', 0.06146833673119545)"
+                ]
+            }
+        ],
+        "index": 264
+    },
+    {
+        "index": 265,
+        "sentences": []
+    },
+    {
+        "index": 266,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 267
+    },
+    {
+        "index": 268,
+        "sentences": []
+    },
+    {
+        "sentences": [],
+        "index": 269
+    },
+    {
+        "index": 270,
+        "sentences": []
+    },
+    {
+        "index": 271,
+        "sentences": [
+            {
+                "answer1": [
+                    "he",
+                    "David"
+                ],
+                "sentence": "Sandra believed that David suspected that _ had stolen the watch.",
+                "answer0": [
+                    "she",
+                    "Sandra"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Sandra"
+                ],
+                "predict_answer": [
+                    "('she', 0.20945383608341217)",
+                    "('he', 0.13169044256210327)"
+                ]
+            },
+            {
+                "correct_answer": [
+                    "he",
+                    "Daniel"
+                ],
+                "sentence": "Daniel believed that Susan suspected that _ had stolen the watch.",
+                "answer1": [
+                    "she",
+                    "Susan"
+                ],
+                "answer0": [
+                    "he",
+                    "Daniel"
+                ],
+                "predict_answer": [
+                    "('he', 0.22833731770515442)",
+                    "('daniel', 0.07387511432170868)"
+                ]
+            }
+        ]
+    },
+    {
+        "sentences": [
+            {
+                "sentence": "Sandy believed that Tim regretted that _ had stolen the watch.",
+                "answer1": [
+                    "she",
+                    "Sandy"
+                ],
+                "answer0": [
+                    "he",
+                    "Tim"
+                ],
+                "correct_answer": [
+                    "he",
+                    "Tim"
+                ],
+                "predict_answer": [
+                    "('he', 0.8744392991065979)",
+                    "('tim', 0.03023201785981655)"
+                ]
+            },
+            {
+                "answer1": [
+                    "she",
+                    "Linda"
+                ],
+                "sentence": "Jason believed that Linda regretted that _ had stolen the watch.",
+                "answer0": [
+                    "he",
+                    "Jason"
+                ],
+                "correct_answer": [
+                    "she",
+                    "Linda"
+                ],
+                "predict_answer": [
+                    "('she', 0.7108531594276428)",
+                    "('he', 0.11007855832576752)",
+                    "('linda', 0.01558978483080864)"
+                ]
+            }
+        ],
+        "index": 272
+    }
+]
