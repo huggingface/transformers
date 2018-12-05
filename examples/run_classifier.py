@@ -35,7 +35,7 @@ from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 from pytorch_pretrained_bert.optimization import BertAdam
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
-logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
+logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
@@ -409,14 +409,14 @@ def main():
                         type=int,
                         default=-1,
                         help="local_rank for distributed training on gpus")
-    parser.add_argument('--seed', 
-                        type=int, 
+    parser.add_argument('--seed',
+                        type=int,
                         default=42,
                         help="random seed for initialization")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
                         default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")                       
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument('--optimize_on_cpu',
                         default=False,
                         action='store_true',
@@ -487,7 +487,7 @@ def main():
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
     # Prepare model
-    model = BertForSequenceClassification.from_pretrained(args.bert_model, 
+    model = BertForSequenceClassification.from_pretrained(args.bert_model,
                 cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank))
     if args.fp16:
         model.half()
