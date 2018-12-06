@@ -69,7 +69,7 @@ This package comprises the following classes that can be imported in Python and 
 
 The repository further comprises:
 
-- Three examples on how to use Bert (in the [`examples` folder](./examples)):
+- Four examples on how to use Bert (in the [`examples` folder](./examples)):
   - [`extract_features.py`](./examples/extract_features.py) - Show how to extract hidden states from an instance of `BertModel`,
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 task.
@@ -284,7 +284,7 @@ An example on how to use this class is given in the [`run_classifier.py`](./exam
 
 `BertForMultipleChoice` is a fine-tuning model that includes `BertModel` and a linear layer on top of the `BertModel`.
 
-The linear layer outputs a single value for each choice of a multiple choice problem, then all the output corresponding to an instance are passed through a softmax to get the model choice.
+The linear layer outputs a single value for each choice of a multiple choice problem, then all the outputs corresponding to an instance are passed through a softmax to get the model choice.
 
 This implementation is largely inspired by the work of OpenAI in [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) and the answer of Jacob Devlin in the following [issue](https://github.com/google-research/bert/issues/38).
 
