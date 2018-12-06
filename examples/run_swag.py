@@ -379,14 +379,6 @@ def main():
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # task_name = args.task_name.lower()
-
-    # if task_name not in processors:
-    #     raise ValueError("Task not found: %s" % (task_name))
-
-    # processor = processors[task_name]()
-    # label_list = processor.get_labels()
-
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
