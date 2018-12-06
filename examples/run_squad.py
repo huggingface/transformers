@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 class SquadExample(object):
-    """A single training/test example for simple sequence classification."""
+    """A single training/test example for the Squad dataset."""
 
     def __init__(self,
                  qas_id,
