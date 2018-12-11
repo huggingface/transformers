@@ -19,7 +19,7 @@ This implementation is provided with [Google's pre-trained models](https://githu
 
 ## Installation
 
-This repo was tested on Python 3.5+ and PyTorch 0.4.1
+This repo was tested on Python 3.6+ and PyTorch 0.4.1
 
 ### With pip
 
