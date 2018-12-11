@@ -35,7 +35,7 @@ from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 from pytorch_pretrained_bert.optimization import BertAdam
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
-logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
+logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
@@ -196,9 +196,7 @@ class ColaProcessor(DataProcessor):
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
 
-    label_map = {}
-    for (i, label) in enumerate(label_list):
-        label_map[label] = i
+    label_map = {label : i for i, label in enumerate(label_list)}
 
     features = []
     for (ex_index, example) in enumerate(examples):
@@ -207,8 +205,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         tokens_b = None
         if example.text_b:
             tokens_b = tokenizer.tokenize(example.text_b)
-
-        if tokens_b:
             # Modifies `tokens_a` and `tokens_b` in place so that the total
             # length is less than the specified length.
             # Account for [CLS], [SEP], [SEP] with "- 3"
@@ -216,7 +212,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         else:
             # Account for [CLS] and [SEP] with "- 2"
             if len(tokens_a) > max_seq_length - 2:
-                tokens_a = tokens_a[0:(max_seq_length - 2)]
+                tokens_a = tokens_a[:(max_seq_length - 2)]
 
         # The convention in BERT is:
         # (a) For sequence pairs:
@@ -236,22 +232,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         # For classification tasks, the first vector (corresponding to [CLS]) is
         # used as as the "sentence vector". Note that this only makes sense because
         # the entire model is fine-tuned.
-        tokens = []
-        segment_ids = []
-        tokens.append("[CLS]")
-        segment_ids.append(0)
-        for token in tokens_a:
-            tokens.append(token)
-            segment_ids.append(0)
-        tokens.append("[SEP]")
-        segment_ids.append(0)
+        tokens = ["[CLS]"] + tokens_a + ["[SEP]"]
+        segment_ids = [0] * len(tokens)
 
         if tokens_b:
-            for token in tokens_b:
-                tokens.append(token)
-                segment_ids.append(1)
-            tokens.append("[SEP]")
-            segment_ids.append(1)
+            tokens += tokens_b + ["[SEP]"]
+            segment_ids += [1] * (len(tokens_b) + 1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -260,10 +246,10 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         input_mask = [1] * len(input_ids)
 
         # Zero-pad up to the sequence length.
-        while len(input_ids) < max_seq_length:
-            input_ids.append(0)
-            input_mask.append(0)
-            segment_ids.append(0)
+        padding = [0] * (max_seq_length - len(input_ids))
+        input_ids += padding
+        input_mask += padding
+        segment_ids += padding
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
@@ -409,14 +395,14 @@ def main():
                         type=int,
                         default=-1,
                         help="local_rank for distributed training on gpus")
-    parser.add_argument('--seed', 
-                        type=int, 
+    parser.add_argument('--seed',
+                        type=int,
                         default=42,
                         help="random seed for initialization")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
                         default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")                       
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument('--optimize_on_cpu',
                         default=False,
                         action='store_true',
@@ -435,6 +421,12 @@ def main():
         "cola": ColaProcessor,
         "mnli": MnliProcessor,
         "mrpc": MrpcProcessor,
+    }
+
+    num_labels_task = {
+        "cola": 2,
+        "mnli": 3,
+        "mrpc": 2,
     }
 
     if args.local_rank == -1 or args.no_cuda:
@@ -475,6 +467,7 @@ def main():
         raise ValueError("Task not found: %s" % (task_name))
 
     processor = processors[task_name]()
+    num_labels = num_labels_task[task_name]
     label_list = processor.get_labels()
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
@@ -487,8 +480,9 @@ def main():
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
     # Prepare model
-    model = BertForSequenceClassification.from_pretrained(args.bert_model, 
-                cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank))
+    model = BertForSequenceClassification.from_pretrained(args.bert_model,
+              cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank),
+              num_labels = num_labels)
     if args.fp16:
         model.half()
     model.to(device)
