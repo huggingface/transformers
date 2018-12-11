@@ -1,6 +1,5 @@
-# This installs Pytorch for CUDA 8 only. If you are using a newer version,
-# please visit http://pytorch.org/ and install the relevant version.
-torch>=0.4.1,<0.5.0
+# PyTorch
+torch>=0.4.1
 # progress bars in model download and training scripts
 tqdm
 # Accessing files from S3 directly.
