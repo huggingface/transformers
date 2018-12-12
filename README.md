@@ -441,24 +441,21 @@ python run_swag.py \
   --do_train \
   --do_eval \
   --data_dir $SWAG_DIR/data
-  --train_batch_size 4 \
+  --train_batch_size 16 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --max_seq_length 80 \
   --output_dir /tmp/swag_output/
+  --gradient_accumulation_steps 4
 ```
 
 Training with the previous hyper-parameters gave us the following results:
 ```
-eval_accuracy = 0.7776167149855043
-eval_loss = 1.006812262735175
-global_step = 55161
-loss = 0.282251750624779
+eval_accuracy = 0.8062081375587323
+eval_loss = 0.5966546792367169
+global_step = 13788
+loss = 0.06423990014260186
 ```
-
-The difference with the `81.6%` accuracy announced in the Bert article
-is probably due to the different `training_batch_size` (here 4 and 16
-in the article).
 
 ## Fine-tuning BERT-large on GPUs
 
