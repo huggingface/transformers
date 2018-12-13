@@ -516,9 +516,9 @@ class PreTrainedBertModel(nn.Module):
         for key in state_dict.keys():
             new_key = None
             if 'gamma' in key:
-                new_key = key.replace('gamma','weight')
+                new_key = key.replace('gamma', 'weight')
             if 'beta' in key:
-                new_key = key.replace('beta','bias')
+                new_key = key.replace('beta', 'bias')
             if new_key:
                 old_keys.append(key)
                 new_keys.append(new_key)
