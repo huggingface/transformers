@@ -440,6 +440,7 @@ export SWAG_DIR=/path/to/SWAG
 python run_swag.py \
   --bert_model bert-base-uncased \
   --do_train \
+  --do_lower_case \
   --do_eval \
   --data_dir $SWAG_DIR/data
   --train_batch_size 16 \
