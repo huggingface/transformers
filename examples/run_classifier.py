@@ -558,8 +558,6 @@ def main():
     # Load a trained model that you have fine-tuned
     model_state_dict = torch.load(output_model_file)
     model = BertForSequenceClassification.from_pretrained(args.bert_model, state_dict=model_state_dict)
-    if args.fp16:
-        model.half()
     model.to(device)
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):

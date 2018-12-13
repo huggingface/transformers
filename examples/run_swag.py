@@ -478,8 +478,6 @@ def main():
     model = BertForMultipleChoice.from_pretrained(args.bert_model,
         state_dict=model_state_dict,
         num_choices=4)
-    if args.fp16:
-        model.half()
     model.to(device)
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
