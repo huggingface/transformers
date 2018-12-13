@@ -52,8 +52,9 @@ This package comprises the following classes that can be imported in Python and 
   - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L752) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
   - [`BertForPreTraining`](./pytorch_pretrained_bert/modeling.py#L620) - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
   - [`BertForSequenceClassification`](./pytorch_pretrained_bert/modeling.py#L814) - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
-  - [`BertForTokenClassification`](./pytorch_pretrained_bert/modeling.py#L880) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**),
-  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L946) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
+  - [`BertForMultipleChoice`](./pytorch_pretrained_bert/modeling.py#L880) - BERT Transformer with a multiple choice head on top (used for task like Swag) (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
+  - [`BertForTokenClassification`](./pytorch_pretrained_bert/modeling.py#L949) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**),
+  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L1015) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
 
 - Three tokenizers (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
@@ -68,10 +69,11 @@ This package comprises the following classes that can be imported in Python and 
 
 The repository further comprises:
 
-- Three examples on how to use Bert (in the [`examples` folder](./examples)):
+- Four examples on how to use Bert (in the [`examples` folder](./examples)):
   - [`extract_features.py`](./examples/extract_features.py) - Show how to extract hidden states from an instance of `BertModel`,
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 task.
+  - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
 
   These examples are detailed in the [Examples](#examples) section of this readme.
 
@@ -278,13 +280,23 @@ The sequence-level classifier is a linear layer that takes as input the last hid
 
 An example on how to use this class is given in the [`run_classifier.py`](./examples/run_classifier.py) script which can be used to fine-tune a single sequence (or pair of sequence) classifier using BERT, for example for the MRPC task.
 
-#### 6. `BertForTokenClassification`
+#### 6. `BertForMultipleChoice`
+
+`BertForMultipleChoice` is a fine-tuning model that includes `BertModel` and a linear layer on top of the `BertModel`.
+
+The linear layer outputs a single value for each choice of a multiple choice problem, then all the outputs corresponding to an instance are passed through a softmax to get the model choice.
+
+This implementation is largely inspired by the work of OpenAI in [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) and the answer of Jacob Devlin in the following [issue](https://github.com/google-research/bert/issues/38).
+
+An example on how to use this class is given in the [`run_swag.py`](./examples/run_swag.py) script which can be used to fine-tune a multiple choice classifier using BERT, for example for the Swag task.
+
+#### 7. `BertForTokenClassification`
 
 `BertForTokenClassification` is a fine-tuning model that includes `BertModel` and a token-level classifier on top of the `BertModel`.
 
 The token-level classifier is a linear layer that takes as input the last hidden state of the sequence.
 
-#### 7. `BertForQuestionAnswering`
+#### 8. `BertForQuestionAnswering`
 
 `BertForQuestionAnswering` is a fine-tuning model that includes `BertModel` with a token-level classifiers on top of the full sequence of last hidden states.
 
@@ -418,6 +430,32 @@ python run_squad.py \
 Training with the previous hyper-parameters gave us the following results:
 ```bash
 {"f1": 88.52381567990474, "exact_match": 81.22043519394512}
+```
+
+The data for Swag can be downloaded by cloning the following [repository](https://github.com/rowanz/swagaf)
+
+```shell
+export SWAG_DIR=/path/to/SWAG
+
+python run_swag.py \
+  --bert_model bert-base-uncased \
+  --do_train \
+  --do_eval \
+  --data_dir $SWAG_DIR/data
+  --train_batch_size 16 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3.0 \
+  --max_seq_length 80 \
+  --output_dir /tmp/swag_output/
+  --gradient_accumulation_steps 4
+```
+
+Training with the previous hyper-parameters gave us the following results:
+```
+eval_accuracy = 0.8062081375587323
+eval_loss = 0.5966546792367169
+global_step = 13788
+loss = 0.06423990014260186
 ```
 
 ## Fine-tuning BERT-large on GPUs
