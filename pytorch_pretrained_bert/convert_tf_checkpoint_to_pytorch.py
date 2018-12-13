@@ -59,9 +59,9 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytor
                 l = re.split(r'_(\d+)', m_name)
             else:
                 l = [m_name]
-            if l[0] == 'kernel':
+            if l[0] == 'kernel' or l[0] == 'gamma':
                 pointer = getattr(pointer, 'weight')
-            elif l[0] == 'output_bias':
+            elif l[0] == 'output_bias' or l[0] == 'beta':
                 pointer = getattr(pointer, 'bias')
             elif l[0] == 'output_weights':
                 pointer = getattr(pointer, 'weight')

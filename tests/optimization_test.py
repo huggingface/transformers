@@ -35,7 +35,7 @@ class OptimizationTest(unittest.TestCase):
         criterion = torch.nn.MSELoss()
         # No warmup, constant schedule, no gradient clipping
         optimizer = BertAdam(params=[w], lr=2e-1,
-                                          weight_decay=0.0,
+                                          weight_decay_rate=0.0,
                                           max_grad_norm=-1)
         for _ in range(100):
             loss = criterion(w, target)
