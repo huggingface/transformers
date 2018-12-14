@@ -106,7 +106,7 @@ class BertConfig(object):
                 initializing all weight matrices.
         """
         if isinstance(vocab_size_or_config_json_file, str):
-            with open(vocab_size_or_config_json_file, "r") as reader:
+            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
                 json_config = json.loads(reader.read())
             for key, value in json_config.items():
                 self.__dict__[key] = value
@@ -137,7 +137,7 @@ class BertConfig(object):
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `BertConfig` from a json file of parameters."""
-        with open(json_file, "r") as reader:
+        with open(json_file, "r", encoding='utf-8') as reader:
             text = reader.read()
         return cls.from_dict(json.loads(text))
 

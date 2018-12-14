@@ -91,7 +91,7 @@ class DataProcessor(object):
     @classmethod
     def _read_tsv(cls, input_file, quotechar=None):
         """Reads a tab separated value file."""
-        with open(input_file, "r") as f:
+        with open(input_file, "r", encoding='utf-8') as f:
             reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
             lines = []
             for line in reader:
@@ -413,7 +413,8 @@ def main():
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
-    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+    logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
+        device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(

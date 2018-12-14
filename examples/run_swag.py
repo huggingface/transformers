@@ -100,7 +100,7 @@ class InputFeatures(object):
 
 
 def read_swag_examples(input_file, is_training):
-    with open(input_file, 'r') as f:
+    with open(input_file, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
         lines = list(reader)
 
@@ -333,7 +333,8 @@ def main():
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
-    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+    logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
+        device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
