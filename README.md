@@ -517,8 +517,7 @@ python ./run_squad.py \
   --doc_stride 128 \
   --output_dir $OUTPUT_DIR \
   --train_batch_size 24 \
-  --gradient_accumulation_steps 2 \
-  --optimize_on_cpu
+  --gradient_accumulation_steps 2 
 ```
 
 If you have a recent GPU (starting from NVIDIA Volta series), you should try **16-bit fine-tuning** (FP16).
