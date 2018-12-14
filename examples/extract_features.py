@@ -168,7 +168,7 @@ def read_examples(input_file):
     """Read a list of `InputExample`s from an input file."""
     examples = []
     unique_id = 0
-    with open(input_file, "r") as reader:
+    with open(input_file, "r", encoding='utf-8') as reader:
         while True:
             line = reader.readline()
             if not line:

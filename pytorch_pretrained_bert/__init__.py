@@ -1,3 +1,4 @@
+__version__ = "0.4.0"
 from .tokenization import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .modeling import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
