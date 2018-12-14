@@ -41,7 +41,7 @@ setup(
     author="Thomas Wolf, Victor Sanh, Tim Rault, Google AI Language Team Authors",
     author_email="thomas@huggingface.co",
     description="PyTorch version of Google AI BERT model with script to load Google pre-trained models",
-    long_description=open("README.md", "r").read(),
+    long_description=open("README.md", "r", encoding='utf-8').read(),
     long_description_content_type="text/markdown",
     keywords='BERT NLP deep learning google',
     license='Apache',
