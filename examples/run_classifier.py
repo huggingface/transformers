@@ -36,13 +36,6 @@ from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 from pytorch_pretrained_bert.optimization import BertAdam
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
-try:
-    from apex.optimizers import FP16_Optimizer
-    from apex.optimizers import FusedAdam
-    from apex.parallel import DistributedDataParallel as DDP
-except ImportError:
-    raise ImportError("Please install apex from https://www.github.com/nvidia/apex to run this.")
-
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
@@ -98,7 +91,7 @@ class DataProcessor(object):
     @classmethod
     def _read_tsv(cls, input_file, quotechar=None):
         """Reads a tab separated value file."""
-        with open(input_file, "r") as f:
+        with open(input_file, "r", encoding='utf-8') as f:
             reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
             lines = []
             for line in reader:
@@ -329,7 +322,7 @@ def main():
                         default=None,
                         type=str,
                         required=True,
-                        help="The output directory where the model checkpoints will be written.")
+                        help="The output directory where the model predictions and checkpoints will be written.")
 
     ## Other parameters
     parser.add_argument("--max_seq_length",
@@ -420,7 +413,8 @@ def main():
         n_gpu = 1
         # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.distributed.init_process_group(backend='nccl')
-    logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
+    logger.info("device: {} n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
+        device, n_gpu, bool(args.local_rank != -1), args.fp16))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
@@ -467,6 +461,11 @@ def main():
         model.half()
     model.to(device)
     if args.local_rank != -1:
+        try:
+            from apex.parallel import DistributedDataParallel as DDP
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+
         model = DDP(model)
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
@@ -482,6 +481,12 @@ def main():
     if args.local_rank != -1:
         t_total = t_total // torch.distributed.get_world_size()
     if args.fp16:
+        try:
+            from apex.optimizers import FP16_Optimizer
+            from apex.optimizers import FusedAdam
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+
         optimizer = FusedAdam(optimizer_grouped_parameters,
                               lr=args.learning_rate,
                               bias_correction=False,
@@ -545,6 +550,16 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
+
+    # Save a trained model
+    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
+    output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+    torch.save(model_to_save.state_dict(), output_model_file)
+
+    # Load a trained model that you have fine-tuned
+    model_state_dict = torch.load(output_model_file)
+    model = BertForSequenceClassification.from_pretrained(args.bert_model, state_dict=model_state_dict)
+    model.to(device)
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         eval_examples = processor.get_dev_examples(args.data_dir)
