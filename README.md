@@ -19,7 +19,7 @@ This implementation is provided with [Google's pre-trained models](https://githu
 
 ## Installation
 
-This repo was tested on Python 3.6+ and PyTorch 0.4.1
+This repo was tested on Python 3.5+ and PyTorch 0.4.1/1.0.0
 
 ### With pip
 
@@ -372,9 +372,9 @@ Where `$THIS_MACHINE_INDEX` is an sequential index assigned to each of your mach
 
 We showcase several fine-tuning examples based on (and extended from) [the original implementation](https://github.com/google-research/bert/):
 
-- a sequence-level classifier on the MRPC classification corpus,
-- a token-level classifier on the question answering dataset SQuAD, and
-- a sequence-level multiple-choice classifier on the SWAG classification corpus.
+- a *sequence-level classifier* on the MRPC classification corpus,
+- a *token-level classifier* on the question answering dataset SQuAD, and
+- a *sequence-level multiple-choice classifier* on the SWAG classification corpus.
 
 #### MRPC
 
@@ -427,7 +427,7 @@ python run_classifier.py \
 
 #### SQuAD
 
-This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) on single tesla V100 16GB.
+This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) on a single tesla V100 16GB.
 
 The data for SQuAD can be downloaded with the following links and should be saved in a `$SQUAD_DIR` directory.
 
@@ -458,7 +458,9 @@ Training with the previous hyper-parameters gave us the following results:
 {"f1": 88.52381567990474, "exact_match": 81.22043519394512}
 ```
 
-The data for Swag can be downloaded by cloning the following [repository](https://github.com/rowanz/swagaf)
+#### SWAG
+
+The data for SWAG can be downloaded by cloning the following [repository](https://github.com/rowanz/swagaf)
 
 ```shell
 export SWAG_DIR=/path/to/SWAG
