@@ -69,12 +69,13 @@ This package comprises the following classes that can be imported in Python and 
 
 The repository further comprises:
 
-- Four examples on how to use Bert (in the [`examples` folder](./examples)):
+- Five examples on how to use Bert (in the [`examples` folder](./examples)):
   - [`extract_features.py`](./examples/extract_features.py) - Show how to extract hidden states from an instance of `BertModel`,
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 task.
   - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
-
+  - [`run_lm_finetuning`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining' on a target text corpus.  
+   
   These examples are detailed in the [Examples](#examples) section of this readme.
 
 - Three notebooks that were used to check that the TensorFlow and PyTorch models behave identically (in the [`notebooks` folder](./notebooks)):
@@ -246,6 +247,9 @@ An example on how to use this class is given in the [`extract_features.py`](./ex
 
   - the masked language modeling logits, and
   - the next sentence classification logits.
+  
+An example on how to use this class is given in the [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) script which can be used to fine-tune the BERT language model on your specific different text corpus. This should improve model performance, if the language style is different from the original BERT training corpus (Wiki + BookCorpus).
+
 
 #### 3. `BertForMaskedLM`
 
@@ -347,7 +351,7 @@ The optimizer accepts the following arguments:
 | Sub-section | Description |
 |-|-|
 | [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
-| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py` and `run_squad.py` |
+| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `run_lm_finetuning.py` |
 | [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
 ### Training large models: introduction, tools and examples
@@ -378,7 +382,8 @@ We showcase several fine-tuning examples based on (and extended from) [the origi
 - a *sequence-level classifier* on the MRPC classification corpus,
 - a *token-level classifier* on the question answering dataset SQuAD, and
 - a *sequence-level multiple-choice classifier* on the SWAG classification corpus.
-
+- a *BERT language model* on another target corpus
+ 
 #### MRPC
 
 This example code fine-tunes BERT on the Microsoft Research Paraphrase
@@ -488,6 +493,25 @@ eval_accuracy = 0.8062081375587323
 eval_loss = 0.5966546792367169
 global_step = 13788
 loss = 0.06423990014260186
+```
+
+#### LM Fine-tuning
+
+The data should be a text file in the same format as [sample_text.txt](./samples/sample_text.txt)  (one sentence per line, docs separated by empty line).
+
+Training one epoch on a 500k sentence corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with `train_batch_size=200` and `max_seq_length=128`:
+
+
+```shell
+python run_lm_finetuning.py \
+  --bert_model bert-base-cased 
+  --do_train 
+  --train_file samples/sample_text.txt 
+  --output_dir models 
+  --num_train_epochs 5.0 
+  --learning_rate 3e-5 
+  --train_batch_size 32 
+  --max_seq_length 128 
 ```
 
 ## Fine-tuning BERT-large on GPUs
