@@ -1,5 +1,5 @@
 # coding: utf8
-if __name__ == '__main__':
+def main():
     import sys
     try:
         from .convert_tf_checkpoint_to_pytorch import convert_tf_checkpoint_to_pytorch
@@ -17,3 +17,6 @@ if __name__ == '__main__':
         TF_CONFIG = sys.argv.pop()
         TF_CHECKPOINT = sys.argv.pop()
         convert_tf_checkpoint_to_pytorch(TF_CHECKPOINT, TF_CONFIG, PYTORCH_DUMP_OUTPUT)
+
+if __name__ == '__main__':
+    main()
