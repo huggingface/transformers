@@ -1,0 +1,11 @@
+version: 2
+jobs:
+    build:
+        working_directory: ~/pytorch-pretrained-BERT
+        docker:
+            - image: circleci/python:3.7
+        steps:
+            - checkout
+            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install pytest
+            - run: python -m pytest -sv tests/
