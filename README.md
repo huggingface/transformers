@@ -498,8 +498,8 @@ loss = 0.06423990014260186
 #### LM Fine-tuning
 
 The data should be a text file in the same format as [sample_text.txt](./samples/sample_text.txt)  (one sentence per line, docs separated by empty line).
-
-Training one epoch on a 500k sentence corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with `train_batch_size=200` and `max_seq_length=128`:
+You can download an [exemplary training corpus](https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt) generated from wikipedia articles and splitted into ~500k sentences with spaCy. 
+Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with `train_batch_size=200` and `max_seq_length=128`:
 
 
 ```shell
