@@ -456,7 +456,9 @@ class PreTrainedBertModel(nn.Module):
                     . `bert-base-uncased`
                     . `bert-large-uncased`
                     . `bert-base-cased`
-                    . `bert-base-multilingual`
+                    . `bert-large-cased`
+                    . `bert-base-multilingual-uncased`
+                    . `bert-base-multilingual-cased`
                     . `bert-base-chinese`
                 - a path or url to a pretrained model archive containing:
                     . `bert_config.json` a configuration file for the model
@@ -1035,15 +1037,7 @@ class BertForQuestionAnswering(PreTrainedBertModel):
     the sequence output that computes start_logits and end_logits
 
     Params:
-        `config`: either
-            - a BertConfig class instance with the configuration to build a new model, or
-            - a str with the name of a pre-trained model to load selected in the list of:
-                . `bert-base-uncased`
-                . `bert-large-uncased`
-                . `bert-base-cased`
-                . `bert-base-multilingual`
-                . `bert-base-chinese`
-                The pre-trained model will be downloaded and cached if needed.
+        `config`: a BertConfig class instance with the configuration to build a new model.
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
