@@ -118,8 +118,9 @@ class InputFeatures(object):
 def read_squad_examples(input_file, is_training):
     """Read a SQuAD json file into a list of SquadExample."""
     with open(input_file, "r", encoding='utf-8') as reader:
-        input_data = json.load(reader)["data"]
-        version = json.load(reader)["version"]
+        source = json.load(reader)
+        input_data = source["data"]
+        version = source["version"]
 
     def is_whitespace(c):
         if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
@@ -441,7 +442,7 @@ RawResult = collections.namedtuple("RawResult",
 
 def write_predictions(all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
-                      output_nbest_file, output_null_log_odds_file, verbose_logging, v2, null_score_diff_threshold):
+                      output_nbest_file, output_null_log_odds_file, verbose_logging, is_version2, null_score_diff_threshold):
     """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
     logger.info("Writing nbest to: %s" % (output_nbest_file))
@@ -477,7 +478,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
             start_indexes = _get_best_indexes(result.start_logits, n_best_size)
             end_indexes = _get_best_indexes(result.end_logits, n_best_size)
             # if we could have irrelevant answers, get the min score of irrelevant
-            if v2:
+            if is_version2:
                 feature_null_score = result.start_logits[0] + result.end_logits[0]
                 if feature_null_score < score_null:
                     score_null = feature_null_score
@@ -513,7 +514,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                             start_logit=result.start_logits[start_index],
                             end_logit=result.end_logits[end_index]))
 
-        if v2:
+        if is_version2:
             prelim_predictions.append(
                 _PrelimPrediction(
                     feature_index=min_null_feature_index,
@@ -567,7 +568,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                     end_logit=pred.end_logit))
 
         # if we didn't inlude the empty option in the n-best, inlcude it
-        if v2:
+        if is_version2:
             if "" not in seen_predictions:
                 nbest.append(
                     _NbestPrediction(
@@ -604,7 +605,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         assert len(nbest_json) >= 1
 
         
-        if not v2:
+        if not is_version2:
             all_predictions[example.qas_id] = nbest_json[0]["text"]
         else:
             # predict "" iff the null score - the score of best non-null > threshold
@@ -623,7 +624,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     with open(output_nbest_file, "w") as writer:
         writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
     
-    if v2:
+    if is_version2:
         with open(output_null_log_odds_file, "w") as writer:
             writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
@@ -991,7 +992,7 @@ def main():
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.to(device) for t in batch) # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids, start_positions, end_positions = batch
+                input_ids, input_mask, segment_ids, start_positions, end_positions, is_impossible = batch
                 loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
