@@ -430,7 +430,7 @@ def main():
 
     if not args.do_train and not args.do_eval:
         raise ValueError("At least one of `do_train` or `do_eval` must be True.")
-        
+
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     os.makedirs(args.output_dir, exist_ok=True)
@@ -503,6 +503,7 @@ def main():
                              t_total=t_total)
 
     global_step = 0
+    tr_loss = 0
     if args.do_train:
         train_features = convert_examples_to_features(
             train_examples, label_list, args.max_seq_length, tokenizer)
@@ -581,7 +582,8 @@ def main():
         model.eval()
         eval_loss, eval_accuracy = 0, 0
         nb_eval_steps, nb_eval_examples = 0, 0
-        for input_ids, input_mask, segment_ids, label_ids in eval_dataloader:
+ 
+        for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader, desc="Evaluating"):
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
@@ -603,11 +605,11 @@ def main():
 
         eval_loss = eval_loss / nb_eval_steps
         eval_accuracy = eval_accuracy / nb_eval_examples
-
+        loss = tr_loss/nb_tr_steps if args.do_train else None
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
                   'global_step': global_step,
-                  'loss': tr_loss/nb_tr_steps}
+                  'loss': loss}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
