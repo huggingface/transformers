@@ -503,6 +503,7 @@ def main():
                              t_total=t_total)
 
     global_step = 0
+    nb_tr_steps = 0
     tr_loss = 0
     if args.do_train:
         train_features = convert_examples_to_features(
@@ -565,6 +566,7 @@ def main():
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         eval_examples = processor.get_dev_examples(args.data_dir)
+        # should tokenize this too. 
         eval_features = convert_examples_to_features(
             eval_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running evaluation *****")
