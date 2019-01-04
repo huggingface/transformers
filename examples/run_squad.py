@@ -117,6 +117,7 @@ def read_squad_examples(input_file, is_training):
         return False
 
     examples = []
+    total_count = 0
     for entry in input_data:
         for paragraph in entry["paragraphs"]:
             paragraph_text = paragraph["context"]
@@ -140,6 +141,7 @@ def read_squad_examples(input_file, is_training):
                 start_position = None
                 end_position = None
                 orig_answer_text = None
+                total_count = total_count + 1
                 if is_training:
                     if len(qa["answers"]) != 1:
                         raise ValueError(
@@ -172,6 +174,7 @@ def read_squad_examples(input_file, is_training):
                     start_position=start_position,
                     end_position=end_position)
                 examples.append(example)
+    print('read_squad_examples', 'total count=', total_count, 'real count=',len(examples))
     return examples
 
 
@@ -409,6 +412,7 @@ RawResult = collections.namedtuple("RawResult",
 def write_predictions(all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
                       output_nbest_file, verbose_logging):
+    logger.info('Write final predictions to the json file.')
     """Write final predictions to the json file."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
     logger.info("Writing nbest to: %s" % (output_nbest_file))
@@ -533,9 +537,11 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         all_predictions[example.qas_id] = nbest_json[0]["text"]
         all_nbest_json[example.qas_id] = nbest_json
 
+    logger.info("Writing predictions to: %s...ok" % (output_prediction_file))
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(all_predictions, indent=4) + "\n")
 
+    logger.info("Writing nbest to: %s...ok" % (output_nbest_file))
     with open(output_nbest_file, "w") as writer:
         writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
 
@@ -729,7 +735,7 @@ def main():
                         default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--do_lower_case",
-                        default=True,
+                        default=False,
                         action='store_true',
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument("--local_rank",
@@ -788,7 +794,7 @@ def main():
         raise ValueError("Output directory () already exists and is not empty.")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model)
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
     num_train_steps = None

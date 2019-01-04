@@ -115,7 +115,7 @@ class BertTokenizer(object):
         return tokens
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name, cache_dir=None, *inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_name, cache_dir=None, do_lower_case=True, *inputs, **kwargs):
         """
         Instantiate a PreTrainedBertModel from a pre-trained model file.
         Download and cache the pre-trained model file if needed.
@@ -149,7 +149,7 @@ class BertTokenizer(object):
             max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name]
             kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
         # Instantiate tokenizer.
-        tokenizer = cls(resolved_vocab_file, *inputs, **kwargs)
+        tokenizer = cls(resolved_vocab_file, do_lower_case, *inputs, **kwargs)
         return tokenizer
 
 
