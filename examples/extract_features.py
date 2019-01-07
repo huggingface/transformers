@@ -199,7 +199,7 @@ def main():
                              "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
 
     ## Other parameters
-    parser.add_argument("--do_lower_case", default=False, action='store_true', help="Set this flag if you are using an uncased model.")
+    parser.add_argument("--do_lower_case", action='store_true', help="Set this flag if you are using an uncased model.")
     parser.add_argument("--layers", default="-1,-2,-3,-4", type=str)
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
@@ -210,7 +210,6 @@ def main():
                         default=-1,
                         help = "local_rank for distributed training on gpus")
     parser.add_argument("--no_cuda",
-                        default=False,
                         action='store_true',
                         help="Whether not to use CUDA when available")
 
