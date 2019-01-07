@@ -39,7 +39,21 @@ python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions
 Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
 {"exact_match": 18.84308971250433, "f1": 35.20497668055708}
 ```
+#### bert-base-multilingual-cased / fp16 / loss 128/ 16batch / 4epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 69.81295462417735, "f1": 77.39262440595996}
+```
+#### bert-base-multilingual-cased / fp16 / loss 0 / 16batch / 2epochs
+- `loss_scale`이 0이면 자동.
 
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 70.15933494977486, "f1": 77.53588692798945}
+
+```
 ## original readme
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
