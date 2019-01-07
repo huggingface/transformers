@@ -681,7 +681,8 @@ def main():
     ## Required parameters
     parser.add_argument("--bert_model", default=None, type=str, required=True,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
+                        "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
+                        "bert-base-multilingual-cased, bert-base-chinese.")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
 
@@ -697,8 +698,8 @@ def main():
     parser.add_argument("--max_query_length", default=64, type=int,
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
-    parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
-    parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_predict", action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
     parser.add_argument("--predict_batch_size", default=8, type=int, help="Total batch size for predictions.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
@@ -713,11 +714,10 @@ def main():
     parser.add_argument("--max_answer_length", default=30, type=int,
                         help="The maximum length of an answer that can be generated. This is needed because the start "
                              "and end predictions are not conditioned on one another.")
-    parser.add_argument("--verbose_logging", default=False, action='store_true',
+    parser.add_argument("--verbose_logging", action='store_true',
                         help="If true, all of the warnings related to data processing will be printed. "
                              "A number of warnings are expected for a normal SQuAD evaluation.")
     parser.add_argument("--no_cuda",
-                        default=False,
                         action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument('--seed',
@@ -729,7 +729,6 @@ def main():
                         default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--do_lower_case",
-                        default=True,
                         action='store_true',
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument("--local_rank",
@@ -737,7 +736,6 @@ def main():
                         default=-1,
                         help="local_rank for distributed training on gpus")
     parser.add_argument('--fp16',
-                        default=False,
                         action='store_true',
                         help="Whether to use 16-bit float precision instead of 32-bit")
     parser.add_argument('--loss_scale',
@@ -788,7 +786,7 @@ def main():
         raise ValueError("Output directory () already exists and is not empty.")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model)
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
     num_train_steps = None
@@ -855,7 +853,7 @@ def main():
     global_step = 0
     if args.do_train:
         cached_train_features_file = args.train_file+'_{0}_{1}_{2}_{3}'.format(
-            args.bert_model, str(args.max_seq_length), str(args.doc_stride), str(args.max_query_length))
+            list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), str(args.max_query_length))
         train_features = None
         try:
             with open(cached_train_features_file, "rb") as reader:
