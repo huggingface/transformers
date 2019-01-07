@@ -730,7 +730,7 @@ class BertForMaskedLM(PreTrainedBertModel):
             is only computed for the labels set in [0, ..., vocab_size]
 
     Outputs:
-        if `masked_lm_labels` is `None`:
+        if `masked_lm_labels` is  not `None`:
             Outputs the masked language modeling loss.
         if `masked_lm_labels` is `None`:
             Outputs the masked language modeling logits of shape [batch_size, sequence_length, vocab_size].
