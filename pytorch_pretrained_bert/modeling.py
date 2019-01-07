@@ -416,12 +416,12 @@ class BertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-class PreTrainedBertModel(nn.Module):
+class PreTrainedModel(nn.Module):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
     def __init__(self, config, *inputs, **kwargs):
-        super(PreTrainedBertModel, self).__init__()
+        super(PreTrainedModel, self).__init__()
         if not isinstance(config, BertConfig):
             raise ValueError(
                 "Parameter config in `{}(config)` should be an instance of class `BertConfig`. "
@@ -447,7 +447,7 @@ class PreTrainedBertModel(nn.Module):
     @classmethod
     def from_pretrained(cls, pretrained_model_name, state_dict=None, cache_dir=None, *inputs, **kwargs):
         """
-        Instantiate a PreTrainedBertModel from a pre-trained model file or a pytorch state dict.
+        Instantiate a PreTrainedModel from a pre-trained model file or a pytorch state dict.
         Download and cache the pre-trained model file if needed.
 
         Params:
@@ -551,7 +551,7 @@ class PreTrainedBertModel(nn.Module):
         return model
 
 
-class BertModel(PreTrainedBertModel):
+class BertModel(PreTrainedModel):
     """BERT model ("Bidirectional Embedding Representations from a Transformer").
 
     Params:
@@ -634,7 +634,7 @@ class BertModel(PreTrainedBertModel):
         return encoded_layers, pooled_output
 
 
-class BertForPreTraining(PreTrainedBertModel):
+class BertForPreTraining(PreTrainedModel):
     """BERT model with pre-training heads.
     This module comprises the BERT model followed by the two pre-training heads:
         - the masked language modeling head, and
@@ -705,7 +705,7 @@ class BertForPreTraining(PreTrainedBertModel):
             return prediction_scores, seq_relationship_score
 
 
-class BertForMaskedLM(PreTrainedBertModel):
+class BertForMaskedLM(PreTrainedModel):
     """BERT model with the masked language modeling head.
     This module comprises the BERT model followed by the masked language modeling head.
 
@@ -766,7 +766,7 @@ class BertForMaskedLM(PreTrainedBertModel):
             return prediction_scores
 
 
-class BertForNextSentencePrediction(PreTrainedBertModel):
+class BertForNextSentencePrediction(PreTrainedModel):
     """BERT model with next sentence prediction head.
     This module comprises the BERT model followed by the next sentence classification head.
 
@@ -828,7 +828,7 @@ class BertForNextSentencePrediction(PreTrainedBertModel):
             return seq_relationship_score
 
 
-class BertForSequenceClassification(PreTrainedBertModel):
+class BertForSequenceClassification(PreTrainedModel):
     """BERT model for classification.
     This module is composed of the BERT model with a linear layer on top of
     the pooled output.
@@ -894,7 +894,7 @@ class BertForSequenceClassification(PreTrainedBertModel):
             return logits
 
 
-class BertForMultipleChoice(PreTrainedBertModel):
+class BertForMultipleChoice(PreTrainedModel):
     """BERT model for multiple choice tasks.
     This module is composed of the BERT model with a linear layer on top of
     the pooled output.
@@ -963,7 +963,7 @@ class BertForMultipleChoice(PreTrainedBertModel):
             return reshaped_logits
 
 
-class BertForTokenClassification(PreTrainedBertModel):
+class BertForTokenClassification(PreTrainedModel):
     """BERT model for token-level classification.
     This module is composed of the BERT model with a linear layer on top of
     the full hidden state of the last layer.
@@ -1029,7 +1029,7 @@ class BertForTokenClassification(PreTrainedBertModel):
             return logits
 
 
-class BertForQuestionAnswering(PreTrainedBertModel):
+class BertForQuestionAnswering(PreTrainedModel):
     """BERT model for Question Answering (span extraction).
     This module is composed of the BERT model with a linear layer on top of
     the sequence output that computes start_logits and end_logits
