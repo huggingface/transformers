@@ -1,5 +1,60 @@
 # PyTorch Pretrained Bert
+## News
+### KorQuAD Fine-tuning 결과
+#### bert-base-multilingual-cased / 15 batch / 2 epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 70.10737790093523, "f1": 77.40572343793674}
+```
+#### bert-base-multilingual-cased / 16 batch / 10 epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 69.10287495670246, "f1": 76.7941243551484}
+```
+#### bert-base-multilingual-cased / 16 batch / 3 epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 69.93418773813647, "f1": 77.28405489749443}
+```
+#### bert-base-multilingual-cased / 16 batch / 4 epochs
+```
+(tf) david@ai-gpuserver:~/work/bert-pytorch/output-kor-cased-16batch-4epoch-190106_0813$ !python
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 70.3325251125736, "f1": 77.64177207544017}
+```
 
+#### bert-base-multilingual-uncased / 16 batch / 10 epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 18.7218565985452, "f1": 34.76119000885214}
+```
+#### bert-base-multilingual-uncased / 16 batch / 2 epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 18.84308971250433, "f1": 35.20497668055708}
+```
+#### bert-base-multilingual-cased / fp16 / loss 128/ 16batch / 4epochs
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 69.81295462417735, "f1": 77.39262440595996}
+```
+#### bert-base-multilingual-cased / fp16 / loss 0 / 16batch / 2epochs
+- `loss_scale`이 0이면 자동.
+
+```
+python ~/work/datasets/evaluate-v1.1.py ~/work/datasets/kor_dev.json predictions.json 
+Evaluation expects v-1.1, but got dataset with v-KorQuAD_v1.0_dev
+{"exact_match": 70.15933494977486, "f1": 77.53588692798945}
+
+```
+## original readme
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
 This repository contains an op-for-op PyTorch reimplementation of [Google's TensorFlow repository for the BERT model](https://github.com/google-research/bert) that was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
