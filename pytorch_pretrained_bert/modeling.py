@@ -549,7 +549,7 @@ class BertPreTrainedModel(nn.Module):
                 model.__class__.__name__, unexpected_keys))
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                               self.__class__.__name__, "\n\t".join(error_msgs)))
+                               model.__class__.__name__, "\n\t".join(error_msgs)))
         if tempdir:
             # Clean up temp dir
             shutil.rmtree(tempdir)
