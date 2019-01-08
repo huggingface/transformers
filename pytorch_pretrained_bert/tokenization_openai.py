@@ -1,9 +1,39 @@
+# coding=utf-8
+# Copyright 2018 The Open AI Team Authors and The HugginFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tokenization classes for OpenAI GPT."""
+import os
 import re
-import ftfy
 import json
-import spacy
-
 from tqdm import tqdm
+import logging
+
+from .file_utils import cached_path
+
+logger = logging.getLogger(__name__)
+
+PRETRAINED_VOCAB_ARCHIVE_MAP = {
+    'openai-gpt': "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-vocab.json",
+}
+PRETRAINED_MERGES_ARCHIVE_MAP = {
+    'openai-gpt': "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-merges.txt",
+}
+PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
+    'openai-gpt': 512,
+}
+VOCAB_NAME = 'vocab.json'
+MERGES_NAME = 'merges.txt'
 
 def get_pairs(word):
     """
@@ -32,16 +62,65 @@ def text_standardize(text):
     text = re.sub(r'[^\S\n]+', ' ', text)
     return text.strip()
 
-class TextEncoder(object):
+class OpenAIGPTTokenizer(object):
     """
     mostly a wrapper for a public python bpe tokenizer
     """
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name, cache_dir=None, *inputs, **kwargs):
+        """
+        Instantiate a PreTrainedBertModel from a pre-trained model file.
+        Download and cache the pre-trained model file if needed.
+        """
+        if pretrained_model_name in PRETRAINED_VOCAB_ARCHIVE_MAP:
+            vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name]
+            merges_file = PRETRAINED_MERGES_ARCHIVE_MAP[pretrained_model_name]
+        else:
+            vocab_file = pretrained_model_name
+        if os.path.isdir(vocab_file):
+            vocab_file = os.path.join(vocab_file, VOCAB_NAME)
+            merges_file = os.path.join(vocab_file, MERGES_NAME)
+        # redirect to the cache, if necessary
+        try:
+            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
+            resolved_merges_file = cached_path(merges_file, cache_dir=cache_dir)
+        except FileNotFoundError:
+            logger.error(
+                "Model name '{}' was not found in model name list ({}). "
+                "We assumed '{}' was a path or url but couldn't find any file "
+                "associated to this path or url.".format(
+                    pretrained_model_name,
+                    ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
+                    vocab_file))
+            return None
+        if resolved_vocab_file == vocab_file and resolved_merges_file == merges_file:
+            logger.info("loading vocabulary file {}".format(vocab_file))
+            logger.info("loading merges file {}".format(merges_file))
+        else:
+            logger.info("loading vocabulary file {} from cache at {}".format(
+                vocab_file, resolved_vocab_file))
+            logger.info("loading merges file {} from cache at {}".format(
+                merges_file, resolved_merges_file))
+        if pretrained_model_name in PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP:
+            # if we're using a pretrained model, ensure the tokenizer wont index sequences longer
+            # than the number of positional embeddings
+            max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name]
+            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
+        # Instantiate tokenizer.
+        tokenizer = cls(resolved_vocab_file, resolved_merges_file, *inputs, **kwargs)
+        return tokenizer
 
-    def __init__(self, encoder_path, bpe_path):
+    def __init__(self, vocab_file, merges_file):
+        try:
+            import ftfy
+            import spacy
+        except ImportError:
+            raise ImportError("Please install ftfy and spacy to use OpenAI GPT tokenizer.")
+
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
-        self.encoder = json.load(open(encoder_path))
+        self.encoder = json.load(open(vocab_file))
         self.decoder = {v:k for k,v in self.encoder.items()}
-        merges = open(bpe_path, encoding='utf-8').read().split('\n')[1:-1]
+        merges = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
@@ -89,7 +168,7 @@ class TextEncoder(object):
         self.cache[token] = word
         return word
 
-    def encode(self, texts, verbose=True):
+    def tokenize(self, texts, verbose=True):
         texts_tokens = []
         if verbose:
             for text in tqdm(texts, ncols=80, leave=False):
