@@ -22,7 +22,8 @@ import random
 
 import torch
 
-from pytorch_pretrained_bert import (OpenAIGPTConfig, OpenAIGPTModel, OpenAIGPTDoubleHeadsModel)
+from pytorch_pretrained_bert import (OpenAIGPTConfig, OpenAIGPTModel,
+                                     OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
 
 
 class OpenAIGPTModelTest(unittest.TestCase):
@@ -89,11 +90,11 @@ class OpenAIGPTModelTest(unittest.TestCase):
 
             multiple_choice_labels = None
             lm_labels = None
-            classification_token_mask = None
+            multiple_choice_token_mask = None
             if self.use_labels:
                 multiple_choice_labels = OpenAIGPTModelTest.ids_tensor([self.batch_size], self.type_sequence_label_size)
                 lm_labels = OpenAIGPTModelTest.ids_tensor([self.batch_size, self.n_choices, self.seq_length], self.num_labels)
-                classification_token_mask = OpenAIGPTModelTest.ids_tensor([self.batch_size, self.n_choices, self.seq_length], 2).float()
+                multiple_choice_token_mask = OpenAIGPTModelTest.ids_tensor([self.batch_size, self.n_choices, self.seq_length], 2).float()
 
             config = OpenAIGPTConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
@@ -109,10 +110,10 @@ class OpenAIGPTModelTest(unittest.TestCase):
                 initializer_range=self.initializer_range)
 
             return (config, input_ids, token_type_ids, position_ids,
-                    multiple_choice_labels, lm_labels, classification_token_mask)
+                    multiple_choice_labels, lm_labels, multiple_choice_token_mask)
 
         def create_openai_model(self, config, input_ids, token_type_ids, position_ids,
-                                multiple_choice_labels, lm_labels, classification_token_mask):
+                                multiple_choice_labels, lm_labels, multiple_choice_token_mask):
             model = OpenAIGPTModel(config)
             hidden_states = model(input_ids, position_ids, token_type_ids)
             outputs = {
@@ -126,12 +127,34 @@ class OpenAIGPTModelTest(unittest.TestCase):
                 [self.batch_size, self.n_choices, self.seq_length, self.n_embd])
 
 
+        def create_openai_lm_head(self, config, input_ids, token_type_ids, position_ids,
+                                       multiple_choice_labels, lm_labels, multiple_choice_token_mask):
+            model = OpenAIGPTLMHeadModel(config)
+            loss = model(input_ids, position_ids, token_type_ids, lm_labels)
+            lm_logits = model(input_ids, position_ids, token_type_ids)
+            outputs = {
+                "loss": loss,
+                "lm_logits": lm_logits,
+            }
+            return outputs
+
+        def check_openai_lm_head_output(self, result):
+            total_voc = self.n_ctx + self.n_special + self.vocab_size
+            self.parent.assertListEqual(
+                list(result["lm_logits"].size()),
+                [self.batch_size, self.n_choices, self.seq_length, total_voc])
+
+        def check_openai_lm_head_loss_output(self, result):
+            self.parent.assertListEqual(
+                list(result["loss"].size()),
+                [])
+
         def create_openai_double_heads(self, config, input_ids, token_type_ids, position_ids,
-                                       multiple_choice_labels, lm_labels, classification_token_mask):
+                                       multiple_choice_labels, lm_labels, multiple_choice_token_mask):
             model = OpenAIGPTDoubleHeadsModel(config)
-            loss = model(input_ids, classification_token_mask, position_ids,
+            loss = model(input_ids, multiple_choice_token_mask, position_ids,
                          token_type_ids, lm_labels, multiple_choice_labels)
-            lm_logits, multiple_choice_logits = model(input_ids, classification_token_mask, position_ids, token_type_ids)
+            lm_logits, multiple_choice_logits = model(input_ids, multiple_choice_token_mask, position_ids, token_type_ids)
             outputs = {
                 "loss": loss,
                 "lm_logits": lm_logits,
@@ -166,6 +189,10 @@ class OpenAIGPTModelTest(unittest.TestCase):
         config_and_inputs = tester.prepare_config_and_inputs()
         output_result = tester.create_openai_model(*config_and_inputs)
         tester.check_openai_model_output(output_result)
+
+        output_result = tester.create_openai_lm_head(*config_and_inputs)
+        tester.check_openai_lm_head_output(output_result)
+        tester.check_openai_lm_head_loss_output(output_result)
 
         output_result = tester.create_openai_double_heads(*config_and_inputs)
         tester.check_openai_double_heads_output(output_result)
