@@ -149,19 +149,19 @@ class Conv1D(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, cfg, scale=False):
+    def __init__(self, nx, n_ctx, config, scale=False):
         super(Attention, self).__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
-        assert n_state % cfg.n_head == 0
+        assert n_state % config.n_head == 0
         self.register_buffer('b', torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
-        self.n_head = cfg.n_head
+        self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
         self.c_attn = Conv1D(n_state * 3, 1, nx)
         self.c_proj = Conv1D(n_state, 1, nx)
-        self.attn_dropout = nn.Dropout(cfg.attn_pdrop)
-        self.resid_dropout = nn.Dropout(cfg.resid_pdrop)
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def _attn(self, q, k, v):
         w = torch.matmul(q, k)
@@ -203,13 +203,13 @@ class Attention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, n_state, cfg):  # in MLP: n_state=3072 (4 * n_embd)
+    def __init__(self, n_state, config):  # in MLP: n_state=3072 (4 * n_embd)
         super(MLP, self).__init__()
-        nx = cfg.n_embd
+        nx = config.n_embd
         self.c_fc = Conv1D(n_state, 1, nx)
         self.c_proj = Conv1D(nx, 1, n_state)
-        self.act = ACT_FNS[cfg.afn]
-        self.dropout = nn.Dropout(cfg.resid_pdrop)
+        self.act = ACT_FNS[config.afn]
+        self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
         h = self.act(self.c_fc(x))
@@ -218,12 +218,12 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, cfg, scale=False):
+    def __init__(self, n_ctx, config, scale=False):
         super(Block, self).__init__()
-        nx = cfg.n_embd
-        self.attn = Attention(nx, n_ctx, cfg, scale)
+        nx = config.n_embd
+        self.attn = Attention(nx, n_ctx, config, scale)
         self.ln_1 = LayerNorm(nx)
-        self.mlp = MLP(4 * nx, cfg)
+        self.mlp = MLP(4 * nx, config)
         self.ln_2 = LayerNorm(nx)
 
     def forward(self, x):
@@ -237,9 +237,9 @@ class Block(nn.Module):
 class OpenAIGPTLMHead(nn.Module):
     """ Language Model Head for the transformer """
 
-    def __init__(self, model_embeddings_weights, cfg):
+    def __init__(self, model_embeddings_weights, config):
         super(OpenAIGPTLMHead, self).__init__()
-        self.n_embd = cfg.n_embd
+        self.n_embd = config.n_embd
         self.set_embeddings_weights(model_embeddings_weights)
 
     def set_embeddings_weights(self, model_embeddings_weights):
@@ -257,12 +257,12 @@ class OpenAIGPTLMHead(nn.Module):
 class OpenAIGPTMultipleChoiceHead(nn.Module):
     """ Classifier Head for the transformer """
 
-    def __init__(self, cfg):
+    def __init__(self, config):
         super(OpenAIGPTMultipleChoiceHead, self).__init__()
-        self.n_embd = cfg.n_embd
+        self.n_embd = config.n_embd
         # self.multiple_choice_token = multiple_choice_token
-        self.dropout = nn.Dropout2d(cfg.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
-        self.linear = nn.Linear(cfg.n_embd, 1)
+        self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
+        self.linear = nn.Linear(config.n_embd, 1)
 
         nn.init.normal_(self.linear.weight, std = 0.02)
         nn.init.normal_(self.linear.bias, 0)
@@ -428,15 +428,63 @@ class OpenAIGPTPreTrainedModel(nn.Module):
 
 
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
-    """ OpenAI GPT model """
+    """OpenAI GPT model ("Improving Language Understanding by Generative Pre-Training").
 
-    def __init__(self, cfg):
-        super(OpenAIGPTModel, self).__init__(cfg)
-        total_embeddings_size = cfg.vocab_size + cfg.n_special + cfg.n_ctx
-        self.embed = nn.Embedding(total_embeddings_size, cfg.n_embd)
-        self.drop = nn.Dropout(cfg.embd_pdrop)
-        block = Block(cfg.n_ctx, cfg, scale=True)
-        self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(cfg.n_layer)])
+    The main implementation difference between BERT and the OpenAI is the use, in OpenAI GPT, of a single embedding matrix
+    to store the word, special ([SEP], [CLS]...) and position embeddings.
+    The embeddings are ordered as follow in the word embeddings matrice:
+        [0,                                                         ----------------------
+         ...                                                        -> word embeddings
+         config.vocab_size - 1,                                     ______________________
+         config.vocab_size,
+         ...                                                        -> special embeddings
+         config.vocab_size + config.n_special - 1,                  ______________________
+         config.vocab_size + config.n_special,
+         ...                                                        -> position embeddings
+         total_num_embeddings - 1]                                  ______________________
+
+    where total_num_embeddings can be obtained as config.total_num_embeddings and is:
+        total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
+    You should use the associate indices to index the embeddings.
+
+    The special embeddings ([SEP], [CLS]...) are not pre-trained and need to be trained during the fine-tuning if you use them.
+    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
+
+    Params:
+        config: a OpenAIGPTConfig class instance with the configuration to build a new model
+
+    Inputs:
+        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
+            were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, config.vocab_size[
+        `position_ids`: an optional torch.LongTensor with the same shape as input_ids
+            with the position indices (selected in the range [config.vocab_size + config.n_special, config.vocab_size + config.n_special + config.n_ctx - 1[.
+        `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
+            You can use it to add a third embedding (the previous two being the word and position embeddings)
+            to each token in the sentence.
+
+    Outputs:
+        `hidden_states`: the encoded-hidden-states at the top of the model
+            as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
+            (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+
+    Example usage:
+    ```python
+    # Already been converted into BPE token ids
+    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+
+    config = modeling_openai.OpenAIGPTConfig()
+
+    model = modeling_openai.OpenAIGPTModel(config)
+    hidden_states = model(input_ids)
+    ```
+    """
+    def __init__(self, config):
+        super(OpenAIGPTModel, self).__init__(config)
+        total_embeddings_size = config.vocab_size + config.n_special + config.n_ctx
+        self.embed = nn.Embedding(total_embeddings_size, config.n_embd)
+        self.drop = nn.Dropout(config.embd_pdrop)
+        block = Block(config.n_ctx, config, scale=True)
+        self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(config.n_layer)])
 
         self.apply(self.init_weights)
         # nn.init.normal_(self.embed.weight, std=0.02)
@@ -480,11 +528,67 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         return hidden_states.view(*input_shape, hidden_states.size(-1))
 
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
-    """ OpenAI GPT model with language model and classification heads """
-    def __init__(self, cfg):
-        super(OpenAIGPTLMHeadModel, self).__init__(cfg)
-        self.transformer = OpenAIGPTModel(cfg)
-        self.lm_head = OpenAIGPTLMHead(self.transformer.embed.weight, cfg)
+    """OpenAI GPT model with a Language Modeling head ("Improving Language Understanding by Generative Pre-Training").
+
+    There are two main implementation differences between BERT and the OpenAI GPT:
+        - the use of an LM loss in OpenAI GPT which means the Transformer is trained to predict the NEXT token for each input token
+            vs. predict the SAME token for BERT (i.e. you need to shift your labels to the right)
+        - the use, in OpenAI GPT, of a single embedding matrix to store the word, special ([SEP], [CLS]...) and position embeddings.
+    The embeddings are ordered as follow in the word embeddings matrice:
+        [0,                                                         ----------------------
+         ...                                                        -> word embeddings
+         config.vocab_size - 1,                                     ______________________
+         config.vocab_size,
+         ...                                                        -> special embeddings
+         config.vocab_size + config.n_special - 1,                  ______________________
+         config.vocab_size + config.n_special,
+         ...                                                        -> position embeddings
+         total_num_embeddings - 1]                                  ______________________
+
+    where total_num_embeddings can be obtained as config.total_num_embeddings and is:
+        total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
+    You should use these indices to index the word, special and position embeddings.
+
+    The special embeddings ([SEP], [CLS]...) are not pre-trained and need to be trained during the fine-tuning if you use them.
+    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
+
+    Params:
+        config: a OpenAIGPTConfig class instance with the configuration to build a new model
+
+    Inputs:
+        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
+            were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, config.vocab_size[
+        `position_ids`: an optional torch.LongTensor with the same shape as input_ids
+            with the position indices (selected in the range [config.vocab_size + config.n_special, config.vocab_size + config.n_special + config.n_ctx - 1[.
+        `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
+            You can use it to add a third embedding (the previous two being the word and position embeddings)
+            to each token in the sentence.
+        `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
+            with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
+            is only computed for the labels set in [0, ..., vocab_size]
+
+    Outputs:
+        if `lm_labels` is not `None`:
+            Outputs the language modeling loss.
+        else:
+            `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, total_num_embeddings]
+                (or more generally [d_1, ..., d_n, total_num_embeddings] were d_1 ... d_n are the dimension of input_ids)
+
+    Example usage:
+    ```python
+    # Already been converted into BPE token ids
+    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+
+    config = modeling_openai.OpenAIGPTConfig()
+
+    model = modeling_openai.OpenAIGPTLMHeadModel(config)
+    lm_logits = model(input_ids)
+    ```
+    """
+    def __init__(self, config):
+        super(OpenAIGPTLMHeadModel, self).__init__(config)
+        self.transformer = OpenAIGPTModel(config)
+        self.lm_head = OpenAIGPTLMHead(self.transformer.embed.weight, config)
         self.apply(self.init_weights)
 
     def set_num_special_tokens(self, num_special_tokens):
@@ -502,12 +606,74 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         return lm_logits
 
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
-    """ OpenAI GPT model with language model and classification heads """
-    def __init__(self, cfg):
-        super(OpenAIGPTDoubleHeadsModel, self).__init__(cfg)
-        self.transformer = OpenAIGPTModel(cfg)
-        self.lm_head = OpenAIGPTLMHead(self.transformer.embed.weight, cfg)
-        self.multiple_choice_head = OpenAIGPTMultipleChoiceHead(cfg)
+    """OpenAI GPT model with a Language Modeling and a Multiple Choice heads ("Improving Language Understanding by Generative Pre-Training").
+
+    There are two main implementation differences between BERT and the OpenAI GPT:
+        - the use of an LM loss in OpenAI GPT which means the Transformer is trained to predict the NEXT token for each input token
+            vs. predict the SAME token for BERT (i.e. you need to shift your labels to the right)
+        - the use, in OpenAI GPT, of a single embedding matrix to store the word, special ([SEP], [CLS]...) and position embeddings.
+    The embeddings are ordered as follow in the word embeddings matrice:
+        [0,                                                         ----------------------
+         ...                                                        -> word embeddings
+         config.vocab_size - 1,                                     ______________________
+         config.vocab_size,
+         ...                                                        -> special embeddings
+         config.vocab_size + config.n_special - 1,                  ______________________
+         config.vocab_size + config.n_special,
+         ...                                                        -> position embeddings
+         total_num_embeddings - 1]                                  ______________________
+
+    where total_num_embeddings can be obtained as config.total_num_embeddings and is:
+        total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
+    You should use these indices to index the word, special and position embeddings.
+
+    The special embeddings ([SEP], [CLS]...) are not pre-trained and need to be trained during the fine-tuning if you use them.
+    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
+
+    Params:
+        config: a OpenAIGPTConfig class instance with the configuration to build a new model
+
+    Inputs:
+        `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length]
+            with the word BPE token indices selected in the range [0, config.vocab_size[
+        `multiple_choice_token_mask`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length]
+            with a value of 1 were the last hidden state is (usually the [CLS] token) and 0 otherwise.
+        `position_ids`: an optional torch.LongTensor with the same shape as input_ids
+            with the position indices (selected in the range [config.vocab_size + config.n_special,
+            config.vocab_size + config.n_special + config.n_ctx - 1[.
+        `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
+            You can use it to add a third embedding (the previous two being the word and position embeddings)
+            to each token in the sentence.
+        `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, num_choices, sequence_length]
+            with indices selected in [-1, 0, ..., total_num_embeddings]. All labels set to -1 are ignored (masked), the loss
+            is only computed for the labels set in [0, ..., total_num_embeddings]
+        `multiple_choice_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size]
+            with indices selected in [0, ..., num_choices].
+
+    Outputs:
+        if `lm_labels` and `multiple_choice_labels` are not `None`:
+            Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
+        else: a tuple with
+            `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, total_num_embeddings]
+            `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
+
+    Example usage:
+    ```python
+    # Already been converted into BPE token ids
+    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+    multiple_choice_token_mask = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+    config = modeling_openai.OpenAIGPTConfig()
+
+    model = modeling_openai.OpenAIGPTLMHeadModel(config)
+    lm_logits, multiple_choice_logits = model(input_ids, multiple_choice_token_mask)
+    ```
+    """
+    def __init__(self, config):
+        super(OpenAIGPTDoubleHeadsModel, self).__init__(config)
+        self.transformer = OpenAIGPTModel(config)
+        self.lm_head = OpenAIGPTLMHead(self.transformer.embed.weight, config)
+        self.multiple_choice_head = OpenAIGPTMultipleChoiceHead(config)
         self.apply(self.init_weights)
 
     def set_num_special_tokens(self, num_special_tokens):
@@ -517,9 +683,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
 
     def forward(self, input_ids, multiple_choice_token_mask, position_ids=None, token_type_ids=None,
                 lm_labels=None, multiple_choice_labels=None):
-        """ input_ids should be of shape B x C x S
-            lm_labels can be masked using the -1 value
-        """
         hidden_states = self.transformer(input_ids, position_ids, token_type_ids)
         lm_logits = self.lm_head(hidden_states)
         multiple_choice_logits = self.multiple_choice_head(hidden_states, multiple_choice_token_mask)
