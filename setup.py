@@ -37,8 +37,8 @@ from setuptools import find_packages, setup
 
 setup(
     name="pytorch_pretrained_bert",
-    version="0.4.0",
-    author="Thomas Wolf, Victor Sanh, Tim Rault, Google AI Language Team Authors",
+    version="0.5.0",
+    author="Thomas Wolf, Victor Sanh, Tim Rault, Google AI Language Team Authors, Open AI team Authors",
     author_email="thomas@huggingface.co",
     description="PyTorch version of Google AI BERT model with script to load Google pre-trained models",
     long_description=open("README.md", "r", encoding='utf-8').read(),
@@ -55,7 +55,7 @@ setup(
                       'tqdm'],
     entry_points={
       'console_scripts': [
-        "pytorch_pretrained_bert=pytorch_pretrained_bert.__main__:main"
+        "pytorch_pretrained_bert=pytorch_pretrained_bert.__main__:main",
       ]
     },
     python_requires='>=3.5.0',
