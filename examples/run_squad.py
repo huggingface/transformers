@@ -684,8 +684,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         for entry in nbest:
             total_scores.append(entry.start_logit + entry.end_logit)
             if not best_non_null_entry:
-                if entry.text:
-                    best_non_null_entry = entry
+                best_non_null_entry = entry
 
         probs = _compute_softmax(total_scores)
 
@@ -700,7 +699,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
         assert len(nbest_json) >= 1
 
-        if not is_version_2:
+        if not is_version_2 or not best_non_null_entry:
             all_predictions[example.qas_id] = nbest_json[0]["text"]
         else:
             # predict "" iff the null score - the score of best non-null > threshold
@@ -714,13 +713,16 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
         all_nbest_json[example.qas_id] = nbest_json
 
-    logger.info("Writing predictions to: %s...ok" % (output_prediction_file))
+    logger.info("Writing predictions to: %s...start" % (output_prediction_file))
+
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(all_predictions, indent=4) + "\n")
+    logger.info("Writing predictions to: %s...ok" % (output_prediction_file))
 
-    logger.info("Writing nbest to: %s...ok" % (output_nbest_file))
+    logger.info("Writing nbest to: %s...start" % (output_nbest_file))
     with open(output_nbest_file, "w") as writer:
         writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
+    logger.info("Writing nbest to: %s...ok" % (output_nbest_file))
 
 
 def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
