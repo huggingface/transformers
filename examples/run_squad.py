@@ -930,6 +930,10 @@ def main():
                         help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
+    parser.add_argument('--null_score_diff_threshold',
+                        type=float, 
+                        default=-1.66, 
+                        help='best f1 threshold. Typical values are between -1.0 and -5.0')
 
     args = parser.parse_args()
 
