@@ -80,10 +80,10 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
         # The convention in BERT is:
         # (a) For sequence pairs:
         #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-        #  type_ids: 0   0  0    0    0     0       0 0    1  1  1  1   1 1
+        #  type_ids:   0   0  0    0    0     0      0   0    1  1  1   1  1   1
         # (b) For single sequences:
         #  tokens:   [CLS] the dog is hairy . [SEP]
-        #  type_ids: 0   0   0   0  0     0 0
+        #  type_ids:   0   0   0   0  0     0   0
         #
         # Where "type_ids" are used to indicate whether this is the first
         # sequence or the second sequence. The embedding vectors for `type=0` and
