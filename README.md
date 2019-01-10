@@ -1,4 +1,4 @@
-# PyTorch Pretrained Bert - PyTorch Pretrained OpenAI GPT
+# PyTorch Pretrained Bert (also with PyTorch Pretrained OpenAI GPT)
 
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
@@ -125,18 +125,18 @@ from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 # Tokenized input
-text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
 tokenized_text = tokenizer.tokenize(text)
 
 # Mask a token that we will try to predict back with `BertForMaskedLM`
 masked_index = 6
 tokenized_text[masked_index] = '[MASK]'
-assert tokenized_text == ['who', 'was', 'jim', 'henson', '?', 'jim', '[MASK]', 'was', 'a', 'puppet', '##eer']
+assert tokenized_text == ['[CLS]', 'who', 'was', 'jim', 'henson', '?', '[SEP]', 'jim', '[MASK]', 'was', 'a', 'puppet', '##eer', '[SEP]']
 
 # Convert token to vocabulary indices
 indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
 # Define sentence A and B indices associated to 1st and 2nd sentences (see paper)
-segments_ids = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]
+segments_ids = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]
 
 # Convert inputs to PyTorch tensors
 tokens_tensor = torch.tensor([indexed_tokens])

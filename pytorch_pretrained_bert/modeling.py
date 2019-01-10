@@ -584,7 +584,7 @@ class BertModel(BertPreTrainedModel):
                 to the last attention block of shape [batch_size, sequence_length, hidden_size],
         `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a
             classifier pretrained on top of the hidden state associated to the first character of the
-            input (`CLF`) to train on the Next-Sentence task (see BERT's paper).
+            input (`CLS`) to train on the Next-Sentence task (see BERT's paper).
 
     Example usage:
     ```python
