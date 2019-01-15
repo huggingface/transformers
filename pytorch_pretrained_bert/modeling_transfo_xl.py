@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Transformer XL model.
-    Directly adapted from https://github.com/kimiyoung/transformer-xl.
+    Adapted from https://github.com/kimiyoung/transformer-xl.
     In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
 
@@ -40,7 +40,7 @@ from .file_utils import cached_path
 logger = logging.getLogger(__name__)
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'transfo-xl': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl.tar.gz",
+    'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103.tar.gz",
 }
 CONFIG_NAME = 'transfo_xl_config.json'
 WEIGHTS_NAME = 'pytorch_model.bin'
@@ -59,12 +59,13 @@ class TransfoXLConfig(object):
                  div_val=4,
                  pre_lnorm=False,
                  n_layer=18,
-                 tgt_len=256,
+                 tgt_len=128,
                  ext_len=0,
-                 mem_len=256,
-                 same_length=False,
+                 mem_len=1600,
+                 clamp_len=1000,
+                 same_length=True,
+                 proj_share_all_but_first=True,
                  attn_type=0,
-                 clamp_len=-1,
                  sample_softmax=-1,
                  adaptive=True,
                  tie_weight=True,
@@ -93,6 +94,7 @@ class TransfoXLConfig(object):
             ext_len: length of the extended context
             mem_len: length of the retained previous heads
             same_length: use the same attn length for all tokens
+            proj_share_all_but_first: True to share all but first projs, False not to share.
             attn_type: attention type. 0 for Transformer-XL, 1 for Shaw et al, 2 for Vaswani et al, 3 for Al Rfou et al.
             clamp_len: use the same pos embeddings after clamp_len
             sample_softmax: number of samples in sampled softmax
@@ -118,7 +120,10 @@ class TransfoXLConfig(object):
             self.cutoffs = []
             self.cutoffs.extend(cutoffs)
             self.tie_weight = tie_weight
-            self.tie_projs = [False] + [True] * len(self.cutoffs)
+            if proj_share_all_but_first:
+                self.tie_projs = [False] + [True] * len(self.cutoffs)
+            else:
+                self.tie_projs = [False] + [False] * len(self.cutoffs)
             self.d_model = d_model
             self.d_embed = d_embed
             self.d_head = d_head
@@ -423,7 +428,7 @@ class RelPartialLearnableMultiHeadAttn(RelMultiHeadAttn):
         r_head_k = r_head_k.view(rlen, self.n_head, self.d_head)                # qlen x n_head x d_head
 
         #### compute attention score
-        rw_head_q = w_head_q + self.r_w_bias                                         # qlen x bsz x n_head x d_head
+        rw_head_q = w_head_q + self.r_w_bias                                    # qlen x bsz x n_head x d_head
         AC = torch.einsum('ibnd,jbnd->ijbn', (rw_head_q, w_head_k))             # qlen x klen x bsz x n_head
 
         rr_head_q = w_head_q + self.r_r_bias
@@ -915,21 +920,25 @@ class MemTransformerLM(nn.Module):
 
         return core_out, new_mems
 
-    def forward(self, data, target, *mems):
+    def forward(self, data, target=None, *mems):
         # nn.DataParallel does not allow size(0) tensors to be broadcasted.
         # So, have to initialize size(0) mems inside the model forward.
         # Moreover, have to return new_mems to allow nn.DataParallel to piece
         # them together.
         if not mems: mems = self.init_mems()
 
-        tgt_len = target.size(0)
         hidden, new_mems = self._forward(data, mems=mems)
+        if target is None:
+            if new_mems is None:
+                return [hidden]
+            else:
+                return [hidden] + new_mems
 
+        tgt_len = target.size(0)
         pred_hid = hidden[-tgt_len:]
         if self.sample_softmax > 0 and self.training:
             assert self.tie_weight
-            logit = sample_logits(self.word_emb,
-                self.out_layer.bias, target, pred_hid, self.sampler)
+            logit = sample_logits(self.word_emb, self.out_layer.bias, target, pred_hid, self.sampler)
             loss = -F.log_softmax(logit, -1)[:, :, 0]
         else:
             loss = self.crit(pred_hid.view(-1, pred_hid.size(-1)), target.view(-1))
@@ -1010,7 +1019,7 @@ class TransfoXLPreTrainedModel(nn.Module):
         pass
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name, num_special_tokens=0, state_dict=None, cache_dir=None,
+    def from_pretrained(cls, pretrained_model_name, state_dict=None, cache_dir=None,
                         *inputs, **kwargs):
         """
         Instantiate a TransfoXLPreTrainedModel from a pre-trained model file or a pytorch state dict.
@@ -1100,7 +1109,7 @@ class TransfoXLPreTrainedModel(nn.Module):
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + '.')
-        load(model.transformer if hasattr(model, 'transformer') else model, prefix='')
+        # load(model.transformer if hasattr(model, 'transformer') else model, prefix='')
         if len(missing_keys) > 0:
             logger.info("Weights of {} not initialized from pretrained model: {}".format(
                 model.__class__.__name__, missing_keys))
@@ -1110,9 +1119,6 @@ class TransfoXLPreTrainedModel(nn.Module):
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                model.__class__.__name__, "\n\t".join(error_msgs)))
-        # Add additional embeddings for special tokens if needed
-        if num_special_tokens != config.n_special:
-            model.set_num_special_tokens(num_special_tokens)
         if tempdir:
             # Clean up temp dir
             shutil.rmtree(tempdir)
