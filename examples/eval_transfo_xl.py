@@ -44,18 +44,18 @@ parser = argparse.ArgumentParser(description='PyTorch Transformer Language Model
 parser.add_argument('--model_name', type=str, default='transfo-xl-wt103',
                     choices=['transfo-xl-wt103'], #, 'lm1b', 'enwik8', 'text8'],
                     help='pretrained model name')
-parser.add_argument('--split', type=str, default='all',
+parser.add_argument('--split', type=str, default='test',
                     choices=['all', 'valid', 'test'],
                     help='which split to evaluate')
 parser.add_argument('--batch_size', type=int, default=10,
                     help='batch size')
-parser.add_argument('--tgt_len', type=int, default=5,
+parser.add_argument('--tgt_len', type=int, default=128,
                     help='number of tokens to predict')
 parser.add_argument('--ext_len', type=int, default=0,
                     help='length of the extended context')
-parser.add_argument('--mem_len', type=int, default=0,
+parser.add_argument('--mem_len', type=int, default=1600,
                     help='length of the retained previous heads')
-parser.add_argument('--clamp_len', type=int, default=-1,
+parser.add_argument('--clamp_len', type=int, default=1000,
                     help='max positional embedding index')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
