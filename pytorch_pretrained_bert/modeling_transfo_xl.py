@@ -34,6 +34,7 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
 from .modeling import BertLayerNorm as LayerNorm
+from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
 from .file_utils import cached_path
 
 logger = logging.getLogger(__name__)
@@ -50,25 +51,26 @@ class TransfoXLConfig(object):
     def __init__(self,
                  vocab_size_or_config_json_file=267735,
                  cutoffs=[20000, 40000, 200000],
-                 d_model=410,
-                 d_embed=410,
-                 d_head=41,
-                 d_inner=2100,
-                 div_val=1.0,
+                 d_model=1024,
+                 d_embed=1024,
+                 n_head=16,
+                 d_head=64,
+                 d_inner=4096,
+                 div_val=4,
                  pre_lnorm=False,
-                 n_layer=16,
-                 n_head=10,
-                 tgt_len=150,
+                 n_layer=18,
+                 tgt_len=256,
                  ext_len=0,
-                 mem_len=150,
+                 mem_len=256,
                  same_length=False,
                  attn_type=0,
                  clamp_len=-1,
                  sample_softmax=-1,
                  adaptive=True,
-                 tied=True,
+                 tie_weight=True,
                  dropout=0.1,
                  dropatt=0.0,
+                 untie_r=True,
                  init="normal",
                  init_range=0.01,
                  proj_init_std=0.01,
@@ -95,10 +97,11 @@ class TransfoXLConfig(object):
             clamp_len: use the same pos embeddings after clamp_len
             sample_softmax: number of samples in sampled softmax
             adaptive: use adaptive softmax
-            tied: tie the word embedding and softmax weights
+            tie_weight: tie the word embedding and softmax weights
             dropout: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
             dropatt: The dropout ratio for the attention probabilities.
+            untie_r: untie relative position biases           
             embd_pdrop: The dropout ratio for the embeddings.
             init: parameter initializer to use
             init_range: parameters initialized by U(-init_range, init_range).
@@ -111,9 +114,10 @@ class TransfoXLConfig(object):
             for key, value in json_config.items():
                 self.__dict__[key] = value
         elif isinstance(vocab_size_or_config_json_file, int):
-            self.vocab_size = vocab_size_or_config_json_file
+            self.n_token = vocab_size_or_config_json_file
             self.cutoffs = []
             self.cutoffs.extend(cutoffs)
+            self.tie_weight = tie_weight
             self.tie_projs = [False] + [True] * len(self.cutoffs)
             self.d_model = d_model
             self.d_embed = d_embed
@@ -131,9 +135,9 @@ class TransfoXLConfig(object):
             self.clamp_len = clamp_len
             self.sample_softmax = sample_softmax
             self.adaptive = adaptive
-            self.tied = tied
             self.dropout = dropout
             self.dropatt = dropatt
+            self.untie_r = untie_r
             self.init = init
             self.init_range = init_range
             self.proj_init_std = proj_init_std
@@ -141,10 +145,6 @@ class TransfoXLConfig(object):
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
-
-    @property
-    def total_num_embeddings(self):
-        return self.vocab_size + self.n_special + self.n_ctx
 
     @classmethod
     def from_dict(cls, json_object):
@@ -230,7 +230,7 @@ class PositionwiseFF(nn.Module):
 
 class MultiHeadAttn(nn.Module):
     def __init__(self, n_head, d_model, d_head, dropout, dropatt=0, 
-                 pre_lnorm=False):
+                 pre_lnorm=False, r_r_bias=None, r_w_bias=None):
         super(MultiHeadAttn, self).__init__()
 
         self.n_head = n_head
@@ -250,6 +250,13 @@ class MultiHeadAttn(nn.Module):
         self.scale = 1 / (d_head ** 0.5)
 
         self.pre_lnorm = pre_lnorm
+
+        if r_r_bias is None or r_w_bias is None: # Biases are not shared
+            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+        else:
+            self.r_r_bias = r_r_bias
+            self.r_w_bias = r_w_bias
 
     def forward(self, h, attn_mask=None, mems=None):
         ##### multihead attention
@@ -304,7 +311,8 @@ class MultiHeadAttn(nn.Module):
 
 class RelMultiHeadAttn(nn.Module):
     def __init__(self, n_head, d_model, d_head, dropout, dropatt=0,
-                 tgt_len=None, ext_len=None, mem_len=None, pre_lnorm=False):
+                 tgt_len=None, ext_len=None, mem_len=None, pre_lnorm=False,
+                 r_r_bias=None, r_w_bias=None):
         super(RelMultiHeadAttn, self).__init__()
 
         self.n_head = n_head
@@ -323,6 +331,13 @@ class RelMultiHeadAttn(nn.Module):
         self.scale = 1 / (d_head ** 0.5)
 
         self.pre_lnorm = pre_lnorm
+
+        if r_r_bias is None or r_w_bias is None: # Biases are not shared
+            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+        else:
+            self.r_r_bias = r_r_bias
+            self.r_w_bias = r_w_bias
 
     def _parallelogram_mask(self, h, w, left=False):
         mask = torch.ones((h, w)).byte()
@@ -377,7 +392,7 @@ class RelPartialLearnableMultiHeadAttn(RelMultiHeadAttn):
 
         self.r_net = nn.Linear(self.d_model, self.n_head * self.d_head, bias=False)
 
-    def forward(self, w, r, r_w_bias, r_r_bias, attn_mask=None, mems=None):
+    def forward(self, w, r, attn_mask=None, mems=None):
         qlen, rlen, bsz = w.size(0), r.size(0), w.size(1)
 
         if mems is not None:
@@ -408,10 +423,10 @@ class RelPartialLearnableMultiHeadAttn(RelMultiHeadAttn):
         r_head_k = r_head_k.view(rlen, self.n_head, self.d_head)                # qlen x n_head x d_head
 
         #### compute attention score
-        rw_head_q = w_head_q + r_w_bias                                         # qlen x bsz x n_head x d_head
+        rw_head_q = w_head_q + self.r_w_bias                                         # qlen x bsz x n_head x d_head
         AC = torch.einsum('ibnd,jbnd->ijbn', (rw_head_q, w_head_k))             # qlen x klen x bsz x n_head
 
-        rr_head_q = w_head_q + r_r_bias
+        rr_head_q = w_head_q + self.r_r_bias
         BD = torch.einsum('ibnd,jnd->ijbn', (rr_head_q, r_head_k))              # qlen x klen x bsz x n_head
         BD = self._rel_shift(BD)
 
@@ -582,9 +597,9 @@ class RelPartialLearnableDecoderLayer(nn.Module):
         self.pos_ff = PositionwiseFF(d_model, d_inner, dropout, 
                                      pre_lnorm=kwargs.get('pre_lnorm'))
 
-    def forward(self, dec_inp, r, r_w_bias, r_r_bias, dec_attn_mask=None, mems=None):
+    def forward(self, dec_inp, r, dec_attn_mask=None, mems=None):
 
-        output = self.dec_attn(dec_inp, r, r_w_bias, r_r_bias,
+        output = self.dec_attn(dec_inp, r,
                                attn_mask=dec_attn_mask,
                                mems=mems)
         output = self.pos_ff(output)
@@ -659,9 +674,9 @@ class MemTransformerLM(nn.Module):
                  dropout, dropatt, tie_weight=True, d_embed=None, 
                  div_val=1, tie_projs=[False], pre_lnorm=False,
                  tgt_len=None, ext_len=None, mem_len=None, 
-                 cutoffs=[], adapt_inp=False,
+                 cutoffs=[], adapt_inp=False, untie_r=False,
                  same_length=False, attn_type=0, clamp_len=-1, 
-                 sample_softmax=-1):
+                 sample_softmax=-1, **kwargs):
         super(MemTransformerLM, self).__init__()
         self.n_token = n_token
 
@@ -685,6 +700,10 @@ class MemTransformerLM(nn.Module):
 
         self.attn_type = attn_type
 
+        if not untie_r:
+            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+
         self.layers = nn.ModuleList()
         if attn_type == 0: # the default attention
             for i in range(n_layer):
@@ -692,7 +711,9 @@ class MemTransformerLM(nn.Module):
                     RelPartialLearnableDecoderLayer(
                         n_head, d_model, d_head, d_inner, dropout,
                         tgt_len=tgt_len, ext_len=ext_len, mem_len=mem_len,
-                        dropatt=dropatt, pre_lnorm=pre_lnorm)
+                        dropatt=dropatt, pre_lnorm=pre_lnorm,
+                        r_w_bias=None if untie_r else self.r_w_bias,
+                        r_r_bias=None if untie_r else self.r_r_bias)
                 )
         elif attn_type == 1: # learnable embeddings
             for i in range(n_layer):
@@ -700,14 +721,18 @@ class MemTransformerLM(nn.Module):
                     RelLearnableDecoderLayer(
                         n_head, d_model, d_head, d_inner, dropout,
                         tgt_len=tgt_len, ext_len=ext_len, mem_len=mem_len,
-                        dropatt=dropatt, pre_lnorm=pre_lnorm)
+                        dropatt=dropatt, pre_lnorm=pre_lnorm,
+                        r_w_bias=None if untie_r else self.r_w_bias,
+                        r_r_bias=None if untie_r else self.r_r_bias)
                 )
         elif attn_type in [2, 3]: # absolute embeddings
             for i in range(n_layer):
                 self.layers.append(
                     DecoderLayer(
                         n_head, d_model, d_head, d_inner, dropout,
-                        dropatt=dropatt, pre_lnorm=pre_lnorm)
+                        dropatt=dropatt, pre_lnorm=pre_lnorm,
+                        r_w_bias=None if untie_r else self.r_w_bias,
+                        r_r_bias=None if untie_r else self.r_r_bias)
                 )
 
         self.sample_softmax = sample_softmax
@@ -738,21 +763,11 @@ class MemTransformerLM(nn.Module):
         self.same_length = same_length
         self.clamp_len = clamp_len
 
-        self._create_params()
-
-    def backward_compatible(self):
-        self.sample_softmax = -1
-
-    def _create_params(self):
         if self.attn_type == 0: # default attention
             self.pos_emb = PositionalEmbedding(self.d_model)
-            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
         elif self.attn_type == 1: # learnable
             self.r_emb = nn.Parameter(torch.Tensor(
                     self.n_layer, self.max_klen, self.n_head, self.d_head))
-            self.r_w_bias = nn.Parameter(torch.Tensor(
-                    self.n_layer, self.n_head, self.d_head))
             self.r_bias = nn.Parameter(torch.Tensor(
                     self.n_layer, self.max_klen, self.n_head))
         elif self.attn_type == 2: # absolute standard
@@ -760,6 +775,10 @@ class MemTransformerLM(nn.Module):
         elif self.attn_type == 3: # absolute deeper SA
             self.r_emb = nn.Parameter(torch.Tensor(
                     self.n_layer, self.max_klen, self.n_head, self.d_head))
+
+    def backward_compatible(self):
+        self.sample_softmax = -1
+
 
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.tgt_len = tgt_len
@@ -937,13 +956,13 @@ class TransfoXLPreTrainedModel(nn.Module):
                 ))
         self.config = config
 
-    def init_weight(weight):
+    def init_weight(self, weight):
         if self.config.init == 'uniform':
             nn.init.uniform_(weight, -self.config.init_range, self.config.init_range)
         elif self.config.init == 'normal':
             nn.init.normal_(weight, 0.0, self.config.init_std)
 
-    def init_bias(bias):
+    def init_bias(self, bias):
         nn.init.constant_(bias, 0.0)
 
     def init_weights(self, m):
@@ -1100,89 +1119,11 @@ class TransfoXLPreTrainedModel(nn.Module):
         return model
 
 
-
-
-
-
-###################
-
-
-
-
-class TransfoXLLMHead(nn.Module):
-    """ Language Model Head for the transformer """
-
-    def __init__(self, model_embeddings_weights, config):
-        super(TransfoXLLMHead, self).__init__()
-        self.n_embd = config.n_embd
-        self.set_embeddings_weights(model_embeddings_weights)
-
-    def set_embeddings_weights(self, model_embeddings_weights):
-        embed_shape = model_embeddings_weights.shape
-        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
-        self.decoder.weight = model_embeddings_weights # Tied weights
-
-    def forward(self, hidden_state):
-        # Truncated Language modeling logits (we remove the last token)
-        # h_trunc = h[:, :-1].contiguous().view(-1, self.n_embd)
-        lm_logits = self.decoder(hidden_state)
-        return lm_logits
-
-
-class TransfoXLMultipleChoiceHead(nn.Module):
-    """ Classifier Head for the transformer """
-
-    def __init__(self, config):
-        super(TransfoXLMultipleChoiceHead, self).__init__()
-        self.n_embd = config.n_embd
-        # self.multiple_choice_token = multiple_choice_token
-        self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
-        self.linear = nn.Linear(config.n_embd, 1)
-
-        nn.init.normal_(self.linear.weight, std = 0.02)
-        nn.init.normal_(self.linear.bias, 0)
-
-    def forward(self, hidden_states, multiple_choice_token_mask):
-        # Classification logits
-        # hidden_states = hidden_states.view(-1, self.n_embd)
-        # multiple_choice_token_mask = multiple_choice_token_mask.view(-1, 1).expand_as(hidden_states)
-        multiple_choice_h = hidden_states * multiple_choice_token_mask.unsqueeze(-1)
-        multiple_choice_h = multiple_choice_h.sum(dim=-2)
-        # flat = x[..., 0].contiguous().view(-1)
-        # multiple_choice_h = multiple_choice_h[flat == self.multiple_choice_token, :]
-        # multiple_choice_h = multiple_choice_h.view(-1, x.size(1), self.n_embd, 1)
-        # # This double transposition is there to replicate the behavior
-        # # of the noise_shape argument in the tensorflow
-        # # implementation.  For more details, see
-        # # https://github.com/huggingface/pytorch-openai-transformer-lm/issues/11
-        # multiple_choice_h = self.dropout(multiple_choice_h.transpose(1, 2)).transpose(1, 2)
-        # multiple_choice_h = multiple_choice_h.contiguous().view(-1, self.n_embd)
-        multiple_choice_logits = self.linear(multiple_choice_h).squeeze(-1)
-        return multiple_choice_logits
-
-
 class TransfoXLModel(TransfoXLPreTrainedModel):
-    """OpenAI GPT model ("Improving Language Understanding by Generative Pre-Training").
-
-    The main implementation difference between BERT and the OpenAI is the use, in OpenAI GPT, of a single embedding matrix
-    to store the word, special ([SEP], [CLS]...) and position embeddings.
-    The embeddings are ordered as follow in the word embeddings matrice:
-        [0,                                                         ----------------------
-         ...                                                        -> word embeddings
-         config.vocab_size - 1,                                     ______________________
-         config.vocab_size,
-         ...                                                        -> special embeddings
-         config.vocab_size + config.n_special - 1,                  ______________________
-         config.vocab_size + config.n_special,
-         ...                                                        -> position embeddings
-         total_num_embeddings - 1]                                  ______________________
-
-    where total_num_embeddings can be obtained as config.total_num_embeddings and is:
-        total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
-    You should use the associate indices to index the embeddings.
-
-    The special embeddings ([SEP], [CLS]...) are not pre-trained and need to be trained during the fine-tuning if you use them.
-    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
+    """ Transformer XL model
+        From "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context"
+        by Zihang Dai*, Zhilin Yang*, Yiming Yang, William W. Cohen, Jaime Carbonell,
+           Quoc V. Le, Ruslan Salakhutdinov (*: equal contribution)
 
     Params:
         config: a TransfoXLConfig class instance with the configuration to build a new model
@@ -1214,219 +1155,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     """
     def __init__(self, config):
         super(TransfoXLModel, self).__init__(config)
-        total_embeddings_size = config.vocab_size + config.n_special + config.n_ctx
-        self.embed = nn.Embedding(total_embeddings_size, config.n_embd)
-        self.drop = nn.Dropout(config.embd_pdrop)
-        block = Block(config.n_ctx, config, scale=True)
-        self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(config.n_layer)])
-
+        self.transformer = MemTransformerLM(**config.to_dict())
         self.apply(self.init_weights)
-        # nn.init.normal_(self.embed.weight, std=0.02)
-
-    def set_num_special_tokens(self, num_special_tokens):
-        " Update input embeddings with new embedding matrice "
-        # Update config
-        self.config.n_special = num_special_tokens
-        # # Build new embeddings and initialize
-        old_embed = self.embed
-        self.embed = nn.Embedding(self.config.total_num_embeddings, self.config.n_embd)
-        # Initialize all new embeddings (in particular the special tokens)
-        self.init_weights(self.embed)
-        # Copy word and positional embeddings from the previous weights
-        self.embed.weight.data[:self.config.vocab_size, :] = old_embed.weight.data[:self.config.vocab_size, :]
-        self.embed.weight.data[-self.config.n_ctx:, :] = old_embed.weight.data[-self.config.n_ctx:, :]
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None):
-        if position_ids is None:
-            start = self.config.vocab_size + self.config.n_special
-            end = start + input_ids.size(-1)
-            position_ids = torch.arange(start, end, dtype=torch.long, device=input_ids.device)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_ids.size(-1))
-        position_ids = position_ids.view(-1, position_ids.size(-1))
-
-        inputs_embeds = self.embed(input_ids)
-        position_embeds = self.embed(position_ids)
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
-            token_type_embeds = self.embed(token_type_ids)
-        else:
-            token_type_embeds = 0
-        # Add the position information to the input embeddings
-        # h = e.sum(dim=2)
-        hidden_states = inputs_embeds + position_embeds + token_type_embeds
-        for block in self.h:
-            hidden_states = block(hidden_states)
-        return hidden_states.view(*input_shape, hidden_states.size(-1))
-
-class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
-    """OpenAI GPT model with a Language Modeling head ("Improving Language Understanding by Generative Pre-Training").
-
-    There are two main implementation differences between BERT and the OpenAI GPT:
-        - the use of an LM loss in OpenAI GPT which means the Transformer is trained to predict the NEXT token for each input token
-            vs. predict the SAME token for BERT (i.e. you need to shift your labels to the right)
-        - the use, in OpenAI GPT, of a single embedding matrix to store the word, special ([SEP], [CLS]...) and position embeddings.
-    The embeddings are ordered as follow in the word embeddings matrice:
-        [0,                                                         ----------------------
-         ...                                                        -> word embeddings
-         config.vocab_size - 1,                                     ______________________
-         config.vocab_size,
-         ...                                                        -> special embeddings
-         config.vocab_size + config.n_special - 1,                  ______________________
-         config.vocab_size + config.n_special,
-         ...                                                        -> position embeddings
-         total_num_embeddings - 1]                                  ______________________
-
-    where total_num_embeddings can be obtained as config.total_num_embeddings and is:
-        total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
-    You should use these indices to index the word, special and position embeddings.
-
-    The special embeddings ([SEP], [CLS]...) are not pre-trained and need to be trained during the fine-tuning if you use them.
-    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
-
-    Params:
-        config: a TransfoXLConfig class instance with the configuration to build a new model
-
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
-            were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, config.vocab_size[
-        `position_ids`: an optional torch.LongTensor with the same shape as input_ids
-            with the position indices (selected in the range [config.vocab_size + config.n_special, config.vocab_size + config.n_special + config.n_ctx - 1[.
-        `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
-            You can use it to add a third embedding (the previous two being the word and position embeddings)
-            to each token in the sentence.
-        `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
-            with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
-            is only computed for the labels set in [0, ..., vocab_size]
-
-    Outputs:
-        if `lm_labels` is not `None`:
-            Outputs the language modeling loss.
-        else:
-            `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, total_num_embeddings]
-                (or more generally [d_1, ..., d_n, total_num_embeddings] were d_1 ... d_n are the dimension of input_ids)
-
-    Example usage:
-    ```python
-    # Already been converted into BPE token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-
-    config = modeling_transfo_xl.TransfoXLConfig()
-
-    model = modeling_transfo_xl.TransfoXLLMHeadModel(config)
-    lm_logits = model(input_ids)
-    ```
-    """
-    def __init__(self, config):
-        super(TransfoXLLMHeadModel, self).__init__(config)
-        self.transformer = TransfoXLModel(config)
-        self.lm_head = TransfoXLLMHead(self.transformer.embed.weight, config)
-        self.apply(self.init_weights)
-
-    def set_num_special_tokens(self, num_special_tokens):
-        " Update input and output embeddings with new embedding matrice "
-        self.transformer.set_num_special_tokens(num_special_tokens)
-        self.lm_head.set_embeddings_weights(self.transformer.embed.weight)
-
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None):
-        hidden_states = self.transformer(input_ids, position_ids, token_type_ids)
-        lm_logits = self.lm_head(hidden_states)
-        if lm_labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1))
-            return loss
-        return lm_logits
-
-class TransfoXLDoubleHeadsModel(TransfoXLPreTrainedModel):
-    """OpenAI GPT model with a Language Modeling and a Multiple Choice heads ("Improving Language Understanding by Generative Pre-Training").
-
-    There are two main implementation differences between BERT and the OpenAI GPT:
-        - the use of an LM loss in OpenAI GPT which means the Transformer is trained to predict the NEXT token for each input token
-            vs. predict the SAME token for BERT (i.e. you need to shift your labels to the right)
-        - the use, in OpenAI GPT, of a single embedding matrix to store the word, special ([SEP], [CLS]...) and position embeddings.
-    The embeddings are ordered as follow in the word embeddings matrice:
-        [0,                                                         ----------------------
-         ...                                                        -> word embeddings
-         config.vocab_size - 1,                                     ______________________
-         config.vocab_size,
-         ...                                                        -> special embeddings
-         config.vocab_size + config.n_special - 1,                  ______________________
-         config.vocab_size + config.n_special,
-         ...                                                        -> position embeddings
-         total_num_embeddings - 1]                                  ______________________
-
-    where total_num_embeddings can be obtained as config.total_num_embeddings and is:
-        total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
-    You should use these indices to index the word, special and position embeddings.
-
-    The special embeddings ([SEP], [CLS]...) are not pre-trained and need to be trained during the fine-tuning if you use them.
-    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
-
-    Params:
-        config: a TransfoXLConfig class instance with the configuration to build a new model
-
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length]
-            with the word BPE token indices selected in the range [0, config.vocab_size[
-        `multiple_choice_token_mask`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length]
-            with a value of 1 were the last hidden state is (usually the [CLS] token) and 0 otherwise.
-        `position_ids`: an optional torch.LongTensor with the same shape as input_ids
-            with the position indices (selected in the range [config.vocab_size + config.n_special,
-            config.vocab_size + config.n_special + config.n_ctx - 1[.
-        `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
-            You can use it to add a third embedding (the previous two being the word and position embeddings)
-            to each token in the sentence.
-        `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, num_choices, sequence_length]
-            with indices selected in [-1, 0, ..., total_num_embeddings]. All labels set to -1 are ignored (masked), the loss
-            is only computed for the labels set in [0, ..., total_num_embeddings]
-        `multiple_choice_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size]
-            with indices selected in [0, ..., num_choices].
-
-    Outputs:
-        if `lm_labels` and `multiple_choice_labels` are not `None`:
-            Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
-        else: a tuple with
-            `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, total_num_embeddings]
-            `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
-
-    Example usage:
-    ```python
-    # Already been converted into BPE token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    multiple_choice_token_mask = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-
-    config = modeling_transfo_xl.TransfoXLConfig()
-
-    model = modeling_transfo_xl.TransfoXLLMHeadModel(config)
-    lm_logits, multiple_choice_logits = model(input_ids, multiple_choice_token_mask)
-    ```
-    """
-    def __init__(self, config):
-        super(TransfoXLDoubleHeadsModel, self).__init__(config)
-        self.transformer = TransfoXLModel(config)
-        self.lm_head = TransfoXLLMHead(self.transformer.embed.weight, config)
-        self.multiple_choice_head = TransfoXLMultipleChoiceHead(config)
-        self.apply(self.init_weights)
-
-    def set_num_special_tokens(self, num_special_tokens):
-        " Update input and output embeddings with new embedding matrice "
-        self.transformer.set_num_special_tokens(num_special_tokens)
-        self.lm_head.set_embeddings_weights(self.transformer.embed.weight)
-
-    def forward(self, input_ids, multiple_choice_token_mask, position_ids=None, token_type_ids=None,
-                lm_labels=None, multiple_choice_labels=None):
-        hidden_states = self.transformer(input_ids, position_ids, token_type_ids)
-        lm_logits = self.lm_head(hidden_states)
-        multiple_choice_logits = self.multiple_choice_head(hidden_states, multiple_choice_token_mask)
-        losses = []
-        if lm_labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1)))
-        if multiple_choice_labels is not None:
-            loss_fct = CrossEntropyLoss()
-            losses.append(loss_fct(multiple_choice_logits, multiple_choice_labels.view(-1)))
-        if losses:
-            return losses
-        return lm_logits, multiple_choice_logits
+        return self.transformer(input_ids, position_ids, token_type_ids)
