@@ -818,7 +818,7 @@ class TransfoXLPreTrainedModel(nn.Module):
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + '.')
-        # load(model.transformer if hasattr(model, 'transformer') else model, prefix='')
+        load(model, prefix='')
         if len(missing_keys) > 0:
             logger.info("Weights of {} not initialized from pretrained model: {}".format(
                 model.__class__.__name__, missing_keys))
