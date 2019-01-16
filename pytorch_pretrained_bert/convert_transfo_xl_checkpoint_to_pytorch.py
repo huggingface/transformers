@@ -93,8 +93,6 @@ def build_tf_to_pytorch_map(model, config):
 
     # Relative positioning biases
     if config.untie_r:
-        layer_str = "transformer/r_r_bias"
-        layer_str_2 = "transformer/r_w_bias"
         r_r_list = []
         r_w_list = []
         for b in model.layers:
@@ -158,7 +156,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
             array = tf_weights[name]
             # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
             # which are not required for using pretrained model
-            if 'kernel' in name or 'proj_W' in name:
+            if 'kernel' in name or 'proj' in name:
                 array = np.transpose(array)
             if ('r_r_bias' in name or 'r_w_bias' in name) and len(pointer) > 1:
                 # Here we will split the TF weigths
