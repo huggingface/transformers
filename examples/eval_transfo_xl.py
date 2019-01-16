@@ -42,7 +42,7 @@ parser = argparse.ArgumentParser(description='PyTorch Transformer Language Model
 # parser.add_argument('--data', type=str, default='../data/wikitext-103',
 #                     help='location of the data corpus')
 parser.add_argument('--model_name', type=str, default='transfo-xl-wt103',
-                    choices=['transfo-xl-wt103'], #, 'lm1b', 'enwik8', 'text8'],
+                    # choices=['transfo-xl-wt103'], #, 'lm1b', 'enwik8', 'text8'],
                     help='pretrained model name')
 parser.add_argument('--split', type=str, default='test',
                     choices=['all', 'valid', 'test'],

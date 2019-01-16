@@ -116,7 +116,8 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         # Save vocabulary and dataset cache as Dictionaries (should be better than pickles for the long-term)
         pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' + VOCAB_NAME
         print("Save vocabulary to {}".format(pytorch_vocab_dump_path))
-        torch.save(corpus.vocab.__dict__, pytorch_vocab_dump_path)
+        corpus_vocab_dict = corpus.vocab.__dict__
+        torch.save(corpus_vocab_dict, pytorch_vocab_dump_path)
 
         corpus_dict_no_vocab = corpus.__dict__
         corpus_dict_no_vocab.pop('vocab', None)
@@ -139,7 +140,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         model = TransfoXLModel(config)
 
         # Build TF to PyTorch weights loading map
-        tf_to_pt_map = build_tf_to_pytorch_map(model.transformer, config)
+        tf_to_pt_map = build_tf_to_pytorch_map(model, config)
 
         # Load weights from TF model
         init_vars = tf.train.list_variables(tf_path)

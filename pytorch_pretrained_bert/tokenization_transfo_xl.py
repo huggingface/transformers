@@ -444,6 +444,12 @@ class TransfoXLCorpus(object):
         for key, value in corpus_dict.items():
             corpus.__dict__[key] = value
         corpus.vocab = vocab
+        if corpus.train is not None:
+            corpus.train = torch.tensor(corpus.train, dtype=torch.long)
+        if corpus.valid is not None:
+            corpus.valid = torch.tensor(corpus.valid, dtype=torch.long)
+        if corpus.test is not None:
+            corpus.test = torch.tensor(corpus.test, dtype=torch.long)
         return corpus
 
     def __init__(self, *args, **kwargs):
