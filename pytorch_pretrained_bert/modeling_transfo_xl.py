@@ -447,10 +447,10 @@ class RelPartialLearnableMultiHeadAttn(RelMultiHeadAttn):
         if attn_mask is not None and attn_mask.any().item():
             if attn_mask.dim() == 2:
                 attn_score = attn_score.float().masked_fill(
-                    attn_mask[None,:,:,None], -float('inf')).type_as(attn_score)
+                    attn_mask[None,:,:,None], -1e30).type_as(attn_score)
             elif attn_mask.dim() == 3:
                 attn_score = attn_score.float().masked_fill(
-                    attn_mask[:,:,:,None], -float('inf')).type_as(attn_score)
+                    attn_mask[:,:,:,None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
         attn_prob = F.softmax(attn_score, dim=1)
@@ -947,12 +947,13 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.mem_len = mem_len
         self.ext_len = ext_len
 
-    def init_mems(self):
+    def init_mems(self, data):
         if self.mem_len > 0:
             mems = []
             param = next(self.parameters())
             for i in range(self.n_layer+1):
-                empty = torch.empty(0, dtype=param.dtype, device=param.device)
+                empty = torch.zeros(self.mem_len, data.size(1), self.config.d_model,
+                                    dtype=param.dtype, device=param.device)
                 mems.append(empty)
 
             return mems
@@ -1081,7 +1082,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         # So, have to initialize size(0) mems inside the model forward.
         # Moreover, have to return new_mems to allow nn.DataParallel to piece
         # them together.
-        if not mems: mems = self.init_mems()
+        if not mems: mems = self.init_mems(data)
 
         hidden, new_mems = self._forward(data, mems=mems)
         if target is None:
