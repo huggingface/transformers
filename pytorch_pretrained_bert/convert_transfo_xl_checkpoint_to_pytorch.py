@@ -68,7 +68,10 @@ def build_tf_to_pytorch_map(model, config):
             layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
         })
 
-    # Softmax cutoffs
+    # Adaptive Softmax
+    tf_to_pt_map.update({
+        "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
+        "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias})
     for i, (out_l, proj_l, tie_proj) in enumerate(zip(
                             model.crit.out_layers,
                             model.crit.out_projs,
@@ -169,14 +172,17 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
                         raise
                     print("Initialize PyTorch weight {} for layer {}".format(name, i))
                     p_i.data = torch.from_numpy(arr_i)
-                continue
-            try:
-                assert pointer.shape == array.shape
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
-            print("Initialize PyTorch weight {}".format(name))
-            pointer.data = torch.from_numpy(array)
+            else:
+                try:
+                    assert pointer.shape == array.shape
+                except AssertionError as e:
+                    e.args += (pointer.shape, array.shape)
+                    raise
+                print("Initialize PyTorch weight {}".format(name))
+                pointer.data = torch.from_numpy(array)
+            del tf_weights[name]
+
+        print("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
 
         # Save pytorch-model
         pytorch_weights_dump_path = pytorch_dump_folder_path + '/' + WEIGHTS_NAME

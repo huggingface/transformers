@@ -802,20 +802,6 @@ class TransfoXLPreTrainedModel(nn.Module):
         if state_dict is None:
             state_dict = torch.load(resolved_archive_file)
 
-        old_keys = []
-        new_keys = []
-        for key in state_dict.keys():
-            new_key = None
-            if 'gamma' in key:
-                new_key = key.replace('gamma', 'weight')
-            if 'beta' in key:
-                new_key = key.replace('beta', 'bias')
-            if new_key:
-                old_keys.append(key)
-                new_keys.append(new_key)
-        for old_key, new_key in zip(old_keys, new_keys):
-            state_dict[new_key] = state_dict.pop(old_key)
-
         missing_keys = []
         unexpected_keys = []
         error_msgs = []
