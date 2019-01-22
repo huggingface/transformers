@@ -296,11 +296,6 @@ def accuracy(out, labels):
     outputs = np.argmax(out, axis=1)
     return np.sum(outputs == labels)
 
-def warmup_linear(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 1.0 - x
-
 def main():
     parser = argparse.ArgumentParser()
 
@@ -447,7 +442,7 @@ def main():
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
         num_train_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+            len(train_examples) / args.train_batch_size * args.num_train_epochs)
 
     # Prepare model
     model = BertForSequenceClassification.from_pretrained(args.bert_model,
@@ -541,10 +536,6 @@ def main():
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    # modify learning rate with special warm up BERT uses
-                    lr_this_step = args.learning_rate * warmup_linear(global_step/t_total, args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
