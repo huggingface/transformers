@@ -980,7 +980,8 @@ def main():
                 "If `do_predict` is True, then `predict_file` must be specified.")
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-        raise ValueError("Output directory () already exists and is not empty.")
+        print('"Output directory () already exists and is not empty."')
+        #raise ValueError("Output directory () already exists and is not empty.")
     os.makedirs(args.output_dir, exist_ok=True)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
