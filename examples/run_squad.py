@@ -1050,8 +1050,12 @@ def main():
 
     global_step = 0
     if args.do_train:
+        feature_prefix = args.bert_model
+        result = os.path.split(feature_prefix)
+        if result[1] is not '':
+            feature_prefix = result[1]
         cached_train_features_file = args.train_file+'_{0}_{1}_{2}_{3}'.format(
-            args.bert_model, str(args.max_seq_length), str(args.doc_stride), str(args.max_query_length))
+            feature_prefix, str(args.max_seq_length), str(args.doc_stride), str(args.max_query_length))
         train_features = None
         try:
             with open(cached_train_features_file, "rb") as reader:

@@ -72,7 +72,8 @@ with open(input_file) as f_o:
     for index, qid in tqdm(enumerate(query_id)):
         is_found = False
         if is_evaluation is True:
-
+            sum_passage = ' '.join(passage['passage_text'] for passage in passages[qid])
+            add_insert_squad(output, query_type[qid], sum_passage, query[qid], query_id[qid], 0, '')
         else:
             for passage in passages[qid]:
                 pos = passage['passage_text'].find(answers[qid][0])
