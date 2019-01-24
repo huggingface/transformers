@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Run BERT on SQuAD."""
+"""Run BERT on SQuAD 2.0"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -46,7 +46,10 @@ logger = logging.getLogger(__name__)
 
 
 class SquadExample(object):
-    """A single training/test example for the Squad dataset."""
+    """
+    A single training/test example for the Squad dataset.
+    For examples without an answer, the start and end position are -1.
+    """
 
     def __init__(self,
                  qas_id,
@@ -55,19 +58,13 @@ class SquadExample(object):
                  orig_answer_text=None,
                  start_position=None,
                  end_position=None,
-                 p_answer_text=None,
-                 p_start_position=None,
-                 p_end_position=None,
-                 is_impossible=False):
+                 is_impossible=None):
         self.qas_id = qas_id
         self.question_text = question_text
         self.doc_tokens = doc_tokens
         self.orig_answer_text = orig_answer_text
         self.start_position = start_position
         self.end_position = end_position
-        self.p_answer_text= p_answer_text
-        self.p_start_position= p_start_position
-        self.p_end_position= p_end_position
         self.is_impossible = is_impossible
 
     def __str__(self):
@@ -76,18 +73,15 @@ class SquadExample(object):
     def __repr__(self):
         s = ""
         s += "qas_id: %s" % (self.qas_id)
-        s += ", question_text: %s" % (self.question_text)
+        s += ", question_text: %s" % (
+            self.question_text)
         s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
         if self.start_position:
             s += ", start_position: %d" % (self.start_position)
-        if self.end_position:
+        if self.start_position:
             s += ", end_position: %d" % (self.end_position)
-        if self.is_impossible:
+        if self.start_position:
             s += ", is_impossible: %r" % (self.is_impossible)
-        if self.p_start_position:
-            s += ", plausible_start_position: %d" % (self.p_start_position)
-        if self.p_end_position:
-            s += ", plausible_end_position: %d" % (self.p_end_position)
         return s
 
 
@@ -106,8 +100,6 @@ class InputFeatures(object):
                  segment_ids,
                  start_position=None,
                  end_position=None,
-                 p_start_position=None,
-                 p_end_position=None,
                  is_impossible=None):
         self.unique_id = unique_id
         self.example_index = example_index
@@ -120,15 +112,15 @@ class InputFeatures(object):
         self.segment_ids = segment_ids
         self.start_position = start_position
         self.end_position = end_position
-        self.p_start_position = p_start_position
-        self.p_end_position = p_end_position
         self.is_impossible = is_impossible
 
 
-def read_squad_examples(input_file, is_training, is_version_2=False):
+def read_squad_examples(input_file, is_training):
     """Read a SQuAD json file into a list of SquadExample."""
     with open(input_file, "r", encoding='utf-8') as reader:
-        input_data = json.load(reader)["data"]
+        source = json.load(reader)
+        input_data = source["data"]
+        version = source["version"]
 
     def is_whitespace(c):
         if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
@@ -136,7 +128,6 @@ def read_squad_examples(input_file, is_training, is_version_2=False):
         return False
 
     examples = []
-    total_count = 0
     for entry in input_data:
         for paragraph in entry["paragraphs"]:
             paragraph_text = paragraph["context"]
@@ -161,13 +152,8 @@ def read_squad_examples(input_file, is_training, is_version_2=False):
                 end_position = None
                 orig_answer_text = None
                 is_impossible = False
-
-                p_start_position = None
-                p_end_position = None
-                p_answer_text = None
-
                 if is_training:
-                    if is_version_2:
+                    if version == "v2.0":
                         is_impossible = qa["is_impossible"]
                     if (len(qa["answers"]) != 1) and (not is_impossible):
                         raise ValueError(
@@ -189,35 +175,14 @@ def read_squad_examples(input_file, is_training, is_version_2=False):
                         cleaned_answer_text = " ".join(
                             whitespace_tokenize(orig_answer_text))
                         if actual_text.find(cleaned_answer_text) == -1:
-                            logger.warning("Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text)
+                            logger.warning("Could not find answer: '%s' vs. '%s'",
+                                            actual_text, cleaned_answer_text)
                             continue
-                    else:
+                    else: 
                         start_position = -1
                         end_position = -1
                         orig_answer_text = ""
-                        # Donghyun's version
-                        if "plausible_answers" in qa:
-                            if len(qa['plausible_answers']) > 0:
-                                p_answer = qa['plausible_answers'][0]
-                                p_answer_text = p_answer["text"]
-                                p_answer_offset = p_answer["answer_start"]
-                                p_answer_length = len(p_answer_text)
-                                p_start_position = char_to_word_offset[p_answer_offset]
-                                p_end_position = char_to_word_offset[p_answer_offset + p_answer_length - 1]
-                                # Only add answers where the text can be exactly recovered from the
-                                # document. If this CAN'T happen it's likely due to weird Unicode
-                                # stuff so we will just skip the example.
-                                #
-                                # Note that this means for training mode, every example is NOT
-                                # guaranteed to be preserved.
-                                p_actual_text = " ".join(doc_tokens[p_start_position:(p_end_position + 1)])
-                                p_cleaned_answer_text = " ".join(
-                                    whitespace_tokenize(p_answer_text))
-                                if p_actual_text.find(p_cleaned_answer_text) == -1:
-                                    logger.warning("Could not find answer: '%s' vs. '%s'", p_actual_text, p_cleaned_answer_text)
-                                    continue
-                
-                # Donghyun's version
+
                 example = SquadExample(
                     qas_id=qas_id,
                     question_text=question_text,
@@ -225,12 +190,8 @@ def read_squad_examples(input_file, is_training, is_version_2=False):
                     orig_answer_text=orig_answer_text,
                     start_position=start_position,
                     end_position=end_position,
-                    p_answer_text=p_answer_text,
-                    p_start_position=p_start_position,
-                    p_end_position=p_end_position,
                     is_impossible=is_impossible)
                 examples.append(example)
-    print('read_squad_examples', 'total count=', total_count, 'real count=',len(examples))
     return examples
 
 
@@ -259,24 +220,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
         tok_start_position = None
         tok_end_position = None
-
-        p_tok_start_position = None
-        p_tok_end_position = None
-
         if is_training and example.is_impossible:
             tok_start_position = -1
             tok_end_position = -1
-            
-            if example.p_answer_text:
-                p_tok_start_position = orig_to_tok_index[example.p_start_position]
-                if example.p_end_position < len(example.doc_tokens) - 1:
-                    p_tok_end_position = orig_to_tok_index[example.p_end_position + 1] - 1
-                else:
-                    p_tok_end_position = len(all_doc_tokens) - 1
-                (p_tok_start_position, p_tok_end_position) = _improve_answer_span(
-                    all_doc_tokens, p_tok_start_position, p_tok_end_position, tokenizer,
-                    example.p_answer_text)
-
         if is_training and not example.is_impossible:
             tok_start_position = orig_to_tok_index[example.start_position]
             if example.end_position < len(example.doc_tokens) - 1:
@@ -323,7 +269,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 split_token_index = doc_span.start + i
                 token_to_orig_map[len(tokens)] = tok_to_orig_index[split_token_index]
 
-                is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
+                is_max_context = _check_is_max_context(doc_spans, doc_span_index,
+                                                       split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
                 segment_ids.append(1)
@@ -348,20 +295,16 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
             start_position = None
             end_position = None
-
-            p_start_position = None
-            p_end_position = None
-
             if is_training and not example.is_impossible:
                 # For training, if our document chunk does not contain an annotation
                 # we throw it out, since there is nothing to predict.
                 doc_start = doc_span.start
                 doc_end = doc_span.start + doc_span.length - 1
-                
-                out_of_span = False
-                if not (tok_start_position >= doc_start and tok_end_position <= doc_end):
+                out_of_span = False 
+                if (example.start_position < doc_start or
+                        example.end_position < doc_start or
+                        example.start_position > doc_end or example.end_position > doc_end):
                     out_of_span = True
-
                 if out_of_span:
                     start_position = 0
                     end_position = 0
@@ -370,31 +313,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     start_position = tok_start_position - doc_start + doc_offset
                     end_position = tok_end_position - doc_start + doc_offset
 
-                p_start_position = 0
-                p_end_position = 0
-            
             if is_training and example.is_impossible:
                 start_position = 0
                 end_position = 0
-
-                if example.p_answer_text:
-                    doc_start = doc_span.start
-                    doc_end = doc_span.start + doc_span.length - 1
-                    
-                    out_of_span = False
-                    if not (p_tok_start_position >= doc_start and p_tok_end_position <= doc_end):
-                        out_of_span = True
-
-                    if out_of_span:
-                        p_start_position = -1
-                        p_end_position = -1
-                    else:
-                        doc_offset = len(query_tokens) + 2
-                        p_start_position = p_tok_start_position - doc_start + doc_offset
-                        p_end_position = p_tok_end_position - doc_start + doc_offset
-                else:
-                    p_start_position = -1
-                    p_end_position = -1
 
             if example_index < 20:
                 logger.info("*** Example ***")
@@ -413,13 +334,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 logger.info(
                     "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
                 if is_training and example.is_impossible:
-                    logger.info("impossible example")
-                    if example.p_answer_text:
-                        p_answer_text = " ".join(tokens[p_start_position:(p_end_position + 1)])
-                        logger.info("plausible_start_position: %d" % (p_start_position))
-                        logger.info("plausible_end_position: %d" % (p_end_position))
-                        logger.info(
-                            "answer: %s" % (p_answer_text))
+                    logger.info("impossible example")   
                 if is_training and not example.is_impossible:
                     answer_text = " ".join(tokens[start_position:(end_position + 1)])
                     logger.info("start_position: %d" % (start_position))
@@ -440,8 +355,6 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     segment_ids=segment_ids,
                     start_position=start_position,
                     end_position=end_position,
-                    p_start_position=p_start_position,
-                    p_end_position=p_end_position,
                     is_impossible=example.is_impossible))
             unique_id += 1
 
@@ -529,9 +442,8 @@ RawResult = collections.namedtuple("RawResult",
 
 def write_predictions(all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
-                      output_nbest_file, verbose_logging, is_version_2=False, null_score_diff_threshold=0.0):
-    logger.info('Write final predictions to the json file.')
-    """Write final predictions to the json file."""
+                      output_nbest_file, output_null_log_odds_file, verbose_logging, is_version2, null_score_diff_threshold):
+    """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
     logger.info("Writing nbest to: %s" % (output_nbest_file))
 
@@ -549,14 +461,12 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
     all_predictions = collections.OrderedDict()
     all_nbest_json = collections.OrderedDict()
-
     scores_diff_json = collections.OrderedDict()
 
     for (example_index, example) in enumerate(all_examples):
         features = example_index_to_features[example_index]
 
         prelim_predictions = []
-
         # keep track of the minimum score of null start+end of position 0
         score_null = 1000000  # large and positive
         min_null_feature_index = 0  # the paragraph slice with min mull score
@@ -565,11 +475,10 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
         for (feature_index, feature) in enumerate(features):
             result = unique_id_to_result[feature.unique_id]
-
             start_indexes = _get_best_indexes(result.start_logits, n_best_size)
             end_indexes = _get_best_indexes(result.end_logits, n_best_size)
-
-            if is_version_2:
+            # if we could have irrelevant answers, get the min score of irrelevant
+            if is_version2:
                 feature_null_score = result.start_logits[0] + result.end_logits[0]
                 if feature_null_score < score_null:
                     score_null = feature_null_score
@@ -604,17 +513,15 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                             end_index=end_index,
                             start_logit=result.start_logits[start_index],
                             end_logit=result.end_logits[end_index]))
-        
-        if is_version_2:
+
+        if is_version2:
             prelim_predictions.append(
                 _PrelimPrediction(
                     feature_index=min_null_feature_index,
                     start_index=0,
                     end_index=0,
                     start_logit=null_start_logit,
-                    end_logit=null_end_logit
-                )
-            )
+                    end_logit=null_end_logit))
 
         prelim_predictions = sorted(
             prelim_predictions,
@@ -630,7 +537,6 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
             if len(nbest) >= n_best_size:
                 break
             feature = features[pred.feature_index]
-
             if pred.start_index > 0:
                 tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
                 orig_doc_start = feature.token_to_orig_map[pred.start_index]
@@ -650,7 +556,6 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
                 if final_text in seen_predictions:
                     continue
-
                 seen_predictions[final_text] = True
             else:
                 final_text = ""
@@ -662,14 +567,14 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                     start_logit=pred.start_logit,
                     end_logit=pred.end_logit))
 
-        if is_version_2:
+        # if we didn't inlude the empty option in the n-best, inlcude it
+        if is_version2:
             if "" not in seen_predictions:
                 nbest.append(
                     _NbestPrediction(
                         text="", start_logit=null_start_logit,
-                        end_logit=null_end_logit
-                    )
-                )
+                        end_logit=null_end_logit))
+
         # In very rare edge cases we could have no valid predictions. So we
         # just create a nonce prediction in this case to avoid failure.
         if not nbest:
@@ -680,11 +585,11 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
         total_scores = []
         best_non_null_entry = None
-
         for entry in nbest:
             total_scores.append(entry.start_logit + entry.end_logit)
             if not best_non_null_entry:
-                best_non_null_entry = entry
+                if entry.text:
+                    best_non_null_entry = entry
 
         probs = _compute_softmax(total_scores)
 
@@ -699,7 +604,8 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 
         assert len(nbest_json) >= 1
 
-        if not is_version_2 or not best_non_null_entry:
+        
+        if not is_version2:
             all_predictions[example.qas_id] = nbest_json[0]["text"]
         else:
             # predict "" iff the null score - the score of best non-null > threshold
@@ -710,19 +616,17 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 all_predictions[example.qas_id] = ""
             else:
                 all_predictions[example.qas_id] = best_non_null_entry.text
-
         all_nbest_json[example.qas_id] = nbest_json
-
-    logger.info("Writing predictions to: %s...start" % (output_prediction_file))
 
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(all_predictions, indent=4) + "\n")
-    logger.info("Writing predictions to: %s...ok" % (output_prediction_file))
 
-    logger.info("Writing nbest to: %s...start" % (output_nbest_file))
     with open(output_nbest_file, "w") as writer:
         writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
-    logger.info("Writing nbest to: %s...ok" % (output_nbest_file))
+    
+    if is_version2:
+        with open(output_null_log_odds_file, "w") as writer:
+            writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
 
 def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
@@ -866,8 +770,7 @@ def main():
     ## Required parameters
     parser.add_argument("--bert_model", default=None, type=str, required=True,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                        "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                        "bert-base-multilingual-cased, bert-base-chinese.")
+                             "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
 
@@ -875,8 +778,6 @@ def main():
     parser.add_argument("--train_file", default=None, type=str, help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--predict_file", default=None, type=str,
                         help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
-    parser.add_argument("--is_version_2", default=False, action='store_true',
-                        help="If true, SQuAD 2.0 is used.")						
     parser.add_argument("--max_seq_length", default=384, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
@@ -885,8 +786,8 @@ def main():
     parser.add_argument("--max_query_length", default=64, type=int,
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
-    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
-    parser.add_argument("--do_predict", action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
     parser.add_argument("--predict_batch_size", default=8, type=int, help="Total batch size for predictions.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
@@ -901,10 +802,11 @@ def main():
     parser.add_argument("--max_answer_length", default=30, type=int,
                         help="The maximum length of an answer that can be generated. This is needed because the start "
                              "and end predictions are not conditioned on one another.")
-    parser.add_argument("--verbose_logging", action='store_true',
+    parser.add_argument("--verbose_logging", default=False, action='store_true',
                         help="If true, all of the warnings related to data processing will be printed. "
                              "A number of warnings are expected for a normal SQuAD evaluation.")
     parser.add_argument("--no_cuda",
+                        default=False,
                         action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument('--seed',
@@ -916,7 +818,6 @@ def main():
                         default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--do_lower_case",
-                        default=False,
                         action='store_true',
                         help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument("--local_rank",
@@ -924,6 +825,7 @@ def main():
                         default=-1,
                         help="local_rank for distributed training on gpus")
     parser.add_argument('--fp16',
+                        default=False,
                         action='store_true',
                         help="Whether to use 16-bit float precision instead of 32-bit")
     parser.add_argument('--loss_scale',
@@ -932,13 +834,8 @@ def main():
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
     parser.add_argument('--null_score_diff_threshold',
-                        type=float, 
-                        default=-1.66, 
-                        help='best f1 threshold. Typical values are between -1.0 and -5.0')
-    parser.add_argument('--save_predict_model',
-                        default=False,
-                        action='store_true',
-                        help="Whether to save the model before the prediction")
+                        type=float, default=0.0,
+                        help="If null_score - best_non_null is greater than the threshold predict null.")
 
     args = parser.parse_args()
 
@@ -979,17 +876,16 @@ def main():
                 "If `do_predict` is True, then `predict_file` must be specified.")
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
-        print('"Output directory () already exists and is not empty."')
-        #raise ValueError("Output directory () already exists and is not empty.")
+        raise ValueError("Output directory () already exists and is not empty.")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    tokenizer = BertTokenizer.from_pretrained(args.bert_model)
 
     train_examples = None
     num_train_steps = None
     if args.do_train:
         train_examples = read_squad_examples(
-            input_file=args.train_file, is_training=True, is_version_2=args.is_version_2)
+            input_file=args.train_file, is_training=True)
         num_train_steps = int(
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
@@ -1050,7 +946,7 @@ def main():
     global_step = 0
     if args.do_train:
         cached_train_features_file = args.train_file+'_{0}_{1}_{2}_{3}'.format(
-            list(filter(None, args.bert_model.split('/'))).pop(), str(args.max_seq_length), str(args.doc_stride), str(args.max_query_length))
+            args.bert_model, str(args.max_seq_length), str(args.doc_stride), str(args.max_query_length))
         train_features = None
         try:
             with open(cached_train_features_file, "rb") as reader:
@@ -1077,8 +973,9 @@ def main():
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
         all_start_positions = torch.tensor([f.start_position for f in train_features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in train_features], dtype=torch.long)
+        all_is_impossibles = torch.tensor([int(f.is_impossible) for f in train_features], dtype=torch.long)
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                   all_start_positions, all_end_positions)
+                                   all_start_positions, all_end_positions, all_is_impossibles)
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
         else:
@@ -1090,7 +987,7 @@ def main():
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 if n_gpu == 1:
                     batch = tuple(t.to(device) for t in batch) # multi-gpu does scattering it-self
-                input_ids, input_mask, segment_ids, start_positions, end_positions = batch
+                input_ids, input_mask, segment_ids, start_positions, end_positions, _ = batch
                 loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
@@ -1116,14 +1013,14 @@ def main():
     if args.do_train:
         torch.save(model_to_save.state_dict(), output_model_file)
 
-        # Load a trained model that you have fine-tuned
-        model_state_dict = torch.load(output_model_file)
-        model = BertForQuestionAnswering.from_pretrained(args.bert_model, state_dict=model_state_dict)
-        model.to(device)
+    # Load a trained model that you have fine-tuned
+    model_state_dict = torch.load(output_model_file)
+    model = BertForQuestionAnswering.from_pretrained(args.bert_model, state_dict=model_state_dict)
+    model.to(device)
 
     if args.do_predict and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         eval_examples = read_squad_examples(
-            input_file=args.predict_file, is_training=False, is_version_2=args.is_version_2)
+            input_file=args.predict_file, is_training=False)
         eval_features = convert_examples_to_features(
             examples=eval_examples,
             tokenizer=tokenizer,
@@ -1167,10 +1064,11 @@ def main():
                                              end_logits=end_logits))
         output_prediction_file = os.path.join(args.output_dir, "predictions.json")
         output_nbest_file = os.path.join(args.output_dir, "nbest_predictions.json")
+        output_null_log_odds_file = os.path.join(args.output_dir, "null_odds.json")
         write_predictions(eval_examples, eval_features, all_results,
                           args.n_best_size, args.max_answer_length,
                           args.do_lower_case, output_prediction_file,
-                          output_nbest_file, args.verbose_logging, args.is_version_2, args.null_score_diff_threshold)
+                          output_nbest_file, output_null_log_odds_file, args.verbose_logging, True, args.null_score_diff_threshold)
 
 
 if __name__ == "__main__":
