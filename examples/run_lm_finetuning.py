@@ -31,7 +31,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertForPreTraining
-from pytorch_pretrained_bert.optimization import BertAdam
+from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
 from torch.utils.data import Dataset
 import random
@@ -40,12 +40,6 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def warmup_linear(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 1.0 - x
 
 
 class BERTDataset(Dataset):
@@ -527,7 +521,7 @@ def main():
         train_dataset = BERTDataset(args.train_file, tokenizer, seq_len=args.max_seq_length,
                                     corpus_lines=None, on_memory=args.on_memory)
         num_train_steps = int(
-            len(train_dataset) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+            len(train_dataset) / args.train_batch_size * args.num_train_epochs)
 
     # Prepare model
     model = BertForPreTraining.from_pretrained(args.bert_model)
@@ -607,10 +601,12 @@ def main():
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    # modify learning rate with special warm up BERT uses
-                    lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_steps, args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
+                    if args.fp16:
+                        # modify learning rate with special warm up BERT uses
+                        # if args.fp16 is False, BertAdam is used that handles this automatically
+                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_steps, args.warmup_proportion)
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr_this_step
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1

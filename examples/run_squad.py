@@ -36,7 +36,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from pytorch_pretrained_bert.tokenization import whitespace_tokenize, BasicTokenizer, BertTokenizer
 from pytorch_pretrained_bert.modeling import BertForQuestionAnswering
-from pytorch_pretrained_bert.optimization import BertAdam
+from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -670,11 +670,6 @@ def _compute_softmax(scores):
         probs.append(score / total_sum)
     return probs
 
-def warmup_linear(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 1.0 - x
-
 def main():
     parser = argparse.ArgumentParser()
 
@@ -794,7 +789,7 @@ def main():
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True)
         num_train_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+            len(train_examples) / args.train_batch_size * args.num_train_epochs)
 
     # Prepare model
     model = BertForQuestionAnswering.from_pretrained(args.bert_model,
@@ -905,10 +900,12 @@ def main():
                 else:
                     loss.backward()
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    # modify learning rate with special warm up BERT uses
-                    lr_this_step = args.learning_rate * warmup_linear(global_step/t_total, args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
+                    if args.fp16:
+                        # modify learning rate with special warm up BERT uses
+                        # if args.fp16 is False, BertAdam is used that handles this automatically
+                        lr_this_step = args.learning_rate * warmup_linear(global_step/t_total, args.warmup_proportion)
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr_this_step
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
