@@ -130,6 +130,9 @@ class OpenAIGPTTokenizer(object):
         else:
             self.special_tokens = dict((tok, len(self.encoder) + i) for i, tok in enumerate(special_tokens))
 
+    def __len__(self):
+        return len(self.encoder) + len(self.special_tokens)
+
     def set_special_tokens(self, special_tokens):
         self.special_tokens = dict((tok, len(self.encoder) + i) for i, tok in enumerate(special_tokens))
 

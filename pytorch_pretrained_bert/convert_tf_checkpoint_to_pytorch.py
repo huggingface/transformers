@@ -28,9 +28,23 @@ import numpy as np
 from .modeling import BertConfig, BertForPreTraining
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
-    config_path = os.path.abspath(bert_config_file)
+    # Initialise PyTorch model
+    config = BertConfig.from_json_file(bert_config_file)
+    print("Building PyTorch model from configuration: {}".format(str(config)))
+    model = BertForPreTraining(config)
+
+    # Load weights from tf checkpoint
+    load_tf_weights_in_bert(model, tf_checkpoint_path)
+
+    # Save pytorch-model
+    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    torch.save(model.state_dict(), pytorch_dump_path)
+
+def load_tf_weights_in_bert(model, tf_checkpoint_path):
+    """ Load tf checkpoints in a pytorch model
+    """
     tf_path = os.path.abspath(tf_checkpoint_path)
-    print("Converting TensorFlow checkpoint from {} with config at {}".format(tf_path, config_path))
+    print("Converting TensorFlow checkpoint from {}".format(tf_path))
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
@@ -40,11 +54,6 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytor
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
-
-    # Initialise PyTorch model
-    config = BertConfig.from_json_file(bert_config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = BertForPreTraining(config)
 
     for name, array in zip(names, arrays):
         name = name.split('/')
@@ -81,11 +90,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytor
             raise
         print("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
-
-    # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
-    torch.save(model.state_dict(), pytorch_dump_path)
-
+    return model
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

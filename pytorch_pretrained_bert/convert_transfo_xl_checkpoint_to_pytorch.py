@@ -106,7 +106,6 @@ def build_tf_to_pytorch_map(model, config):
         'transformer/r_w_bias': r_w_list})
     return tf_to_pt_map
 
-
 def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
                                              transfo_xl_config_file,
                                              pytorch_dump_folder_path,
@@ -140,50 +139,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         print("Building PyTorch model from configuration: {}".format(str(config)))
         model = TransfoXLModel(config)
 
-        # Build TF to PyTorch weights loading map
-        tf_to_pt_map = build_tf_to_pytorch_map(model, config)
-
-        # Load weights from TF model
-        init_vars = tf.train.list_variables(tf_path)
-        tf_weights = {}
-        for name, shape in init_vars:
-            print("Loading TF weight {} with shape {}".format(name, shape))
-            array = tf.train.load_variable(tf_path, name)
-            tf_weights[name] = array
-
-        for name, pointer in tf_to_pt_map.items():
-            assert name in tf_weights
-            array = tf_weights[name]
-            # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-            # which are not required for using pretrained model
-            if 'kernel' in name or 'proj' in name:
-                array = np.transpose(array)
-            if ('r_r_bias' in name or 'r_w_bias' in name) and len(pointer) > 1:
-                # Here we will split the TF weigths
-                assert len(pointer) == array.shape[0]
-                for i, p_i in enumerate(pointer):
-                    arr_i = array[i, ...]
-                    try:
-                        assert p_i.shape == arr_i.shape
-                    except AssertionError as e:
-                        e.args += (p_i.shape, arr_i.shape)
-                        raise
-                    print("Initialize PyTorch weight {} for layer {}".format(name, i))
-                    p_i.data = torch.from_numpy(arr_i)
-            else:
-                try:
-                    assert pointer.shape == array.shape
-                except AssertionError as e:
-                    e.args += (pointer.shape, array.shape)
-                    raise
-                print("Initialize PyTorch weight {}".format(name))
-                pointer.data = torch.from_numpy(array)
-            tf_weights.pop(name, None)
-            tf_weights.pop(name + '/Adam', None)
-            tf_weights.pop(name + '/Adam_1', None)
-
-        print("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
-
+        model = load_tf_weights_in_transfo_xl(model, config, tf_path)
         # Save pytorch-model
         pytorch_weights_dump_path = os.path.join(pytorch_dump_folder_path, WEIGHTS_NAME)
         pytorch_config_dump_path = os.path.join(pytorch_dump_folder_path, CONFIG_NAME)
@@ -193,6 +149,54 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
             f.write(config.to_json_string())
 
+
+def load_tf_weights_in_transfo_xl(model, config, tf_path):
+    """ Load tf checkpoints in a pytorch model
+    """
+    # Build TF to PyTorch weights loading map
+    tf_to_pt_map = build_tf_to_pytorch_map(model, config)
+
+    # Load weights from TF model
+    init_vars = tf.train.list_variables(tf_path)
+    tf_weights = {}
+    for name, shape in init_vars:
+        print("Loading TF weight {} with shape {}".format(name, shape))
+        array = tf.train.load_variable(tf_path, name)
+        tf_weights[name] = array
+
+    for name, pointer in tf_to_pt_map.items():
+        assert name in tf_weights
+        array = tf_weights[name]
+        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
+        # which are not required for using pretrained model
+        if 'kernel' in name or 'proj' in name:
+            array = np.transpose(array)
+        if ('r_r_bias' in name or 'r_w_bias' in name) and len(pointer) > 1:
+            # Here we will split the TF weigths
+            assert len(pointer) == array.shape[0]
+            for i, p_i in enumerate(pointer):
+                arr_i = array[i, ...]
+                try:
+                    assert p_i.shape == arr_i.shape
+                except AssertionError as e:
+                    e.args += (p_i.shape, arr_i.shape)
+                    raise
+                print("Initialize PyTorch weight {} for layer {}".format(name, i))
+                p_i.data = torch.from_numpy(arr_i)
+        else:
+            try:
+                assert pointer.shape == array.shape
+            except AssertionError as e:
+                e.args += (pointer.shape, array.shape)
+                raise
+            print("Initialize PyTorch weight {}".format(name))
+            pointer.data = torch.from_numpy(array)
+        tf_weights.pop(name, None)
+        tf_weights.pop(name + '/Adam', None)
+        tf_weights.pop(name + '/Adam_1', None)
+
+    print("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
+    return model
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
