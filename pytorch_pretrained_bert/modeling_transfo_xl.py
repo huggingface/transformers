@@ -37,6 +37,7 @@ from torch.nn.parameter import Parameter
 from .modeling import BertLayerNorm as LayerNorm
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
 from .file_utils import cached_path
+from .convert_transfo_xl_checkpoint_to_pytorch import load_tf_weights_in_transfo_xl
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 CONFIG_NAME = 'transfo_xl_config.json'
 WEIGHTS_NAME = 'pytorch_model.bin'
+TF_WEIGHTS_NAME = 'model.ckpt'
 
 class TransfoXLConfig(object):
     """Configuration class to store the configuration of a `TransfoXLModel`.
@@ -749,7 +751,7 @@ class TransfoXLPreTrainedModel(nn.Module):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, state_dict=None, cache_dir=None,
-                        *inputs, **kwargs):
+                        from_tf=False, *inputs, **kwargs):
         """
         Instantiate a TransfoXLPreTrainedModel from a pre-trained model file or a pytorch state dict.
         Download and cache the pre-trained model file if needed.
@@ -761,6 +763,10 @@ class TransfoXLPreTrainedModel(nn.Module):
                 - a path or url to a pretrained model archive containing:
                     . `transfo_xl_config.json` a configuration file for the model
                     . `pytorch_model.bin` a PyTorch dump of a TransfoXLModel instance
+                - a path or url to a pretrained model archive containing:
+                    . `bert_config.json` a configuration file for the model
+                    . `model.chkpt` a TensorFlow checkpoint
+            from_tf: should we load the weights from a locally saved TensorFlow checkpoint
             cache_dir: an optional path to a folder in which the pre-trained models will be cached.
             state_dict: an optional state dictionnary (collections.OrderedDict object) to use instead of pre-trained models
             *inputs, **kwargs: additional input for the specific Bert class
@@ -799,9 +805,12 @@ class TransfoXLPreTrainedModel(nn.Module):
         logger.info("Model config {}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
-        if state_dict is None:
+        if state_dict is None and not from_tf:
             state_dict = torch.load(resolved_archive_file)
-
+        if from_tf:
+            # Directly load from a TensorFlow checkpoint
+            weights_path = os.path.join(serialization_dir, TF_WEIGHTS_NAME)
+            return load_tf_weights_in_transfo_xl(model, weights_path)
         missing_keys = []
         unexpected_keys = []
         error_msgs = []
