@@ -291,7 +291,7 @@ if __name__ == '__main__':
     # sampler = LogUniformSampler(n_vocab, unique=False)
     # new_labels, sample, sample_prob = sampler.sample(n_sample, labels)
 
-    sampler = LogUniformSampler(n_vocab, unique=True)
+    sampler = LogUniformSampler(n_vocab, n_sample)#, unique=True)
     # true_probs, samp_probs, neg_samples = sampler.sample(n_sample, labels)
 
     # print('true_probs', true_probs.numpy().tolist())
