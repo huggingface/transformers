@@ -121,6 +121,13 @@ def build_tf_to_pytorch_map(model, config):
 def load_tf_weights_in_transfo_xl(model, config, tf_path):
     """ Load tf checkpoints in a pytorch model
     """
+    try:
+        import numpy as np
+        import tensorflow as tf
+    except ModuleNotFoundError:
+        print("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions.")
+        raise
     # Build TF to PyTorch weights loading map
     tf_to_pt_map = build_tf_to_pytorch_map(model, config)
 

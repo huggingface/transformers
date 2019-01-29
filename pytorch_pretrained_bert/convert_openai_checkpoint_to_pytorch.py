@@ -18,13 +18,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import re
-import json
 import argparse
 import torch
-import numpy as np
 
-from .modeling_openai import load_tf_weights_in_openai_gpt, OpenAIGPTConfig, OpenAIGPTModel, CONFIG_NAME, WEIGHTS_NAME
+from pytorch_pretrained_bert.modeling_openai import load_tf_weights_in_openai_gpt, OpenAIGPTConfig, OpenAIGPTModel, CONFIG_NAME, WEIGHTS_NAME
 
 def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_config_file, pytorch_dump_folder_path):
     # Construct model
@@ -67,5 +64,5 @@ if __name__ == "__main__":
                             "This specifies the model architecture.")
     args = parser.parse_args()
     convert_openai_checkpoint_to_pytorch(args.openai_checkpoint_folder_path,
-                                         args.pytorch_dump_folder_path,
-                                         args.openai_config_file)
+                                         args.openai_config_file,
+                                         args.pytorch_dump_folder_path)
