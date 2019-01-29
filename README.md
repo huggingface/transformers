@@ -391,35 +391,36 @@ An example on how to use this class is given in the [`run_squad.py`](./examples/
 
 `OpenAIGPTModel` is the basic OpenAI GPT Transformer model with a layer of summed token and position embeddings followed by a series of 12 identical self-attention blocks.
 
-The main implementation difference between BERT and the OpenAI is the use, in OpenAI GPT, of a single embedding matrix to store the word, special (`[SEP]`, `[CLS]`...) token and position embeddings.
-The embeddings are ordered as follow in the word embeddings matrice:
+OpenAI GPT use a single embedding matrix to store the word and special embeddings.
+Special tokens embeddings are additional tokens that are not pre-trained: `[SEP]`, `[CLS]`...
+Special tokens need to be trained during the fine-tuning if you use them.
+The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
 
+The embeddings are ordered as follow in the token embeddings matrice:
+
+```python
     [0,                                                         ----------------------
       ...                                                        -> word embeddings
       config.vocab_size - 1,                                     ______________________
       config.vocab_size,
       ...                                                        -> special embeddings
-      config.vocab_size + config.n_special - 1,                  ______________________
-      config.vocab_size + config.n_special,
-      ...                                                        -> position embeddings
-      total_num_embeddings - 1]                                  ______________________
+      config.vocab_size + config.n_special - 1]                  ______________________
+```
 
-where total_num_embeddings can be obtained as config.total_num_embeddings and is:
-
-    total_num_embeddings = config.vocab_size + config.n_special + config.n_ctx
+where total_tokens_embeddings can be obtained as config.total_tokens_embeddings and is:
+    `total_tokens_embeddings = config.vocab_size + config.n_special`
 You should use the associate indices to index the embeddings.
-
-The special tokens embeddings (`[SEP]`, `[CLS]`...) are not pre-trained and need to be trained during the fine-tuning if you use them.
-
-The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
 
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
 [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py)
-- `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length] were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, config.vocab_size[
-- `position_ids`: an optional torch.LongTensor with the same shape as input_ids with the position indices (selected in the range [config.vocab_size + config.n_special, config.vocab_size + config.n_special + config.n_ctx - 1[.
-- `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids. You can use it to add a third embedding (the previous two being the word and position embeddings) to each token in the sentence.
+- `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length] were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, total_tokens_embeddings[
+- `position_ids`: an optional torch.LongTensor with the same shape as input_ids
+    with the position indices (selected in the range [0, config.n_positions - 1[.
+- `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
+    You can use it to add a third type of embedding to each input token in the sequence
+    (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
 
 This model *outputs*:
 - `hidden_states`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
@@ -435,7 +436,7 @@ This model *outputs*:
 - if `lm_labels` is not `None`:
   Outputs the language modeling loss.
 - else:
-  Outputs `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, total_num_embeddings] (or more generally [d_1, ..., d_n, total_num_embeddings] were d_1 ... d_n are the dimension of input_ids)
+  Outputs `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, total_tokens_embeddings] (or more generally [d_1, ..., d_n, total_tokens_embeddings] were d_1 ... d_n are the dimension of input_ids)
 
 #### 11. `OpenAIGPTDoubleHeadsModel`
 
@@ -452,7 +453,7 @@ This model *outputs*:
 - if `lm_labels` and `multiple_choice_labels` are not `None`:
   Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
 - else Outputs a tuple with:
-  - `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, total_num_embeddings]
+  - `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, total_tokens_embeddings]
   - `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
 
 
