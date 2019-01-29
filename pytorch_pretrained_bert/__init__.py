@@ -6,15 +6,15 @@ from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .modeling import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
                        BertForSequenceClassification, BertForMultipleChoice,
-                       BertForTokenClassification, BertForQuestionAnswering)
+                       BertForTokenClassification, BertForQuestionAnswering,
+                       load_tf_weights_in_bert)
 from .modeling_openai import (OpenAIGPTConfig, OpenAIGPTModel,
-                              OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
-from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel)
+                              OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
+                              load_tf_weights_in_openai_gpt)
+from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel,
+                                  load_tf_weights_in_transfo_xl)
 
 from .optimization import BertAdam
 from .optimization_openai import OpenAIAdam
 
-from .convert_openai_checkpoint_to_pytorch import load_tf_weights_in_openai_gpt
-from .convert_tf_checkpoint_to_pytorch import load_tf_weights_in_bert
-from .convert_transfo_xl_checkpoint_to_pytorch import load_tf_weights_in_transfo_xl
 from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE
