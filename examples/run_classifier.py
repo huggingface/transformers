@@ -411,7 +411,7 @@ def main():
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
                             args.gradient_accumulation_steps))
 
-    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -441,8 +441,8 @@ def main():
     num_train_steps = None
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
-        num_train_steps = int(
-            len(train_examples) / args.train_batch_size * args.num_train_epochs)
+        num_train_steps =
+            len(train_examples) // args.train_batch_size // args.gradient_accumulation_steps * args.num_train_epochs
 
     # Prepare model
     model = BertForSequenceClassification.from_pretrained(args.bert_model,

@@ -497,7 +497,7 @@ def main():
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
                             args.gradient_accumulation_steps))
 
-    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -520,8 +520,8 @@ def main():
         print("Loading Train Dataset", args.train_file)
         train_dataset = BERTDataset(args.train_file, tokenizer, seq_len=args.max_seq_length,
                                     corpus_lines=None, on_memory=args.on_memory)
-        num_train_steps = int(
-            len(train_dataset) / args.train_batch_size * args.num_train_epochs)
+        num_train_steps =
+            len(train_dataset) // args.train_batch_size // args.gradient_accumulation_steps * args.num_train_epochs
 
     # Prepare model
     model = BertForPreTraining.from_pretrained(args.bert_model)
@@ -544,6 +544,10 @@ def main():
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+
+    t_total = num_train_steps
+    if args.local_rank != -1:
+        t_total = t_total // torch.distributed.get_world_size()
     if args.fp16:
         try:
             from apex.optimizers import FP16_Optimizer
@@ -564,7 +568,7 @@ def main():
         optimizer = BertAdam(optimizer_grouped_parameters,
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
-                             t_total=num_train_steps)
+                             t_total=t_total)
 
     global_step = 0
     if args.do_train:
@@ -604,7 +608,7 @@ def main():
                     if args.fp16:
                         # modify learning rate with special warm up BERT uses
                         # if args.fp16 is False, BertAdam is used that handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_steps, args.warmup_proportion)
+                        lr_this_step = args.learning_rate * warmup_linear(global_step/t_total, args.warmup_proportion)
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
                     optimizer.step()
