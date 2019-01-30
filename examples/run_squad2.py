@@ -794,7 +794,7 @@ def main():
     parser.add_argument("--num_train_epochs", default=3.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% "
+                        help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10%% "
                              "of training.")
     parser.add_argument("--n_best_size", default=20, type=int,
                         help="The total number of n-best predictions to generate in the nbest_predictions.json "
