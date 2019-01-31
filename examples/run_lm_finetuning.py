@@ -328,8 +328,8 @@ def convert_example_to_features(example, max_seq_length, tokenizer):
     # Account for [CLS], [SEP], [SEP] with "- 3"
     _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
 
-    t1_random, t1_label = random_word(tokens_a, tokenizer)
-    t2_random, t2_label = random_word(tokens_b, tokenizer)
+    tokens_a, t1_label = random_word(tokens_a, tokenizer)
+    tokens_b, t2_label = random_word(tokens_b, tokenizer)
     # concatenate lm labels and account for CLS, SEP, SEP
     lm_label_ids = ([-1] + t1_label + [-1] + t2_label + [-1])
 
