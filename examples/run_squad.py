@@ -277,14 +277,13 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 # we throw it out, since there is nothing to predict.
                 doc_start = doc_span.start
                 doc_end = doc_span.start + doc_span.length - 1
-                if (example.start_position < doc_start or
-                        example.end_position < doc_start or
-                        example.start_position > doc_end or example.end_position > doc_end):
-                    continue
-
                 doc_offset = len(query_tokens) + 2
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
+                if (start_position < doc_start or
+                        end_position < doc_start or
+                        start_position > doc_end or end_position > doc_end):
+                    continue
 
             if example_index < 20:
                 logger.info("*** Example ***")
