@@ -225,8 +225,14 @@ class OpenAIGPTTokenizer(object):
                 tokens.append(self.decoder[i])
         return tokens
 
-    def decode(self, ids, skip_special_tokens=False):
+    def decode(self, ids, skip_special_tokens=False, clean_up_tokenization_spaces=False):
         """Converts a sequence of ids in a string."""
         tokens = self.convert_ids_to_tokens(ids, skip_special_tokens=skip_special_tokens)
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
+        if clean_up_tokenization_spaces:
+            out_string = out_string.replace('<unk>', '')
+            out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ',').replace(' ,', ','
+                    ).replace(" n't", "n't").replace(" 'm", "'m").replace(" 're", "'re").replace(" do not", " don't"
+                    ).replace(" 's", "'s").replace(" t ", "'t ").replace(" s ", "'s ").replace(" m ", "'m "
+                    ).replace(" 've", "'ve")
         return out_string
