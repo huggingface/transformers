@@ -228,5 +228,5 @@ class OpenAIGPTTokenizer(object):
     def decode(self, ids, skip_special_tokens=False):
         """Converts a sequence of ids in a string."""
         tokens = self.convert_ids_to_tokens(ids, skip_special_tokens=skip_special_tokens)
-        out_string = ''.join(tokens).replace('</w>', ' ')
+        out_string = ''.join(tokens).replace('</w>', ' ').strip()
         return out_string
