@@ -120,3 +120,6 @@ dmypy.json
 
 # TF code
 tensorflow_code
+
+# Models
+models
