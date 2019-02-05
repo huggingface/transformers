@@ -14,14 +14,13 @@
 # limitations under the License.
 """Tokenization classes."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import collections
-import unicodedata
-import os
 import logging
+import os
+import unicodedata
+from io import open
 
 from .file_utils import cached_path
 
@@ -129,7 +128,7 @@ class BertTokenizer(object):
         # redirect to the cache, if necessary
         try:
             resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-        except FileNotFoundError:
+        except EnvironmentError:
             logger.error(
                 "Model name '{}' was not found in model name list ({}). "
                 "We assumed '{}' was a path or url but couldn't find any file "

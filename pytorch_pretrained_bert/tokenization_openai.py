@@ -13,11 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+import json
+import logging
 import os
 import re
-import json
+import sys
+from io import open
+
 from tqdm import tqdm
-import logging
 
 from .file_utils import cached_path
 
@@ -82,7 +88,7 @@ class OpenAIGPTTokenizer(object):
         try:
             resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
             resolved_merges_file = cached_path(merges_file, cache_dir=cache_dir)
-        except FileNotFoundError:
+        except EnvironmentError:
             logger.error(
                 "Model name '{}' was not found in model name list ({}). "
                 "We assumed '{}' was a path or url but couldn't find files {} and {} "
@@ -119,7 +125,7 @@ class OpenAIGPTTokenizer(object):
         self.max_len = max_len if max_len is not None else int(1e12)
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
         self.fix_text = ftfy.fix_text
-        self.encoder = json.load(open(vocab_file))
+        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
         self.decoder = {v:k for k,v in self.encoder.items()}
         merges = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
@@ -196,7 +202,7 @@ class OpenAIGPTTokenizer(object):
     def convert_tokens_to_ids(self, tokens):
         """Converts a sequence of tokens into ids using the vocab."""
         ids = []
-        if isinstance(tokens, str):
+        if isinstance(tokens, str) or (sys.version_info[0] == 2 and isinstance(tokens, unicode)):
             if tokens in self.special_tokens:
                 return self.special_tokens[tokens]
             else:

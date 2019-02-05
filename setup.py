@@ -33,6 +33,7 @@ To create the package for pypi.
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
 """
+from io import open
 from setuptools import find_packages, setup
 
 setup(
@@ -58,7 +59,7 @@ setup(
         "pytorch_pretrained_bert=pytorch_pretrained_bert.__main__:main",
       ]
     },
-    python_requires='>=3.5.0',
+    # python_requires='>=3.5.0',
     tests_require=['pytest'],
     classifiers=[
           'Intended Audience :: Science/Research',

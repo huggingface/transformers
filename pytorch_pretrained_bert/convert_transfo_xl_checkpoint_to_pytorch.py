@@ -14,25 +14,31 @@
 # limitations under the License.
 """Convert Transformer XL checkpoint and datasets."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
+import argparse
 import os
 import sys
-import argparse
-import pickle
+from io import open
 
-import tensorflow as tf
 import torch
-import numpy as np
 
-from pytorch_pretrained_bert.modeling_transfo_xl import TransfoXLConfig, TransfoXLModel, CONFIG_NAME, WEIGHTS_NAME, load_tf_weights_in_transfo_xl
-from pytorch_pretrained_bert.tokenization_transfo_xl import VOCAB_NAME, CORPUS_NAME
+import pytorch_pretrained_bert.tokenization_transfo_xl as data_utils
+from pytorch_pretrained_bert.modeling_transfo_xl import (CONFIG_NAME,
+                                                         WEIGHTS_NAME,
+                                                         TransfoXLConfig,
+                                                         TransfoXLModel,
+                                                         load_tf_weights_in_transfo_xl)
+from pytorch_pretrained_bert.tokenization_transfo_xl import (CORPUS_NAME,
+                                                             VOCAB_NAME)
+
+if sys.version_info[0] == 2:
+    import cPickle as pickle
+else:
+    import pickle
 
 # We do this to be able to load the python 2 datasets pickles
 # See e.g. https://stackoverflow.com/questions/2121874/python-pickling-after-changing-a-modules-directory/2121918#2121918
-import pytorch_pretrained_bert.tokenization_transfo_xl as data_utils
 data_utils.Vocab = data_utils.TransfoXLTokenizer
 data_utils.Corpus = data_utils.TransfoXLCorpus
 sys.modules['data_utils'] = data_utils
