@@ -14,14 +14,18 @@
 # limitations under the License.
 """Convert OpenAI GPT checkpoint."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import argparse
+from io import open
+
 import torch
 
-from pytorch_pretrained_bert.modeling_openai import load_tf_weights_in_openai_gpt, OpenAIGPTConfig, OpenAIGPTModel, CONFIG_NAME, WEIGHTS_NAME
+from pytorch_pretrained_bert.modeling_openai import (CONFIG_NAME, WEIGHTS_NAME,
+                                                     OpenAIGPTConfig,
+                                                     OpenAIGPTModel,
+                                                     load_tf_weights_in_openai_gpt)
+
 
 def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_config_file, pytorch_dump_folder_path):
     # Construct model

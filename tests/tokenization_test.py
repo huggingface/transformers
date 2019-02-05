@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import os
 import unittest
+from io import open
 
 from pytorch_pretrained_bert.tokenization import (BertTokenizer, BasicTokenizer, WordpieceTokenizer,
                                                   _is_whitespace, _is_control, _is_punctuation)
@@ -30,7 +31,7 @@ class TokenizationTest(unittest.TestCase):
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
             "##ing", ","
         ]
-        with open("/tmp/bert_tokenizer_test.txt", "w") as vocab_writer:
+        with open("/tmp/bert_tokenizer_test.txt", "w", encoding='utf-8') as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
             vocab_file = vocab_writer.name
@@ -49,7 +50,7 @@ class TokenizationTest(unittest.TestCase):
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
             "##ing", ","
         ]
-        with open("/tmp/bert_tokenizer_test.txt", "w") as vocab_writer:
+        with open("/tmp/bert_tokenizer_test.txt", "w", encoding='utf-8') as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
             vocab_file = vocab_writer.name
 

@@ -17,26 +17,26 @@
     Adapted from https://github.com/kimiyoung/transformer-xl.
     In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/eval.py
 """
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
-import sys
 import functools
 import argparse
+import logging
 import time
 import math
+import sys
+from io import open
 
 import torch
 
 from pytorch_pretrained_bert import TransfoXLModel, TransfoXLCorpus
 
-def logging(s, log_path, print_=True, log_=True):
-    if print_:
-        print(s)
-    if log_:
-        with open(log_path, 'a+') as f_log:
-            f_log.write(s + '\n')
+logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+                    datefmt = '%m/%d/%Y %H:%M:%S',
+                    level = logging.INFO)
+logger = logging.getLogger(__name__)
 
-def get_logger(log_path, **kwargs):
-    return functools.partial(logging, log_path=log_path, **kwargs)
 
 parser = argparse.ArgumentParser(description='PyTorch Transformer Language Model')
 # parser.add_argument('--data', type=str, default='../data/wikitext-103',
@@ -71,8 +71,8 @@ assert args.ext_len >= 0, 'extended context length must be non-negative'
 device = torch.device("cuda" if args.cuda else "cpu")
 
 # Get logger
-logging = get_logger(os.path.join(args.work_dir, 'log.txt'),
-                     log_=not args.no_log)
+# logging = get_logger(os.path.join(args.work_dir, 'log.txt'),
+#                      log_=not args.no_log)
 
 # Load dataset
 corpus = TransfoXLCorpus.from_pretrained(args.model_name)
@@ -90,7 +90,7 @@ te_iter = corpus.get_iterator('test', args.batch_size, args.tgt_len,
 model = TransfoXLModel.from_pretrained(args.model_name)
 model = model.to(device)
 
-logging('Evaluating with bsz {} tgt_len {} ext_len {} mem_len {} clamp_len {}'.format(
+logger.info('Evaluating with bsz {} tgt_len {} ext_len {} mem_len {} clamp_len {}'.format(
        args.batch_size, args.tgt_len, args.ext_len, args.mem_len, args.clamp_len))
 
 model.reset_length(args.tgt_len, args.ext_len, args.mem_len)
@@ -116,7 +116,7 @@ def evaluate(eval_iter):
             total_loss += seq_len * loss.item()
             total_len += seq_len
         total_time = time.time() - start_time
-    logging('Time : {:.2f}s, {:.2f}ms/segment'.format(
+    logger.info('Time : {:.2f}s, {:.2f}ms/segment'.format(
             total_time, 1000 * total_time / (idx+1)))
     return total_loss / total_len
 
@@ -146,6 +146,6 @@ if valid_loss is not None:
 if test_loss is not None:
     log_str += format_log(test_loss, 'test')
 
-logging('=' * 100)
-logging(log_str)
-logging('=' * 100)
+logger.info('=' * 100)
+logger.info(log_str)
+logger.info('=' * 100)

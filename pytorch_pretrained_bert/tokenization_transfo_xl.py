@@ -16,15 +16,26 @@
 """ Tokenization classes for Transformer XL model.
     Adapted from https://github.com/kimiyoung/transformer-xl.
 """
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
-import os
 import glob
 import logging
-import pickle
-import torch
+import os
+import sys
 from collections import Counter, OrderedDict
+from io import open
+
+import torch
+import numpy as np
 
 from .file_utils import cached_path
+
+if sys.version_info[0] == 2:
+    import cPickle as pickle
+else:
+    import pickle
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +66,7 @@ class TransfoXLTokenizer(object):
         # redirect to the cache, if necessary
         try:
             resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-        except FileNotFoundError:
+        except EnvironmentError:
             logger.error(
                 "Model name '{}' was not found in model name list ({}). "
                 "We assumed '{}' was a path or url but couldn't find files {} "
@@ -422,7 +433,7 @@ class TransfoXLCorpus(object):
         # redirect to the cache, if necessary
         try:
             resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
-        except FileNotFoundError:
+        except EnvironmentError:
             logger.error(
                 "Model name '{}' was not found in model name list ({}). "
                 "We assumed '{}' was a path or url but couldn't find files {} "

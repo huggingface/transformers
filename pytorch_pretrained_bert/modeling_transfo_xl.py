@@ -27,6 +27,8 @@ import tarfile
 import tempfile
 import shutil
 import collections
+import sys
+from io import open
 
 import torch
 import torch.nn as nn
@@ -124,7 +126,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
     try:
         import numpy as np
         import tensorflow as tf
-    except ModuleNotFoundError:
+    except ImportError:
         print("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
@@ -239,7 +241,8 @@ class TransfoXLConfig(object):
             proj_init_std: parameters initialized by N(0, init_std)
             init_std: parameters initialized by N(0, init_std)
         """
-        if isinstance(vocab_size_or_config_json_file, str):
+        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
+                        and isinstance(vocab_size_or_config_json_file, unicode)):
             with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
                 json_config = json.loads(reader.read())
             for key, value in json_config.items():
@@ -503,11 +506,12 @@ class RelMultiHeadAttn(nn.Module):
         return x
 
     def _rel_shift(self, x, zero_triu=False):
-        zero_pad = torch.zeros((x.size(0), 1, *x.size()[2:]),
-                               device=x.device, dtype=x.dtype)
+        zero_pad_shape = (x.size(0), 1) + x.size()[2:]
+        zero_pad = torch.zeros(zero_pad_shape, device=x.device, dtype=x.dtype)
         x_padded = torch.cat([zero_pad, x], dim=1)
 
-        x_padded = x_padded.view(x.size(1) + 1, x.size(0), *x.size()[2:])
+        x_padded_shape = (x.size(1) + 1, x.size(0)) + x.size()[2:]
+        x_padded = x_padded.view(*x_padded_shape)
 
         x = x_padded[1:].view_as(x)
 
@@ -797,7 +801,8 @@ class AdaptiveEmbedding(nn.Module):
 
                 emb_flat.index_copy_(0, indices_i, emb_i)
 
-            embed = emb_flat.view(*inp.size(), self.d_proj)
+            embed_shape = inp.size() + (self.d_proj,)
+            embed = emb_flat.view(embed_shape)
 
         embed.mul_(self.emb_scale)
 
@@ -905,7 +910,7 @@ class TransfoXLPreTrainedModel(nn.Module):
         try:
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
             resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
-        except FileNotFoundError:
+        except EnvironmentError:
             logger.error(
                 "Model name '{}' was not found in model name list ({}). "
                 "We assumed '{}' was a path or url but couldn't find files {} and {} "

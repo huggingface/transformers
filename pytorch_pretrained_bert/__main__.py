@@ -15,7 +15,7 @@ def main():
         if sys.argv[1] == "convert_tf_checkpoint_to_pytorch":
             try:
                 import tensorflow as tf
-            except ModuleNotFoundError:
+            except ImportError:
                 print("pytorch_pretrained_bert can only be used from the commandline to convert TensorFlow models in PyTorch, "
                     "In that case, it requires TensorFlow to be installed. Please see "
                     "https://www.tensorflow.org/install/ for installation instructions.")
@@ -43,7 +43,7 @@ def main():
         else:
             try:
                 import tensorflow as tf
-            except ModuleNotFoundError:
+            except ImportError:
                 print("pytorch_pretrained_bert can only be used from the commandline to convert TensorFlow models in PyTorch, "
                     "In that case, it requires TensorFlow to be installed. Please see "
                     "https://www.tensorflow.org/install/ for installation instructions.")
