@@ -680,14 +680,15 @@ Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 wit
 
 ```shell
 python run_lm_finetuning.py \
-  --bert_model bert-base-cased 
-  --do_train 
-  --train_file samples/sample_text.txt 
-  --output_dir models 
-  --num_train_epochs 5.0 
-  --learning_rate 3e-5 
-  --train_batch_size 32 
-  --max_seq_length 128 
+  --bert_model bert-base-uncased \
+  --do_lower_case \
+  --do_train \
+  --train_file ../samples/sample_text.txt \
+  --output_dir models \
+  --num_train_epochs 5.0 \
+  --learning_rate 3e-5 \
+  --train_batch_size 32 \
+  --max_seq_length 128 \
 ```
 
 ## Fine-tuning BERT-large on GPUs
