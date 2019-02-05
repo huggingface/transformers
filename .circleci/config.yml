@@ -1,11 +1,26 @@
 version: 2
 jobs:
-    build:
+    build_py3:
         working_directory: ~/pytorch-pretrained-BERT
         docker:
-            - image: circleci/python:3.7
+            - image: circleci/python:3.5
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest
             - run: python -m pytest -sv tests/
+    build_py2:
+        working_directory: ~/pytorch-pretrained-BERT
+        docker:
+            - image: circleci/python:2.7
+        steps:
+            - checkout
+            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install pytest
+            - run: python -m pytest -sv tests/
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build_py3
+      - build_py2
