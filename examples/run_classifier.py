@@ -33,7 +33,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertForSequenceClassification
-from pytorch_pretrained_bert.optimization import BertAdam
+from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -296,11 +296,6 @@ def accuracy(out, labels):
     outputs = np.argmax(out, axis=1)
     return np.sum(outputs == labels)
 
-def warmup_linear(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 1.0 - x
-
 def main():
     parser = argparse.ArgumentParser()
 
@@ -416,7 +411,7 @@ def main():
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
                             args.gradient_accumulation_steps))
 
-    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -443,11 +438,13 @@ def main():
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
-    num_train_steps = None
+    num_train_optimization_steps = None
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
-        num_train_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+        num_train_optimization_steps = int(
+            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
+        if args.local_rank != -1:
+            num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
     # Prepare model
     model = BertForSequenceClassification.from_pretrained(args.bert_model,
@@ -473,9 +470,6 @@ def main():
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-    t_total = num_train_steps
-    if args.local_rank != -1:
-        t_total = t_total // torch.distributed.get_world_size()
     if args.fp16:
         try:
             from apex.optimizers import FP16_Optimizer
@@ -496,7 +490,7 @@ def main():
         optimizer = BertAdam(optimizer_grouped_parameters,
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
-                             t_total=t_total)
+                             t_total=num_train_optimization_steps)
 
     global_step = 0
     nb_tr_steps = 0
@@ -507,7 +501,7 @@ def main():
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", num_train_steps)
+        logger.info("  Num steps = %d", num_train_optimization_steps)
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
@@ -541,10 +535,12 @@ def main():
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    # modify learning rate with special warm up BERT uses
-                    lr_this_step = args.learning_rate * warmup_linear(global_step/t_total, args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
+                    if args.fp16:
+                        # modify learning rate with special warm up BERT uses
+                        # if args.fp16 is False, BertAdam is used that handles this automatically
+                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr_this_step
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
