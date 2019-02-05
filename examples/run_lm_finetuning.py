@@ -30,19 +30,16 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from pytorch_pretrained_bert.modeling import BertForPreTraining
-from pytorch_pretrained_bert.optimization import BertAdam
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
+
+from torch.utils.data import Dataset
+import random
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def warmup_linear(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 1.0 - x
 
 
 class BERTDataset(Dataset):
@@ -136,11 +133,11 @@ class BERTDataset(Dataset):
         # transform sample to features
         cur_features = convert_example_to_features(cur_example, self.seq_len, self.tokenizer)
 
-        cur_tensors = {"input_ids": torch.tensor(cur_features.input_ids),
-                       "input_mask": torch.tensor(cur_features.input_mask),
-                       "segment_ids": torch.tensor(cur_features.segment_ids),
-                       "lm_label_ids": torch.tensor(cur_features.lm_label_ids),
-                       "is_next": torch.tensor(cur_features.is_next)}
+        cur_tensors = (torch.tensor(cur_features.input_ids),
+                       torch.tensor(cur_features.input_mask),
+                       torch.tensor(cur_features.segment_ids),
+                       torch.tensor(cur_features.lm_label_ids),
+                       torch.tensor(cur_features.is_next))
 
         return cur_tensors
 
@@ -325,8 +322,8 @@ def convert_example_to_features(example, max_seq_length, tokenizer):
     # Account for [CLS], [SEP], [SEP] with "- 3"
     _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
 
-    t1_random, t1_label = random_word(tokens_a, tokenizer)
-    t2_random, t2_label = random_word(tokens_b, tokenizer)
+    tokens_a, t1_label = random_word(tokens_a, tokenizer)
+    tokens_b, t2_label = random_word(tokens_b, tokenizer)
     # concatenate lm labels and account for CLS, SEP, SEP
     lm_label_ids = ([-1] + t1_label + [-1] + t2_label + [-1])
 
@@ -459,6 +456,9 @@ def main():
     parser.add_argument("--on_memory",
                         action='store_true',
                         help="Whether to load train samples into memory or use disk")
+    parser.add_argument("--do_lower_case",
+                        action='store_true',
+                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
@@ -498,7 +498,7 @@ def main():
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
                             args.gradient_accumulation_steps))
 
-    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -517,13 +517,15 @@ def main():
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     #train_examples = None
-    num_train_steps = None
+    num_train_optimization_steps = None
     if args.do_train:
         print("Loading Train Dataset", args.train_file)
         train_dataset = BERTDataset(args.train_file, tokenizer, seq_len=args.max_seq_length,
                                     corpus_lines=None, on_memory=args.on_memory)
-        num_train_steps = int(
-            len(train_dataset) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
+        num_train_optimization_steps = int(
+            len(train_dataset) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
+        if args.local_rank != -1:
+            num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
     # Prepare model
     model = BertForPreTraining.from_pretrained(args.bert_model)
@@ -546,6 +548,7 @@ def main():
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+
     if args.fp16:
         try:
             from apex.optimizers import FP16_Optimizer
@@ -566,14 +569,14 @@ def main():
         optimizer = BertAdam(optimizer_grouped_parameters,
                              lr=args.learning_rate,
                              warmup=args.warmup_proportion,
-                             t_total=num_train_steps)
+                             t_total=num_train_optimization_steps)
 
     global_step = 0
     if args.do_train:
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_dataset))
         logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", num_train_steps)
+        logger.info("  Num steps = %d", num_train_optimization_steps)
 
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_dataset)
@@ -588,7 +591,7 @@ def main():
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-                batch = tuple(t.to(device) for t in batch.values())
+                batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, lm_label_ids, is_next = batch
                 loss = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
                 if n_gpu > 1:
@@ -603,20 +606,22 @@ def main():
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    # modify learning rate with special warm up BERT uses
-                    lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_steps, args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
+                    if args.fp16:
+                        # modify learning rate with special warm up BERT uses
+                        # if args.fp16 is False, BertAdam is used that handles this automatically
+                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
+                        for param_group in optimizer.param_groups:
+                            param_group['lr'] = lr_this_step
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
 
+        # Save a trained model
         logger.info("** ** * Saving fine - tuned model ** ** * ")
+        model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
         output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
-        if n_gpu > 1:
-            torch.save(model.module.bert.state_dict(), output_model_file)
-        else:
-            torch.save(model.bert.state_dict(), output_model_file)
+        if args.do_train:
+            torch.save(model_to_save.state_dict(), output_model_file)
 
 
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
