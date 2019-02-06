@@ -93,6 +93,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         '''
             hidden :: [len*bsz x d_proj]
             target :: [len*bsz]
+            We could replace this implementation by the native PyTorch one
+            if their was an option to set bias on all clusters in the native one.
+            line https://github.com/pytorch/pytorch/blob/dbe6a7a9ff1a364a8706bf5df58a1ca96d2fd9da/torch/nn/modules/adaptive.py#L138
         '''
 
         if hidden.size(0) != target.size(0):
@@ -156,9 +159,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
                     tail_logit_i = self._compute_logit(hidden_i, weight_i, bias_i, proj_i)
                     tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
-
-                    logprob_i = head_logprob_i[:, -i] \
-                              + tail_logprob_i.gather(1, target_i[:,None]).squeeze(1)
+                    cluster_prob_idx = self.cutoffs[0] + i - 1  # No probability for the head cluster
+                    logprob_i = head_logprob_i[:, cluster_prob_idx] \
+                              + tail_logprob_i.gather(1, target_i[:, None]).squeeze(1)
 
                 if (hasattr(self, 'keep_order') and self.keep_order) or keep_order:
                     nll.index_copy_(0, indices_i, -logprob_i)
@@ -168,6 +171,69 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                 offset += logprob_i.size(0)
 
         return nll
+
+
+    def log_prob(self, hidden):
+        r""" Computes log probabilities for all :math:`n\_classes`
+        From: https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/adaptive.py
+        Args:
+            hidden (Tensor): a minibatch of examples
+        Returns:
+            log-probabilities of for each class :math:`c`
+            in range :math:`0 <= c <= n\_classes`, where :math:`n\_classes` is a
+            parameter passed to ``AdaptiveLogSoftmaxWithLoss`` constructor.
+        Shape:
+            - Input: :math:`(N, in\_features)`
+            - Output: :math:`(N, n\_classes)`
+        """
+        if self.n_clusters == 0:
+            logit = self._compute_logit(hidden, self.out_layers[0].weight,
+                                        self.out_layers[0].bias, self.out_projs[0])
+            return F.log_softmax(logit, dim=-1)
+        else:
+            # construct weights and biases
+            weights, biases = [], []
+            for i in range(len(self.cutoffs)):
+                if self.div_val == 1:
+                    l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
+                    weight_i = self.out_layers[0].weight[l_idx:r_idx]
+                    bias_i = self.out_layers[0].bias[l_idx:r_idx]
+                else:
+                    weight_i = self.out_layers[i].weight
+                    bias_i = self.out_layers[i].bias
+
+                if i == 0:
+                    weight_i = torch.cat(
+                        [weight_i, self.cluster_weight], dim=0)
+                    bias_i = torch.cat(
+                        [bias_i, self.cluster_bias], dim=0)
+
+                weights.append(weight_i)
+                biases.append(bias_i)
+
+            head_weight, head_bias, head_proj = weights[0], biases[0], self.out_projs[0]
+            head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
+
+            out = hidden.new_empty((head_logit.size(0), self.n_token))
+            head_logprob = F.log_softmax(head_logit, dim=1)
+
+            cutoff_values = [0] + self.cutoffs
+            for i in range(len(cutoff_values) - 1):
+                start_idx, stop_idx = cutoff_values[i], cutoff_values[i + 1]
+
+                if i == 0:
+                    out[:, :self.cutoffs[0]] = head_logprob[:, :self.cutoffs[0]]
+                else:
+                    weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
+
+                    tail_logit_i = self._compute_logit(hidden, weight_i, bias_i, proj_i)
+                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
+
+                    logprob_i = head_logprob[:, -i] + tail_logprob_i
+                    out[:, start_idx, stop_idx] = logprob_i
+
+            return out
+
 
 class LogUniformSampler(object):
     def __init__(self, range_max, n_sample):
