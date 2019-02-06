@@ -1215,7 +1215,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         # So, have to initialize size(0) mems inside the model forward.
         # Moreover, have to return new_mems to allow nn.DataParallel to piece
         # them together.
-        if not mems: mems = self.init_mems(data)
+        if not mems:
+            mems = self.init_mems(data)
 
         hidden, new_mems = self._forward(data, mems=mems)
         if target is None:
