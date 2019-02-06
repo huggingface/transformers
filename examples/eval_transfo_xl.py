@@ -111,7 +111,7 @@ def evaluate(eval_iter):
         mems = tuple()
         for idx, (data, target, seq_len) in enumerate(eval_iter):
             ret = model(data, target, *mems)
-            loss, mems = ret[0], ret[1:]
+            loss, mems = ret
             loss = loss.mean()
             total_loss += seq_len * loss.item()
             total_len += seq_len
