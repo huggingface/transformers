@@ -1088,7 +1088,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         if self.mem_len > 0:
             mems = []
             param = next(self.parameters())
-            for i in range(self.n_layer+1):
+            for i in range(self.n_layer):
                 empty = torch.zeros(self.mem_len, data.size(1), self.config.d_model,
                                     dtype=param.dtype, device=param.device)
                 mems.append(empty)
@@ -1151,15 +1151,14 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             core_out = self.drop(word_emb)
             pos_emb = self.drop(pos_emb)
 
-            hids.append(core_out)
             for i, layer in enumerate(self.layers):
+                hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 core_out = layer(core_out, pos_emb, dec_attn_mask=dec_attn_mask, mems=mems_i)
-                hids.append(core_out)
         elif self.attn_type == 1: # learnable
             core_out = self.drop(word_emb)
-            hids.append(core_out)
             for i, layer in enumerate(self.layers):
+                hids.append(core_out)
                 if self.clamp_len > 0:
                     r_emb = self.r_emb[i][-self.clamp_len :]
                     r_bias = self.r_bias[i][-self.clamp_len :]
@@ -1169,7 +1168,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 mems_i = None if mems is None else mems[i]
                 core_out = layer(core_out, r_emb, self.r_w_bias[i],
                         r_bias, dec_attn_mask=dec_attn_mask, mems=mems_i)
-                hids.append(core_out)
         elif self.attn_type == 2: # absolute
             pos_seq = torch.arange(klen - 1, -1, -1.0, device=word_emb.device,
                                    dtype=word_emb.dtype)
@@ -1179,19 +1177,18 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
             core_out = self.drop(word_emb + pos_emb[-qlen:])
 
-            hids.append(core_out)
             for i, layer in enumerate(self.layers):
+                hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 if mems_i is not None and i == 0:
                     mems_i += pos_emb[:mlen]
                 core_out = layer(core_out, dec_attn_mask=dec_attn_mask,
                                  mems=mems_i)
-                hids.append(core_out)
         elif self.attn_type == 3:
             core_out = self.drop(word_emb)
 
-            hids.append(core_out)
             for i, layer in enumerate(self.layers):
+                hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 if mems_i is not None and mlen > 0:
                     cur_emb = self.r_emb[i][:-qlen]
@@ -1206,7 +1203,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
                 core_out = layer(core_out, dec_attn_mask=dec_attn_mask,
                                  mems=mems_i)
-                hids.append(core_out)
 
         core_out = self.drop(core_out)
 
@@ -1241,5 +1237,4 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         if new_mems is None:
             return [loss]
         else:
-            return [loss] + new_mems
-
+            return (loss, new_mems)
