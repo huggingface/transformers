@@ -432,10 +432,6 @@ def main():
                         default=32,
                         type=int,
                         help="Total batch size for training.")
-    parser.add_argument("--eval_batch_size",
-                        default=8,
-                        type=int,
-                        help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
                         default=3e-5,
                         type=float,
