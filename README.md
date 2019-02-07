@@ -36,7 +36,7 @@ This PyTorch implementation of Transformer-XL is an adaptation of the original [
 
 ## Installation
 
-This repo was tested on Python 3.5+ and PyTorch 0.4.1/1.0.0
+This repo was tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 0.4.1/1.0.0
 
 ### With pip
 
@@ -78,13 +78,20 @@ This package comprises the following classes that can be imported in Python and 
   - [`OpenAIGPTLMHeadModel`](./pytorch_pretrained_bert/modeling_openai.py#L691) - OpenAI GPT Transformer with the tied language modeling head on top (**fully pre-trained**),
   - [`OpenAIGPTDoubleHeadsModel`](./pytorch_pretrained_bert/modeling_openai.py#L752) - OpenAI GPT Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
 
+- Two **Transformer-XL** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling_transfo_xl.py`](./pytorch_pretrained_bert/modeling_transfo_xl.py) file):
+  - [`TransfoXLModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L974) - Transformer-XL model which outputs the last hidden state and memory cells (**fully pre-trained**),
+  - [`TransfoXLLMHeadModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L1236) - Transformer-XL with the tied adaptive softmax head on top for language modeling which outputs the logits/loss and memory cells (**fully pre-trained**),
+
 - Tokenizers for **BERT** (using word-piece) (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
   - `WordpieceTokenizer` - WordPiece tokenization,
   - `BertTokenizer` - perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
 - Tokenizer for **OpenAI GPT** (using Byte-Pair-Encoding) (in the [`tokenization_openai.py`](./pytorch_pretrained_bert/tokenization_openai.py) file):
-  - `OpenAIGPTTokenizer` - perform Byte-Pair-Encoding (BPE) tokenization,
+  - `OpenAIGPTTokenizer` - perform Byte-Pair-Encoding (BPE) tokenization.
+
+- Tokenizer for **Transformer-XL** (word tokens ordered by frequency for adaptive softmax) (in the [`tokenization_transfo_xl.py`](./pytorch_pretrained_bert/tokenization_transfo_xl.py) file):
+  - `OpenAIGPTTokenizer` - perform word tokenization and can order words by frequency in a corpus for use in an adaptive softmax.
 
 - Optimizer for **BERT** (in the [`optimization.py`](./pytorch_pretrained_bert/optimization.py) file):
   - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
@@ -221,7 +228,7 @@ model = OpenAIGPTModel.from_pretrained('openai-gpt')
 model.eval()
 
 # Predict hidden states features for each layer
-hidden_states = model(tokens_tensor, segments_tensors)
+hidden_states = model(tokens_tensor)
 ```
 
 And how to use `OpenAIGPTLMHeadModel`
@@ -247,31 +254,37 @@ First let's prepare a tokenized input with `OpenAIGPTTokenizer`
 
 ```python
 import torch
-from pytorch_pretrained_bert import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
+from pytorch_pretrained_bert import TransfoXLTokenizer, TransfoXLModel, TransfoXLLMHeadModel
 
-# Load pre-trained model tokenizer (vocabulary)
-tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+# Load pre-trained model tokenizer (vocabulary from wikitext 103)
+tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
 
 # Tokenized input
-text = "Who was Jim Henson ? Jim Henson was a puppeteer"
-tokenized_text = tokenizer.tokenize(text)
+text_1 = "Who was Jim Henson ?"
+text_2 = "Jim Henson was a puppeteer"
+tokenized_text_1 = tokenizer.tokenize(text_1)
+tokenized_text_2 = tokenizer.tokenize(text_2)
 
 # Convert token to vocabulary indices
-indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+indexed_tokens_1 = tokenizer.convert_tokens_to_ids(tokenized_text_1)
+indexed_tokens_2 = tokenizer.convert_tokens_to_ids(tokenized_text_2)
 
 # Convert inputs to PyTorch tensors
-tokens_tensor = torch.tensor([indexed_tokens])
+tokens_tensor_1 = torch.tensor([indexed_tokens_1])
+tokens_tensor_2 = torch.tensor([indexed_tokens_2])
 ```
 
-Let's see how to use `OpenAIGPTModel` to get hidden states
+Let's see how to use `TransfoXLModel` to get hidden states
 
 ```python
 # Load pre-trained model (weights)
-model = OpenAIGPTModel.from_pretrained('openai-gpt')
+model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
 model.eval()
 
 # Predict hidden states features for each layer
-hidden_states = model(tokens_tensor, segments_tensors)
+hidden_states_1, mems_1 = model(tokens_tensor_1)
+# We can re-use the memory cells in a subsequent call to attend a longer context
+hidden_states_2, mems_2 = model(tokens_tensor_2, mems_1)
 ```
 
 And how to use `OpenAIGPTLMHeadModel`
@@ -282,10 +295,12 @@ model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
 model.eval()
 
 # Predict all tokens
-predictions = model(tokens_tensor)
+predictions_1, mems_1 = model(tokens_tensor_1)
+# We can re-use the memory cells in a subsequent call to attend a longer context
+predictions_2, mems_2 = model(tokens_tensor_2, mems_1)
 
 # get the predicted last token
-predicted_index = torch.argmax(predictions[0, masked_index]).item()
+predicted_index = torch.argmax(predictions_1[0, masked_index]).item()
 predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
 ```
 
@@ -323,11 +338,12 @@ where
     - `bert-base-multilingual-cased`: **(New, recommended)** 104 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `bert-base-chinese`: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `openai-gpt`: OpenAI English model, 12-layer, 768-hidden, 12-heads, 110M parameters
+    - `transfo-xl-wt103`: Transformer-XL English model trained on wikitext-103, 18-layer, 1024-hidden, 16-heads, 257M parameters
 
   - a path or url to a pretrained model archive containing:
 
     - `bert_config.json` or `openai_gpt_config.json` a configuration file for the model, and
-    - `pytorch_model.bin` a PyTorch dump of a pre-trained instance of `BertForPreTraining` or `OpenAIGPTModel` (saved with the usual `torch.save()`)
+    - `pytorch_model.bin` a PyTorch dump of a pre-trained instance of `BertForPreTraining`, `OpenAIGPTModel` or `TransfoXLModel` (saved with the usual `torch.save()`)
 
   If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
 - `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information).
@@ -345,6 +361,10 @@ model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 # OpenAI GPT
 tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
 model = OpenAIGPTModel.from_pretrained('openai-gpt')
+
+# Transformer-XL
+tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
+model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
 ```
 
 ### PyTorch models
@@ -523,6 +543,37 @@ This model *outputs*:
   - `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, total_tokens_embeddings]
   - `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
 
+#### 12. `TransfoXLModel`
+
+The Transformer-XL model is described in "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context".
+
+Transformer XL use a relative positioning with sinusiodal patterns and adaptive softmax inputs which means that:
+
+- you don't need to specify positioning embeddings indices
+- the tokens in the vocabulary have to be sorted to decreasing frequency.
+
+This model takes as *inputs*:
+[`modeling_transfo_xl.py`](./pytorch_pretrained_bert/modeling_transfo_xl.py)
+- `input_ids`: a torch.LongTensor of shape [sequence_length, batch_size] with the token indices selected in the range [0, self.config.n_token[
+- `mems`: an optional memory of hidden states from previous forward passes as a list (num layers) of hidden states at the entry of each layer. Each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
+
+This model *outputs* a tuple of (last_hidden_state, new_mems)
+- `last_hidden_state`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [sequence_length, batch_size, self.config.d_model]
+- `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
+
+#### 13. `TransfoXLLMHeadModel`
+
+`TransfoXLLMHeadModel` includes the `TransfoXLModel` Transformer followed by an (adaptive) softmax head with weights tied to the input embeddings.
+
+*Inputs* are the same as the inputs of the [`TransfoXLModel`](#-12.-`TransfoXLModel`) class plus optional labels:
+- `target`: an optional torch.LongTensor of shape [sequence_length, batch_size] with the target token indices selected in the range [0, self.config.n_token[
+
+*Outputs* a tuple of (last_hidden_state, new_mems)
+- `softmax_output`: output of the (adaptive) softmax:
+  - if target is None: Negative log likelihood of shape :: [len, bsz]
+  - else: log probabilities of tokens, shape :: [len, bsz, n_tokens]
+- `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
+
 
 ### Tokenizers:
 
@@ -547,7 +598,7 @@ Please refer to the doc strings and code in [`tokenization.py`](./pytorch_pretra
 
 `OpenAIGPTTokenizer` perform Byte-Pair-Encoding (BPE) tokenization.
 
-This class has one arguments:
+This class has two arguments:
 
 - `vocab_file`: path to a vocabulary file.
 - `merges_file`: path to a file containing the BPE merges.
@@ -559,6 +610,12 @@ and three methods:
 - `convert_ids_to_tokens(tokens)`: convert a list of `int` indices in a list of `str` tokens in the vocabulary.
 
 Please refer to the doc strings and code in [`tokenization_openai.py`](./pytorch_pretrained_bert/tokenization_openai.py) for the details of the `OpenAIGPTTokenizer`.
+
+#### `TransfoXLTokenizer`
+
+`TransfoXLTokenizer` perform word tokenization.
+
+Please refer to the doc strings and code in [`tokenization_transfo_xl.py`](./pytorch_pretrained_bert/tokenization_transfo_xl.py) for the details of the `TransfoXLTokenizer`.
 
 ### Optimizers:
 
@@ -757,6 +814,36 @@ python run_lm_finetuning.py \
   --train_batch_size 32 \
   --max_seq_length 128 \
 ```
+
+### OpenAI GPT and Transformer-XL: running the examples
+
+We provied two examples of scripts for OpenAI GPT and Transformer-XL based on (and extended from) the respective original implementations:
+
+#### Fine-tuning OpenAI GPT on the RocStories dataset
+
+This example code fine-tunes OpenAI GPT on the RocStories dataset.
+
+Before running this example you should download the
+[RocStories dataset](https://github.com/snigdhac/StoryComprehension_EMNLP/tree/master/Dataset/RoCStories) and unpack it to some directory `$ROC_STORIES_DIR`.
+
+```shell
+export ROC_STORIES_DIR=/path/to/RocStories
+
+python train_openai_gpt.py \
+  --task_name MRPC \
+  --do_train \
+  --do_eval \
+  --do_lower_case \
+  --data_dir $GLUE_DIR/MRPC/ \
+  --bert_model bert-base-uncased \
+  --max_seq_length 128 \
+  --train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3.0 \
+  --output_dir /tmp/mrpc_output/
+```
+
+Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation results between 84% and 88%.
 
 ## Fine-tuning BERT-large on GPUs
 
