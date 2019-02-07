@@ -1,14 +1,25 @@
-# PyTorch Pretrained Bert (also with PyTorch Pretrained OpenAI GPT)
+# PyTorch Pretrained BERT: The Big and Extending Repository of (pre-trained) Transformers
 
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
-This repository contains an op-for-op PyTorch reimplementation of [Google's TensorFlow repository for the BERT model](https://github.com/google-research/bert) and of [OpenAI's TensorFlow repository for the OpenAI GPT model](https://github.com/openai/finetune-transformer-lm)
+This repository contains op-for-op PyTorch reimplementations, pre-trained models and fine-tuning examples for:
 
-BERT that was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
+- [Google's BERT model](https://github.com/google-research/bert),
+- [OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm), and
+- [Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl).
+
+These implementations have been tested on several datasets (see the examples) and should match the performances of the associated TensorFlow implementations (e.g. ~91 F1 on SQuAD for BERT, ~88 F1 on RocStories for OpenAI GPT and ~18.3 perplexity on WikiText 103 for the Transformer-XL). You can find more details in the [Examples](#examples) section below.
+
+Here are some information on these models:
+
+**BERT** was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 This PyTorch implementation of BERT is provided with [Google's pre-trained models](https://github.com/google-research/bert), examples, notebooks and a command-line interface to load any pre-trained TensorFlow checkpoint for BERT is also provided.
 
-OpenAI GPT that was released together with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
-This PyTorch implementation of OpenAI GPT is provided with [OpenAI's pre-trained model](https://github.com/openai/finetune-transformer-lm) and a command-line interface that was used to convert the pre-trained NumPy checkpoint in the provided PyTorch model.
+**OpenAI GPT** was released together with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
+This PyTorch implementation of OpenAI GPT is provided with [OpenAI's pre-trained model](https://github.com/openai/finetune-transformer-lm) and a command-line interface that was used to convert the pre-trained NumPy checkpoint in PyTorch.
+
+**Google/CMU's Transformer-XL** was released together with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](http://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
+This PyTorch implementation of Transformer-XL is an adaptation of the original [PyTorch implementation](https://github.com/kimiyoung/transformer-xl) which has been slightly modifier to match the performances of the TensforFlow implementation and allow to re-use the pretrained weights. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
 
 ## Content
 
@@ -52,7 +63,7 @@ python -m pytest -sv tests/
 
 This package comprises the following classes that can be imported in Python and are detailed in the [Doc](#doc) section of this readme:
 
-- Eight PyTorch models (`torch.nn.Module`) for Bert with pre-trained weights (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
+- Eight **Bert** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
   - [`BertModel`](./pytorch_pretrained_bert/modeling.py#L556) - raw BERT Transformer model (**fully pre-trained**),
   - [`BertForMaskedLM`](./pytorch_pretrained_bert/modeling.py#L710) - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
   - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L771) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
@@ -62,40 +73,46 @@ This package comprises the following classes that can be imported in Python and 
   - [`BertForTokenClassification`](./pytorch_pretrained_bert/modeling.py#L969) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**),
   - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L1034) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
 
-- Three PyTorch models (`torch.nn.Module`) for OpenAI with pre-trained weights (in the [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py) file):
+- Three **OpenAI GPT** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py) file):
   - [`OpenAIGPTModel`](./pytorch_pretrained_bert/modeling_openai.py#L537) - raw OpenAI GPT Transformer model (**fully pre-trained**),
   - [`OpenAIGPTLMHeadModel`](./pytorch_pretrained_bert/modeling_openai.py#L691) - OpenAI GPT Transformer with the tied language modeling head on top (**fully pre-trained**),
   - [`OpenAIGPTDoubleHeadsModel`](./pytorch_pretrained_bert/modeling_openai.py#L752) - OpenAI GPT Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
 
-- Three tokenizers for BERT (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
+- Tokenizers for **BERT** (using word-piece) (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
   - `WordpieceTokenizer` - WordPiece tokenization,
   - `BertTokenizer` - perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
-- One tokenizers for OpenAI GPT (in the [`tokenization_openai.py`](./pytorch_pretrained_bert/tokenization_openai.py) file):
+- Tokenizer for **OpenAI GPT** (using Byte-Pair-Encoding) (in the [`tokenization_openai.py`](./pytorch_pretrained_bert/tokenization_openai.py) file):
   - `OpenAIGPTTokenizer` - perform Byte-Pair-Encoding (BPE) tokenization,
 
-- One optimizer for BERT (in the [`optimization.py`](./pytorch_pretrained_bert/optimization.py) file):
+- Optimizer for **BERT** (in the [`optimization.py`](./pytorch_pretrained_bert/optimization.py) file):
   - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
-- One optimizer for OpenAI GPT (in the [`optimization_openai.py`](./pytorch_pretrained_bert/optimization_openai.py) file):
+- Optimizer for **OpenAI GPT** (in the [`optimization_openai.py`](./pytorch_pretrained_bert/optimization_openai.py) file):
   - `OpenAIGPTAdam` - OpenAI GPT version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
-- A configuration class for BERT (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
+- Configuration classes for BERT, OpenAI GPT and Transformer-XL (in the respective [`modeling.py`](./pytorch_pretrained_bert/modeling.py), [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py), [`modeling_transfo_xl.py`](./pytorch_pretrained_bert/modeling_transfo_xl.py) files):
   - `BertConfig` - Configuration class to store the configuration of a `BertModel` with utilities to read and write from JSON configuration files.
-
-- A configuration class for OpenAI GPT (in the [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py) file):
   - `OpenAIGPTConfig` - Configuration class to store the configuration of a `OpenAIGPTModel` with utilities to read and write from JSON configuration files.
+  - `TransfoXLConfig` - Configuration class to store the configuration of a `TransfoXLModel` with utilities to read and write from JSON configuration files.
 
 The repository further comprises:
 
-- Five examples on how to use Bert (in the [`examples` folder](./examples)):
+- Five examples on how to use **BERT** (in the [`examples` folder](./examples)):
   - [`extract_features.py`](./examples/extract_features.py) - Show how to extract hidden states from an instance of `BertModel`,
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
-  - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 task.
+  - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 and SQuAD v2.0 tasks.
   - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
   - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining' on a target text corpus.  
-   
+
+- One example on how to use **OpenAI GPT** (in the [`examples` folder](./examples)):
+  - [`openai_gpt_train.py`](./examples/openai_gpt_train.py) - Show how to fine-tune an instance of `OpenGPTDoubleHeadsModel` on the RocStories task.
+
+- Two examples on how to use **Transformer-XL** (in the [`examples` folder](./examples)):
+  - [`transfo_xl_train.py`](./examples/transfo_xl_train.py) - Show how to train and exaluate an instance of `TransfoXLModel` on WikiText 103,
+  - [`transfo_xl_eval.py`](./examples/transfo_xl_eval.py) - Simply exaluate a pre-trained model of `TransfoXLModel` on WikiText 103.
+
   These examples are detailed in the [Examples](#examples) section of this readme.
 
 - Three notebooks that were used to check that the TensorFlow and PyTorch models behave identically (in the [`notebooks` folder](./notebooks)):
@@ -105,7 +122,7 @@ The repository further comprises:
 
   These notebooks are detailed in the [Notebooks](#notebooks) section of this readme.
 
-- A command-line interface to convert any TensorFlow checkpoint (BERT) and NumPy checkpoint (OpenAI) in a PyTorch dump:
+- A command-line interface to convert TensorFlow checkpoints (BERT, Transformer-XL) or NumPy checkpoint (OpenAI) in a PyTorch save of the associated PyTorch model:
 
   This CLI is detailed in the [Command-line interface](#Command-line-interface) section of this readme.
 
@@ -173,6 +190,56 @@ assert predicted_token == 'henson'
 ```
 
 ### OpenAI GPT
+
+Here is a quick-start example using `OpenAIGPTTokenizer`, `OpenAIGPTModel` and `OpenAIGPTLMHeadModel` class with OpenAI's pre-trained  model. See the [doc section](#doc) below for all the details on these classes.
+
+First let's prepare a tokenized input with `OpenAIGPTTokenizer`
+
+```python
+import torch
+from pytorch_pretrained_bert import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
+
+# Load pre-trained model tokenizer (vocabulary)
+tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+
+# Tokenized input
+text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+tokenized_text = tokenizer.tokenize(text)
+
+# Convert token to vocabulary indices
+indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+
+# Convert inputs to PyTorch tensors
+tokens_tensor = torch.tensor([indexed_tokens])
+```
+
+Let's see how to use `OpenAIGPTModel` to get hidden states
+
+```python
+# Load pre-trained model (weights)
+model = OpenAIGPTModel.from_pretrained('openai-gpt')
+model.eval()
+
+# Predict hidden states features for each layer
+hidden_states = model(tokens_tensor, segments_tensors)
+```
+
+And how to use `OpenAIGPTLMHeadModel`
+
+```python
+# Load pre-trained model (weights)
+model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
+model.eval()
+
+# Predict all tokens
+predictions = model(tokens_tensor)
+
+# get the predicted last token
+predicted_index = torch.argmax(predictions[0, masked_index]).item()
+predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+```
+
+### Transformer-XL
 
 Here is a quick-start example using `OpenAIGPTTokenizer`, `OpenAIGPTModel` and `OpenAIGPTLMHeadModel` class with OpenAI's pre-trained  model. See the [doc section](#doc) below for all the details on these classes.
 
