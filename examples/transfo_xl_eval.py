@@ -16,17 +16,15 @@
 """ PyTorch Transformer XL model evaluation script.
     Adapted from https://github.com/kimiyoung/transformer-xl.
     In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/eval.py
+
+    This script with default values evaluates a pretrained Transformer-XL on WikiText 103
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
-import functools
 import argparse
 import logging
 import time
 import math
-import sys
-from io import open
 
 import torch
 
@@ -39,10 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 parser = argparse.ArgumentParser(description='PyTorch Transformer Language Model')
-# parser.add_argument('--data', type=str, default='../data/wikitext-103',
-#                     help='location of the data corpus')
 parser.add_argument('--model_name', type=str, default='transfo-xl-wt103',
-                    # choices=['transfo-xl-wt103'], #, 'lm1b', 'enwik8', 'text8'],
                     help='pretrained model name')
 parser.add_argument('--split', type=str, default='test',
                     choices=['all', 'valid', 'test'],
@@ -70,11 +65,11 @@ assert args.ext_len >= 0, 'extended context length must be non-negative'
 
 device = torch.device("cuda" if args.cuda else "cpu")
 
-# Get logger
-# logging = get_logger(os.path.join(args.work_dir, 'log.txt'),
-#                      log_=not args.no_log)
-
-# Load dataset
+# Load a pre-processed dataset
+# You can also build the corpus yourself using TransfoXLCorpus methods
+# The pre-processing involve computing word frequencies to prepare the Adaptive input and SoftMax
+# and tokenizing the dataset
+# The pre-processed corpus is a convertion (using the conversion script )
 corpus = TransfoXLCorpus.from_pretrained(args.model_name)
 ntokens = len(corpus.vocab)
 
@@ -83,10 +78,7 @@ va_iter = corpus.get_iterator('valid', args.batch_size, args.tgt_len,
 te_iter = corpus.get_iterator('test', args.batch_size, args.tgt_len,
     device=device, ext_len=args.ext_len)
 
-# Load the best saved model.
-# with open(os.path.join(args.work_dir, 'model.pt'), 'rb') as f:
-#     model = torch.load(f)
-# model.backward_compatible()
+# Load a pre-trained model
 model = TransfoXLModel.from_pretrained(args.model_name)
 model = model.to(device)
 
@@ -132,10 +124,6 @@ elif args.split == 'test':
     valid_loss = None
 
 def format_log(loss, split):
-    # if args.dataset in ['enwik8', 'text8']:
-    #     log_str = '| {0} loss {1:5.2f} | {0} bpc {2:9.5f} '.format(
-    #         split, loss, loss / math.log(2))
-    # else:
     log_str = '| {0} loss {1:5.2f} | {0} ppl {2:9.3f} '.format(
         split, loss, math.exp(loss))
     return log_str
