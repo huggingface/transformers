@@ -193,6 +193,7 @@ class OpenAIGPTTokenizer(object):
         return word
 
     def tokenize(self, text):
+        """ Tokenize a string. """
         split_tokens = []
         text = self.nlp(text_standardize(self.fix_text(text)))
         for token in text:
@@ -200,7 +201,7 @@ class OpenAIGPTTokenizer(object):
         return split_tokens
 
     def convert_tokens_to_ids(self, tokens):
-        """Converts a sequence of tokens into ids using the vocab."""
+        """ Converts a sequence of tokens into ids using the vocab. """
         ids = []
         if isinstance(tokens, str) or (sys.version_info[0] == 2 and isinstance(tokens, unicode)):
             if tokens in self.special_tokens:
