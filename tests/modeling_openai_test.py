@@ -114,6 +114,7 @@ class OpenAIGPTModelTest(unittest.TestCase):
         def create_openai_model(self, config, input_ids, token_type_ids, position_ids,
                                 mc_labels, lm_labels, mc_token_mask):
             model = OpenAIGPTModel(config)
+            model.eval()
             hidden_states = model(input_ids, position_ids, token_type_ids)
             outputs = {
                 "hidden_states": hidden_states,
@@ -129,6 +130,7 @@ class OpenAIGPTModelTest(unittest.TestCase):
         def create_openai_lm_head(self, config, input_ids, token_type_ids, position_ids,
                                        mc_labels, lm_labels, mc_token_mask):
             model = OpenAIGPTLMHeadModel(config)
+            model.eval()
             loss = model(input_ids, position_ids, token_type_ids, lm_labels)
             lm_logits = model(input_ids, position_ids, token_type_ids)
             outputs = {
@@ -151,6 +153,7 @@ class OpenAIGPTModelTest(unittest.TestCase):
         def create_openai_double_heads(self, config, input_ids, token_type_ids, position_ids,
                                        mc_labels, lm_labels, mc_token_mask):
             model = OpenAIGPTDoubleHeadsModel(config)
+            model.eval()
             loss = model(input_ids, mc_token_mask,
                          lm_labels=lm_labels, mc_labels=mc_labels,
                          token_type_ids=token_type_ids, position_ids=position_ids)

@@ -114,6 +114,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertModel(config=config)
+            model.eval()
             all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
             outputs = {
                 "sequence_output": all_encoder_layers[-1],
@@ -134,6 +135,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertForMaskedLM(config=config)
+            model.eval()
             loss = model(input_ids, token_type_ids, input_mask, token_labels)
             prediction_scores = model(input_ids, token_type_ids, input_mask)
             outputs = {
@@ -149,6 +151,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_for_next_sequence_prediction(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertForNextSentencePrediction(config=config)
+            model.eval()
             loss = model(input_ids, token_type_ids, input_mask, sequence_labels)
             seq_relationship_score = model(input_ids, token_type_ids, input_mask)
             outputs = {
@@ -165,6 +168,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_for_pretraining(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertForPreTraining(config=config)
+            model.eval()
             loss = model(input_ids, token_type_ids, input_mask, token_labels, sequence_labels)
             prediction_scores, seq_relationship_score = model(input_ids, token_type_ids, input_mask)
             outputs = {
@@ -185,6 +189,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertForQuestionAnswering(config=config)
+            model.eval()
             loss = model(input_ids, token_type_ids, input_mask, sequence_labels, sequence_labels)
             start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
             outputs = {
@@ -205,6 +210,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertForSequenceClassification(config=config, num_labels=self.num_labels)
+            model.eval()
             loss = model(input_ids, token_type_ids, input_mask, sequence_labels)
             logits = model(input_ids, token_type_ids, input_mask)
             outputs = {
@@ -221,6 +227,7 @@ class BertModelTest(unittest.TestCase):
 
         def create_bert_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
             model = BertForTokenClassification(config=config, num_labels=self.num_labels)
+            model.eval()
             loss = model(input_ids, token_type_ids, input_mask, token_labels)
             logits = model(input_ids, token_type_ids, input_mask)
             outputs = {
