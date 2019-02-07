@@ -27,7 +27,7 @@ import pytorch_pretrained_bert.tokenization_transfo_xl as data_utils
 from pytorch_pretrained_bert.modeling_transfo_xl import (CONFIG_NAME,
                                                          WEIGHTS_NAME,
                                                          TransfoXLConfig,
-                                                         TransfoXLModel,
+                                                         TransfoXLLMHeadModel,
                                                          load_tf_weights_in_transfo_xl)
 from pytorch_pretrained_bert.tokenization_transfo_xl import (CORPUS_NAME,
                                                              VOCAB_NAME)
@@ -37,7 +37,7 @@ if sys.version_info[0] == 2:
 else:
     import pickle
 
-# We do this to be able to load the python 2 datasets pickles
+# We do this to be able to load python 2 datasets pickles
 # See e.g. https://stackoverflow.com/questions/2121874/python-pickling-after-changing-a-modules-directory/2121918#2121918
 data_utils.Vocab = data_utils.TransfoXLTokenizer
 data_utils.Corpus = data_utils.TransfoXLCorpus
@@ -49,6 +49,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
                                              pytorch_dump_folder_path,
                                              transfo_xl_dataset_file):
     if transfo_xl_dataset_file:
+        # Convert a pre-processed corpus (see original TensorFlow repo)
         with open(transfo_xl_dataset_file, "rb") as fp:
             corpus = pickle.load(fp, encoding="latin1")
         # Save vocabulary and dataset cache as Dictionaries (should be better than pickles for the long-term)
@@ -64,18 +65,18 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         torch.save(corpus_dict_no_vocab, pytorch_dataset_dump_path)
 
     if tf_checkpoint_path:
+        # Convert a pre-trained TensorFlow model
         config_path = os.path.abspath(transfo_xl_config_file)
         tf_path = os.path.abspath(tf_checkpoint_path)
 
         print("Converting Transformer XL checkpoint from {} with config at {}".format(tf_path, config_path))
         # Initialise PyTorch model
-        # Construct model
         if transfo_xl_config_file == "":
             config = TransfoXLConfig()
         else:
             config = TransfoXLConfig(transfo_xl_config_file)
         print("Building PyTorch model from configuration: {}".format(str(config)))
-        model = TransfoXLModel(config)
+        model = TransfoXLLMHeadModel(config)
 
         model = load_tf_weights_in_transfo_xl(model, config, tf_path)
         # Save pytorch-model
@@ -90,7 +91,6 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
     parser.add_argument("--pytorch_dump_folder_path",
                         default = None,
                         type = str,
