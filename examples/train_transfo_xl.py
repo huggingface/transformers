@@ -437,7 +437,7 @@ def evaluate(eval_iter):
             if args.max_eval_steps > 0 and i >= args.max_eval_steps:
                 break
             ret = model(data, target, *mems)
-            loss, mems = ret[0], ret[1:]
+            loss, mems = ret
             loss = loss.mean()
             total_loss += seq_len * loss.float().item()
             total_len += seq_len
