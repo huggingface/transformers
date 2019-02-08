@@ -99,8 +99,20 @@ def main():
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--lm_coef', type=float, default=0.5)
     parser.add_argument('--n_valid', type=int, default=374)
+
+    parser.add_argument('--server_ip', type=str, default='')
+    parser.add_argument('--server_port', type=str, default='')
     args = parser.parse_args()
     print(args)
+
+    # Some distant debugging
+    # See https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
+    import ptvsd
+    print(sys.argv)
+    print("Waiting for debugger attach")
+    ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+    ptvsd.wait_for_attach()
+
 
     random.seed(args.seed)
     np.random.seed(args.seed)
