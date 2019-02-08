@@ -970,7 +970,7 @@ class TransfoXLPreTrainedModel(nn.Module):
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                model.__class__.__name__, "\n\t".join(error_msgs)))
         # Make sure we are still sharing the input and output embeddings
-        if model.hasattr('tie_weights'):
+        if hasattr(model, 'tie_weights'):
             model.tie_weights()
         return model
 
