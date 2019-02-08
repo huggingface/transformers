@@ -108,7 +108,6 @@ def main():
     # Some distant debugging
     # See https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
     import ptvsd
-    print(sys.argv)
     print("Waiting for debugger attach")
     ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
     ptvsd.wait_for_attach()
