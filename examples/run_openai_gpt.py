@@ -52,30 +52,29 @@ def load_rocstories_dataset(dataset_path):
             output.append((' '.join(line[1:5]), line[5], line[6], int(line[-1])-1))
     return output
 
-def pre_process_datasets(encoded_datasets, max_len, start_token, delimiter_token, clf_token):
-    """ Pre-process datasets containing lists of
-        tuples(story, 1st continuation, 2nd continuation, label)
-        
-        In Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
-        input_ids[batch, alternative, :] = [start_token] + story[:max_len] + [delimiter_token] + cont1[:max_len] + [clf_token]
+def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token):
+    """ Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
+
+        To Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
+        input_ids[batch, alternative, :] = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
     """
     tensor_datasets = []
     for dataset in encoded_datasets:
         n_batch = len(dataset)
-        input_ids = np.zeros((n_batch, 2, max_len), dtype=np.int32)
-        mc_token_mask = np.zeros((n_batch, 2, max_len), dtype=np.int32)
-        lm_labels = np.full((n_batch, 2, max_len), -1, dtype=np.float32)
-        mc_labels = np.zeros((n_batch,), dtype=np.float32)
+        input_ids = np.zeros((n_batch, 2, input_len), dtype=np.int64)
+        mc_token_mask = np.zeros((n_batch, 2, input_len), dtype=np.int64)
+        lm_labels = np.full((n_batch, 2, input_len), -1, dtype=np.int64)
+        mc_labels = np.zeros((n_batch,), dtype=np.int64)
         for i, (story, cont1, cont2, mc_label), in enumerate(dataset):
-            with_cont1 = [start_token] + story[:max_len] + [delimiter_token] + cont1[:max_len] + [clf_token]
-            with_cont2 = [start_token] + story[:max_len] + [delimiter_token] + cont2[:max_len] + [clf_token]
+            with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
+            with_cont2 = [start_token] + story[:cap_length] + [delimiter_token] + cont2[:cap_length] + [clf_token]
             input_ids[i, 0, :len(with_cont1)] = with_cont1
             input_ids[i, 1, :len(with_cont2)] = with_cont2
             mc_token_mask[i, 0, len(with_cont1) - 1] = 1
             lm_labels[i, 0, :len(with_cont1)-1] = with_cont1[1:]
             lm_labels[i, 1, :len(with_cont2)-1] = with_cont2[1:]
             mc_labels[i] = mc_label
-        all_inputs = tuple(input_ids, mc_token_mask, lm_labels, mc_labels)
+        all_inputs = (input_ids, mc_token_mask, lm_labels, mc_labels)
         tensor_datasets.append(tuple(torch.tensor(t) for t in all_inputs))
     return tensor_datasets
 
@@ -83,6 +82,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='openai-gpt',
                         help='pretrained model name')
+    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
+    parser.add_argument("--do_eval", action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument("--output_dir", default=None, type=str, required=True,
+                        help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument('--train_dataset', type=str, default='cloze_test_val__spring2016 - cloze_test_ALL_val.tsv')
     parser.add_argument('--eval_dataset', type=str, default='test_spring2016.tsv')
     parser.add_argument('--seed', type=int, default=42)
@@ -92,7 +95,6 @@ def main():
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=6.25e-5)
     parser.add_argument('--warmup_proportion', type=float, default=0.002)
-    parser.add_argument('--max_grad_norm', type=float, default=1)
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--lm_coef', type=float, default=0.5)
@@ -109,6 +111,12 @@ def main():
     n_gpu = torch.cuda.device_count()
     logger.info("device: {}, n_gpu {}".format(device, n_gpu))
 
+    if not args.do_train and not args.do_eval:
+        raise ValueError("At least one of `do_train` or `do_eval` must be True.")
+
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+
     # Load tokenizer and model
     # This loading functions also add new tokens and embeddings called `special tokens`
     # These new embeddings will be fine-tuned on the RocStories dataset
@@ -118,23 +126,28 @@ def main():
     model = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_name, num_special_tokens=len(special_tokens))
 
     # Load and encode the datasets
+    def tokenize_and_encode(obj):
+        """ Tokenize and encode a nested object """
+        if isinstance(obj, str):
+            return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
+        elif isinstance(obj, int):
+            return obj
+        return list(tokenize_and_encode(o) for o in obj)
+
     logger.info("Encoding dataset...")
     train_dataset = load_rocstories_dataset(args.train_dataset)
-    eval_datset = load_rocstories_dataset(args.eval_datset)
-    datasets = (train_dataset, eval_datset)
-    tokenized_datasets = tuple(list(list(tokenizer.tokenize(x) for x in instance)
-                                         for instance in dataset) for dataset in datasets)
-    encoded_datasets = tuple(list(list(tokenizer.convert_tokens_to_ids(x) for x in instance)
-                                       for instance in dataset) for dataset in tokenized_datasets)
+    eval_dataset = load_rocstories_dataset(args.eval_dataset)
+    datasets = (train_dataset, eval_dataset)
+    encoded_datasets = tokenize_and_encode(datasets)
 
     # Compute the mex input length for the Transformer
-    max_input_length = max(len(story) + max(len(cont1), len(cont2)) + 3  \
+    input_length = max(len(story) + max(len(cont1), len(cont2)) + 3  \
                            for dataset in encoded_datasets for story, cont1, cont2, _ in dataset)
-    max_input_length = min(max_input_length, model.config.n_positions)  # Max size of input for the pre-trained model
-    max_sub_part_length = max_input_length // 2 - 2
+    input_length = min(input_length, model.config.n_positions)  # Max size of input for the pre-trained model
+    max_sub_part_length = input_length // 2 - 2
 
     # Prepare inputs tensors and dataloaders
-    tensor_datasets = pre_process_datasets(encoded_datasets, max_sub_part_length, *special_tokens_ids)
+    tensor_datasets = pre_process_datasets(encoded_datasets, input_length, max_sub_part_length, *special_tokens_ids)
     train_tensor_dataset, eval_tensor_dataset = tensor_datasets[0], tensor_datasets[1]
 
     train_data = TensorDataset(*train_tensor_dataset)

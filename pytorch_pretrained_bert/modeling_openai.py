@@ -38,9 +38,9 @@ from .modeling import BertLayerNorm as LayerNorm
 logger = logging.getLogger(__name__)
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-pytorch_model.bin"}
-PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-openai_gpt_config.json"}
+PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-config.json"}
 
-CONFIG_NAME = "openai_gpt_config.json"
+CONFIG_NAME = "config.json"
 WEIGHTS_NAME = "pytorch_model.bin"
 
 def load_tf_weights_in_openai_gpt(model, openai_checkpoint_folder_path):
@@ -444,7 +444,7 @@ class OpenAIGPTPreTrainedModel(nn.Module):
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
             config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
         else:
-            archive_file = pretrained_model_name_or_path
+            archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         # redirect to the cache, if necessary
         try:
