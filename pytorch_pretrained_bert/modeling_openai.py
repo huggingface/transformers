@@ -141,6 +141,7 @@ class OpenAIGPTConfig(object):
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
+        layer_norm_epsilon=1e-5,
         initializer_range=0.02,
     ):
         """Constructs OpenAIGPTConfig.
@@ -161,6 +162,7 @@ class OpenAIGPTConfig(object):
             attn_pdrop: The dropout ratio for the attention
                 probabilities.
             embd_pdrop: The dropout ratio for the embeddings.
+            layer_norm_epsilon: epsilon to use in the layer norm layers
             initializer_range: The sttdev of the truncated_normal_initializer for
                 initializing all weight matrices.
         """
@@ -182,6 +184,7 @@ class OpenAIGPTConfig(object):
             self.resid_pdrop = resid_pdrop
             self.embd_pdrop = embd_pdrop
             self.attn_pdrop = attn_pdrop
+            self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
         else:
             raise ValueError(
@@ -318,9 +321,9 @@ class Block(nn.Module):
         super(Block, self).__init__()
         nx = config.n_embd
         self.attn = Attention(nx, n_ctx, config, scale)
-        self.ln_1 = LayerNorm(nx)
+        self.ln_1 = LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
-        self.ln_2 = LayerNorm(nx)
+        self.ln_2 = LayerNorm(nx, eps=config.layer_norm_epsilon)
 
     def forward(self, x):
         a = self.attn(x)
