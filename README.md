@@ -943,7 +943,20 @@ You can download Google's pre-trained models for the conversion [here](https://g
 
 ### OpenAI GPT
 
-Here is an example of the conversion process for a pre-trained OpenAI GPT model, assuming that your NumPy checkpoit save as the same format than OpenAI pretrained model (see [here](https://github.com/openai/finetune-transformer-lm))
+Here is an example of the conversion process for a pre-trained OpenAI GPT model, assuming that your NumPy checkpoint save as the same format than OpenAI pretrained model (see [here](https://github.com/openai/finetune-transformer-lm))
+
+```shell
+export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
+
+pytorch_pretrained_bert convert_openai_checkpoint \
+  $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
+  $PYTORCH_DUMP_OUTPUT \
+  [OPENAI_GPT_CONFIG]
+```
+
+### Transformer-XL
+
+Here is an example of the conversion process for a pre-trained Transformer-XL model (see [here](https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models))
 
 ```shell
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
