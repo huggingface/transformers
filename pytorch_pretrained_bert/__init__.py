@@ -17,4 +17,4 @@ from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHe
 from .optimization import BertAdam
 from .optimization_openai import OpenAIAdam
 
-from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE, cached_path
