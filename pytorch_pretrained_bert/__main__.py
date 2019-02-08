@@ -7,14 +7,14 @@ def main():
         "convert_transfo_xl_checkpoint"
     ]:
         print(
-        "Should be used as"
-        "`pytorch_pretrained_bert convert_tf_checkpoint_to_pytorch TF_CHECKPOINT TF_CONFIG PYTORCH_DUMP_OUTPUT`, \n"
-        "`pytorch_pretrained_bert convert_openai_checkpoint OPENAI_GPT_CHECKPOINT_FOLDER_PATH PYTORCH_DUMP_OUTPUT [OPENAI_GPT_CONFIG]` or \n"
-        "`pytorch_pretrained_bert convert_transfo_xl_checkpoint TF_CHECKPOINT_OR_DATASET PYTORCH_DUMP_OUTPUT [TF_CONFIG]`")
+        "Should be used as one of: \n"
+        ">> `pytorch_pretrained_bert convert_tf_checkpoint_to_pytorch TF_CHECKPOINT TF_CONFIG PYTORCH_DUMP_OUTPUT`, \n"
+        ">> `pytorch_pretrained_bert convert_openai_checkpoint OPENAI_GPT_CHECKPOINT_FOLDER_PATH PYTORCH_DUMP_OUTPUT [OPENAI_GPT_CONFIG]` or \n"
+        ">> `pytorch_pretrained_bert convert_transfo_xl_checkpoint TF_CHECKPOINT_OR_DATASET PYTORCH_DUMP_OUTPUT [TF_CONFIG]`")
     else:
         if sys.argv[1] == "convert_tf_checkpoint_to_pytorch":
             try:
-                import tensorflow as tf
+                from .convert_tf_checkpoint_to_pytorch import convert_tf_checkpoint_to_pytorch
             except ImportError:
                 print("pytorch_pretrained_bert can only be used from the commandline to convert TensorFlow models in PyTorch, "
                     "In that case, it requires TensorFlow to be installed. Please see "
@@ -42,7 +42,7 @@ def main():
                                                  PYTORCH_DUMP_OUTPUT)
         else:
             try:
-                import tensorflow as tf
+                from .convert_transfo_xl_checkpoint_to_pytorch import convert_transfo_xl_checkpoint_to_pytorch
             except ImportError:
                 print("pytorch_pretrained_bert can only be used from the commandline to convert TensorFlow models in PyTorch, "
                     "In that case, it requires TensorFlow to be installed. Please see "
