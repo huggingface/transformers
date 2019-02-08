@@ -57,6 +57,33 @@ def build_tf_to_pytorch_map(model, config):
         This time I use a map to keep the PyTorch model as identical to the original PyTorch model as possible.
     """
     tf_to_pt_map = {}
+
+    if hasattr(model, 'transformer'):
+        # We are loading in a TransfoXLLMHeadModel => we will load also the Adaptive Softmax
+        tf_to_pt_map.update({
+            "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
+            "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias})
+        for i, (out_l, proj_l, tie_proj) in enumerate(zip(
+                                model.crit.out_layers,
+                                model.crit.out_projs,
+                                config.tie_projs)):
+            layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
+            if config.tie_weight:
+                tf_to_pt_map.update({
+                    layer_str + 'b': out_l.bias})
+            else:
+                raise NotImplementedError
+                # I don't think this is implemented in the TF code
+                tf_to_pt_map.update({
+                    layer_str + 'lookup_table': out_l.weight,
+                    layer_str + 'b': out_l.bias})
+            if not tie_proj:
+                tf_to_pt_map.update({
+                    layer_str + 'proj': proj_l
+                    })
+        # Now load the rest of the transformer
+        model = model.transformer
+
     # Embeddings
     for i, (embed_l, proj_l) in enumerate(zip(model.word_emb.emb_layers, model.word_emb.emb_projs)):
         layer_str = "transformer/adaptive_embed/cutoff_%d/" % i
@@ -81,29 +108,6 @@ def build_tf_to_pytorch_map(model, config):
             layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
             layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
         })
-
-    # Adaptive Softmax
-    tf_to_pt_map.update({
-        "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
-        "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias})
-    for i, (out_l, proj_l, tie_proj) in enumerate(zip(
-                            model.crit.out_layers,
-                            model.crit.out_projs,
-                            config.tie_projs)):
-        layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
-        if config.tie_weight:
-            tf_to_pt_map.update({
-                layer_str + 'b': out_l.bias})
-        else:
-            raise NotImplementedError
-            # I don't think this is implemented in the TF code
-            tf_to_pt_map.update({
-                layer_str + 'lookup_table': out_l.weight,
-                layer_str + 'b': out_l.bias})
-        if not tie_proj:
-            tf_to_pt_map.update({
-                layer_str + 'proj': proj_l
-                })
 
     # Relative positioning biases
     if config.untie_r:
