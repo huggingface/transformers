@@ -100,7 +100,7 @@ def main():
         total_len, total_loss = 0, 0.
         start_time = time.time()
         with torch.no_grad():
-            mems = tuple()
+            mems = None
             for idx, (data, target, seq_len) in enumerate(eval_iter):
                 ret = model(data, target, *mems)
                 loss, mems = ret
