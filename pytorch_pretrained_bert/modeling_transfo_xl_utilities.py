@@ -169,7 +169,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
 
                 if i == 0:
                     if target is not None:
-                        logprob_i = head_logprob_i.gather(1, target_i[:,None]).squeeze(1)
+                        logprob_i = head_logprob_i.gather(1, target_i[:, None]).squeeze(1)
                     else:
                         out[:, :self.cutoffs[0]] = head_logprob[:, :self.cutoffs[0]]
                 else:
