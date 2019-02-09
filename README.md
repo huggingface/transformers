@@ -817,7 +817,10 @@ python run_lm_finetuning.py \
 
 ### OpenAI GPT and Transformer-XL: running the examples
 
-We provied two examples of scripts for OpenAI GPT and Transformer-XL based on (and extended from) the respective original implementations:
+We provide two examples of scripts for OpenAI GPT and Transformer-XL based on (and extended from) the respective original implementations:
+
+- fine-tuning OpenAI GPT on the ROCStories dataset
+- evaluating Transformer-XL on Wikitext 103
 
 #### Fine-tuning OpenAI GPT on the RocStories dataset
 
@@ -829,21 +832,28 @@ Before running this example you should download the
 ```shell
 export ROC_STORIES_DIR=/path/to/RocStories
 
-python train_openai_gpt.py \
-  --task_name MRPC \
+python run_openai_gpt.py \
+  --model_name openai-gpt \
   --do_train \
   --do_eval \
-  --do_lower_case \
-  --data_dir $GLUE_DIR/MRPC/ \
-  --bert_model bert-base-uncased \
-  --max_seq_length 128 \
-  --train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/mrpc_output/
+  --train_dataset $ROC_STORIES_DIR/cloze_test_val__spring2016\ -\ cloze_test_ALL_val.csv \
+  --eval_dataset $ROC_STORIES_DIR/cloze_test_test__spring2016\ -\ cloze_test_ALL_test.csv \
+  --output_dir ../log \
+  --train_batch_size 16 \
 ```
 
-Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation results between 84% and 88%.
+This command run in about 10 min on a single K-80 an gives an evaluation accuracy of 86.42% (the authors reports a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
+
+#### Evaluating the pre-trained Transformer-XL on the WikiText 103 dataset
+
+This example code evaluate the pre-trained Transformer-XL on the WikiText 103 dataset.
+This command will download a pre-processed version of the WikiText 103 dataset in which the vocabulary has been computed.
+
+```shell
+python run_transfo_xl.py --work_dir ../log
+```
+
+This command run in about 10 min on a single K-80 an gives an evaluation accuracy of 86.42% (the authors reports a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
 
 ## Fine-tuning BERT-large on GPUs
 
