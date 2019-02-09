@@ -28,7 +28,7 @@ import math
 
 import torch
 
-from pytorch_pretrained_bert import TransfoXLModel, TransfoXLCorpus
+from pytorch_pretrained_bert import TransfoXLLMHeadModel, TransfoXLCorpus
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -79,7 +79,7 @@ def main():
         device=device, ext_len=args.ext_len)
 
     # Load a pre-trained model
-    model = TransfoXLModel.from_pretrained(args.model_name)
+    model = TransfoXLLMHeadModel.from_pretrained(args.model_name)
     model = model.to(device)
 
     logger.info('Evaluating with bsz {} tgt_len {} ext_len {} mem_len {} clamp_len {}'.format(
