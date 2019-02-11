@@ -350,7 +350,7 @@ with torch.no_grad():
 # get the predicted last token
 predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
 predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
-assert predicted_token == '.</w>'
+assert predicted_token == 'who'
 ```
 
 ## Doc
