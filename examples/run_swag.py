@@ -469,17 +469,24 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
 
-    # Save a trained model
-    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-    output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
-    torch.save(model_to_save.state_dict(), output_model_file)
 
-    # Load a trained model that you have fine-tuned
-    model_state_dict = torch.load(output_model_file)
-    model = BertForMultipleChoice.from_pretrained(args.bert_model,
-        state_dict=model_state_dict,
-        num_choices=4)
+    if args.do_train:
+        # Save a trained model and the associated configuration
+        model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
+        output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
+        torch.save(model_to_save.state_dict(), output_model_file)
+        output_config_file = os.path.join(args.output_dir, CONFIG_NAME)
+        with open(output_config_file, 'w') as f:
+            f.write(model_to_save.config.to_json_string())
+
+        # Load a trained model and config that you have fine-tuned
+        config = BertConfig(output_config_file)
+        model = BertForMultipleChoice(config, num_choices=4)
+        model.load_state_dict(torch.load(output_model_file))
+    else:
+        model = BertForMultipleChoice.from_pretrained(args.bert_model, num_choices=4)
     model.to(device)
+
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         eval_examples = read_swag_examples(os.path.join(args.data_dir, 'val.csv'), is_training = True)
