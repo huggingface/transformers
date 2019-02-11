@@ -52,8 +52,8 @@ def main():
                         help='length of the retained previous heads')
     parser.add_argument('--clamp_len', type=int, default=1000,
                         help='max positional embedding index')
-    parser.add_argument('--cuda', action='store_true',
-                        help='use CUDA')
+    parser.add_argument('--no_cuda', action='store_true',
+                        help='Do not use CUDA even though CUA is available')
     parser.add_argument('--work_dir', type=str, required=True,
                         help='path to the work_dir')
     parser.add_argument('--no_log', action='store_true',
@@ -63,7 +63,8 @@ def main():
     args = parser.parse_args()
     assert args.ext_len >= 0, 'extended context length must be non-negative'
 
-    device = torch.device("cuda" if args.cuda else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    logger.info("device: {}".format(device))
 
     # Load a pre-processed dataset
     # You can also build the corpus yourself using TransfoXLCorpus methods
