@@ -187,8 +187,14 @@ Let's see how to use `BertModel` to get hidden states
 model = BertModel.from_pretrained('bert-base-uncased')
 model.eval()
 
+# If you have a GPU, put everything on cuda
+tokens_tensor = tokens_tensor.to('cuda')
+segments_tensors = segments_tensors.to('cuda')
+model.to('cuda')
+
 # Predict hidden states features for each layer
-encoded_layers, _ = model(tokens_tensor, segments_tensors)
+with torch.no_grad():
+    encoded_layers, _ = model(tokens_tensor, segments_tensors)
 # We have a hidden states for each of the 12 layers in model bert-base-uncased
 assert len(encoded_layers) == 12
 ```
@@ -200,8 +206,14 @@ And how to use `BertForMaskedLM`
 model = BertForMaskedLM.from_pretrained('bert-base-uncased')
 model.eval()
 
+# If you have a GPU, put everything on cuda
+tokens_tensor = tokens_tensor.to('cuda')
+segments_tensors = segments_tensors.to('cuda')
+model.to('cuda')
+
 # Predict all tokens
-predictions = model(tokens_tensor, segments_tensors)
+with torch.no_grad():
+    predictions = model(tokens_tensor, segments_tensors)
 
 # confirm we were able to predict 'henson'
 predicted_index = torch.argmax(predictions[0, masked_index]).item()
@@ -240,8 +252,13 @@ Let's see how to use `OpenAIGPTModel` to get hidden states
 model = OpenAIGPTModel.from_pretrained('openai-gpt')
 model.eval()
 
+# If you have a GPU, put everything on cuda
+tokens_tensor = tokens_tensor.to('cuda')
+model.to('cuda')
+
 # Predict hidden states features for each layer
-hidden_states = model(tokens_tensor)
+with torch.no_grad():
+    hidden_states = model(tokens_tensor)
 ```
 
 And how to use `OpenAIGPTLMHeadModel`
@@ -251,19 +268,25 @@ And how to use `OpenAIGPTLMHeadModel`
 model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
 model.eval()
 
+# If you have a GPU, put everything on cuda
+tokens_tensor = tokens_tensor.to('cuda')
+model.to('cuda')
+
 # Predict all tokens
-predictions = model(tokens_tensor)
+with torch.no_grad():
+    predictions = model(tokens_tensor)
 
 # get the predicted last token
-predicted_index = torch.argmax(predictions[0, masked_index]).item()
+predicted_index = torch.argmax(predictions[0, -1, :]).item()
 predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+assert predicted_token == '.</w>'
 ```
 
 ### Transformer-XL
 
-Here is a quick-start example using `OpenAIGPTTokenizer`, `OpenAIGPTModel` and `OpenAIGPTLMHeadModel` class with OpenAI's pre-trained  model. See the [doc section](#doc) below for all the details on these classes.
+Here is a quick-start example using `TransfoXLTokenizer`, `TransfoXLModel` and `TransfoXLModelLMHeadModel` class with the Transformer-XL model pre-trained on WikiText-103. See the [doc section](#doc) below for all the details on these classes.
 
-First let's prepare a tokenized input with `OpenAIGPTTokenizer`
+First let's prepare a tokenized input with `TransfoXLTokenizer`
 
 ```python
 import torch
@@ -294,27 +317,40 @@ Let's see how to use `TransfoXLModel` to get hidden states
 model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
 model.eval()
 
-# Predict hidden states features for each layer
-hidden_states_1, mems_1 = model(tokens_tensor_1)
-# We can re-use the memory cells in a subsequent call to attend a longer context
-hidden_states_2, mems_2 = model(tokens_tensor_2, mems_1)
+# If you have a GPU, put everything on cuda
+tokens_tensor_1 = tokens_tensor_1.to('cuda')
+tokens_tensor_2 = tokens_tensor_2.to('cuda')
+model.to('cuda')
+
+with torch.no_grad():
+    # Predict hidden states features for each layer
+    hidden_states_1, mems_1 = model(tokens_tensor_1)
+    # We can re-use the memory cells in a subsequent call to attend a longer context
+    hidden_states_2, mems_2 = model(tokens_tensor_2, mems=mems_1)
 ```
 
-And how to use `OpenAIGPTLMHeadModel`
+And how to use `TransfoXLLMHeadModel`
 
 ```python
 # Load pre-trained model (weights)
-model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
+model = TransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
 model.eval()
 
-# Predict all tokens
-predictions_1, mems_1 = model(tokens_tensor_1)
-# We can re-use the memory cells in a subsequent call to attend a longer context
-predictions_2, mems_2 = model(tokens_tensor_2, mems_1)
+# If you have a GPU, put everything on cuda
+tokens_tensor_1 = tokens_tensor_1.to('cuda')
+tokens_tensor_2 = tokens_tensor_2.to('cuda')
+model.to('cuda')
+
+with torch.no_grad():
+    # Predict all tokens
+    predictions_1, mems_1 = model(tokens_tensor_1)
+    # We can re-use the memory cells in a subsequent call to attend a longer context
+    predictions_2, mems_2 = model(tokens_tensor_2, mems=mems_1)
 
 # get the predicted last token
-predicted_index = torch.argmax(predictions_1[0, masked_index]).item()
+predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
 predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+assert predicted_token == '.</w>'
 ```
 
 ## Doc
