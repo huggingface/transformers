@@ -70,7 +70,10 @@ def text_standardize(text):
 
 class OpenAIGPTTokenizer(object):
     """
-    mostly a wrapper for a public python bpe tokenizer
+    BPE tokenizer. Peculiarities:
+        - lower case all inputs
+        - uses SpaCy tokenizer
+        - special tokens: additional symbols (ex: "__classify__") to add to a vocabulary.
     """
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
@@ -150,7 +153,7 @@ class OpenAIGPTTokenizer(object):
         logger.info("Special tokens {}".format(self.special_tokens))
 
     def bpe(self, token):
-        word = tuple(token[:-1]) + ( token[-1] + '</w>',)
+        word = tuple(token[:-1]) + (token[-1] + '</w>',)
         if token in self.cache:
             return self.cache[token]
         pairs = get_pairs(word)
@@ -159,7 +162,7 @@ class OpenAIGPTTokenizer(object):
             return token+'</w>'
 
         while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
