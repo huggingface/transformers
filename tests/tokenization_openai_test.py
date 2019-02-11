@@ -32,7 +32,7 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
                  "low</w>", "lowest</w>", "newer</w>", "wider</w>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w", "e r</w>", ""]
-        with open("/tmp/openai_tokenizer_vocab_test.json", "w", encoding='utf-8') as fp:
+        with open("/tmp/openai_tokenizer_vocab_test.json", "wb") as fp:
             json.dump(vocab_tokens, fp)
             vocab_file = fp.name
         with open("/tmp/openai_tokenizer_merges_test.txt", "w", encoding='utf-8') as fp:
