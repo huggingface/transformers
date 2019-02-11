@@ -507,7 +507,7 @@ class TransfoXLCorpus(object):
             resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
-                "Model name '{}' was not found in model name list ({}). "
+                "Corpus '{}' was not found in corpus list ({}). "
                 "We assumed '{}' was a path or url but couldn't find files {} "
                 "at this path or url.".format(
                     pretrained_model_name_or_path,
