@@ -8,7 +8,7 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest ftfy spacy
-            - run: python -m spacy download en
+            - run: sudo python -m spacy download en
             - run: python -m pytest -sv tests/
     build_py2:
         working_directory: ~/pytorch-pretrained-BERT
@@ -17,8 +17,9 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest ftfy spacy
-            - run: python -m spacy download en
+            - run: sudo pip install pytest spacy
+            - run: sudo pip install ftfy==4.4.3
+            - run: sudo python -m spacy download en
             - run: python -m pytest -sv tests/
 workflows:
   version: 2
