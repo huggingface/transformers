@@ -45,12 +45,25 @@ PyTorch pretrained bert can be installed by pip as follows:
 pip install pytorch-pretrained-bert
 ```
 
+If you want to use the tokenizer associated to the `OpenAI GPT` tokenizer, you will need to install `ftfy` (if you are using Python 2, version 4.4.3 is the last version working for you) and `SpaCy` :
+```bash
+pip install spacy ftfy==4.4.3
+python -m spacy download en
+```
+
 ### From source
 
 Clone the repository and run:
 ```bash
 pip install [--editable] .
 ```
+
+Here also, if you want to use `OpenAIGPT` tokenizer, you will need to install `ftfy` (limit to version 4.4.3 if you are using Python 2) and `SpaCy` :
+```bash
+pip install spacy ftfy==4.4.3
+python -m spacy download en
+```
+
 
 A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`).
 
