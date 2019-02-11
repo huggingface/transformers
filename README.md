@@ -891,7 +891,7 @@ python run_openai_gpt.py \
   --train_batch_size 16 \
 ```
 
-This command run in about 10 min on a single K-80 an gives an evaluation accuracy of 86.42% (the authors reports a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
+This command runs in about 10 min on a single K-80 an gives an evaluation accuracy of about 86.4% (the authors report a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
 
 #### Evaluating the pre-trained Transformer-XL on the WikiText 103 dataset
 
@@ -902,7 +902,7 @@ This command will download a pre-processed version of the WikiText 103 dataset i
 python run_transfo_xl.py --work_dir ../log
 ```
 
-This command run in about 10 min on a single K-80 an gives an evaluation accuracy of 86.42% (the authors reports a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
+This command runs in about 1 min on a V100 and gives an evaluation perplexity of 18.22 on WikiText-103 (the authors report a perplexity of about 18.3 on this dataset with the TensorFlow code).
 
 ## Fine-tuning BERT-large on GPUs
 
