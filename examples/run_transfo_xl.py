@@ -60,8 +60,17 @@ def main():
                         help='do not log the eval result')
     parser.add_argument('--same_length', action='store_true',
                         help='set same length attention with masking')
+    parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     args = parser.parse_args()
     assert args.ext_len >= 0, 'extended context length must be non-negative'
+
+    if args.server_ip and args.server_port:
+        # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
+        import ptvsd
+        print("Waiting for debugger attach")
+        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+        ptvsd.wait_for_attach()
 
     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     logger.info("device: {}".format(device))
