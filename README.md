@@ -127,11 +127,10 @@ The repository further comprises:
   - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining' on a target text corpus.  
 
 - One example on how to use **OpenAI GPT** (in the [`examples` folder](./examples)):
-  - [`openai_gpt_train.py`](./examples/openai_gpt_train.py) - Show how to fine-tune an instance of `OpenGPTDoubleHeadsModel` on the RocStories task.
+  - [`run_openai_gpt.py`](./examples/run_openai_gpt.py) - Show how to fine-tune an instance of `OpenGPTDoubleHeadsModel` on the RocStories task.
 
-- Two examples on how to use **Transformer-XL** (in the [`examples` folder](./examples)):
-  - [`transfo_xl_train.py`](./examples/transfo_xl_train.py) - Show how to train and exaluate an instance of `TransfoXLModel` on WikiText 103,
-  - [`transfo_xl_eval.py`](./examples/transfo_xl_eval.py) - Simply exaluate a pre-trained model of `TransfoXLModel` on WikiText 103.
+- One example on how to use **Transformer-XL** (in the [`examples` folder](./examples)):
+  - [`run_transfo_xl.py`](./examples/run_transfo_xl.py) - Show how to load and evaluate a pre-trained model of `TransfoXLLMHeadModel` on WikiText 103.
 
   These examples are detailed in the [Examples](#examples) section of this readme.
 
