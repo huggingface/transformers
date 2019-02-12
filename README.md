@@ -165,7 +165,7 @@ text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
 tokenized_text = tokenizer.tokenize(text)
 
 # Mask a token that we will try to predict back with `BertForMaskedLM`
-masked_index = 6
+masked_index = 8
 tokenized_text[masked_index] = '[MASK]'
 assert tokenized_text == ['[CLS]', 'who', 'was', 'jim', 'henson', '?', '[SEP]', 'jim', '[MASK]', 'was', 'a', 'puppet', '##eer', '[SEP]']
 
