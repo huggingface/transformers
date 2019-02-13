@@ -419,7 +419,6 @@ def main():
                         help="The output directory where the model checkpoints will be written.")
 
     ## Other parameters
-    parser.add_argument("--do_lower_case", action='store_true', help="Set this flag if you are using an uncased model.")
     parser.add_argument("--max_seq_length",
                         default=128,
                         type=int,
