@@ -45,11 +45,13 @@ PyTorch pretrained bert can be installed by pip as follows:
 pip install pytorch-pretrained-bert
 ```
 
-If you want to use the tokenizer associated to the `OpenAI GPT` tokenizer, you will need to install `ftfy` (if you are using Python 2, version 4.4.3 is the last version working for you) and `SpaCy` :
+If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install `ftfy` (limit to version 4.4.3 if you are using Python 2) and `SpaCy` :
 ```bash
 pip install spacy ftfy==4.4.3
 python -m spacy download en
 ```
+
+If you don't install `ftfy` and `SpaCy`, the `OpenAI GPT` tokenizer will default to tokenize using BERT's `BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage, don't worry).
 
 ### From source
 
@@ -58,12 +60,13 @@ Clone the repository and run:
 pip install [--editable] .
 ```
 
-Here also, if you want to use `OpenAIGPT` tokenizer, you will need to install `ftfy` (limit to version 4.4.3 if you are using Python 2) and `SpaCy` :
+Here also, if you want to reproduce the original tokenization process of the `OpenAI GPT` model, you will need to install `ftfy` (limit to version 4.4.3 if you are using Python 2) and `SpaCy` :
 ```bash
 pip install spacy ftfy==4.4.3
 python -m spacy download en
 ```
 
+Again, if you don't install `ftfy` and `SpaCy`, the `OpenAI GPT` tokenizer will default to tokenize using BERT's `BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage).
 
 A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`).
 
@@ -157,6 +160,10 @@ First let's prepare a tokenized input with `BertTokenizer`
 import torch
 from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 
+# OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
+import logging
+logging.basicConfig(level=logging.INFO)
+
 # Load pre-trained model tokenizer (vocabulary)
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
@@ -230,6 +237,10 @@ First let's prepare a tokenized input with `OpenAIGPTTokenizer`
 import torch
 from pytorch_pretrained_bert import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
 
+# OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
+import logging
+logging.basicConfig(level=logging.INFO)
+
 # Load pre-trained model tokenizer (vocabulary)
 tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
 
@@ -290,6 +301,10 @@ First let's prepare a tokenized input with `TransfoXLTokenizer`
 ```python
 import torch
 from pytorch_pretrained_bert import TransfoXLTokenizer, TransfoXLModel, TransfoXLLMHeadModel
+
+# OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
+import logging
+logging.basicConfig(level=logging.INFO)
 
 # Load pre-trained model tokenizer (vocabulary from wikitext 103)
 tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
@@ -629,10 +644,12 @@ This model *outputs* a tuple of (last_hidden_state, new_mems)
 
 `BertTokenizer` perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
-This class has two arguments:
+This class has four arguments:
 
 - `vocab_file`: path to a vocabulary file.
 - `do_lower_case`: convert text to lower-case while tokenizing. **Default = True**.
+- `max_len`: max length to filter the input of the Transformer. Default to pre-trained value for the model if `None`. **Default = None**
+- `never_split`: a list of tokens that should not be splitted during tokenization. **Default = `["[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"]`**
 
 and three methods:
 
@@ -646,16 +663,20 @@ Please refer to the doc strings and code in [`tokenization.py`](./pytorch_pretra
 
 `OpenAIGPTTokenizer` perform Byte-Pair-Encoding (BPE) tokenization.
 
-This class has two arguments:
+This class has four arguments:
 
 - `vocab_file`: path to a vocabulary file.
 - `merges_file`: path to a file containing the BPE merges.
+- `max_len`: max length to filter the input of the Transformer. Default to pre-trained value for the model if `None`. **Default = None**
+- `special_tokens`: a list of tokens to add to the vocabulary for fine-tuning. If SpaCy is not installed and BERT's `BasicTokenizer` is used as the pre-BPE tokenizer, these tokens are not split. **Default= None**
 
-and three methods:
+and five methods:
 
 - `tokenize(text)`: convert a `str` in a list of `str` tokens by (1) performing basic tokenization and (2) WordPiece tokenization.
 - `convert_tokens_to_ids(tokens)`: convert a list of `str` tokens in a list of `int` indices in the vocabulary.
 - `convert_ids_to_tokens(tokens)`: convert a list of `int` indices in a list of `str` tokens in the vocabulary.
+- `set_special_tokens(self, special_tokens)`: update the list of special tokens (see above arguments)
+- `decode(ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)`: decode a list of `int` indices in a string and do some post-processing if needed: (i) remove special tokens from the output and (ii) clean up tokenization spaces.
 
 Please refer to the doc strings and code in [`tokenization_openai.py`](./pytorch_pretrained_bert/tokenization_openai.py) for the details of the `OpenAIGPTTokenizer`.
 
