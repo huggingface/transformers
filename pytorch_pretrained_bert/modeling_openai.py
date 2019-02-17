@@ -56,7 +56,7 @@ def load_tf_weights_in_openai_gpt(model, openai_checkpoint_folder_path):
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
     init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
 
-    # Thsi as used when we had a single embedding matrix for positions and tokens
+    # This was used when we had a single embedding matrix for positions and tokens
     # init_params[0] = np.concatenate([init_params[1], init_params[0]], 0)
     # del init_params[1]
     init_params = [arr.squeeze() for arr in init_params]
