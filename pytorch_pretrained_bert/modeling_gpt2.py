@@ -64,20 +64,24 @@ def load_tf_weights_in_gpt2(model, gpt2_checkpoint_path):
         print("Loading TF weight {} with shape {}".format(name, shape))
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
-        arrays.append(array)
+        arrays.append(array.squeeze())
 
     for name, array in zip(names, arrays):
+        name = name[6:]  # skip "model/"
         name = name.split('/')
         pointer = model
         for m_name in name:
-            if re.fullmatch(r'[A-Za-z]+_\d+', m_name):
-                l = re.split(r'_(\d+)', m_name)
+            if re.fullmatch(r'[A-Za-z]+\d+', m_name):
+                l = re.split(r'(\d+)', m_name)
             else:
                 l = [m_name]
             if l[0] == 'w' or l[0] == 'g':
                 pointer = getattr(pointer, 'weight')
             elif l[0] == 'b':
                 pointer = getattr(pointer, 'bias')
+            elif l[0] == 'wpe' or l[0] == 'wte':
+                pointer = getattr(pointer, l[0])
+                pointer = getattr(pointer, 'weight')
             else:
                 pointer = getattr(pointer, l[0])
             if len(l) >= 2:
@@ -107,7 +111,7 @@ class GPT2Config(object):
 
     def __init__(
         self,
-        vocab_size_or_config_json_file=40478,
+        vocab_size_or_config_json_file=50257,
         n_positions=1024,
         n_ctx=1024,
         n_embd=768,
@@ -273,10 +277,10 @@ class Block(nn.Module):
         self.ln_2 = LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, past):
+    def forward(self, x, past=None):
         a, present = self.attn(self.ln_1(x), past=past)
         x = x + a
-        m = self.mlp(self.ln_2(c))
+        m = self.mlp(self.ln_2(x))
         x = x + m
         return x, present
 
@@ -522,8 +526,12 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.apply(self.init_weights)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, past=None):
-        past_length = 0 if past is None else past[0][0].size(-2)
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, pasts=None):
+        if pasts is None:
+            past_length = 0
+            pasts = [None] * len(self.h)
+        else:
+            pasts[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_ids.size(-1) + past_length, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
@@ -541,8 +549,8 @@ class GPT2Model(GPT2PreTrainedModel):
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
         presents = []
-        for block in self.h:
-            hidden_states, present = block(hidden_states)
+        for block, past in zip(self.h, pasts):
+            hidden_states, present = block(hidden_states, past)
             presents.append(present)
         hidden_states = self.ln_f(hidden_states)
         output_shape = input_shape + (hidden_states.size(-1),)
@@ -599,8 +607,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         """
         self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None):
-        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past)
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, pasts=None):
+        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, pasts)
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
@@ -665,8 +673,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         """
         self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
 
-    def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None, position_ids=None, past=None):
-        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past)
+    def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None, position_ids=None, pasts=None):
+        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, pasts)
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
