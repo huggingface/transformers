@@ -20,9 +20,9 @@ This PyTorch implementation of BERT is provided with [Google's pre-trained model
 This PyTorch implementation of OpenAI GPT is an adaptation of the [PyTorch implementation by HuggingFace](https://github.com/huggingface/pytorch-openai-transformer-lm) and is provided with [OpenAI's pre-trained model](https://github.com/openai/finetune-transformer-lm) and a command-line interface that was used to convert the pre-trained NumPy checkpoint in PyTorch.
 
 **Google/CMU's Transformer-XL** was released together with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](http://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-This PyTorch implementation of Transformer-XL is an adaptation of the original [PyTorch implementation](https://github.com/kimiyoung/transformer-xl) which has been slightly modified to match the performances of the TensforFlow implementation and allow to re-use the pretrained weights. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
+This PyTorch implementation of Transformer-XL is an adaptation of the original [PyTorch implementation](https://github.com/kimiyoung/transformer-xl) which has been slightly modified to match the performances of the TensorFlow implementation and allow to re-use the pretrained weights. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
 
-**OpenAI GPT-2** was released together with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, JeffreyWu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
+**OpenAI GPT-2** was released together with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
 This PyTorch implementation of OpenAI GPT-2 is an adaptation of the [OpenAI's implementation](https://github.com/openai/gpt-2) and is provided with [OpenAI's pre-trained model](https://github.com/openai/gpt-2) and a command-line interface that was used to convert the TensorFlow checkpoint in PyTorch.
 
 
