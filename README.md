@@ -400,12 +400,15 @@ logging.basicConfig(level=logging.INFO)
 # Load pre-trained model tokenizer (vocabulary)
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
-# Encode input
-text = "Who was Jim Henson ? Jim Henson was a puppeteer"
-indexed_tokens = tokenizer.encode(text)
+# Encode some inputs
+text_1 = "Who was Jim Henson ?"
+text_2 = "Jim Henson was a puppeteer"
+indexed_tokens_1 = tokenizer.encode(text_1)
+indexed_tokens_2 = tokenizer.encode(text_2)
 
 # Convert inputs to PyTorch tensors
-tokens_tensor = torch.tensor([indexed_tokens])
+tokens_tensor_1 = torch.tensor([indexed_tokens_1])
+tokens_tensor_2 = torch.tensor([indexed_tokens_2])
 ```
 
 Let's see how to use `GPT2Model` to get hidden states
@@ -416,12 +419,16 @@ model = GPT2Model.from_pretrained('gpt2')
 model.eval()
 
 # If you have a GPU, put everything on cuda
-tokens_tensor = tokens_tensor.to('cuda')
+tokens_tensor_1 = tokens_tensor_1.to('cuda')
+tokens_tensor_2 = tokens_tensor_2.to('cuda')
 model.to('cuda')
 
 # Predict hidden states features for each layer
 with torch.no_grad():
-    hidden_states = model(tokens_tensor)
+    hidden_states_1, past = model(tokens_tensor_1)
+    # past can be used to reuse precomputed hidden state in a subsequent predictions
+    # (see beam-search examples in the run_gpt2.py example
+    hidden_states-2, past = model(tokens_tensor_2, past=past)
 ```
 
 And how to use `GPT2LMHeadModel`
@@ -432,15 +439,18 @@ model = GPT2LMHeadModel.from_pretrained('gpt2')
 model.eval()
 
 # If you have a GPU, put everything on cuda
-tokens_tensor = tokens_tensor.to('cuda')
+tokens_tensor_1 = tokens_tensor.to('cuda')
 model.to('cuda')
 
 # Predict all tokens
 with torch.no_grad():
-    predictions = model(tokens_tensor)
+    predictions_1, past = model(tokens_tensor_1)
+    # past can be used to reuse precomputed hidden state in a subsequent predictions
+    # (see beam-search examples in the run_gpt2.py example
+    predictions_2, past = model(tokens_tensor_2, past=past)
 
 # get the predicted last token
-predicted_index = torch.argmax(predictions[0, -1, :]).item()
+predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
 predicted_token = tokenizer.decode([predicted_index])
 ```
 
