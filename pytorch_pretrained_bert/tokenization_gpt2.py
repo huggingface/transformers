@@ -27,10 +27,8 @@ try:
 except ImportError:
     # Just a dummy decorator to get the checks to run on python2
     # because honestly I don't want to support a byte-level unicode BPE tokenizer on python 2 right now.
-    def lru_cache(func):
-        def func_wrapper(*inputs, **args):
-            return func(inputs, args)
-        return func_wrapper
+    def lru_cache():
+        return lambda func: func
 
 from .file_utils import cached_path
 
