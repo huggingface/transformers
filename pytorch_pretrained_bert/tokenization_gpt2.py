@@ -81,8 +81,6 @@ class GPT2Tokenizer(object):
     """
     GPT-2 BPE tokenizer. Peculiarities:
         - Byte-level BPE
-        - argument special_tokens and function set_special_tokens:
-            can be used to add additional symbols (ex: "__classify__") to a vocabulary.
     """
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
@@ -127,8 +125,7 @@ class GPT2Tokenizer(object):
         tokenizer = cls(resolved_vocab_file, resolved_merges_file, *inputs, **kwargs)
         return tokenizer
 
-    def __init__(self, vocab_file, merges_file, errors='replace', max_len=None):
-        self.max_len = max_len if max_len is not None else int(1e12)
+    def __init__(self, vocab_file, merges_file, errors='replace'):
         self.encoder = json.load(open(vocab_file))
         self.decoder = {v:k for k,v in self.encoder.items()}
         self.errors = errors # how to handle errors in decoding
