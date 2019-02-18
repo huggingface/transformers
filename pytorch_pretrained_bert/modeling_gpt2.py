@@ -244,10 +244,10 @@ class Attention(nn.Module):
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
         if layer_past is not None:
-            past_key, past_value = layer_past[0], layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
+            past_key, past_value = layer_past[0].transpose(-2, -1), layer_past[1]  # transpose to have same shapes
+            key = torch.cat((past_key, key), dim=-1)
             value = torch.cat((past_value, value), dim=-2)
-        present = torch.stack((key, value))
+        present = torch.stack((key.transpose(-2, -1), value))
         a = self._attn(query, key, value)
         a = self.merge_heads(a)
         a = self.c_proj(a)
@@ -278,7 +278,7 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
 
     def forward(self, x, layer_past=None):
-        a, present = self.attn(self.ln_1(x), layer_past=past)
+        a, present = self.attn(self.ln_1(x), layer_past=layer_past)
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
@@ -531,7 +531,7 @@ class GPT2Model(GPT2PreTrainedModel):
             past_length = 0
             past = [None] * len(self.h)
         else:
-            past[0][0].size(-2)
+            past_length = past[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_ids.size(-1) + past_length, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
