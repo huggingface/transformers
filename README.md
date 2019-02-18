@@ -5,8 +5,9 @@
 This repository contains op-for-op PyTorch reimplementations, pre-trained models and fine-tuning examples for:
 
 - [Google's BERT model](https://github.com/google-research/bert),
-- [OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm), and
-- [Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl).
+- [OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm),
+- [Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl), and
+- [OpenAI's GPT-2 model](https://blog.openai.com/better-language-models/),
 
 These implementations have been tested on several datasets (see the examples) and should match the performances of the associated TensorFlow implementations (e.g. ~91 F1 on SQuAD for BERT, ~88 F1 on RocStories for OpenAI GPT and ~18.3 perplexity on WikiText 103 for the Transformer-XL). You can find more details in the [Examples](#examples) section below.
 
@@ -20,6 +21,10 @@ This PyTorch implementation of OpenAI GPT is an adaptation of the [PyTorch imple
 
 **Google/CMU's Transformer-XL** was released together with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](http://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
 This PyTorch implementation of Transformer-XL is an adaptation of the original [PyTorch implementation](https://github.com/kimiyoung/transformer-xl) which has been slightly modified to match the performances of the TensforFlow implementation and allow to re-use the pretrained weights. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
+
+**OpenAI GPT-2** was released together with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, JeffreyWu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
+This PyTorch implementation of OpenAI GPT-2 is an adaptation of the [OpenAI's implementation](https://github.com/openai/gpt-2) and is provided with [OpenAI's pre-trained model](https://github.com/openai/gpt-2 and a command-line interface that was used to convert the TensorFlow checkpoint in PyTorch.
+
 
 ## Content
 
@@ -98,6 +103,11 @@ This package comprises the following classes that can be imported in Python and 
   - [`TransfoXLModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L974) - Transformer-XL model which outputs the last hidden state and memory cells (**fully pre-trained**),
   - [`TransfoXLLMHeadModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L1236) - Transformer-XL with the tied adaptive softmax head on top for language modeling which outputs the logits/loss and memory cells (**fully pre-trained**),
 
+- Three **OpenAI GPT-2** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling_gpt2.py`](./pytorch_pretrained_bert/modeling_gpt2.py) file):
+  - [`GPT2Model`](./pytorch_pretrained_bert/modeling_gpt2.py#L537) - raw OpenAI GPT-2 Transformer model (**fully pre-trained**),
+  - [`GPT2LMHeadModel`](./pytorch_pretrained_bert/modeling_gpt2.py#L691) - OpenAI GPT-2 Transformer with the tied language modeling head on top (**fully pre-trained**),
+  - [`GPT2DoubleHeadsModel`](./pytorch_pretrained_bert/modeling_gpt2.py#L752) - OpenAI GPT-2 Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT-2 Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
+
 - Tokenizers for **BERT** (using word-piece) (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
   - `WordpieceTokenizer` - WordPiece tokenization,
@@ -108,6 +118,9 @@ This package comprises the following classes that can be imported in Python and 
 
 - Tokenizer for **Transformer-XL** (word tokens ordered by frequency for adaptive softmax) (in the [`tokenization_transfo_xl.py`](./pytorch_pretrained_bert/tokenization_transfo_xl.py) file):
   - `OpenAIGPTTokenizer` - perform word tokenization and can order words by frequency in a corpus for use in an adaptive softmax.
+
+- Tokenizer for **OpenAI GPT-2** (using byte-level Byte-Pair-Encoding) (in the [`tokenization_gpt2.py`](./pytorch_pretrained_bert/tokenization_gpt2.py) file):
+  - `GPT2Tokenizer` - perform byte-level Byte-Pair-Encoding (BPE) tokenization.
 
 - Optimizer for **BERT** (in the [`optimization.py`](./pytorch_pretrained_bert/optimization.py) file):
   - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
@@ -134,6 +147,9 @@ The repository further comprises:
 
 - One example on how to use **Transformer-XL** (in the [`examples` folder](./examples)):
   - [`run_transfo_xl.py`](./examples/run_transfo_xl.py) - Show how to load and evaluate a pre-trained model of `TransfoXLLMHeadModel` on WikiText 103.
+
+- One example on how to use **OpenAI GPT-2** in the unconditional and interactive mode (in the [`examples` folder](./examples)):
+  - [`run_gpt2.py`](./examples/run_gpt2.py) - Show how to use OpenAI GPT-2 an instance of `GPT2LMHeadModel` to generate text (same as the original OpenAI GPT-2 examples).
 
   These examples are detailed in the [Examples](#examples) section of this readme.
 
@@ -367,6 +383,67 @@ predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
 assert predicted_token == 'who'
 ```
 
+### OpenAI GPT-2
+
+Here is a quick-start example using `GPT2Tokenizer`, `GPT2Model` and `GPT2LMHeadModel` class with OpenAI's pre-trained  model. See the [doc section](#doc) below for all the details on these classes.
+
+First let's prepare a tokenized input with `GPT2Tokenizer`
+
+```python
+import torch
+from pytorch_pretrained_bert import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
+
+# OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
+import logging
+logging.basicConfig(level=logging.INFO)
+
+# Load pre-trained model tokenizer (vocabulary)
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+
+# Encode input
+text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+indexed_tokens = tokenizer.encode(text)
+
+# Convert inputs to PyTorch tensors
+tokens_tensor = torch.tensor([indexed_tokens])
+```
+
+Let's see how to use `GPT2Model` to get hidden states
+
+```python
+# Load pre-trained model (weights)
+model = GPT2Model.from_pretrained('gpt2')
+model.eval()
+
+# If you have a GPU, put everything on cuda
+tokens_tensor = tokens_tensor.to('cuda')
+model.to('cuda')
+
+# Predict hidden states features for each layer
+with torch.no_grad():
+    hidden_states = model(tokens_tensor)
+```
+
+And how to use `GPT2LMHeadModel`
+
+```python
+# Load pre-trained model (weights)
+model = GPT2LMHeadModel.from_pretrained('gpt2')
+model.eval()
+
+# If you have a GPU, put everything on cuda
+tokens_tensor = tokens_tensor.to('cuda')
+model.to('cuda')
+
+# Predict all tokens
+with torch.no_grad():
+    predictions = model(tokens_tensor)
+
+# get the predicted last token
+predicted_index = torch.argmax(predictions[0, -1, :]).item()
+predicted_token = tokenizer.decode([predicted_index])
+```
+
 ## Doc
 
 Here is a detailed documentation of the classes in the package and how to use them:
@@ -402,11 +479,12 @@ where
     - `bert-base-chinese`: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `openai-gpt`: OpenAI English model, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `transfo-xl-wt103`: Transformer-XL English model trained on wikitext-103, 18-layer, 1024-hidden, 16-heads, 257M parameters
+    - `gpt2`: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
 
   - a path or url to a pretrained model archive containing:
 
     - `bert_config.json` or `openai_gpt_config.json` a configuration file for the model, and
-    - `pytorch_model.bin` a PyTorch dump of a pre-trained instance of `BertForPreTraining`, `OpenAIGPTModel` or `TransfoXLModel` (saved with the usual `torch.save()`)
+    - `pytorch_model.bin` a PyTorch dump of a pre-trained instance of `BertForPreTraining`, `OpenAIGPTModel`, `TransfoXLModel`, `GPT2LMHeadModel` (saved with the usual `torch.save()`)
 
   If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
 - `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information).
@@ -428,6 +506,11 @@ model = OpenAIGPTModel.from_pretrained('openai-gpt')
 # Transformer-XL
 tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
 model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
+
+# OpenAI GPT-2
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+model = GPT2Model.from_pretrained('gpt2')
+
 ```
 
 ### PyTorch models
@@ -649,6 +732,60 @@ all_hidden_states = lower_hidden_states + [hidden_states]
   - else: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens]
 - `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]. Note that the first two dimensions are transposed in `mems` with regards to `input_ids`.
 
+#### 14. `GPT2Model`
+
+`GPT2Model` is the OpenAI GPT-2 Transformer model with a layer of summed token and position embeddings followed by a series of 12 identical self-attention blocks.
+
+The inputs and output are **identical to the TensorFlow model inputs and outputs**.
+
+We detail them here. This model takes as *inputs*:
+[`modeling_gpt2.py`](./pytorch_pretrained_bert/modeling_gpt2.py)
+- `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length] were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, vocab_size[
+- `position_ids`: an optional torch.LongTensor with the same shape as input_ids
+    with the position indices (selected in the range [0, config.n_positions - 1[.
+- `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
+    You can use it to add a third type of embedding to each input token in the sequence
+    (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
+- `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states (key and values in the attention blocks) to speed up sequential decoding (this is the `presents` output of the model, cf. below).
+
+This model *outputs*:
+- `hidden_states`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+- `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
+
+#### 15. `GPT2LMHeadModel`
+
+`GPT2LMHeadModel` includes the `GPT2Model` Transformer followed by a language modeling head with weights tied to the input embeddings (no additional parameters).
+
+*Inputs* are the same as the inputs of the [`GPT2Model`](#-14.-`GPT2Model`) class plus optional labels:
+- `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size].
+
+*Outputs*:
+- if `lm_labels` is not `None`:
+  Outputs the language modeling loss.
+- else: a tupple of
+  - `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, total_tokens_embeddings] (or more generally [d_1, ..., d_n, total_tokens_embeddings] were d_1 ... d_n are the dimension of input_ids)
+  - `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
+
+#### 16. `GPT2DoubleHeadsModel`
+
+`GPT2DoubleHeadsModel` includes the `GPT2Model` Transformer followed by two heads:
+- a language modeling head with weights tied to the input embeddings (no additional parameters) and:
+- a multiple choice classifier (linear layer that take as input a hidden state in a sequence to compute a score, see details in paper).
+
+*Inputs* are the same as the inputs of the [`GPT2Model`](#-14.-`GPT2Model`) class plus a classification mask and two optional labels:
+- `multiple_choice_token_ids`: a torch.LongTensor of shape [batch_size, num_choices] with the index of the token whose hidden state should be used as input for the multiple choice classifier (usually the [CLS] token for each choice).
+- `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size].
+- `multiple_choice_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size] with indices selected in [0, ..., num_choices].
+
+*Outputs*:
+- if `lm_labels` and `multiple_choice_labels` are not `None`:
+  Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
+- else Outputs a tuple with:
+  - `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, total_tokens_embeddings]
+  - `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
+  - `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
+
+
 ### Tokenizers:
 
 #### `BertTokenizer`
@@ -696,6 +833,24 @@ Please refer to the doc strings and code in [`tokenization_openai.py`](./pytorch
 `TransfoXLTokenizer` perform word tokenization. This tokenizer can be used for adaptive softmax and has utilities for counting tokens in a corpus to create a vocabulary ordered by toekn frequency (for adaptive softmax). See the adaptive softmax paper ([Efficient softmax approximation for GPUs](http://arxiv.org/abs/1609.04309)) for more details.
 
 Please refer to the doc strings and code in [`tokenization_transfo_xl.py`](./pytorch_pretrained_bert/tokenization_transfo_xl.py) for the details of these additional methods in `TransfoXLTokenizer`.
+
+#### `GPT2Tokenizer`
+
+`GPT2Tokenizer` perform byte-level Byte-Pair-Encoding (BPE) tokenization.
+
+This class has three arguments:
+
+- `vocab_file`: path to a vocabulary file.
+- `merges_file`: path to a file containing the BPE merges.
+- `errors`: How to handle unicode decoding errors. **Default = `replace`**
+
+and two methods:
+
+- `encode(text)`: convert a `str` in a list of `int` tokens by performing byte-level BPE.
+- `decode(tokens)`: convert back a list of `int` tokens in a `str`.
+
+Please refer to [`tokenization_gpt2.py`](./pytorch_pretrained_bert/tokenization_gpt2.py) for more details on the `GPT2Tokenizer`.
+
 
 ### Optimizers:
 
@@ -896,12 +1051,13 @@ python run_lm_finetuning.py \
   --max_seq_length 128 \
 ```
 
-### OpenAI GPT and Transformer-XL: running the examples
+### OpenAI GPT, Transformer-XL and GPT-2: running the examples
 
-We provide two examples of scripts for OpenAI GPT and Transformer-XL based on (and extended from) the respective original implementations:
+We provide three examples of scripts for OpenAI GPT, Transformer-XL and OpenAI GPT-2 based on (and extended from) the respective original implementations:
 
 - fine-tuning OpenAI GPT on the ROCStories dataset
 - evaluating Transformer-XL on Wikitext 103
+- unconditional and conditional generation from a pre-trained OpenAI GPT-2 model
 
 #### Fine-tuning OpenAI GPT on the RocStories dataset
 
@@ -935,6 +1091,22 @@ python run_transfo_xl.py --work_dir ../log
 ```
 
 This command runs in about 1 min on a V100 and gives an evaluation perplexity of 18.22 on WikiText-103 (the authors report a perplexity of about 18.3 on this dataset with the TensorFlow code).
+
+#### Unconditional and conditional generation from OpenAI's GPT-2 model
+
+This example code is identical to the original unconditional and conditional generation codes.
+
+Conditional generation:
+```shell
+python run_gpt2.py
+```
+
+Unconditional generation:
+```shell
+python run_gpt2.py --unconditional
+```
+
+The same option as in the original scripts are provided, please refere to the code of the example and the original repository of OpenAI.
 
 ## Fine-tuning BERT-large on GPUs
 
@@ -1050,12 +1222,25 @@ pytorch_pretrained_bert convert_openai_checkpoint \
 Here is an example of the conversion process for a pre-trained Transformer-XL model (see [here](https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models))
 
 ```shell
-export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
+export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
 
-pytorch_pretrained_bert convert_openai_checkpoint \
-  $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
+pytorch_pretrained_bert convert_transfo_xl_checkpoint \
+  $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
   $PYTORCH_DUMP_OUTPUT \
-  [OPENAI_GPT_CONFIG]
+  [TRANSFO_XL_CONFIG]
+```
+
+### GPT-2
+
+Here is an example of the conversion process for a pre-trained OpenAI's GPT-2 model.
+
+```shell
+export GPT2_DIR=/path/to/gpt2/checkpoint
+
+pytorch_pretrained_bert convert_gpt2_checkpoint \
+  $GPT2_DIR/model.ckpt \
+  $PYTORCH_DUMP_OUTPUT \
+  [GPT2_CONFIG]
 ```
 
 ## TPU
