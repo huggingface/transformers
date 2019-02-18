@@ -428,7 +428,7 @@ with torch.no_grad():
     hidden_states_1, past = model(tokens_tensor_1)
     # past can be used to reuse precomputed hidden state in a subsequent predictions
     # (see beam-search examples in the run_gpt2.py example
-    hidden_states-2, past = model(tokens_tensor_2, past=past)
+    hidden_states_2, past = model(tokens_tensor_2, past=past)
 ```
 
 And how to use `GPT2LMHeadModel`
