@@ -292,7 +292,7 @@ class TransfoXLTokenizer(object):
         return "".join(output)
 
     def whitespace_tokenize(self, text):
-        """Runs basic whitespace cleaning and splitting on a peice of text."""
+        """Runs basic whitespace cleaning and splitting on a piece of text."""
         text = text.strip()
         if not text:
             return []
