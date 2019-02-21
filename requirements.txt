@@ -1,10 +1,23 @@
-# PyTorch
-torch>=0.4.1
-# progress bars in model download and training scripts
-tqdm
-# Accessing files from S3 directly.
-boto3
-# Used for downloading models over HTTP
-requests
-# For OpenAI GPT
-regex
+name: bert-pytorch
+
+channels:
+  - pytorch
+
+dependencies:
+    # PyTorch
+    - pytorch=0.4.1
+    # progress bars in model download and training scripts
+    - tqdm
+    # Accessing files from S3 directly.
+    - boto3
+    # Used for downloading models over HTTP
+    - requests
+    - scikit-learn=0.20.2
+    # For OpenAI GPT
+    - regex
+    - h5py=2.9.0
+    - hdf5=1.10.4
+    - pip:
+        - torch==0.4.1
+
+prefix: /Users/liuqianchu/miniconda3/envs/bert-pytorch

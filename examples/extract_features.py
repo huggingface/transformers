@@ -30,12 +30,13 @@ from torch.utils.data.distributed import DistributedSampler
 
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertModel
+import numpy
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
-
+import h5py
 
 class InputExample(object):
 
@@ -48,25 +49,43 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, unique_id, tokens, input_ids, input_mask, input_type_ids):
+    def __init__(self, unique_id, tokens, input_ids, input_mask, input_type_ids,orig_to_tok_maps,orig_tokens):
         self.unique_id = unique_id
         self.tokens = tokens
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.input_type_ids = input_type_ids
+        self.orig_to_tok_maps=orig_to_tok_maps
+        self.orig_tokens=orig_tokens
 
+def tokenize_map(orig_tokens,tokenizer):
+    ### Input
+    labels = ["NNP", "NNP", "POS", "NN"]
+
+    ### Output
+    bert_tokens = []
+
+    # Token map will be an int -> int mapping between the `orig_tokens` index and
+    # the `bert_tokens` index.
+    orig_to_tok_map = []
+
+    for orig_token in orig_tokens:
+        orig_to_tok_map.append(len(bert_tokens)+1)
+        bert_tokens.extend(tokenizer.tokenize(orig_token))
+    return bert_tokens,orig_to_tok_map
 
 def convert_examples_to_features(examples, seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
 
     features = []
     for (ex_index, example) in enumerate(examples):
-        tokens_a = tokenizer.tokenize(example.text_a)
-
+        orig_tokens=example.text_a.split()
+        tokens_a,orig_to_tok_map_a = tokenize_map(orig_tokens,tokenizer)
         tokens_b = None
         if example.text_b:
-            tokens_b = tokenizer.tokenize(example.text_b)
-
+            tokens_b,orig_to_tok_map_b = tokenize_map(example.text_b.split(),tokenizer)
+            orig_tokens+=example.text_b.split()
+            orig_to_tok_map_a+=orig_to_tok_map_b
         if tokens_b:
             # Modifies `tokens_a` and `tokens_b` in place so that the total
             # length is less than the specified length.
@@ -77,6 +96,7 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
             if len(tokens_a) > seq_length - 2:
                 tokens_a = tokens_a[0:(seq_length - 2)]
 
+        # orig_to_tok_maps.append(orig_to_tok_map_a)
         # The convention in BERT is:
         # (a) For sequence pairs:
         #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
@@ -124,6 +144,10 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
             input_mask.append(0)
             input_type_ids.append(0)
 
+        while len(orig_to_tok_map_a) < seq_length:
+            orig_to_tok_map_a.append(0)
+
+        assert len(orig_to_tok_map_a) == seq_length
         assert len(input_ids) == seq_length
         assert len(input_mask) == seq_length
         assert len(input_type_ids) == seq_length
@@ -143,7 +167,9 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
                 tokens=tokens,
                 input_ids=input_ids,
                 input_mask=input_mask,
-                input_type_ids=input_type_ids))
+                input_type_ids=input_type_ids,
+                orig_to_tok_maps=orig_to_tok_map_a,
+                orig_tokens=orig_tokens))
     return features
 
 
@@ -173,7 +199,7 @@ def read_examples(input_file):
             line = reader.readline()
             if not line:
                 break
-            line = line.strip()
+            line = line.strip().split('\t')[0]
             text_a = None
             text_b = None
             m = re.match(r"^(.*) \|\|\| (.*)$", line)
@@ -187,6 +213,25 @@ def read_examples(input_file):
             unique_id += 1
     return examples
 
+def get_orig_seq(input_mask_batch):
+    seq=[i for i in input_mask_batch if i!=0]
+    return seq
+def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_mask_batch):
+    average_layer_batch_out=[]
+    for sent_i, sent_embed in enumerate(average_layer_batch):
+        sent_embed_out=[]
+        orig_to_token_map_batch_sent=get_orig_seq(orig_to_token_map_batch[sent_i])
+        seq_len = len(get_orig_seq(input_mask_batch[sent_i]))
+
+        for i in range(len(orig_to_token_map_batch_sent)):
+            start = orig_to_token_map_batch_sent[i]
+            if i==(len(orig_to_token_map_batch_sent)-1):
+                sent_embed_out.append(sum(sent_embed[start:seq_len-1]) / (seq_len-1 - start))
+                continue
+            end = orig_to_token_map_batch_sent[i + 1]
+            sent_embed_out.append(sum(sent_embed[start:end])/(end-start))
+        average_layer_batch_out.append(numpy.array(sent_embed_out))
+    return numpy.array(average_layer_batch_out)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -200,7 +245,7 @@ def main():
 
     ## Other parameters
     parser.add_argument("--do_lower_case", action='store_true', help="Set this flag if you are using an uncased model.")
-    parser.add_argument("--layers", default="-1,-2,-3,-4", type=str)
+    # parser.add_argument("--layers", default="-1,-2,-3,-4", type=str)
     parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                             "than this will be truncated, and sequences shorter than this will be padded.")
@@ -225,7 +270,7 @@ def main():
         torch.distributed.init_process_group(backend='nccl')
     logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(args.local_rank != -1)))
 
-    layer_indexes = [int(x) for x in args.layers.split(",")]
+    # layer_indexes = [int(x) for x in args.layers.split(",")]
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
@@ -250,8 +295,10 @@ def main():
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
     all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+    all_input_orig_to_token_maps = torch.tensor([f.orig_to_tok_maps for f in features],dtype=torch.long)
 
-    eval_data = TensorDataset(all_input_ids, all_input_mask, all_example_index)
+
+    eval_data = TensorDataset(all_input_ids, all_input_mask, all_example_index,all_input_orig_to_token_maps)
     if args.local_rank == -1:
         eval_sampler = SequentialSampler(eval_data)
     else:
@@ -259,38 +306,56 @@ def main():
     eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.batch_size)
 
     model.eval()
-    with open(args.output_file, "w", encoding='utf-8') as writer:
-        for input_ids, input_mask, example_indices in eval_dataloader:
+    batch_counter=0
+    with h5py.File(args.output_file, 'w') as writer:
+        for input_ids, input_mask, example_indices, input_orig_to_token_maps in eval_dataloader:
+            print ('batch no. {0}'.format(batch_counter))
+            batch_counter+=1
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
 
             all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
             all_encoder_layers = all_encoder_layers
 
+            average_layer_batch = sum(all_encoder_layers[-4:]) / 4
+            # if orig_to_token_map_batch!=None:
+            average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(), input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
+
+            sent_set=set()
             for b, example_index in enumerate(example_indices):
+
                 feature = features[example_index.item()]
-                unique_id = int(feature.unique_id)
-                # feature = unique_id_to_feature[unique_id]
-                output_json = collections.OrderedDict()
-                output_json["linex_index"] = unique_id
-                all_out_features = []
-                for (i, token) in enumerate(feature.tokens):
-                    all_layers = []
-                    for (j, layer_index) in enumerate(layer_indexes):
-                        layer_output = all_encoder_layers[int(layer_index)].detach().cpu().numpy()
-                        layer_output = layer_output[b]
-                        layers = collections.OrderedDict()
-                        layers["index"] = layer_index
-                        layers["values"] = [
-                            round(x.item(), 6) for x in layer_output[i]
-                        ]
-                        all_layers.append(layers)
-                    out_features = collections.OrderedDict()
-                    out_features["token"] = token
-                    out_features["layers"] = all_layers
-                    all_out_features.append(out_features)
-                output_json["features"] = all_out_features
-                writer.write(json.dumps(output_json) + "\n")
+                sent='\t'.join(feature.orig_tokens)
+                sent = sent.replace('.', '$period$')
+                sent = sent.replace('/', '$backslash$')
+                if sent in sent_set:
+                    continue
+                sent_set.add(sent)
+                payload=average_layer_batch[b]
+                writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
+                                    data=payload)
+
+            #     # feature = unique_id_to_feature[unique_id]
+            #     output_json = collections.OrderedDict()
+            #     output_json["linex_index"] = unique_id
+            #     all_out_features = []
+            #     for (i, token) in enumerate(feature.tokens):
+            #         all_layers = []
+            #         for (j, layer_index) in enumerate(layer_indexes):
+            #             layer_output = all_encoder_layers[int(layer_index)].detach().cpu().numpy()
+            #             layer_output = layer_output[b]
+            #             layers = collections.OrderedDict()
+            #             layers["index"] = layer_index
+            #             layers["values"] = [
+            #                 round(x.item(), 6) for x in layer_output[i]
+            #             ]
+            #             all_layers.append(layers)
+            #         out_features = collections.OrderedDict()
+            #         out_features["token"] = token
+            #         out_features["layers"] = all_layers
+            #         all_out_features.append(out_features)
+            #     output_json["features"] = all_out_features
+            #     writer.write(json.dumps(output_json) + "\n")
 
 
 if __name__ == "__main__":
