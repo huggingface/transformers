@@ -140,7 +140,7 @@ The repository further comprises:
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 and SQuAD v2.0 tasks.
   - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
-  - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining' on a target text corpus.  
+  - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining` on a target text corpus.  
 
 - One example on how to use **OpenAI GPT** (in the [`examples` folder](./examples)):
   - [`run_openai_gpt.py`](./examples/run_openai_gpt.py) - Show how to fine-tune an instance of `OpenGPTDoubleHeadsModel` on the RocStories task.
@@ -427,7 +427,7 @@ model.to('cuda')
 with torch.no_grad():
     hidden_states_1, past = model(tokens_tensor_1)
     # past can be used to reuse precomputed hidden state in a subsequent predictions
-    # (see beam-search examples in the run_gpt2.py example
+    # (see beam-search examples in the run_gpt2.py example).
     hidden_states_2, past = model(tokens_tensor_2, past=past)
 ```
 
@@ -439,14 +439,15 @@ model = GPT2LMHeadModel.from_pretrained('gpt2')
 model.eval()
 
 # If you have a GPU, put everything on cuda
-tokens_tensor_1 = tokens_tensor.to('cuda')
+tokens_tensor_1 = tokens_tensor_1.to('cuda')
+tokens_tensor_2 = tokens_tensor_2.to('cuda')
 model.to('cuda')
 
 # Predict all tokens
 with torch.no_grad():
     predictions_1, past = model(tokens_tensor_1)
     # past can be used to reuse precomputed hidden state in a subsequent predictions
-    # (see beam-search examples in the run_gpt2.py example
+    # (see beam-search examples in the run_gpt2.py example).
     predictions_2, past = model(tokens_tensor_2, past=past)
 
 # get the predicted last token
@@ -460,7 +461,7 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 | Sub-section | Description |
 |-|-|
-| [Loading Google AI's/OpenAI's pre-trained weigths](#Loading-Google-AI-or-OpenAI-pre-trained-weigths-and-PyTorch-dump) | How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance |
+| [Loading Google AI's/OpenAI's pre-trained weigths](#loading-google-ai-or-openai-pre-trained-weigths-or-pytorch-dump) | How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance |
 | [PyTorch models](#PyTorch-models) | API of the BERT, GPT, GPT-2 and Transformer-XL PyTorch model classes |
 | [Tokenizers](#tokenizers) | API of the tokenizers class for BERT, GPT, GPT-2 and Transformer-XL|
 | [Optimizers](#optimizerss) |  API of the optimizers |

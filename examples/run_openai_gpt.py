@@ -17,7 +17,15 @@
     Adapted from https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/train.py
     It self adapted from https://github.com/openai/finetune-transformer-lm/blob/master/train.py
 
-    This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset
+    This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset:
+        python run_openai_gpt.py \
+          --model_name openai-gpt \
+          --do_train \
+          --do_eval \
+          --train_dataset $ROC_STORIES_DIR/cloze_test_val__spring2016\ -\ cloze_test_ALL_val.csv \
+          --eval_dataset $ROC_STORIES_DIR/cloze_test_test__spring2016\ -\ cloze_test_ALL_test.csv \
+          --output_dir ../log \
+          --train_batch_size 16 \
 """
 import argparse
 import os
