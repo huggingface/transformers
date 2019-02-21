@@ -427,7 +427,7 @@ model.to('cuda')
 with torch.no_grad():
     hidden_states_1, past = model(tokens_tensor_1)
     # past can be used to reuse precomputed hidden state in a subsequent predictions
-    # (see beam-search examples in the run_gpt2.py example
+    # (see beam-search examples in the run_gpt2.py example).
     hidden_states_2, past = model(tokens_tensor_2, past=past)
 ```
 
@@ -439,14 +439,15 @@ model = GPT2LMHeadModel.from_pretrained('gpt2')
 model.eval()
 
 # If you have a GPU, put everything on cuda
-tokens_tensor_1 = tokens_tensor.to('cuda')
+tokens_tensor_1 = tokens_tensor_1.to('cuda')
+tokens_tensor_2 = tokens_tensor_2.to('cuda')
 model.to('cuda')
 
 # Predict all tokens
 with torch.no_grad():
     predictions_1, past = model(tokens_tensor_1)
     # past can be used to reuse precomputed hidden state in a subsequent predictions
-    # (see beam-search examples in the run_gpt2.py example
+    # (see beam-search examples in the run_gpt2.py example).
     predictions_2, past = model(tokens_tensor_2, past=past)
 
 # get the predicted last token
