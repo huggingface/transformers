@@ -94,7 +94,9 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
         else:
             # Account for [CLS] and [SEP] with "- 2"
             if len(tokens_a) > seq_length - 2:
-                tokens_a = tokens_a[0:(seq_length - 2)]
+                print ('exceed length:',tokens_a)
+                continue #skip when the length exceeds
+                # tokens_a = tokens_a[0:(seq_length - 2)]
 
         # orig_to_tok_maps.append(orig_to_tok_map_a)
         # The convention in BERT is:
