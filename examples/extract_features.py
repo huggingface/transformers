@@ -213,7 +213,11 @@ def read_examples(input_file):
             examples.append(
                 InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
             unique_id += 1
-    return examples
+            if len(examples)>10:
+                yield examples
+                examples=[]
+    if examples!=[]:
+        yield examples
 
 def get_orig_seq(input_mask_batch):
     seq=[i for i in input_mask_batch if i!=0]
@@ -235,6 +239,82 @@ def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_m
         average_layer_batch_out.append(numpy.array(sent_embed_out))
     return numpy.array(average_layer_batch_out)
 
+def examples2embeds(examples,tokenizer,model,device,writer,args):
+    features = convert_examples_to_features(
+        examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer)
+
+    unique_id_to_feature = {}
+    for feature in features:
+        unique_id_to_feature[feature.unique_id] = feature
+
+    
+    # elif n_gpu > 1:
+    #    model = torch.nn.DataParallel(model)
+
+    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+    all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+    all_input_orig_to_token_maps = torch.tensor([f.orig_to_tok_maps for f in features], dtype=torch.long)
+
+    eval_data = TensorDataset(all_input_ids, all_input_mask, all_example_index, all_input_orig_to_token_maps)
+    if args.local_rank == -1:
+        eval_sampler = SequentialSampler(eval_data)
+    else:
+        eval_sampler = DistributedSampler(eval_data)
+    eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.batch_size)
+
+    model.eval()
+    batch_counter = 0
+    sent_set = set()
+    # with h5py.File(args.output_file, 'w') as writer:
+    for input_ids, input_mask, example_indices, input_orig_to_token_maps in eval_dataloader:
+        print('batch no. {0}'.format(batch_counter))
+        batch_counter += 1
+        input_ids = input_ids.to(device)
+        input_mask = input_mask.to(device)
+
+        all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
+        all_encoder_layers = all_encoder_layers
+
+        average_layer_batch = sum(all_encoder_layers[-4:]) / 4
+        # if orig_to_token_map_batch!=None:
+        average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
+                                                      input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
+
+        for b, example_index in enumerate(example_indices):
+
+            feature = features[example_index.item()]
+            sent = '\t'.join(feature.orig_tokens)
+            sent = sent.replace('.', '$period$')
+            sent = sent.replace('/', '$backslash$')
+            if sent in sent_set:
+                continue
+            sent_set.add(sent)
+            payload = average_layer_batch[b]
+            writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
+                                  data=payload)
+
+        #     # feature = unique_id_to_feature[unique_id]
+        #     output_json = collections.OrderedDict()
+        #     output_json["linex_index"] = unique_id
+        #     all_out_features = []
+        #     for (i, token) in enumerate(feature.tokens):
+        #         all_layers = []
+        #         for (j, layer_index) in enumerate(layer_indexes):
+        #             layer_output = all_encoder_layers[int(layer_index)].detach().cpu().numpy()
+        #             layer_output = layer_output[b]
+        #             layers = collections.OrderedDict()
+        #             layers["index"] = layer_index
+        #             layers["values"] = [
+        #                 round(x.item(), 6) for x in layer_output[i]
+        #             ]
+        #             all_layers.append(layers)
+        #         out_features = collections.OrderedDict()
+        #         out_features["token"] = token
+        #         out_features["layers"] = all_layers
+        #         all_out_features.append(out_features)
+        #     output_json["features"] = all_out_features
+        #     writer.write(json.dumps(output_json) + "\n")
 def main():
     parser = argparse.ArgumentParser()
 
@@ -262,6 +342,8 @@ def main():
 
     args = parser.parse_args()
 
+    writer= h5py.File(args.output_file, 'w')
+
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
@@ -275,90 +357,15 @@ def main():
     # layer_indexes = [int(x) for x in args.layers.split(",")]
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-
-    examples = read_examples(args.input_file)
-
-    features = convert_examples_to_features(
-        examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer)
-
-    unique_id_to_feature = {}
-    for feature in features:
-        unique_id_to_feature[feature.unique_id] = feature
-
     model = BertModel.from_pretrained(args.bert_model)
     model.to(device)
 
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-    all_input_orig_to_token_maps = torch.tensor([f.orig_to_tok_maps for f in features],dtype=torch.long)
-
-
-    eval_data = TensorDataset(all_input_ids, all_input_mask, all_example_index,all_input_orig_to_token_maps)
-    if args.local_rank == -1:
-        eval_sampler = SequentialSampler(eval_data)
-    else:
-        eval_sampler = DistributedSampler(eval_data)
-    eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.batch_size)
-
-    model.eval()
-    batch_counter=0
-    with h5py.File(args.output_file, 'w') as writer:
-        for input_ids, input_mask, example_indices, input_orig_to_token_maps in eval_dataloader:
-            print ('batch no. {0}'.format(batch_counter))
-            batch_counter+=1
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-
-            all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
-            all_encoder_layers = all_encoder_layers
-
-            average_layer_batch = sum(all_encoder_layers[-4:]) / 4
-            # if orig_to_token_map_batch!=None:
-            average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(), input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
-
-            sent_set=set()
-            for b, example_index in enumerate(example_indices):
-
-                feature = features[example_index.item()]
-                sent='\t'.join(feature.orig_tokens)
-                sent = sent.replace('.', '$period$')
-                sent = sent.replace('/', '$backslash$')
-                if sent in sent_set:
-                    continue
-                sent_set.add(sent)
-                payload=average_layer_batch[b]
-                writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
-                                    data=payload)
-
-            #     # feature = unique_id_to_feature[unique_id]
-            #     output_json = collections.OrderedDict()
-            #     output_json["linex_index"] = unique_id
-            #     all_out_features = []
-            #     for (i, token) in enumerate(feature.tokens):
-            #         all_layers = []
-            #         for (j, layer_index) in enumerate(layer_indexes):
-            #             layer_output = all_encoder_layers[int(layer_index)].detach().cpu().numpy()
-            #             layer_output = layer_output[b]
-            #             layers = collections.OrderedDict()
-            #             layers["index"] = layer_index
-            #             layers["values"] = [
-            #                 round(x.item(), 6) for x in layer_output[i]
-            #             ]
-            #             all_layers.append(layers)
-            #         out_features = collections.OrderedDict()
-            #         out_features["token"] = token
-            #         out_features["layers"] = all_layers
-            #         all_out_features.append(out_features)
-            #     output_json["features"] = all_out_features
-            #     writer.write(json.dumps(output_json) + "\n")
-
+    for examples in read_examples(args.input_file):
+        examples2embeds(examples,tokenizer,model,device,writer,args)
+    writer.close()
 
 if __name__ == "__main__":
     main()
