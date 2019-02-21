@@ -17,7 +17,5 @@ dependencies:
     - regex
     - h5py=2.9.0
     - hdf5=1.10.4
-    - pip:
-        - torch==0.4.1
 
 prefix: /Users/liuqianchu/miniconda3/envs/bert-pytorch
