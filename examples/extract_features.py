@@ -192,7 +192,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_b.pop()
 
 
-def read_examples(input_file):
+def read_examples(input_file,example_batch=100000):
     """Read a list of `InputExample`s from an input file."""
     examples = []
     unique_id = 0
@@ -213,7 +213,7 @@ def read_examples(input_file):
             examples.append(
                 InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
             unique_id += 1
-            if len(examples)>10:
+            if len(examples)>example_batch:
                 yield examples
                 examples=[]
     if examples!=[]:
@@ -265,7 +265,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
 
     model.eval()
     batch_counter = 0
-    sent_set = set()
+    # sent_set = set()
     # with h5py.File(args.output_file, 'w') as writer:
     for input_ids, input_mask, example_indices, input_orig_to_token_maps in eval_dataloader:
         print('batch no. {0}'.format(batch_counter))
@@ -287,12 +287,13 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             sent = '\t'.join(feature.orig_tokens)
             sent = sent.replace('.', '$period$')
             sent = sent.replace('/', '$backslash$')
-            if sent in sent_set:
-                continue
-            sent_set.add(sent)
-            payload = average_layer_batch[b]
-            writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
-                                  data=payload)
+            # if sent in sent_set:
+            #     continue
+            # sent_set.add(sent)
+            if sent not in writer:
+                payload = average_layer_batch[b]
+                writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
+                                      data=payload)
 
         #     # feature = unique_id_to_feature[unique_id]
         #     output_json = collections.OrderedDict()
@@ -363,7 +364,10 @@ def main():
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
+    example_counter=0
     for examples in read_examples(args.input_file):
+        example_counter+=1
+        print ('processed {0} examples'.format (str(100000*example_counter)))
         examples2embeds(examples,tokenizer,model,device,writer,args)
     writer.close()
 
