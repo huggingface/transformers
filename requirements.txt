@@ -5,7 +5,7 @@ channels:
 
 dependencies:
     # PyTorch
-    - pytorch=0.4.1
+    - pytorch=1.0.0
     # progress bars in model download and training scripts
     - tqdm
     # Accessing files from S3 directly.
@@ -17,5 +17,7 @@ dependencies:
     - regex
     - h5py=2.9.0
     - hdf5=1.10.4
+    - pip:
+        - pytorch-pretrained-bert
 
 prefix: /Users/liuqianchu/miniconda3/envs/bert-pytorch
