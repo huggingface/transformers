@@ -248,8 +248,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         unique_id_to_feature[feature.unique_id] = feature
 
     
-    # elif n_gpu > 1:
-    #    model = torch.nn.DataParallel(model)
+
 
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
@@ -364,6 +363,9 @@ def main():
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
+    elif n_gpu > 1:
+       model = torch.nn.DataParallel(model)
+        
     example_counter=0
     for examples in read_examples(args.input_file):
         example_counter+=1
