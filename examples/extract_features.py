@@ -291,8 +291,12 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             # sent_set.add(sent)
             if sent not in writer:
                 payload = average_layer_batch[b]
-                writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
-                                      data=payload)
+                try:
+                    writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
+                                          data=payload)
+                except OSError as e:
+                    print(e, sent)
+
 
         #     # feature = unique_id_to_feature[unique_id]
         #     output_json = collections.OrderedDict()
@@ -340,14 +344,16 @@ def main():
     parser.add_argument("--no_cuda",
                         action='store_true',
                         help="Whether not to use CUDA when available")
+    parser.add_argument('--gpu', type=int,help='specify the gpu to use')
 
     args = parser.parse_args()
 
     writer= h5py.File(args.output_file, 'w')
 
     if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
+        device = torch.device("cuda:{0}".format(args.gpu) if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        # n_gpu = torch.cuda.device_count()
+        n_gpu=1
     else:
         device = torch.device("cuda", args.local_rank)
         n_gpu = 1
@@ -364,9 +370,9 @@ def main():
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
-    elif n_gpu > 1:
-       model = torch.nn.DataParallel(model)
-        
+    # elif n_gpu > 1:
+    #    model = torch.nn.DataParallel(model)
+       
     example_counter=0
     for examples in read_examples(args.input_file,args.example_batch):
         example_counter+=1
