@@ -368,18 +368,17 @@ class GPT2PreTrainedModel(nn.Module):
         Params:
             pretrained_model_name_or_path: either:
                 - a str with the name of a pre-trained model to load selected in the list of:
-                    . `openai-gpt`
+                    . `gpt2`
                 - a path or url to a pretrained model archive containing:
                     . `gpt2_config.json` a configuration file for the model
                     . `pytorch_model.bin` a PyTorch dump of a GPT2Model instance
                 - a path or url to a pretrained model archive containing:
-                    . `bert_config.json` a configuration file for the model
+                    . `gpt2_config.json` a configuration file for the model
                     . a TensorFlow checkpoint with trained weights
             from_tf: should we load the weights from a locally saved TensorFlow checkpoint
             cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-            state_dict: an optional state dictionnary (collections.OrderedDict object) to use instead of pre-trained models
-            *inputs, **kwargs: additional input for the specific Bert class
-                (ex: num_labels for BertForSequenceClassification)
+            state_dict: an optional state dictionary (collections.OrderedDict object) to use instead of pre-trained models
+            *inputs, **kwargs: additional input for the specific GPT class
         """
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
@@ -494,10 +493,11 @@ class GPT2Model(GPT2PreTrainedModel):
             The input, position and token_type embeddings are summed inside the Transformer before the first
             self-attention block.
 
-    Outputs:
+    Outputs a tuple consisting of:
         `hidden_states`: the encoded-hidden-states at the top of the model
             as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
             (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+        `presents`: ?
 
     Example usage:
     ```python
@@ -507,7 +507,7 @@ class GPT2Model(GPT2PreTrainedModel):
     config = modeling_gpt2.GPT2Config()
 
     model = modeling_gpt2.GPT2Model(config)
-    hidden_states = model(input_ids)
+    hidden_states, presents = model(input_ids)
     ```
     """
 
@@ -575,9 +575,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     Outputs:
         if `lm_labels` is not `None`:
             Outputs the language modeling loss.
-        else:
+        else a tuple:
             `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, config.vocab_size]
                 (or more generally [d_1, ..., d_n, config.vocab_size] were d_1 ... d_n are the dimension of input_ids)
+            `presents`: ...
 
     Example usage:
     ```python
@@ -587,7 +588,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     config = modeling_gpt2.GPT2Config()
 
     model = modeling_gpt2.GPT2LMHeadModel(config)
-    lm_logits = model(input_ids)
+    lm_logits, presents = model(input_ids)
     ```
     """
 
@@ -642,6 +643,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         else: a tuple with
             `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, config.vocab_size]
             `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
+            `presents`: ...
 
     Example usage:
     ```python
@@ -652,7 +654,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     config = modeling_gpt2.GPT2Config()
 
     model = modeling_gpt2.GPT2LMHeadModel(config)
-    lm_logits, multiple_choice_logits = model(input_ids, mc_token_ids)
+    lm_logits, multiple_choice_logits, presents = model(input_ids, mc_token_ids)
     ```
     """
 
