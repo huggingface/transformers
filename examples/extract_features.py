@@ -192,7 +192,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_b.pop()
 
 
-def read_examples(input_file,example_batch=100000):
+def read_examples(input_file,example_batch):
     """Read a list of `InputExample`s from an input file."""
     examples = []
     unique_id = 0
@@ -213,7 +213,7 @@ def read_examples(input_file,example_batch=100000):
             examples.append(
                 InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
             unique_id += 1
-            if len(examples)>example_batch:
+            if len(examples)>=example_batch:
                 yield examples
                 examples=[]
     if examples!=[]:
@@ -332,6 +332,7 @@ def main():
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                             "than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--batch_size", default=32, type=int, help="Batch size for predictions.")
+    parser.add_argument('--example_batch', default=100000,type=int, help='batch size for input examples')
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
@@ -367,9 +368,9 @@ def main():
        model = torch.nn.DataParallel(model)
         
     example_counter=0
-    for examples in read_examples(args.input_file):
+    for examples in read_examples(args.input_file,args.example_batch):
         example_counter+=1
-        print ('processed {0} examples'.format (str(100000*example_counter)))
+        print ('processed {0} examples'.format (str(args.example_batch*example_counter)))
         examples2embeds(examples,tokenizer,model,device,writer,args)
     writer.close()
 
