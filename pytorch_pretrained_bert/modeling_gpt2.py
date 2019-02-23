@@ -492,12 +492,16 @@ class GPT2Model(GPT2PreTrainedModel):
             (the previous two being the word and position embeddings).
             The input, position and token_type embeddings are summed inside the Transformer before the first
             self-attention block.
+        `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
+            (key and values in the attention blocks) to speed up sequential decoding
+            (this is the presents output of the model, cf. below).
 
     Outputs a tuple consisting of:
         `hidden_states`: the encoded-hidden-states at the top of the model
             as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
             (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
-        `presents`: ?
+        `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as
+            torch.FloatTensors. They can be reused to speed up sequential decoding.
 
     Example usage:
     ```python
@@ -571,6 +575,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
             with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
             is only computed for the labels set in [0, ..., vocab_size]
+        `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
+            (key and values in the attention blocks) to speed up sequential decoding
+            (this is the presents output of the model, cf. below).
 
     Outputs:
         if `lm_labels` is not `None`:
@@ -578,7 +585,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         else a tuple:
             `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, config.vocab_size]
                 (or more generally [d_1, ..., d_n, config.vocab_size] were d_1 ... d_n are the dimension of input_ids)
-            `presents`: ...
+            `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as
+                torch.FloatTensors. They can be reused to speed up sequential decoding.
 
     Example usage:
     ```python
@@ -636,6 +644,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             is only computed for the labels set in [0, ..., config.vocab_size]
         `multiple_choice_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size]
             with indices selected in [0, ..., num_choices].
+        `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
+            (key and values in the attention blocks) to speed up sequential decoding
+            (this is the presents output of the model, cf. below).
 
     Outputs:
         if `lm_labels` and `multiple_choice_labels` are not `None`:
@@ -643,7 +654,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         else: a tuple with
             `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, num_choices, sequence_length, config.vocab_size]
             `multiple_choice_logits`: the multiple choice logits as a torch.FloatTensor of size [batch_size, num_choices]
-            `presents`: ...
+            `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as
+                torch.FloatTensors. They can be reused to speed up sequential decoding.
 
     Example usage:
     ```python
