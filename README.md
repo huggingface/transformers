@@ -140,7 +140,7 @@ The repository further comprises:
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 and SQuAD v2.0 tasks.
   - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
-  - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining` on a target text corpus.  
+  - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining` on a target text corpus.
 
 - One example on how to use **OpenAI GPT** (in the [`examples` folder](./examples)):
   - [`run_openai_gpt.py`](./examples/run_openai_gpt.py) - Show how to fine-tune an instance of `OpenGPTDoubleHeadsModel` on the RocStories task.
@@ -569,7 +569,7 @@ An example on how to use this class is given in the [`extract_features.py`](./ex
 
   - the masked language modeling logits, and
   - the next sentence classification logits.
-  
+
 An example on how to use this class is given in the [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) script which can be used to fine-tune the BERT language model on your specific different text corpus. This should improve model performance, if the language style is different from the original BERT training corpus (Wiki + BookCorpus).
 
 
@@ -773,7 +773,7 @@ This model *outputs*:
 *Outputs*:
 - if `lm_labels` is not `None`:
   Outputs the language modeling loss.
-- else: a tupple of
+- else: a tuple of
   - `lm_logits`: the language modeling logits as a torch.FloatTensor of size [batch_size, sequence_length, total_tokens_embeddings] (or more generally [d_1, ..., d_n, total_tokens_embeddings] were d_1 ... d_n are the dimension of input_ids)
   - `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
 
@@ -929,7 +929,7 @@ We showcase several fine-tuning examples based on (and extended from) [the origi
 - a *token-level classifier* on the question answering dataset SQuAD, and
 - a *sequence-level multiple-choice classifier* on the SWAG classification corpus.
 - a *BERT language model* on another target corpus
- 
+
 #### MRPC
 
 This example code fine-tunes BERT on the Microsoft Research Paraphrase
@@ -1045,7 +1045,7 @@ loss = 0.06423990014260186
 #### LM Fine-tuning
 
 The data should be a text file in the same format as [sample_text.txt](./samples/sample_text.txt)  (one sentence per line, docs separated by empty line).
-You can download an [exemplary training corpus](https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt) generated from wikipedia articles and splitted into ~500k sentences with spaCy. 
+You can download an [exemplary training corpus](https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt) generated from wikipedia articles and splitted into ~500k sentences with spaCy.
 Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with `train_batch_size=200` and `max_seq_length=128`:
 
 
@@ -1147,7 +1147,7 @@ python ./run_squad.py \
   --doc_stride 128 \
   --output_dir $OUTPUT_DIR \
   --train_batch_size 24 \
-  --gradient_accumulation_steps 2 
+  --gradient_accumulation_steps 2
 ```
 
 If you have a recent GPU (starting from NVIDIA Volta series), you should try **16-bit fine-tuning** (FP16).
