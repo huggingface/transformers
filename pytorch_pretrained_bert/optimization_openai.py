@@ -37,7 +37,7 @@ def warmup_linear(x, warmup=0.002):
         After `t_total`-th training step, learning rate is zero. """
     if x < warmup:
         return x/warmup
-    return max(1.0 - x, 0)
+    return max((x-1.)/(warmup-1.), 0)
 
 SCHEDULES = {
     'warmup_cosine':warmup_cosine,
