@@ -21,16 +21,23 @@ from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
 
 def warmup_cosine(x, warmup=0.002):
-    s = 1 if x <= warmup else 0
-    return s*(x/warmup) + (1-s)*(0.5 * (1 + torch.cos(math.pi * x)))
+    if x < warmup:
+        return x/warmup
+    return 0.5 * (1.0 + torch.cos(math.pi * x))
 
 def warmup_constant(x, warmup=0.002):
-    s = 1 if x <= warmup else 0
-    return s*(x/warmup) + (1-s)*1
+    """ Linearly increases learning rate over `warmup`*`t_total` (as provided to BertAdam) training steps.
+        Learning rate is 1. afterwards. """
+    if x < warmup:
+        return x/warmup
+    return 1.0
 
 def warmup_linear(x, warmup=0.002):
-    s = 1 if x <= warmup else 0
-    return (s*(x/warmup) + (1-s))*(1-x)
+    """ Specifies a triangular learning rate schedule where peak is reached at `warmup`*`t_total`-th (as provided to BertAdam) training step.
+        After `t_total`-th training step, learning rate is zero. """
+    if x < warmup:
+        return x/warmup
+    return max(1.0 - x, 0)
 
 SCHEDULES = {
     'warmup_cosine':warmup_cosine,
