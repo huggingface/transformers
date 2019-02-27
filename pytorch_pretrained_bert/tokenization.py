@@ -74,8 +74,14 @@ def whitespace_tokenize(text):
 class BertTokenizer(object):
     """Runs end-to-end tokenization: punctuation splitting + wordpiece"""
 
-    def __init__(self, vocab_file, do_lower_case=True, max_len=None,
+    def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
                  never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+        """Constructs a BertTokenizer.
+
+        Args:
+          do_lower_case: Whether to lower case the input.
+          do_wordpiece_only: Whether to do basic tokenization before wordpiece.
+        """
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
@@ -83,16 +89,21 @@ class BertTokenizer(object):
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict(
             [(ids, tok) for tok, ids in self.vocab.items()])
-        self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
-                                              never_split=never_split)
+        self.do_basic_tokenize = do_basic_tokenize
+        if do_basic_tokenize:
+          self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
+                                                never_split=never_split)
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
         self.max_len = max_len if max_len is not None else int(1e12)
 
     def tokenize(self, text):
-        split_tokens = []
-        for token in self.basic_tokenizer.tokenize(text):
-            for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                split_tokens.append(sub_token)
+        if self.do_basic_tokenize:
+          split_tokens = []
+          for token in self.basic_tokenizer.tokenize(text):
+              for sub_token in self.wordpiece_tokenizer.tokenize(token):
+                  split_tokens.append(sub_token)
+        else:
+          split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
 
     def convert_tokens_to_ids(self, tokens):
