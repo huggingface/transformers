@@ -82,8 +82,6 @@ class BertAdam(Optimizer):
                         b1=b1, b2=b2, e=e, weight_decay=weight_decay,
                         max_grad_norm=max_grad_norm)
         super(BertAdam, self).__init__(params, defaults)
-        # warning for t_total exceeded
-        self._warned_for_t_total_at_progress = -1 if schedule == "warmup_linear" else float("inf")      # warning is not active with other schedules (since it doesn't break them)
 
     def get_lr(self):
         lr = []
@@ -110,6 +108,8 @@ class BertAdam(Optimizer):
         loss = None
         if closure is not None:
             loss = closure()
+
+        warned_for_t_total = False
 
         for group in self.param_groups:
             for p in group['params']:
@@ -157,11 +157,11 @@ class BertAdam(Optimizer):
                     progress = state['step']/group['t_total']
                     lr_scheduled = group['lr'] * schedule_fct(progress, group['warmup'])
                     # warning for exceeding t_total (only active with warmup_linear
-                    if progress > 1. and progress > self._warned_for_t_total_at_progress:
+                    if group['schedule'] == "warmup_linear" and progress > 1. and not warned_for_t_total:
                         logger.warning(
                             "Training beyond specified 't_total' steps. Learning rate set to {}. "
                             "Please set 't_total' of {} correctly.".format(lr_scheduled, self.__class__.__name__))
-                        self._warned_for_t_total_at_progress = progress
+                        warned_for_t_total = True
                     # end warning
                 else:
                     lr_scheduled = group['lr']
