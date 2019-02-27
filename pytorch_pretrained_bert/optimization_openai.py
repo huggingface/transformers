@@ -19,6 +19,9 @@ import torch
 from torch.optim import Optimizer
 from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
+import logging
+
+logger = logging.getLogger(__name__)
 
 def warmup_cosine(x, warmup=0.002):
     if x < warmup:
@@ -37,6 +40,8 @@ def warmup_linear(x, warmup=0.002):
         After `t_total`-th training step, learning rate is zero. """
     if x < warmup:
         return x/warmup
+    if x > 1:
+        logger.warning("Training beyond specified 't_total' steps. Learning rate set to zero. Please set 't_total' of BertAdam correctly.")
     return max((x-1.)/(warmup-1.), 0)
 
 SCHEDULES = {
