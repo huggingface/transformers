@@ -79,8 +79,16 @@ class BertTokenizer(object):
         """Constructs a BertTokenizer.
 
         Args:
-          do_lower_case: Whether to lower case the input.
-          do_wordpiece_only: Whether to do basic tokenization before wordpiece.
+          vocab_file: Path to a one-wordpiece-per-line vocabulary file
+          do_lower_case: Whether to lower case the input
+                         Only has an effect when do_wordpiece_only=False
+          do_basic_tokenize: Whether to do basic tokenization before wordpiece.
+          max_len: An artificial maximum length to truncate tokenized sequences to;
+                         Effective maximum length is always the minimum of this
+                         value (if specified) and the underlying BERT model's
+                         sequence length.
+          never_split: List of tokens which will never be split during tokenization.
+                         Only has an effect when do_wordpiece_only=False
         """
         if not os.path.isfile(vocab_file):
             raise ValueError(
