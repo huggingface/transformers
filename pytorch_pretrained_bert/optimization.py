@@ -83,7 +83,7 @@ class BertAdam(Optimizer):
                         max_grad_norm=max_grad_norm)
         super(BertAdam, self).__init__(params, defaults)
         # warning for t_total exceeded
-        self._warned_for_t_total_at_progress = -1 if schedule == "warmup_linear" else float("inf")
+        self._warned_for_t_total_at_progress = -1 if schedule == "warmup_linear" else float("inf")      # warning is not active with other schedules (since it doesn't break them)
 
     def get_lr(self):
         lr = []
