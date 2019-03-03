@@ -232,7 +232,7 @@ class OpenAIGPTTokenizer(object):
             else:
                 ids.append(self.encoder.get(token, 0))
         if len(ids) > self.max_len:
-            raise ValueError(
+            logger.warning(
                 "Token indices sequence length is longer than the specified maximum "
                 " sequence length for this OpenAI GPT model ({} > {}). Running this"
                 " sequence through the model will result in indexing errors".format(len(ids), self.max_len)
