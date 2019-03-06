@@ -739,8 +739,8 @@ all_hidden_states = lower_hidden_states + [hidden_states]
 
 *Outputs* a tuple of (last_hidden_state, new_mems)
 - `softmax_output`: output of the (adaptive) softmax:
-  - if target is None: Negative log likelihood of shape [batch_size, sequence_length]
-  - else: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens]
+  - if target is None: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens] 
+  - else: Negative log likelihood of target tokens with shape [batch_size, sequence_length]
 - `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]. Note that the first two dimensions are transposed in `mems` with regards to `input_ids`.
 
 #### 14. `GPT2Model`
