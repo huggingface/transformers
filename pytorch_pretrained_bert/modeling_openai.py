@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HugginFace Inc. team.
+# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
