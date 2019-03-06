@@ -193,7 +193,7 @@ class GPT2Tokenizer(object):
             token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
             bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
         if len(bpe_tokens) > self.max_len:
-            raise ValueError(
+            logger.warning(
                 "Token indices sequence length is longer than the specified maximum "
                 " sequence length for this OpenAI GPT-2 model ({} > {}). Running this"
                 " sequence through the model will result in indexing errors".format(len(bpe_tokens), self.max_len)
