@@ -507,7 +507,7 @@ where
 Examples:
 ```python
 # BERT
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, do_basic_tokenize=True)
 model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 
 # OpenAI GPT
@@ -803,11 +803,12 @@ This model *outputs*:
 
 `BertTokenizer` perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
-This class has four arguments:
+This class has five arguments:
 
 - `vocab_file`: path to a vocabulary file.
 - `do_lower_case`: convert text to lower-case while tokenizing. **Default = True**.
 - `max_len`: max length to filter the input of the Transformer. Default to pre-trained value for the model if `None`. **Default = None**
+- `do_basic_tokenize`: Do basic tokenization before wordpice tokenization. Set to false if text is pre-tokenized. **Default = True**.
 - `never_split`: a list of tokens that should not be splitted during tokenization. **Default = `["[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"]`**
 
 and three methods:
