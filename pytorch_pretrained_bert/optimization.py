@@ -69,7 +69,7 @@ class WarmupCosineSchedule(LRSchedule):
             return progress / self.warmup
         else:
             progress = (progress - self.warmup) / (1 - self.warmup)   # progress after warmup
-            return 0.5 * (1. + torch.cos(math.pi * self.cycles * 2 * progress))
+            return 0.5 * (1. + math.cos(math.pi * self.cycles * 2 * progress))
 
 
 class WarmupConstantSchedule(LRSchedule):
