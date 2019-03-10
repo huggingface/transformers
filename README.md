@@ -1,5 +1,7 @@
 # PyTorch Pretrained BERT: The Big & Extending Repository of pretrained Transformers
 
+个人增加代码部分：<<contrib>> package!
+
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
 This repository contains op-for-op PyTorch reimplementations, pre-trained models and fine-tuning examples for:
