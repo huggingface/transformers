@@ -278,7 +278,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         all_encoder_layers, _ = model(input_ids, token_type_ids=None, attention_mask=input_mask)
         all_encoder_layers = all_encoder_layers
 
-        average_layer_batch = sum(all_encoder_layers[-4:]) / 4
+        average_layer_batch = sum(all_encoder_layers[-12:]) / 12
         # if orig_to_token_map_batch!=None:
         average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
                                                       input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
