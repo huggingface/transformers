@@ -236,7 +236,10 @@ def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_m
                 continue
             end = orig_to_token_map_batch_sent[i + 1]
             sent_embed_out.append(sum(sent_embed[start:end])/(end-start))
-        average_layer_batch_out.append(numpy.array(sent_embed_out))
+        try:
+            average_layer_batch_out.append(numpy.array(sent_embed_out))
+        except ValueError as e:
+            print (e,sent_i,sent_embed_out)
     return numpy.array(average_layer_batch_out)
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
