@@ -69,7 +69,7 @@ class WarmupCosineSchedule(LRSchedule):
             return progress / self.warmup
         else:
             progress = (progress - self.warmup) / (1 - self.warmup)   # progress after warmup
-            return 0.5 * (1. + math.cos(math.pi * ((self.cycles * 2 * progress) % 1))
+            return 0.5 * (1. + math.cos(math.pi * self.cycles * 2 * progress))
 
 
 class WarmupCosineWithRestartsSchedule(WarmupCosineSchedule):
@@ -84,7 +84,7 @@ class WarmupCosineWithRestartsSchedule(WarmupCosineSchedule):
             return progress / self.warmup
         else:
             progress = (progress - self.warmup) / (1 - self.warmup)     # progress after warmup
-            ret = 0.5 * (1. + math.cos(math.pi * self.cycles * 2 * progress))
+            ret = 0.5 * (1. + math.cos(math.pi * ((self.cycles * 2 * progress) % 1)))
             return ret
 
 
