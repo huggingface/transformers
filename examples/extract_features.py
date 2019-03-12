@@ -202,14 +202,16 @@ def read_examples(input_file,example_batch):
             if not line:
                 break
             line = line.strip().split('\t')[0]
-            text_a = None
+            if line=='':
+                continue
+            text_a = line
             text_b = None
-            m = re.match(r"^(.*) \|\|\| (.*)$", line)
-            if m is None:
-                text_a = line
-            else:
-                text_a = m.group(1)
-                text_b = m.group(2)
+            # m = re.match(r"^(.*) \|\|\| (.*)$", line)
+            # if m is None:
+            #     text_a = line
+            # else:
+            #     text_a = m.group(1)
+            #     text_b = m.group(2)
             examples.append(
                 InputExample(unique_id=unique_id, text_a=text_a, text_b=text_b))
             unique_id += 1
@@ -239,8 +241,10 @@ def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_m
         try:
             average_layer_batch_out.append(numpy.array(sent_embed_out))
         except ValueError as e:
-            print (e,sent_i,sent_embed_out)
-    return numpy.array(average_layer_batch_out)
+            print (e,)
+            average_layer_batch_out.append(None)
+
+    return average_layer_batch_out
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
     features = convert_examples_to_features(
@@ -280,8 +284,11 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
 
         average_layer_batch = sum(all_encoder_layers[-12:]) / 12
         # if orig_to_token_map_batch!=None:
-        average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
+        try:
+            average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
                                                       input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
+        except ValueError as e:
+            print (e, examples[example_indices])
 
         for b, example_index in enumerate(example_indices):
 
@@ -294,11 +301,14 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             # sent_set.add(sent)
             if sent not in writer:
                 payload = average_layer_batch[b]
-                try:
-                    writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
-                                          data=payload)
-                except OSError as e:
-                    print(e, sent)
+                if type(payload)==type(None):
+                    print ('ValueError:',sent)
+                else:
+                    payload=numpy.array(payload)
+                    try:
+                        writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload)
+                    except OSError as e:
+                        print(e, sent)
 
 
         #     # feature = unique_id_to_feature[unique_id]
