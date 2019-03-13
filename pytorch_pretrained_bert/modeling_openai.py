@@ -32,8 +32,12 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .file_utils import cached_path
-from .modeling import BertLayerNorm as LayerNorm
+try:
+    from .file_utils import cached_path
+    from .modeling import BertLayerNorm as LayerNorm
+except ImportError: # handle the case when the module is used from another project
+    from file_utils import cached_path
+    from modeling import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
 

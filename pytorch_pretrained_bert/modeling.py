@@ -32,7 +32,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .file_utils import cached_path
+try:
+    from .file_utils import cached_path
+except ImportError: # handle the case when the module is used from another project
+    from file_utils import cached_path
 
 logger = logging.getLogger(__name__)
 
