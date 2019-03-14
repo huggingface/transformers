@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HugginFace Inc. team.
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@
     Adapted from https://github.com/kimiyoung/transformer-xl.
     In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
+
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import copy

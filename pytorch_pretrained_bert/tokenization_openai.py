@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Open AI Team Authors and The HugginFace Inc. team.
+# Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -232,7 +232,7 @@ class OpenAIGPTTokenizer(object):
             else:
                 ids.append(self.encoder.get(token, 0))
         if len(ids) > self.max_len:
-            raise ValueError(
+            logger.warning(
                 "Token indices sequence length is longer than the specified maximum "
                 " sequence length for this OpenAI GPT model ({} > {}). Running this"
                 " sequence through the model will result in indexing errors".format(len(ids), self.max_len)

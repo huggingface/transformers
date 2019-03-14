@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HugginFace Inc. team.
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -163,7 +163,7 @@ def main():
     datasets = (train_dataset, eval_dataset)
     encoded_datasets = tokenize_and_encode(datasets)
 
-    # Compute the mex input length for the Transformer
+    # Compute the max input length for the Transformer
     max_length = model.config.n_positions // 2 - 2
     input_length = max(len(story[:max_length]) + max(len(cont1[:max_length]), len(cont2[:max_length])) + 3  \
                            for dataset in encoded_datasets for story, cont1, cont2, _ in dataset)
@@ -210,6 +210,7 @@ def main():
                 loss = args.lm_coef * losses[0] + losses[1]
                 loss.backward()
                 optimizer.step()
+                optimizer.zero_grad()
                 tr_loss += loss.item()
                 exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
                 nb_tr_steps += 1

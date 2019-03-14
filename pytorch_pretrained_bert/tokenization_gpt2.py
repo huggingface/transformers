@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Open AI Team Authors and The HugginFace Inc. team.
+# Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -193,7 +193,7 @@ class GPT2Tokenizer(object):
             token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
             bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
         if len(bpe_tokens) > self.max_len:
-            raise ValueError(
+            logger.warning(
                 "Token indices sequence length is longer than the specified maximum "
                 " sequence length for this OpenAI GPT-2 model ({} > {}). Running this"
                 " sequence through the model will result in indexing errors".format(len(bpe_tokens), self.max_len)

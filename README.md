@@ -85,28 +85,28 @@ python -m pytest -sv tests/
 This package comprises the following classes that can be imported in Python and are detailed in the [Doc](#doc) section of this readme:
 
 - Eight **Bert** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling.py`](./pytorch_pretrained_bert/modeling.py) file):
-  - [`BertModel`](./pytorch_pretrained_bert/modeling.py#L556) - raw BERT Transformer model (**fully pre-trained**),
-  - [`BertForMaskedLM`](./pytorch_pretrained_bert/modeling.py#L710) - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
-  - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L771) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
-  - [`BertForPreTraining`](./pytorch_pretrained_bert/modeling.py#L639) - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
-  - [`BertForSequenceClassification`](./pytorch_pretrained_bert/modeling.py#L833) - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
-  - [`BertForMultipleChoice`](./pytorch_pretrained_bert/modeling.py#L899) - BERT Transformer with a multiple choice head on top (used for task like Swag) (BERT Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
-  - [`BertForTokenClassification`](./pytorch_pretrained_bert/modeling.py#L969) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**),
-  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L1034) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
+  - [`BertModel`](./pytorch_pretrained_bert/modeling.py#L639) - raw BERT Transformer model (**fully pre-trained**),
+  - [`BertForMaskedLM`](./pytorch_pretrained_bert/modeling.py#L793) - BERT Transformer with the pre-trained masked language modeling head on top (**fully pre-trained**),
+  - [`BertForNextSentencePrediction`](./pytorch_pretrained_bert/modeling.py#L854) - BERT Transformer with the pre-trained next sentence prediction classifier on top  (**fully pre-trained**),
+  - [`BertForPreTraining`](./pytorch_pretrained_bert/modeling.py#L722) - BERT Transformer with masked language modeling head and next sentence prediction classifier on top (**fully pre-trained**),
+  - [`BertForSequenceClassification`](./pytorch_pretrained_bert/modeling.py#L916) - BERT Transformer with a sequence classification head on top (BERT Transformer is **pre-trained**, the sequence classification head **is only initialized and has to be trained**),
+  - [`BertForMultipleChoice`](./pytorch_pretrained_bert/modeling.py#L982) - BERT Transformer with a multiple choice head on top (used for task like Swag) (BERT Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
+  - [`BertForTokenClassification`](./pytorch_pretrained_bert/modeling.py#L1051) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**),
+  - [`BertForQuestionAnswering`](./pytorch_pretrained_bert/modeling.py#L1124) - BERT Transformer with a token classification head on top (BERT Transformer is **pre-trained**, the token classification head **is only initialized and has to be trained**).
 
 - Three **OpenAI GPT** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py) file):
-  - [`OpenAIGPTModel`](./pytorch_pretrained_bert/modeling_openai.py#L537) - raw OpenAI GPT Transformer model (**fully pre-trained**),
-  - [`OpenAIGPTLMHeadModel`](./pytorch_pretrained_bert/modeling_openai.py#L691) - OpenAI GPT Transformer with the tied language modeling head on top (**fully pre-trained**),
-  - [`OpenAIGPTDoubleHeadsModel`](./pytorch_pretrained_bert/modeling_openai.py#L752) - OpenAI GPT Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
+  - [`OpenAIGPTModel`](./pytorch_pretrained_bert/modeling_openai.py#L536) - raw OpenAI GPT Transformer model (**fully pre-trained**),
+  - [`OpenAIGPTLMHeadModel`](./pytorch_pretrained_bert/modeling_openai.py#L643) - OpenAI GPT Transformer with the tied language modeling head on top (**fully pre-trained**),
+  - [`OpenAIGPTDoubleHeadsModel`](./pytorch_pretrained_bert/modeling_openai.py#L722) - OpenAI GPT Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
 
 - Two **Transformer-XL** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling_transfo_xl.py`](./pytorch_pretrained_bert/modeling_transfo_xl.py) file):
-  - [`TransfoXLModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L974) - Transformer-XL model which outputs the last hidden state and memory cells (**fully pre-trained**),
-  - [`TransfoXLLMHeadModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L1236) - Transformer-XL with the tied adaptive softmax head on top for language modeling which outputs the logits/loss and memory cells (**fully pre-trained**),
+  - [`TransfoXLModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L983) - Transformer-XL model which outputs the last hidden state and memory cells (**fully pre-trained**),
+  - [`TransfoXLLMHeadModel`](./pytorch_pretrained_bert/modeling_transfo_xl.py#L1260) - Transformer-XL with the tied adaptive softmax head on top for language modeling which outputs the logits/loss and memory cells (**fully pre-trained**),
 
 - Three **OpenAI GPT-2** PyTorch models (`torch.nn.Module`) with pre-trained weights (in the [`modeling_gpt2.py`](./pytorch_pretrained_bert/modeling_gpt2.py) file):
-  - [`GPT2Model`](./pytorch_pretrained_bert/modeling_gpt2.py#L537) - raw OpenAI GPT-2 Transformer model (**fully pre-trained**),
-  - [`GPT2LMHeadModel`](./pytorch_pretrained_bert/modeling_gpt2.py#L691) - OpenAI GPT-2 Transformer with the tied language modeling head on top (**fully pre-trained**),
-  - [`GPT2DoubleHeadsModel`](./pytorch_pretrained_bert/modeling_gpt2.py#L752) - OpenAI GPT-2 Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT-2 Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
+  - [`GPT2Model`](./pytorch_pretrained_bert/modeling_gpt2.py#L479) - raw OpenAI GPT-2 Transformer model (**fully pre-trained**),
+  - [`GPT2LMHeadModel`](./pytorch_pretrained_bert/modeling_gpt2.py#L559) - OpenAI GPT-2 Transformer with the tied language modeling head on top (**fully pre-trained**),
+  - [`GPT2DoubleHeadsModel`](./pytorch_pretrained_bert/modeling_gpt2.py#L624) - OpenAI GPT-2 Transformer with the tied language modeling head and a multiple choice classification head on top (OpenAI GPT-2 Transformer is **pre-trained**, the multiple choice classification head **is only initialized and has to be trained**),
 
 - Tokenizers for **BERT** (using word-piece) (in the [`tokenization.py`](./pytorch_pretrained_bert/tokenization.py) file):
   - `BasicTokenizer` - basic tokenization (punctuation splitting, lower casing, etc.),
@@ -507,7 +507,7 @@ where
 Examples:
 ```python
 # BERT
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, do_basic_tokenize=True)
 model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 
 # OpenAI GPT
@@ -739,8 +739,8 @@ all_hidden_states = lower_hidden_states + [hidden_states]
 
 *Outputs* a tuple of (last_hidden_state, new_mems)
 - `softmax_output`: output of the (adaptive) softmax:
-  - if target is None: Negative log likelihood of shape [batch_size, sequence_length]
-  - else: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens]
+  - if target is None: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens] 
+  - else: Negative log likelihood of target tokens with shape [batch_size, sequence_length]
 - `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]. Note that the first two dimensions are transposed in `mems` with regards to `input_ids`.
 
 #### 14. `GPT2Model`
@@ -803,11 +803,12 @@ This model *outputs*:
 
 `BertTokenizer` perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
 
-This class has four arguments:
+This class has five arguments:
 
 - `vocab_file`: path to a vocabulary file.
 - `do_lower_case`: convert text to lower-case while tokenizing. **Default = True**.
 - `max_len`: max length to filter the input of the Transformer. Default to pre-trained value for the model if `None`. **Default = None**
+- `do_basic_tokenize`: Do basic tokenization before wordpice tokenization. Set to false if text is pre-tokenized. **Default = True**.
 - `never_split`: a list of tokens that should not be splitted during tokenization. **Default = `["[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"]`**
 
 and three methods:
@@ -898,6 +899,7 @@ The differences with `BertAdam` is that `OpenAIGPTAdam` compensate for bias as i
 |-|-|
 | [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
 | [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `run_lm_finetuning.py` |
+| [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#Fine-tuning-with-OpenAI-GPT-Transformer-XL-and-GPT-2) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
 | [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
 ### Training large models: introduction, tools and examples
@@ -1090,7 +1092,7 @@ python run_openai_gpt.py \
   --train_batch_size 16 \
 ```
 
-This command runs in about 10 min on a single K-80 an gives an evaluation accuracy of about 86.4% (the authors report a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
+This command runs in about 10 min on a single K-80 an gives an evaluation accuracy of about 87.7% (the authors report a median accuracy with the TensorFlow code of 85.8% and the OpenAI GPT paper reports a best single run accuracy of 86.5%).
 
 #### Evaluating the pre-trained Transformer-XL on the WikiText 103 dataset
 

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -367,7 +367,7 @@ def main():
 
     # Prepare model
     model = BertForMultipleChoice.from_pretrained(args.bert_model,
-        cache_dir=os.path.join(PYTORCH_PRETRAINED_BERT_CACHE, 'distributed_{}'.format(args.local_rank)),
+        cache_dir=os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(args.local_rank)),
         num_choices=4)
     if args.fp16:
         model.half()

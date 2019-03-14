@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -620,7 +620,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 all_predictions[example.qas_id] = ""
             else:
                 all_predictions[example.qas_id] = best_non_null_entry.text
-                all_nbest_json[example.qas_id] = nbest_json
+            all_nbest_json[example.qas_id] = nbest_json
 
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(all_predictions, indent=4) + "\n")
@@ -894,7 +894,7 @@ def main():
 
     # Prepare model
     model = BertForQuestionAnswering.from_pretrained(args.bert_model,
-                cache_dir=os.path.join(PYTORCH_PRETRAINED_BERT_CACHE, 'distributed_{}'.format(args.local_rank)))
+                cache_dir=os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(args.local_rank)))
 
     if args.fp16:
         model.half()

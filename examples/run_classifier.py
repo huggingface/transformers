@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -190,6 +190,37 @@ class ColaProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
             text_a = line[3]
+            label = line[1]
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+        return examples
+
+
+class Sst2Processor(DataProcessor):
+    """Processor for the SST-2 data set (GLUE version)."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, i)
+            text_a = line[0]
             label = line[1]
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
@@ -401,10 +432,12 @@ def main():
         "cola": ColaProcessor,
         "mnli": MnliProcessor,
         "mrpc": MrpcProcessor,
+        "sst-2": Sst2Processor,
     }
 
     num_labels_task = {
         "cola": 2,
+        "sst-2": 2,
         "mnli": 3,
         "mrpc": 2,
     }
@@ -462,7 +495,7 @@ def main():
             num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
     # Prepare model
-    cache_dir = args.cache_dir if args.cache_dir else os.path.join(PYTORCH_PRETRAINED_BERT_CACHE, 'distributed_{}'.format(args.local_rank))
+    cache_dir = args.cache_dir if args.cache_dir else os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(args.local_rank))
     model = BertForSequenceClassification.from_pretrained(args.bert_model,
               cache_dir=cache_dir,
               num_labels = num_labels)
@@ -561,7 +594,6 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
 
-    if args.do_train:
         # Save a trained model and the associated configuration
         model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
         output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
@@ -597,7 +629,7 @@ def main():
         model.eval()
         eval_loss, eval_accuracy = 0, 0
         nb_eval_steps, nb_eval_examples = 0, 0
- 
+
         for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader, desc="Evaluating"):
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)

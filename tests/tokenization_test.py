@@ -46,24 +46,6 @@ class TokenizationTest(unittest.TestCase):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
-    def test_full_tokenizer_raises_error_for_long_sequences(self):
-        vocab_tokens = [
-            "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
-            "##ing", ","
-        ]
-        with open("/tmp/bert_tokenizer_test.txt", "w", encoding='utf-8') as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-            vocab_file = vocab_writer.name
-
-        tokenizer = BertTokenizer(vocab_file, max_len=10)
-        os.remove(vocab_file)
-        tokens = tokenizer.tokenize(u"the cat sat on the mat in the summer time")
-        indices = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(indices, [0 for _ in range(10)])
-
-        tokens = tokenizer.tokenize(u"the cat sat on the mat in the summer time .")
-        self.assertRaises(ValueError, tokenizer.convert_tokens_to_ids, tokens)
-
     def test_chinese(self):
         tokenizer = BasicTokenizer()
 
