@@ -18,6 +18,8 @@
     In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
 import copy
 import json
