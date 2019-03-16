@@ -15,6 +15,8 @@
 # limitations under the License.
 """PyTorch OpenAI GPT model."""
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import collections
 import copy
 import json
@@ -374,6 +376,7 @@ class OpenAIGPTMultipleChoiceHead(nn.Module):
         # (bsz, num_choices, 1, hidden_size)
         multiple_choice_h = hidden_states.gather(2, mc_token_ids).squeeze(2)
         # (bsz, num_choices, hidden_size)
+        multiple_choice_h = self.dropout(multiple_choice_h.transpose(1, 2)).transpose(1, 2)
         multiple_choice_logits = self.linear(multiple_choice_h).squeeze(-1)
         # (bsz, num_choices)
         return multiple_choice_logits
