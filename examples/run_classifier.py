@@ -908,7 +908,7 @@ def main():
 
             with torch.no_grad():
                 logits = model(input_ids, segment_ids, input_mask, labels=None)
-            
+
             # create eval loss and other metric required by the task
             if output_mode == "classification":
                 loss_fct = CrossEntropyLoss()
@@ -944,11 +944,16 @@ def main():
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
-        
+
         # hack for MNLI-MM
         if task_name == "mnli":
             task_name = "mnli-mm"
             processor = processors[task_name]()
+
+            if os.path.exists(args.output_dir + '-MM') and os.listdir(args.output_dir + '-MM') and args.do_train:
+                raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+            if not os.path.exists(args.output_dir + '-MM'):
+                os.makedirs(args.output_dir + '-MM')
 
             eval_examples = processor.get_dev_examples(args.data_dir)
             eval_features = convert_examples_to_features(
@@ -990,7 +995,7 @@ def main():
                 else:
                     preds[0] = np.append(
                         preds[0], logits.detach().cpu().numpy(), axis=0)
-            
+
             eval_loss = eval_loss / nb_eval_steps
             preds = preds[0]
             preds = np.argmax(preds, axis=1)
