@@ -71,7 +71,19 @@ def whitespace_tokenize(text):
     return tokens
 
 
-class BertTokenizer(object):
+class Tokenizer(object):
+    """
+    Tokenizer superclass
+    """
+
+    def encode(self, text):
+        raise NotImplementedError("Implement encode() in Tokenizer subclass")
+
+    def decode(self, tokens):
+        raise NotImplementedError("Implement decode() in Tokenizer subclass")
+
+
+class BertTokenizer(Tokenizer):
     """Runs end-to-end tokenization: punctuation splitting + wordpiece"""
 
     def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
@@ -113,6 +125,9 @@ class BertTokenizer(object):
         else:
           split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
+
+    def encode(self, text):
+        self.tokenize(text)
 
     def convert_tokens_to_ids(self, tokens):
         """Converts a sequence of tokens into ids using the vocab."""

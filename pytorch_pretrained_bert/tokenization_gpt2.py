@@ -21,6 +21,7 @@ import logging
 import os
 import regex as re
 from io import open
+from .tokenization import Tokenizer
 
 try:
     from functools import lru_cache
@@ -80,7 +81,7 @@ def get_pairs(word):
         prev_char = char
     return pairs
 
-class GPT2Tokenizer(object):
+class GPT2Tokenizer(Tokenizer):
     """
     GPT-2 BPE tokenizer. Peculiarities:
         - Byte-level BPE

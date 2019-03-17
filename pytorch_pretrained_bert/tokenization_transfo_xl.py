@@ -26,6 +26,7 @@ import sys
 from collections import Counter, OrderedDict
 from io import open
 import unicodedata
+from .tokenization import Tokenizer
 
 import torch
 import numpy as np
@@ -50,7 +51,7 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
 }
 CORPUS_NAME = 'corpus.bin'
 
-class TransfoXLTokenizer(object):
+class TransfoXLTokenizer(Tokenizer):
     """
     Transformer-XL tokenizer adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
     """
@@ -192,6 +193,10 @@ class TransfoXLTokenizer(object):
             encoded = torch.cat(encoded)
 
         return encoded
+
+    def encode(self, text):
+        result = self.encode_sents([text])
+        return result[0]
 
     def add_special(self, sym):
         if sym not in self.sym2idx:
