@@ -112,8 +112,7 @@ def main():
         with torch.no_grad():
             mems = None
             for idx, (data, target, seq_len) in enumerate(eval_iter):
-                ret = model(data, target, mems)
-                loss, mems = ret
+                loss, mems = model(data, target, mems)
                 loss = loss.mean()
                 total_loss += seq_len * loss.item()
                 total_len += seq_len
