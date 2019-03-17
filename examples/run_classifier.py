@@ -857,7 +857,6 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
 
-    if args.do_train:
         # Save a trained model and the associated configuration
         model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
         output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
