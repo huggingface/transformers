@@ -127,7 +127,7 @@ class BertTokenizer(Tokenizer):
         return split_tokens
 
     def encode(self, text):
-        self.tokenize(text)
+        return self.tokenize(text)
 
     def convert_tokens_to_ids(self, tokens):
         """Converts a sequence of tokens into ids using the vocab."""

@@ -251,7 +251,7 @@ class OpenAIGPTTokenizer(Tokenizer):
         return tokens
 
     def encode(self, text):
-        self.convert_tokens_to_ids(self.tokenize(text))
+        return self.convert_tokens_to_ids(self.tokenize(text))
 
     def decode(self, ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         """Converts a sequence of ids in a string."""
