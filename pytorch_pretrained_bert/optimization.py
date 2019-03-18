@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 def warmup_cosine(x, warmup=0.002):
     if x < warmup:
         return x/warmup
-
     x_ = (x - warmup) / (1 - warmup)  # progress after warmup
     return 0.5 * (1. + math.cos(math.pi * x_))
 
