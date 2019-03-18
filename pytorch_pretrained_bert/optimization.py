@@ -52,7 +52,7 @@ class LRSchedule(object):
 
     def get_lr_(self, step):
         return 1.
-        # raise NotImplemented("use subclass")
+        # raise NotImplemented("use subclass")  -
 
 
 class WarmupCosineSchedule(LRSchedule):
