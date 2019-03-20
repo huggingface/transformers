@@ -51,9 +51,10 @@ by `pregenerate_training_data.py`. Note that you should use the same bert_model 
 Also note that max_seq_len does not need to be specified for the `finetune_on_pregenerated.py` script, 
 as it is inferred from the training examples.
 
-There are various options that can be tweaked, but the most important ones are probably `max_seq_len`, which controls
-the length of training examples (in wordpiece tokens) seen by the model, and `--fp16`, which enables fast half-precision
-training on recent GPUs. `max_seq_len` defaults to 128 but can be set as high as 512. 
+There are various options that can be tweaked, but they are mostly set to the values from the BERT paper/repo and should
+be left alone. The most relevant ones for the end-user are probably `--max_seq_len`, which controls the length of 
+training examples (in wordpiece tokens) seen by the model, and `--fp16`, which enables fast half-precision training on
+recent GPUs. `--max_seq_len` defaults to 128 but can be set as high as 512. 
 Higher values may yield stronger language models at the cost of slower and more memory-intensive training
 
 In addition, if memory usage is an issue, especially when training on a single GPU, reducing `--train_batch_size` from
