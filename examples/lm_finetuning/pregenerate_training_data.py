@@ -220,6 +220,13 @@ def main():
 
     args = parser.parse_args()
 
+    # TODO Add a low-memory / multiprocessing path for very large datasets
+    #      In this path documents would be stored in a shelf after being tokenized, and multiple processes would convert
+    #      those docs into training examples that would be written out on the fly. This would avoid the need to keep
+    #      the whole training set in memory and would speed up dataset creation at the cost of code complexity.
+    #      In addition, the finetuning script would need to be modified to store the training epochs as memmaped arrays,
+    #      and to shuffle them by importing to the rows of the array in a random order.
+
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     vocab_list = list(tokenizer.vocab.keys())
     with args.corpus_path.open() as f:
@@ -232,7 +239,6 @@ def main():
                 doc = []
             else:
                 tokens = tokenizer.tokenize(line)
-                # TODO If the sentence is longer than max_len, do we split it in the middle? That's probably a bad idea
                 doc.append(tokens)
 
     args.save_dir.mkdir(exist_ok=True)
