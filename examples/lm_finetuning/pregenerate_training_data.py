@@ -269,6 +269,5 @@ def main():
             metrics_file.write(json.dumps(metrics))
 
 
-
 if __name__ == '__main__':
     main()
