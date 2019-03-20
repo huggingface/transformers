@@ -29,6 +29,7 @@ import sys
 from io import open
 
 import torch
+import torch.cuda
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -388,7 +389,14 @@ class BertEncoder(nn.Module):
     def __init__(self, config):
         super(BertEncoder, self).__init__()
         layer = BertLayer(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
+        layers = [copy.deepcopy(layer) for _ in range(config.num_hidden_layers)]
+        ngpu = torch.cuda.device_count()
+        if ngpu > 1:
+            layers_per_gpu = len(layers) / ngpu
+            for layer_index, layer in enumerate(layers):
+                gpu_index = int(layer_index / layers_per_gpu)
+                layer.to(torch.device(f"cuda:{gpu_index}"))
+        self.layer = nn.ModuleList(layers)
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True):
         all_encoder_layers = []
