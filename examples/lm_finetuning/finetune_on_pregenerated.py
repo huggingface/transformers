@@ -73,7 +73,10 @@ class PregeneratedDataset(Dataset):
         logging.info(f"Loading training examples for epoch {epoch}")
         with data_file.open() as f:
             for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples")):
-                example = json.loads(line.rstrip())
+                line = line.strip()
+                if not line:
+                    continue  # Skip trailing blank lines etc.
+                example = json.loads(line)
                 features = convert_example_to_features(example, tokenizer, seq_len)
                 input_ids[i] = features.input_ids
                 segment_ids[i] = features.segment_ids
