@@ -397,6 +397,7 @@ class BertEncoder(nn.Module):
             layers_per_gpu = len(layers) / (ngpu - 1)
             for layer_index, layer in enumerate(layers):
                 gpu_index = int(layer_index / layers_per_gpu) + 1
+                print(f"Putting layer {layer_index} on GPU {gpu_index}")
                 layer.to(torch.device(f"cuda:{gpu_index}"))
         self.layer = nn.ModuleList(layers)
 
