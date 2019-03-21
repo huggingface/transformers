@@ -1,7 +1,3 @@
-# Step 1: Slurp the dataset up, tokenize each sentence, and store as docs -> sentences -> tokens
-# Step 2: Walk over the dataset, using the Google BERT logic to concatenate sentences into training examples
-# Step 3: Write out the examples, possibly as Torch tensors?
-
 from argparse import ArgumentParser
 from pathlib import Path
 from tqdm import tqdm, trange
