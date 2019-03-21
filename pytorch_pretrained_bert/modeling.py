@@ -390,6 +390,7 @@ class BertEncoder(nn.Module):
         super(BertEncoder, self).__init__()
         layer = BertLayer(config)
         layers = [copy.deepcopy(layer) for _ in range(config.num_hidden_layers)]
+
         ngpu = torch.cuda.device_count()
         if ngpu > 1:
             # Spread out the layers over all GPUs other than GPU0. GPU0 tends to be full of other
@@ -402,12 +403,22 @@ class BertEncoder(nn.Module):
         self.layer = nn.ModuleList(layers)
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True):
+        own_device = self.device
+
         all_encoder_layers = []
         for layer_module in self.layer:
+            layer_device = layer_module.device
+            if hidden_states.device != layer_device:
+                hidden_states.to(layer_device)
+            if attention_mask.device != layer_device:
+                attention_mask.to(layer_device)
+
             hidden_states = layer_module(hidden_states, attention_mask)
             if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)
         if not output_all_encoded_layers:
+            if hidden_states.device != own_device:
+                hidden_states.to(own_device)
             all_encoder_layers.append(hidden_states)
         return all_encoder_layers
 
