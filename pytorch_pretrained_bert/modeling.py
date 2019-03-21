@@ -410,7 +410,7 @@ class BertEncoder(nn.Module):
 
         all_encoder_layers = []
         for layer_module in self.layer:
-            layer_device = get_device(layer_module.device)
+            layer_device = get_device(layer_module)
             if hidden_states.device != layer_device:
                 print(f"Transferring hidden states from {hidden_states.device} to {layer_device}")
                 hidden_states.to(layer_device)
