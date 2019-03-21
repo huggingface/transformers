@@ -403,12 +403,16 @@ class BertEncoder(nn.Module):
         self.layer = nn.ModuleList(layers)
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True):
-        own_device = self.device
+        def get_device(module):
+            return next(module.parameters()).device
+
+        own_device = hidden_states.device
 
         all_encoder_layers = []
         for layer_module in self.layer:
-            layer_device = layer_module.device
+            layer_device = get_device(layer_module.device)
             if hidden_states.device != layer_device:
+                print(f"Transferring hidden states from {hidden_states.device} to {layer_device}")
                 hidden_states.to(layer_device)
             if attention_mask.device != layer_device:
                 attention_mask.to(layer_device)
