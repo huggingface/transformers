@@ -54,7 +54,7 @@ def convert_example_to_features(example, tokenizer, max_seq_length):
 
 class PregeneratedDataset(Dataset):
     def __init__(self, training_path, epoch, tokenizer, num_data_epochs):
-        # TODO Add an option to memmap and shuffle the training data if needed (see note in pregenerate_training_data)
+        # TODO Add an option to memmap the training data if needed (see note in pregenerate_training_data)
         self.vocab = tokenizer.vocab
         self.tokenizer = tokenizer
         self.epoch = epoch
