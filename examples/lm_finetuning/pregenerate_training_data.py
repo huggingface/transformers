@@ -151,11 +151,7 @@ def create_instances_from_document(
                     is_random_next = True
                     target_b_length = target_seq_length - len(tokens_a)
 
-                    # This should rarely go for more than one iteration for large
-                    # corpora. However, just to be careful, we try to make sure that
-                    # the random document is not the same as the document
-                    # we're processing.
-                    # random_document = get_random_doc(all_documents, document, doc_weights)
+                    # Sample a random document, with longer docs being sampled more frequently
                     random_document = doc_database.sample_doc(current_idx=doc_idx, sentence_weighted=True)
 
                     random_start = randint(0, len(random_document) - 1)
