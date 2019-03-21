@@ -390,17 +390,19 @@ class BertEncoder(nn.Module):
         super(BertEncoder, self).__init__()
         layer = BertLayer(config)
         layers = [copy.deepcopy(layer) for _ in range(config.num_hidden_layers)]
-
-        ngpu = torch.cuda.device_count()
-        if ngpu > 1:
-            # Spread out the layers over all GPUs other than GPU0. GPU0 tends to be full of other
-            # stuff already.
-            layers_per_gpu = len(layers) / (ngpu - 1)
-            for layer_index, layer in enumerate(layers):
-                gpu_index = int(layer_index / layers_per_gpu) + 1
-                print(f"Putting layer {layer_index} on GPU {gpu_index}")
-                layer.to(torch.device(f"cuda:{gpu_index}"))
         self.layer = nn.ModuleList(layers)
+
+    @staticmethod
+    def _get_device_ids(layers):
+        layers = len(layers)
+        ngpu = torch.cuda.device_count()
+        if ngpu <= 1:
+            return [torch.cuda.device(0)] * layers
+
+        # Spread out the layers over all GPUs other than GPU0. GPU0 tends to be full of other
+        # stuff already.
+        layers_per_gpu = layers / (ngpu - 1)
+        return [torch.cuda.device(int(layer_index / layers_per_gpu) + 1) for layer_index in range(layers)]
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True):
         def get_device(module):
@@ -409,20 +411,19 @@ class BertEncoder(nn.Module):
         own_device = hidden_states.device
 
         all_encoder_layers = []
-        for layer_module in self.layer:
-            layer_device = get_device(layer_module)
-            if hidden_states.device != layer_device:
-                print(f"Transferring hidden states from {hidden_states.device} to {layer_device}")
-                hidden_states.to(layer_device)
-            if attention_mask.device != layer_device:
-                attention_mask.to(layer_device)
+        for layer_module, layer_device in zip(self.layer, self._get_device_ids(self.layer)):
+            print(f"Moving layer to device {layer_device}")
+            layer_module = layer_module.to(layer_device)
+
+            print(f"Transferring hidden states from {hidden_states.device} to {layer_device}")
+            hidden_states = hidden_states.to(layer_device)
+            attention_mask = attention_mask.to(layer_device)
 
             hidden_states = layer_module(hidden_states, attention_mask)
             if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)
         if not output_all_encoded_layers:
-            if hidden_states.device != own_device:
-                hidden_states.to(own_device)
+            hidden_states.to(own_device)
             all_encoder_layers.append(hidden_states)
         return all_encoder_layers
 
