@@ -6,6 +6,7 @@ import json
 import random
 import numpy as np
 from collections import namedtuple
+from tempfile import TemporaryDirectory
 
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
@@ -53,8 +54,7 @@ def convert_example_to_features(example, tokenizer, max_seq_length):
 
 
 class PregeneratedDataset(Dataset):
-    def __init__(self, training_path, epoch, tokenizer, num_data_epochs):
-        # TODO Add an option to memmap the training data if needed (see note in pregenerate_training_data)
+    def __init__(self, training_path, epoch, tokenizer, num_data_epochs, reduce_memory=False):
         self.vocab = tokenizer.vocab
         self.tokenizer = tokenizer
         self.epoch = epoch
@@ -65,11 +65,28 @@ class PregeneratedDataset(Dataset):
         metrics = json.loads(metrics_file.read_text())
         num_samples = metrics['num_training_examples']
         seq_len = metrics['max_seq_len']
-        input_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.int32)
-        input_masks = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
-        segment_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
-        lm_label_ids = np.full(shape=(num_samples, seq_len), dtype=np.int32, fill_value=-1)
-        is_nexts = np.zeros(shape=(num_samples,), dtype=np.bool)
+        self.temp_dir = None
+        self.working_dir = None
+        if reduce_memory:
+            self.temp_dir = TemporaryDirectory()
+            self.working_dir = Path(self.temp_dir.name)
+            input_ids = np.memmap(filename=self.working_dir/'input_ids.memmap',
+                                  mode='w+', dtype=np.int32, shape=(num_samples, seq_len))
+            input_masks = np.memmap(filename=self.working_dir/'input_masks.memmap',
+                                    shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
+            segment_ids = np.memmap(filename=self.working_dir/'input_masks.memmap',
+                                    shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
+            lm_label_ids = np.memmap(filename=self.working_dir/'lm_label_ids.memmap',
+                                     shape=(num_samples, seq_len), mode='w+', dtype=np.int32)
+            lm_label_ids[:] = -1
+            is_nexts = np.memmap(filename=self.working_dir/'is_nexts.memmap',
+                                 shape=(num_samples,), mode='w+', dtype=np.bool)
+        else:
+            input_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.int32)
+            input_masks = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
+            segment_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
+            lm_label_ids = np.full(shape=(num_samples, seq_len), dtype=np.int32, fill_value=-1)
+            is_nexts = np.zeros(shape=(num_samples,), dtype=np.bool)
         logging.info(f"Loading training examples for epoch {epoch}")
         with data_file.open() as f:
             for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples")):
@@ -110,6 +127,8 @@ def main():
                         choices=["bert-base-uncased", "bert-large-uncased", "bert-base-cased",
                                  "bert-base-multilingual", "bert-base-chinese"])
     parser.add_argument("--do_lower_case", action="store_true")
+    parser.add_argument("--reduce_memory", action="store_true",
+                        help="Store training data as on-disc memmaps to massively reduce memory usage")
 
     parser.add_argument("--epochs", type=int, default=3, help="Number of epochs to train for")
     parser.add_argument("--local_rank",
@@ -309,8 +328,6 @@ def main():
     model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
     output_model_file = args.output_dir / "pytorch_model.bin"
     torch.save(model_to_save.state_dict(), str(output_model_file))
-
-
 
 
 if __name__ == '__main__':

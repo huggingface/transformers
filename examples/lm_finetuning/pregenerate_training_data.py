@@ -11,15 +11,10 @@ import json
 
 
 class DocumentDatabase:
-    def __init__(self, reduce_memory=False, working_dir=None):
+    def __init__(self, reduce_memory=False):
         if reduce_memory:
-            if working_dir is None:
-                self.temp_dir = TemporaryDirectory()
-                self.working_dir = Path(self.temp_dir.name)
-            else:
-                self.temp_dir = None
-                self.working_dir = Path(working_dir)
-                self.working_dir.mkdir(parents=True, exist_ok=True)
+            self.temp_dir = TemporaryDirectory()
+            self.working_dir = Path(self.temp_dir.name)
             self.document_shelf_filepath = self.working_dir / 'shelf.db'
             self.document_shelf = shelve.open(str(self.document_shelf_filepath),
                                               flag='n', protocol=-1)
@@ -237,8 +232,6 @@ def main():
 
     parser.add_argument("--reduce_memory", action="store_true",
                         help="Reduce memory usage for large datasets by keeping data on disc rather than in memory")
-    parser.add_argument("--working_dir", type=Path, default=None,
-                        help="Temporary directory to use for --reduce_memory. If not set, uses TemporaryDirectory()")
 
     parser.add_argument("--epochs_to_generate", type=int, default=3,
                         help="Number of epochs of data to pregenerate")
@@ -254,7 +247,7 @@ def main():
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     vocab_list = list(tokenizer.vocab.keys())
-    docs = DocumentDatabase(reduce_memory=args.reduce_memory, working_dir=args.working_dir)
+    docs = DocumentDatabase(reduce_memory=args.reduce_memory)
     with args.train_corpus.open() as f:
         doc = []
         for line in tqdm(f, desc="Loading Dataset", unit=" lines"):
