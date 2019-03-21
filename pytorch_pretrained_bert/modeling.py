@@ -392,9 +392,11 @@ class BertEncoder(nn.Module):
         layers = [copy.deepcopy(layer) for _ in range(config.num_hidden_layers)]
         ngpu = torch.cuda.device_count()
         if ngpu > 1:
-            layers_per_gpu = len(layers) / ngpu
+            # Spread out the layers over all GPUs other than GPU0. GPU0 tends to be full of other
+            # stuff already.
+            layers_per_gpu = len(layers) / (ngpu - 1)
             for layer_index, layer in enumerate(layers):
-                gpu_index = int(layer_index / layers_per_gpu)
+                gpu_index = int(layer_index / layers_per_gpu) + 1
                 layer.to(torch.device(f"cuda:{gpu_index}"))
         self.layer = nn.ModuleList(layers)
 
