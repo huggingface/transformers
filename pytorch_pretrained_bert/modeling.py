@@ -397,25 +397,21 @@ class BertEncoder(nn.Module):
         layers = len(layers)
         ngpu = torch.cuda.device_count()
         if ngpu <= 1:
-            return [torch.cuda.device(0)] * layers
+            return ["cuda:0"] * layers
 
-        # Spread out the layers over all GPUs other than GPU0. GPU0 tends to be full of other
-        # stuff already.
-        layers_per_gpu = layers / (ngpu - 1)
-        return [torch.cuda.device(int(layer_index / layers_per_gpu) + 1) for layer_index in range(layers)]
+        layers_per_gpu = layers / ngpu
+        return [f"cuda:{int(layer_index / layers_per_gpu)}" for layer_index in range(layers)]
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True):
         def get_device(module):
             return next(module.parameters()).device
 
-        own_device = hidden_states.device
-
         all_encoder_layers = []
         for layer_module, layer_device in zip(self.layer, self._get_device_ids(self.layer)):
-            print(f"Moving layer to device {layer_device}")
-            layer_module = layer_module.to(layer_device)
+            #print(f"Moving layer to device {layer_device}")
+            layer_module = layer_module.to(layer_device, torch.float, False)
 
-            print(f"Transferring hidden states from {hidden_states.device} to {layer_device}")
+            #print(f"Transferring hidden states from {hidden_states.device} to {layer_device}")
             hidden_states = hidden_states.to(layer_device)
             attention_mask = attention_mask.to(layer_device)
 
@@ -423,9 +419,8 @@ class BertEncoder(nn.Module):
             if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)
         if not output_all_encoded_layers:
-            hidden_states.to(own_device)
             all_encoder_layers.append(hidden_states)
-        return all_encoder_layers
+        return [l.to("cuda:0") for l in all_encoder_layers]
 
 
 class BertPooler(nn.Module):
