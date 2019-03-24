@@ -625,7 +625,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             # in pytorch, it's [batch, num_classes, d_0, d_1, ..., d_{r-1}]
             # We just flatten the tokens out this way.
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
             return loss
         return lm_logits, presents
