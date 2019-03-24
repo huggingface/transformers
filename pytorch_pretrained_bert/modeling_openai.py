@@ -811,8 +811,11 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
         if lm_labels is not None:
+            shift_logits = lm_logits[:, :-1]
+            shift_labels = lm_labels[:, 1:]
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1)))
+            losses.append(loss_fct(shift_logits.view(-1,
+                          shift_logits.size(-1)), shift_labels.view(-1)))
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
             losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))
