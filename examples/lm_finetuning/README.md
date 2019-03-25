@@ -58,9 +58,12 @@ recent GPUs. `--max_seq_len` defaults to 128 but can be set as high as 512.
 Higher values may yield stronger language models at the cost of slower and more memory-intensive training
 
 In addition, if memory usage is an issue, especially when training on a single GPU, reducing `--train_batch_size` from
-the default 32 to a lower number (4-16) can be helpful. There is also a `--reduce_memory` option for both the
-`pregenerate_training_data.py` and `finetune_on_pregenerated.py` scripts that spills data to disc in shelf objects
-or numpy memmaps rather than retaining it in memory, which hugely reduces memory usage with little performance impact.
+the default 32 to a lower number (4-16) can be helpful, or leaving `--train_batch_size` at the default and increasing 
+`--gradient_accumulation_steps` to 2-8. Changing `--gradient_accumulation_steps` may be preferable as alterations to the
+batch size may require corresponding changes in the learning rate to compensate. There is also a `--reduce_memory` 
+option for both the `pregenerate_training_data.py` and `finetune_on_pregenerated.py` scripts that spills data to disc 
+in shelf objects or numpy memmaps rather than retaining it in memory, which hugely reduces memory usage with little 
+performance impact.
 
 ###Examples
 #####Simple fine-tuning
