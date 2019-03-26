@@ -129,6 +129,13 @@ class BertTokenizer(Tokenizer):
     def encode(self, text):
         return self.tokenize(text)
 
+    def decode(self, tokens):
+        # Confusing language here: the input "tokens" in the superclass decode()
+        # refer to the int tokens. So this step takes us from "int tokens" back
+        # to "text tokens".
+        tokens = self.convert_ids_to_tokens(tokens)
+        return " ".join(tokens)
+
     def convert_tokens_to_ids(self, tokens):
         """Converts a sequence of tokens into ids using the vocab."""
         ids = []
