@@ -720,9 +720,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             shift_logits = lm_logits[:, :-1].contiguous()
             shift_labels = lm_labels[:, 1:].contiguous()
 
-            # In tensorflow, it's [batch, d_0, d_1, ..., d_{r-1}, num_classes]
-            # in pytorch, it's [batch, num_classes, d_0, d_1, ..., d_{r-1}]
-            # We just flatten the tokens out this way.
+            # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
