@@ -805,8 +805,10 @@ def main():
 
         if output_mode == "classification":
             all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+            loss_fct = CrossEntropyLoss()
         elif output_mode == "regression":
             all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.float)
+            loss_fct = MSELoss()
 
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         if args.local_rank == -1:
@@ -827,10 +829,8 @@ def main():
                 logits = model(input_ids, segment_ids, input_mask, labels=None)
 
                 if output_mode == "classification":
-                    loss_fct = CrossEntropyLoss()
                     loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
                 elif output_mode == "regression":
-                    loss_fct = MSELoss()
                     loss = loss_fct(logits.view(-1), label_ids.view(-1))
 
                 if n_gpu > 1:
