@@ -140,7 +140,7 @@ The repository further comprises:
   - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
   - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 and SQuAD v2.0 tasks.
   - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
-  - [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining` on a target text corpus.
+  - [`simple_lm_finetuning.py`](./examples/lm_finetuning/simple_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining` on a target text corpus.
 
 - One example on how to use **OpenAI GPT** (in the [`examples` folder](./examples)):
   - [`run_openai_gpt.py`](./examples/run_openai_gpt.py) - Show how to fine-tune an instance of `OpenGPTDoubleHeadsModel` on the RocStories task.
@@ -461,12 +461,12 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 | Sub-section | Description |
 |-|-|
-| [Loading Google AI's/OpenAI's pre-trained weigths](#loading-google-ai-or-openai-pre-trained-weigths-or-pytorch-dump) | How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance |
+| [Loading Google AI's/OpenAI's pre-trained weights](#loading-google-ai-or-openai-pre-trained-weights-or-pytorch-dump) | How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance |
 | [PyTorch models](#PyTorch-models) | API of the BERT, GPT, GPT-2 and Transformer-XL PyTorch model classes |
 | [Tokenizers](#tokenizers) | API of the tokenizers class for BERT, GPT, GPT-2 and Transformer-XL|
 | [Optimizers](#optimizerss) |  API of the optimizers |
 
-### Loading Google AI or OpenAI pre-trained weigths or PyTorch dump
+### Loading Google AI or OpenAI pre-trained weights or PyTorch dump
 
 To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated as
 
@@ -927,10 +927,59 @@ Where `$THIS_MACHINE_INDEX` is an sequential index assigned to each of your mach
 
 We showcase several fine-tuning examples based on (and extended from) [the original implementation](https://github.com/google-research/bert/):
 
-- a *sequence-level classifier* on the MRPC classification corpus,
+- a *sequence-level classifier* on nine different GLUE tasks,
 - a *token-level classifier* on the question answering dataset SQuAD, and
 - a *sequence-level multiple-choice classifier* on the SWAG classification corpus.
 - a *BERT language model* on another target corpus
+
+#### GLUE results on dev set
+
+We get the following results on the dev set of GLUE benchmark with an uncased BERT base 
+model. All experiments were run on a P100 GPU with a batch size of 32.
+
+| Task | Metric | Result |
+|-|-|-|
+| CoLA | Matthew's corr. | 57.29 |
+| SST-2 | accuracy | 93.00 |
+| MRPC | F1/accuracy | 88.85/83.82 |
+| STS-B | Pearson/Spearman corr. | 89.70/89.37 |
+| QQP | accuracy/F1 | 90.72/87.41 |
+| MNLI | matched acc./mismatched acc.| 83.95/84.39 |
+| QNLI | accuracy | 89.04 |
+| RTE | accuracy | 61.01 |
+| WNLI | accuracy | 53.52 |
+
+Some of these results are significantly different from the ones reported on the test set
+of GLUE benchmark on the website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the webite.
+
+Before running anyone of these GLUE tasks you should download the
+[GLUE data](https://gluebenchmark.com/tasks) by running
+[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
+and unpack it to some directory `$GLUE_DIR`.
+
+```shell
+export GLUE_DIR=/path/to/glue
+export TASK_NAME=MRPC
+
+python run_classifier.py \
+  --task_name $TASK_NAME \
+  --do_train \
+  --do_eval \
+  --do_lower_case \
+  --data_dir $GLUE_DIR/$TASK_NAME \
+  --bert_model bert-base-uncased \
+  --max_seq_length 128 \
+  --train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3.0 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+where task name can be one of CoLA, SST-2, MRPC, STS-B, QQP, MNLI, QNLI, RTE, WNLI.
+
+The dev set results will be present within the text file 'eval_results.txt' in the specified output_dir. In case of MNLI, since there are two separate dev sets, matched and mismatched, there will be a separate output folder called '/tmp/MNLI-MM/' in addition to '/tmp/MNLI/'.
+
+The code has not been tested with half-precision training with apex on any GLUE task apart from MRPC, MNLI, CoLA, SST-2. The following section provides details on how to run half-precision training with MRPC. With that being said, there shouldn't be any issues in running half-precision training with the remaining GLUE tasks as well, since the data processor for each task inherits from the base class DataProcessor.
 
 #### MRPC
 
@@ -1051,18 +1100,7 @@ You can download an [exemplary training corpus](https://ext-bert-sample.obs.eu-d
 Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with `train_batch_size=200` and `max_seq_length=128`:
 
 
-```shell
-python run_lm_finetuning.py \
-  --bert_model bert-base-uncased \
-  --do_lower_case \
-  --do_train \
-  --train_file ../samples/sample_text.txt \
-  --output_dir models \
-  --num_train_epochs 5.0 \
-  --learning_rate 3e-5 \
-  --train_batch_size 32 \
-  --max_seq_length 128 \
-```
+Thank to the work of @Rocketknight1 and @tholor there are now **several scripts** that can be used to fine-tune BERT using the pretraining objective (combination of masked-language modeling and next sentence prediction loss). These scripts are detailed in the [`README`](./examples/lm_finetuning/README.md) of the [`examples/lm_finetuning/`](./examples/lm_finetuning/) folder.
 
 ### OpenAI GPT, Transformer-XL and GPT-2: running the examples
 
