@@ -344,21 +344,22 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     logger.info(
                         "answer: %s" % (answer_text))
 
-            features.append(
-                InputFeatures(
-                    unique_id=unique_id,
-                    example_index=example_index,
-                    doc_span_index=doc_span_index,
-                    tokens=tokens,
-                    token_to_orig_map=token_to_orig_map,
-                    token_is_max_context=token_is_max_context,
-                    input_ids=input_ids,
-                    input_mask=input_mask,
-                    segment_ids=segment_ids,
-                    start_position=start_position,
-                    end_position=end_position,
-                    is_impossible=example.is_impossible))
-            unique_id += 1
+            if not start_position == end_position == 0:
+                features.append(
+                    InputFeatures(
+                        unique_id=unique_id,
+                        example_index=example_index,
+                        doc_span_index=doc_span_index,
+                        tokens=tokens,
+                        token_to_orig_map=token_to_orig_map,
+                        token_is_max_context=token_is_max_context,
+                        input_ids=input_ids,
+                        input_mask=input_mask,
+                        segment_ids=segment_ids,
+                        start_position=start_position,
+                        end_position=end_position,
+                        is_impossible=example.is_impossible))
+                unique_id += 1
 
     return features
 
