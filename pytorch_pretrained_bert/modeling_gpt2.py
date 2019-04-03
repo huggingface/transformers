@@ -15,6 +15,8 @@
 # limitations under the License.
 """PyTorch OpenAI GPT-2 model."""
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import collections
 import copy
 import json
@@ -615,8 +617,14 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past)
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = lm_logits[:, :-1].contiguous()
+            shift_labels = lm_labels[:, 1:].contiguous()
+
+            # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
+                            shift_labels.view(-1))
             return loss
         return lm_logits, presents
 
@@ -688,8 +696,11 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
         if lm_labels is not None:
+            shift_logits = lm_logits[:, :-1].contiguous()
+            shift_labels = lm_labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1)))
+            losses.append(loss_fct(shift_logits.view(-1,
+                          shift_logits.size(-1)), shift_labels.view(-1)))
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
             losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))

@@ -33,9 +33,6 @@ from pytorch_pretrained_bert.modeling import BertForPreTraining
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
-from torch.utils.data import Dataset
-import random
-
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
@@ -404,7 +401,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--train_file",
+    parser.add_argument("--train_corpus",
                         default=None,
                         type=str,
                         required=True,
@@ -514,8 +511,8 @@ def main():
     #train_examples = None
     num_train_optimization_steps = None
     if args.do_train:
-        print("Loading Train Dataset", args.train_file)
-        train_dataset = BERTDataset(args.train_file, tokenizer, seq_len=args.max_seq_length,
+        print("Loading Train Dataset", args.train_corpus)
+        train_dataset = BERTDataset(args.train_corpus, tokenizer, seq_len=args.max_seq_length,
                                     corpus_lines=None, on_memory=args.on_memory)
         num_train_optimization_steps = int(
             len(train_dataset) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
