@@ -38,7 +38,7 @@ class LRSchedule(object):
         :param kw:
         """
         super(LRSchedule, self).__init__(**kw)
-        if t_total <= 0:
+        if t_total < 0:
             logger.warning("t_total value of {} results in schedule not being applied".format(t_total))
         if not 0.0 <= warmup < 1.0 and not warmup == -1:
             raise ValueError("Invalid warmup: {} - should be in [0.0, 1.0[ or -1".format(warmup))
