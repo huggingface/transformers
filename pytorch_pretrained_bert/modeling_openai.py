@@ -15,6 +15,8 @@
 # limitations under the License.
 """PyTorch OpenAI GPT model."""
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import collections
 import copy
 import json
@@ -374,6 +376,7 @@ class OpenAIGPTMultipleChoiceHead(nn.Module):
         # (bsz, num_choices, 1, hidden_size)
         multiple_choice_h = hidden_states.gather(2, mc_token_ids).squeeze(2)
         # (bsz, num_choices, hidden_size)
+        multiple_choice_h = self.dropout(multiple_choice_h.transpose(1, 2)).transpose(1, 2)
         multiple_choice_logits = self.linear(multiple_choice_h).squeeze(-1)
         # (bsz, num_choices)
         return multiple_choice_logits
@@ -713,8 +716,14 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         hidden_states = self.transformer(input_ids, position_ids, token_type_ids)
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = lm_logits[:, :-1].contiguous()
+            shift_labels = lm_labels[:, 1:].contiguous()
+
+            # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
+                            shift_labels.view(-1))
             return loss
         return lm_logits
 
@@ -800,8 +809,11 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
         if lm_labels is not None:
+            shift_logits = lm_logits[:, :-1].contiguous()
+            shift_labels = lm_labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1)))
+            losses.append(loss_fct(shift_logits.view(-1,
+                          shift_logits.size(-1)), shift_labels.view(-1)))
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
             losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))

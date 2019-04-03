@@ -85,9 +85,9 @@ class SquadExample(object):
         s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
         if self.start_position:
             s += ", start_position: %d" % (self.start_position)
-        if self.start_position:
+        if self.end_position:
             s += ", end_position: %d" % (self.end_position)
-        if self.start_position:
+        if self.is_impossible:
             s += ", is_impossible: %r" % (self.is_impossible)
         return s
 
@@ -471,7 +471,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         prelim_predictions = []
         # keep track of the minimum score of null start+end of position 0
         score_null = 1000000  # large and positive
-        min_null_feature_index = 0  # the paragraph slice with min mull score
+        min_null_feature_index = 0  # the paragraph slice with min null score
         null_start_logit = 0  # the start logit at the slice with min null score
         null_end_logit = 0  # the end logit at the slice with min null score
         for (feature_index, feature) in enumerate(features):
@@ -620,7 +620,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 all_predictions[example.qas_id] = ""
             else:
                 all_predictions[example.qas_id] = best_non_null_entry.text
-                all_nbest_json[example.qas_id] = nbest_json
+            all_nbest_json[example.qas_id] = nbest_json
 
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(all_predictions, indent=4) + "\n")
@@ -657,8 +657,8 @@ def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
     #
     # What we really want to return is "Steve Smith".
     #
-    # Therefore, we have to apply a semi-complicated alignment heruistic between
-    # `pred_text` and `orig_text` to get a character-to-charcter alignment. This
+    # Therefore, we have to apply a semi-complicated alignment heuristic between
+    # `pred_text` and `orig_text` to get a character-to-character alignment. This
     # can fail in certain cases in which case we just return `orig_text`.
 
     def _strip_spaces(text):
