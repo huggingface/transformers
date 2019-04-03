@@ -51,7 +51,7 @@ class OptimizationTest(unittest.TestCase):
 
 class WarmupCosineWithRestartsTest(unittest.TestCase):
     def test_it(self):
-        m = WarmupCosineWithWarmupRestartsSchedule(warmup=-1, t_total=500, cycles=5)
+        m = WarmupCosineWithWarmupRestartsSchedule(warmup=0.05, t_total=1000, cycles=5)
         x = np.arange(0, 1000)
         y = [m.get_lr(xe) for xe in x]
         plt.plot(y)
