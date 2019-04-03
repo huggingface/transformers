@@ -22,7 +22,7 @@ import torch
 
 from pytorch_pretrained_bert import BertAdam
 from pytorch_pretrained_bert.optimization import WarmupCosineWithWarmupRestartsSchedule
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 import numpy as np
 
 class OptimizationTest(unittest.TestCase):
@@ -54,8 +54,8 @@ class WarmupCosineWithRestartsTest(unittest.TestCase):
         m = WarmupCosineWithWarmupRestartsSchedule(warmup=0.05, t_total=1000, cycles=5)
         x = np.arange(0, 1000)
         y = [m.get_lr(xe) for xe in x]
-        plt.plot(y)
-        plt.show(block=False)
+        # plt.plot(y)
+        # plt.show(block=False)
         y = np.asarray(y)
         expected_zeros = y[[0, 200, 400, 600, 800]]
         print(expected_zeros)
