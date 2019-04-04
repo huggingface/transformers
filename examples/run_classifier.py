@@ -442,7 +442,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         # sequence or the second sequence. The embedding vectors for `type=0` and
         # `type=1` were learned during pre-training and are added to the wordpiece
         # embedding vector (and position vector). This is not *strictly* necessary
-        # since the [SEP] token unambigiously separates the sequences, but it makes
+        # since the [SEP] token unambiguously separates the sequences, but it makes
         # it easier for the model to learn the concept of sequences.
         #
         # For classification tasks, the first vector (corresponding to [CLS]) is
