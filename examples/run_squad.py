@@ -85,9 +85,9 @@ class SquadExample(object):
         s += ", doc_tokens: [%s]" % (" ".join(self.doc_tokens))
         if self.start_position:
             s += ", start_position: %d" % (self.start_position)
-        if self.start_position:
+        if self.end_position:
             s += ", end_position: %d" % (self.end_position)
-        if self.start_position:
+        if self.is_impossible:
             s += ", is_impossible: %r" % (self.is_impossible)
         return s
 
