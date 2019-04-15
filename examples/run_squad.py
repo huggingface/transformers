@@ -1020,7 +1020,7 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
 
-    if args.do_train:
+    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         # Save a trained model, configuration and tokenizer
         model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
 
