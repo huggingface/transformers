@@ -146,6 +146,7 @@ class BertTokenizer(object):
                     index = token_index
                 writer.write(token + u'\n')
                 index += 1
+        return vocab_file
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
