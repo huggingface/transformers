@@ -148,6 +148,7 @@ class TransfoXLTokenizer(object):
         index = 0
         vocab_file = os.path.join(vocab_path, VOCAB_NAME)
         torch.save(self.__dict__, vocab_file)
+        return vocab_file
 
     def build_vocab(self):
         if self.vocab_file:

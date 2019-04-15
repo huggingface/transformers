@@ -46,6 +46,17 @@ class TokenizationTest(unittest.TestCase):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
+        vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
+        tokenizer.from_pretrained(vocab_file)
+        os.remove(vocab_file)
+
+        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
+        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+
+
     def test_chinese(self):
         tokenizer = BasicTokenizer()
 
