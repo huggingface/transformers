@@ -135,9 +135,10 @@ class BertTokenizer(object):
         return tokens
 
     def save_vocabulary(self, vocab_path):
-        """Save the tokenizer vocabulary to a path."""
+        """Save the tokenizer vocabulary to a directory or file."""
         index = 0
-        vocab_file = os.path.join(vocab_path, VOCAB_NAME)
+        if os.path.isdir(vocab_path):
+            vocab_file = os.path.join(vocab_path, VOCAB_NAME)
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
