@@ -131,6 +131,7 @@ This package comprises the following classes that can be imported in Python and 
 - Configuration classes for BERT, OpenAI GPT and Transformer-XL (in the respective [`modeling.py`](./pytorch_pretrained_bert/modeling.py), [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py), [`modeling_transfo_xl.py`](./pytorch_pretrained_bert/modeling_transfo_xl.py) files):
   - `BertConfig` - Configuration class to store the configuration of a `BertModel` with utilities to read and write from JSON configuration files.
   - `OpenAIGPTConfig` - Configuration class to store the configuration of a `OpenAIGPTModel` with utilities to read and write from JSON configuration files.
+  - `GPT2Config` - Configuration class to store the configuration of a `GPT2Model` with utilities to read and write from JSON configuration files.
   - `TransfoXLConfig` - Configuration class to store the configuration of a `TransfoXLModel` with utilities to read and write from JSON configuration files.
 
 The repository further comprises:
@@ -523,6 +524,23 @@ tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 model = GPT2Model.from_pretrained('gpt2')
 
 ```
+
+### Configuration classes
+
+Models (BERT, GPT, GPT-2 and Transformer-XL) are defined and build from configuration classes which containes the parameters of the models (number of layers, dimensionalities...) and a few utilities to read and write from JSON configuration files. The respective configuration classes are:
+
+- `BertConfig` for `BertModel` and BERT classes instances.
+- `OpenAIGPTConfig` for `OpenAIGPTModel` and OpenAI GPT classes instances.
+- `GPT2Config` for `GPT2Model` and OpenAI GPT-2 classes instances.
+- `TransfoXLConfig` for `TransfoXLModel` and Transformer-XL classes instances.
+
+These configuration classes contains a few utilities to load and save configurations:
+
+- `from_dict(cls, json_object)`: A class method to construct a configuration from a Python dictionary of parameters. Returns an instance of the configuration class.
+- `from_json_file(cls, json_file)`: A class method to construct a configuration from a json file of parameters. Returns an instance of the configuration class.
+- `to_dict()`: Serializes an instance to a Python dictionary. Returns a dictionary.
+- `to_json_string()`: Serializes an instance to a JSON string. Returns a string.
+- `to_json_file(json_file_path)`: Save an instance to a json file.
 
 ### PyTorch models
 
