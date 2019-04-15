@@ -226,6 +226,7 @@ def get_orig_seq(input_mask_batch):
     return seq
 def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_mask_batch):
     average_layer_batch_out=[]
+    cls_embed_batch_out=[]
     for sent_i, sent_embed in enumerate(average_layer_batch):
         sent_embed_out=[]
         orig_to_token_map_batch_sent=get_orig_seq(orig_to_token_map_batch[sent_i])
@@ -244,7 +245,15 @@ def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_m
             print (e,)
             average_layer_batch_out.append(None)
 
-    return average_layer_batch_out
+        #add cls sentence embed
+        try:
+            cls_embed_batch_out.append(numpy.array([sent_embed[0]]))
+        except ValueError as e:
+            print (e,)
+            cls_embed_batch_out.append(None)
+
+
+    return average_layer_batch_out,cls_embed_batch_out
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
     features = convert_examples_to_features(
@@ -253,8 +262,6 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
     unique_id_to_feature = {}
     for feature in features:
         unique_id_to_feature[feature.unique_id] = feature
-
-    
 
 
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -285,7 +292,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         average_layer_batch = sum(all_encoder_layers[-12:]) / 12
         # if orig_to_token_map_batch!=None:
         try:
-            average_layer_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
+            average_layer_batch, cls_embed_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
                                                       input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
         except ValueError as e:
             print (e, examples[example_indices])
@@ -301,12 +308,14 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             # sent_set.add(sent)
             if sent not in writer:
                 payload = average_layer_batch[b]
+                payload_cls=cls_embed_batch[b]
                 if type(payload)==type(None):
                     print ('ValueError:',sent)
                 else:
                     payload=numpy.array(payload)
                     try:
                         writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload)
+                        writer.create_dataset('[CLS]\t'+sent, payload_cls.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload_cls)
                     except OSError as e:
                         print(e, sent)
 
