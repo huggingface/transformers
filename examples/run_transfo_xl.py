@@ -28,7 +28,7 @@ import math
 
 import torch
 
-from pytorch_pretrained_bert import TransfoXLLMHeadModel, TransfoXLCorpus
+from pytorch_pretrained_bert import TransfoXLLMHeadModel, TransfoXLCorpus, TransfoXLTokenizer
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -80,6 +80,7 @@ def main():
     # The pre-processing involve computing word frequencies to prepare the Adaptive input and SoftMax
     # and tokenizing the dataset
     # The pre-processed corpus is a convertion (using the conversion script )
+    tokenizer = TransfoXLTokenizer.from_pretrained(args.model_name)
     corpus = TransfoXLCorpus.from_pretrained(args.model_name)
     ntokens = len(corpus.vocab)
 
