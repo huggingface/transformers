@@ -1274,18 +1274,20 @@ To get these results we used a combination of:
 
 Here is the full list of hyper-parameters for this run:
 ```bash
+export SQUAD_DIR=/path/to/SQUAD
+
 python ./run_squad.py \
   --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
   --do_lower_case \
-  --train_file $SQUAD_TRAIN \
-  --predict_file $SQUAD_EVAL \
+  --train_file $SQUAD_DIR/train-v1.1.json \
+  --predict_file $SQUAD_DIR/dev-v1.1.json \
   --learning_rate 3e-5 \
   --num_train_epochs 2 \
   --max_seq_length 384 \
   --doc_stride 128 \
-  --output_dir $OUTPUT_DIR \
+  --output_dir /tmp/debug_squad/ \
   --train_batch_size 24 \
   --gradient_accumulation_steps 2
 ```
@@ -1294,18 +1296,20 @@ If you have a recent GPU (starting from NVIDIA Volta series), you should try **1
 
 Here is an example of hyper-parameters for a FP16 run we tried:
 ```bash
+export SQUAD_DIR=/path/to/SQUAD
+
 python ./run_squad.py \
   --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
   --do_lower_case \
-  --train_file $SQUAD_TRAIN \
-  --predict_file $SQUAD_EVAL \
+  --train_file $SQUAD_DIR/train-v1.1.json \
+  --predict_file $SQUAD_DIR/dev-v1.1.json \
   --learning_rate 3e-5 \
   --num_train_epochs 2 \
   --max_seq_length 384 \
   --doc_stride 128 \
-  --output_dir $OUTPUT_DIR \
+  --output_dir /tmp/debug_squad/ \
   --train_batch_size 24 \
   --fp16 \
   --loss_scale 128
