@@ -220,6 +220,11 @@ class BertConfig(object):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
+    def to_json_file(self, json_file_path):
+        """ Save this instance to a json file."""
+        with open(json_file_path, "w", encoding='utf-8') as writer:
+            writer.write(self.to_json_string())
+
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
 except ImportError:
