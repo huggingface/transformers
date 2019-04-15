@@ -33,6 +33,9 @@ except (AttributeError, ImportError):
     PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
                                               os.path.join(os.path.expanduser("~"), '.pytorch_pretrained_bert'))
 
+CONFIG_NAME = "config.json"
+WEIGHTS_NAME = "pytorch_model.bin"
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 

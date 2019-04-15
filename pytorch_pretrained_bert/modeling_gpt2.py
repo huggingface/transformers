@@ -34,16 +34,13 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .file_utils import cached_path
+from .file_utils import cached_path, CONFIG_NAME, WEIGHTS_NAME
 from .modeling import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-pytorch_model.bin"}
 PRETRAINED_CONFIG_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json"}
-
-CONFIG_NAME = "config.json"
-WEIGHTS_NAME = "pytorch_model.bin"
 
 def load_tf_weights_in_gpt2(model, gpt2_checkpoint_path):
     """ Load tf checkpoints in a pytorch model

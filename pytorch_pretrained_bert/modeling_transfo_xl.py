@@ -40,7 +40,7 @@ from torch.nn.parameter import Parameter
 
 from .modeling import BertLayerNorm as LayerNorm
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
-from .file_utils import cached_path
+from .file_utils import cached_path, CONFIG_NAME, WEIGHTS_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,7 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
 PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-config.json",
 }
-CONFIG_NAME = 'config.json'
-WEIGHTS_NAME = 'pytorch_model.bin'
+
 TF_WEIGHTS_NAME = 'model.ckpt'
 
 def build_tf_to_pytorch_map(model, config):
