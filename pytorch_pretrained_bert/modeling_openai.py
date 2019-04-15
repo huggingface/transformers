@@ -476,7 +476,7 @@ class OpenAIGPTPreTrainedModel(nn.Module):
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
-            state_dict = torch.load(resolved_archive_file, map_location='cpu' if not torch.cuda.is_available() else None)
+            state_dict = torch.load(resolved_archive_file, map_location='cpu')
         if from_tf:
             # Directly load from a TensorFlow checkpoint (stored as NumPy array)
             return load_tf_weights_in_openai_gpt(model, resolved_archive_file)
