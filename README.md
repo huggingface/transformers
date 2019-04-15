@@ -462,10 +462,12 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 | Sub-section | Description |
 |-|-|
-| [Loading Google AI's/OpenAI's pre-trained weights](#loading-google-ai-or-openai-pre-trained-weights-or-pytorch-dump) | How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance |
-| [PyTorch models](#PyTorch-models) | API of the BERT, GPT, GPT-2 and Transformer-XL PyTorch model classes |
+| [Loading pre-trained weights](#loading-google-ai-or-openai-pre-trained-weights-or-pytorch-dump) | How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance |
+| [Serialization best-practices](#serialization-best-practices) | How to save and reload a fine-tuned model |
+| [Configurations](#configurations) | API of the configuration classes for BERT, GPT, GPT-2 and Transformer-XL |
+| [Models](#models) | API of the PyTorch model classes for BERT, GPT, GPT-2 and Transformer-XL |
 | [Tokenizers](#tokenizers) | API of the tokenizers class for BERT, GPT, GPT-2 and Transformer-XL|
-| [Optimizers](#optimizerss) |  API of the optimizers |
+| [Optimizers](#optimizers) |  API of the optimizers |
 
 ### Loading Google AI or OpenAI pre-trained weights or PyTorch dump
 
@@ -525,8 +527,9 @@ model = GPT2Model.from_pretrained('gpt2')
 
 ```
 
-### Serialization best-practices: saving and re-loading a fine-tuned model (BERT, GPT, GPT-2 and Transformer-XL)
+### Serialization best-practices
 
+This section explain how you can save and re-load a fine-tuned model (BERT, GPT, GPT-2 and Transformer-XL).
 There are three types of files you need to save to be able to reload a fine-tuned model:
 
 - the model it-self which should be saved following PyTorch serialization [best practices](https://pytorch.org/docs/stable/notes/serialization.html#best-practices),
@@ -601,7 +604,7 @@ model.load_state_dict(state_dict)
 tokenizer = OpenAIGPTTokenizer(output_vocab_file)
 ```
 
-### Configuration classes
+### Configurations
 
 Models (BERT, GPT, GPT-2 and Transformer-XL) are defined and build from configuration classes which containes the parameters of the models (number of layers, dimensionalities...) and a few utilities to read and write from JSON configuration files. The respective configuration classes are:
 
@@ -618,7 +621,7 @@ These configuration classes contains a few utilities to load and save configurat
 - `to_json_string()`: Serializes an instance to a JSON string. Returns a string.
 - `to_json_file(json_file_path)`: Save an instance to a json file.
 
-### PyTorch models
+### Models
 
 #### 1. `BertModel`
 
