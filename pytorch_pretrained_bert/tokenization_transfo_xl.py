@@ -145,8 +145,10 @@ class TransfoXLTokenizer(object):
             raise ValueError('No <unkown> token in vocabulary')
 
     def save_vocabulary(self, vocab_path):
+        """Save the tokenizer vocabulary to a directory or file."""
         index = 0
-        vocab_file = os.path.join(vocab_path, VOCAB_NAME)
+        if os.path.isdir(vocab_path):
+            vocab_file = os.path.join(vocab_path, VOCAB_NAME)
         torch.save(self.__dict__, vocab_file)
         return vocab_file
 
