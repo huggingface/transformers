@@ -52,7 +52,7 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-        vocab_file, merges_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
+        vocab_file, merges_file, special_tokens_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
         tokenizer.from_pretrained("/tmp/")
         os.remove(vocab_file)
         os.remove(merges_file)

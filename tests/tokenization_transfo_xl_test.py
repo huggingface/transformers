@@ -35,7 +35,7 @@ class TransfoXLTokenizationTest(unittest.TestCase):
         tokenizer.build_vocab()
         os.remove(vocab_file)
 
-        tokens = tokenizer.tokenize(u"<unk> UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
 
         self.assertListEqual(
@@ -45,7 +45,7 @@ class TransfoXLTokenizationTest(unittest.TestCase):
         tokenizer.from_pretrained(vocab_file)
         os.remove(vocab_file)
 
-        tokens = tokenizer.tokenize(u"<unk> UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
 
         self.assertListEqual(
@@ -56,15 +56,14 @@ class TransfoXLTokenizationTest(unittest.TestCase):
         tokenizer = TransfoXLTokenizer(lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(u" \tHeLLo!how  \n Are yoU?  "),
+            tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
             ["hello", "!", "how", "are", "you", "?"])
-        self.assertListEqual(tokenizer.tokenize(u"H\u00E9llo"), ["hello"])
 
     def test_full_tokenizer_no_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(u" \tHeLLo!how  \n Are yoU?  "),
+            tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
             ["HeLLo", "!", "how", "Are", "yoU", "?"])
 
 
