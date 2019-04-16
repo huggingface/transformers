@@ -16,6 +16,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import sys
 import json
 import logging
 import os
@@ -138,7 +139,7 @@ class GPT2Tokenizer(object):
         tokenizer = cls(resolved_vocab_file, resolved_merges_file, special_tokens=special_tokens, *inputs, **kwargs)
         return tokenizer
 
-    def __init__(self, vocab_file, merges_file, errors='replace', max_len=None):
+    def __init__(self, vocab_file, merges_file, errors='replace', special_tokens=None, max_len=None):
         self.max_len = max_len if max_len is not None else int(1e12)
         self.encoder = json.load(open(vocab_file))
         self.decoder = {v:k for k,v in self.encoder.items()}
@@ -153,8 +154,25 @@ class GPT2Tokenizer(object):
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+        self.special_tokens = {}
+        self.special_tokens_decoder = {}
+        self.set_special_tokens(special_tokens)
+
     def __len__(self):
-        return len(self.encoder)
+        return len(self.encoder) + len(self.special_tokens)
+
+    def set_special_tokens(self, special_tokens):
+        """ Add a list of additional tokens to the encoder.
+            The additional tokens are indexed starting from the last index of the
+            current vocabulary in the order of the `special_tokens` list.
+        """
+        if not special_tokens:
+            self.special_tokens = {}
+            self.special_tokens_decoder = {}
+            return
+        self.special_tokens = dict((tok, len(self.encoder) + i) for i, tok in enumerate(special_tokens))
+        self.special_tokens_decoder = {v:k for k, v in self.special_tokens.items()}
+        logger.info("Special tokens {}".format(self.special_tokens))
 
     def bpe(self, token):
         if token in self.cache:
@@ -197,6 +215,54 @@ class GPT2Tokenizer(object):
         self.cache[token] = word
         return word
 
+    def tokenize(self, text):
+        """ Tokenize a string. """
+        bpe_tokens = []
+        for token in re.findall(self.pat, text):
+            token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
+            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
+        return bpe_tokens
+
+    def convert_tokens_to_ids(self, tokens):
+        """ Converts a sequence of tokens into ids using the vocab. """
+        ids = []
+        if isinstance(tokens, str) or (sys.version_info[0] == 2 and isinstance(tokens, unicode)):
+            if tokens in self.special_tokens:
+                return self.special_tokens[tokens]
+            else:
+                return self.encoder.get(tokens, 0)
+        for token in tokens:
+            if token in self.special_tokens:
+                ids.append(self.special_tokens[token])
+            else:
+                ids.append(self.encoder.get(token, 0))
+        if len(ids) > self.max_len:
+            logger.warning(
+                "Token indices sequence length is longer than the specified maximum "
+                " sequence length for this OpenAI GPT model ({} > {}). Running this"
+                " sequence through the model will result in indexing errors".format(len(ids), self.max_len)
+            )
+        return ids
+
+    def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
+        """Converts a sequence of ids in BPE tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            if i in self.special_tokens_decoder:
+                if not skip_special_tokens:
+                    tokens.append(self.special_tokens_decoder[i])
+            else:
+                tokens.append(self.decoder[i])
+        return tokens
+
+    def encode(self, text):
+        return self.convert_tokens_to_ids(self.tokenize(text))
+
+    def decode(self, tokens):
+        text = ''.join([self.decoder[token] for token in tokens])
+        text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
+        return text
+
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary and merge files to a directory."""
         if not os.path.isdir(vocab_path):
@@ -220,26 +286,14 @@ class GPT2Tokenizer(object):
                 writer.write(' '.join(bpe_tokens) + u'\n')
                 index += 1
 
+        index = len(self.encoder)
         with open(special_tokens_file, 'w', encoding='utf-8') as writer:
-            for token in sorted(self.special_tokens.keys(), key=lambda kv: kv[1]):
+            for token, token_index in sorted(self.special_tokens.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning("Saving special tokens vocabulary to {}: BPE indices are not consecutive."
+                                   " Please check that the tokenizer is not corrupted!".format(special_tokens_file))
+                    index = token_index
                 writer.write(token + u'\n')
+                index += 1
 
         return vocab_file, merge_file, special_tokens_file
-
-    def encode(self, text):
-        bpe_tokens = []
-        for token in re.findall(self.pat, text):
-            token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
-            bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
-        if len(bpe_tokens) > self.max_len:
-            logger.warning(
-                "Token indices sequence length is longer than the specified maximum "
-                " sequence length for this OpenAI GPT-2 model ({} > {}). Running this"
-                " sequence through the model will result in indexing errors".format(len(bpe_tokens), self.max_len)
-            )
-        return bpe_tokens
-
-    def decode(self, tokens):
-        text = ''.join([self.decoder[token] for token in tokens])
-        text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
-        return text
