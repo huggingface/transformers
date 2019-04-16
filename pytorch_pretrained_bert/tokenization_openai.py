@@ -273,9 +273,8 @@ class OpenAIGPTTokenizer(object):
         if clean_up_tokenization_spaces:
             out_string = out_string.replace('<unk>', '')
             out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ',').replace(' ,', ','
-                    ).replace(" n't", "n't").replace(" 'm", "'m").replace(" 're", "'re").replace(" do not", " don't"
-                    ).replace(" 's", "'s").replace(" t ", "'t ").replace(" s ", "'s ").replace(" m ", "'m "
-                    ).replace(" 've", "'ve")
+                    ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
+                    ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
         return out_string
 
     def save_vocabulary(self, vocab_path):
