@@ -83,30 +83,51 @@ def run_model():
     elif args.length > model.config.n_ctx:
         raise ValueError("Can't get samples longer than window size: %s" % model.config.n_ctx)
 
-    while not args.unconditional:
+    while True:
+        context_tokens = []
         if not args.unconditional:
             raw_text = input("Model prompt >>> ")
             while not raw_text:
                 print('Prompt should not be empty!')
                 raw_text = input("Model prompt >>> ")
             context_tokens = enc.encode(raw_text)
+            generated = 0
+            for _ in range(args.nsamples // args.batch_size):
+                out = sample_sequence(
+                    model=model, length=args.length,
+                    context=context_tokens,
+                    start_token=None,
+                    batch_size=args.batch_size,
+                    temperature=args.temperature, top_k=args.top_k, device=device
+                )
+                out = out[:, len(context_tokens):].tolist()
+                for i in range(args.batch_size):
+                    generated += 1
+                    text = enc.decode(out[i])
+                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
+                    print(text)
+            print("=" * 80)
+    if args.unconditional:
         generated = 0
         for _ in range(args.nsamples // args.batch_size):
             out = sample_sequence(
                 model=model, length=args.length,
-                context=context_tokens if not args.unconditional else None,
-                start_token=enc.encoder['<|endoftext|>'] if args.unconditional else None,
+                context=None,
+                start_token=enc.encoder['<|endoftext|>'],
                 batch_size=args.batch_size,
                 temperature=args.temperature, top_k=args.top_k, device=device
             )
-            out = out[:, len(context_tokens):].tolist()
+            out = out[:,1:].tolist()
             for i in range(args.batch_size):
                 generated += 1
                 text = enc.decode(out[i])
                 print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
                 print(text)
         print("=" * 80)
+        if args.unconditional:
+            break
 
 if __name__ == '__main__':
     run_model()
+
 

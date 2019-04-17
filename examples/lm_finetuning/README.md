@@ -37,6 +37,7 @@ python3 simple_lm_finetuning.py
 --bert_model bert-base-uncased 
 --do_lower_case 
 --output_dir finetuned_lm/
+--do_train
 ```
 
 ### Pregenerating training data
