@@ -40,7 +40,6 @@ class GPT2TokenizationTest(unittest.TestCase):
             merges_file = fp.name
 
         tokenizer = GPT2Tokenizer(vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
-        print("encoder", tokenizer.byte_encoder)
         os.remove(vocab_file)
         os.remove(merges_file)
 
