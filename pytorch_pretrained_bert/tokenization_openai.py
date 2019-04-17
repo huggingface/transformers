@@ -223,7 +223,10 @@ class OpenAIGPTTokenizer(object):
             # Using BERT's BasicTokenizer
             text = self.nlp.tokenize(text)
             for token in text:
-                split_tokens.extend([t for t in self.bpe(token).split(' ')])
+                if token not in self.special_tokens:
+                    split_tokens.extend([t for t in self.bpe(token).split(' ')])
+                else:
+                    split_tokens.append(token)
         else:
             # Using SpaCy & ftfy (original tokenization process of OpenAI GPT)
             text = self.nlp(text_standardize(self.fix_text(text)))
