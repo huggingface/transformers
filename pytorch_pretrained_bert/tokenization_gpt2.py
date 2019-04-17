@@ -97,6 +97,7 @@ class GPT2Tokenizer(object):
         if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
             vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
             merges_file = PRETRAINED_MERGES_ARCHIVE_MAP[pretrained_model_name_or_path]
+            special_tokens_file = None
         else:
             vocab_file = os.path.join(pretrained_model_name_or_path, VOCAB_NAME)
             merges_file = os.path.join(pretrained_model_name_or_path, MERGES_NAME)
