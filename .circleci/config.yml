@@ -9,7 +9,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest ftfy spacy
             - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/
+            - run: python -m pytest -sv tests/ --runslow
     build_py2:
         working_directory: ~/pytorch-pretrained-BERT
         docker:
@@ -20,7 +20,7 @@ jobs:
             - run: sudo pip install pytest spacy
             - run: sudo pip install ftfy==4.4.3
             - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/
+            - run: python -m pytest -sv tests/ --runslow
 workflows:
   version: 2
   build_and_test:
