@@ -929,10 +929,11 @@ This class has four arguments:
 
 and five methods:
 
-- `tokenize(text)`: convert a `str` in a list of `str` tokens by (1) performing basic tokenization and (2) WordPiece tokenization.
+- `tokenize(text)`: convert a `str` in a list of `str` tokens by performing BPE tokenization.
 - `convert_tokens_to_ids(tokens)`: convert a list of `str` tokens in a list of `int` indices in the vocabulary.
 - `convert_ids_to_tokens(tokens)`: convert a list of `int` indices in a list of `str` tokens in the vocabulary.
 - `set_special_tokens(self, special_tokens)`: update the list of special tokens (see above arguments)
+- `encode(text)`: convert a `str` in a list of `int` tokens by performing BPE encoding.
 - `decode(ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)`: decode a list of `int` indices in a string and do some post-processing if needed: (i) remove special tokens from the output and (ii) clean up tokenization spaces.
 - `save_vocabulary(directory_path)`: save the vocabulary, merge and special tokens files to `directory_path`. Return the path to the three files: `vocab_file_path`, `merge_file_path`, `special_tokens_file_path`. The vocabulary can be reloaded with `OpenAIGPTTokenizer.from_pretrained('directory_path')`.
 
@@ -958,6 +959,10 @@ This class has three arguments:
 
 and two methods:
 
+- `tokenize(text)`: convert a `str` in a list of `str` tokens by performing byte-level BPE.
+- `convert_tokens_to_ids(tokens)`: convert a list of `str` tokens in a list of `int` indices in the vocabulary.
+- `convert_ids_to_tokens(tokens)`: convert a list of `int` indices in a list of `str` tokens in the vocabulary.
+- `set_special_tokens(self, special_tokens)`: update the list of special tokens (see above arguments)
 - `encode(text)`: convert a `str` in a list of `int` tokens by performing byte-level BPE.
 - `decode(tokens)`: convert back a list of `int` tokens in a `str`.
 - `save_vocabulary(directory_path)`: save the vocabulary, merge and special tokens files to `directory_path`. Return the path to the three files: `vocab_file_path`, `merge_file_path`, `special_tokens_file_path`. The vocabulary can be reloaded with `OpenAIGPTTokenizer.from_pretrained('directory_path')`.

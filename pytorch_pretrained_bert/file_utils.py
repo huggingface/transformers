@@ -227,7 +227,7 @@ def get_from_cache(url, cache_dir=None):
             meta = {'url': url, 'etag': etag}
             meta_path = cache_path + '.json'
             with open(meta_path, 'w', encoding="utf-8") as meta_file:
-                json.dump(meta, meta_file)
+                meta_file.write(json.dumps(meta))
 
             logger.info("removing temp file %s", temp_file.name)
 
