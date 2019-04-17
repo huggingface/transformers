@@ -31,13 +31,14 @@ class GPT2TokenizationTest(unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w", "e r", ""]
         with open("/tmp/openai_tokenizer_vocab_test.json", "w") as fp:
-            json.dump(vocab_tokens, fp)
+            fp.write(json.dumps(vocab_tokens))
             vocab_file = fp.name
         with open("/tmp/openai_tokenizer_merges_test.txt", "w") as fp:
             fp.write("\n".join(merges))
             merges_file = fp.name
 
         tokenizer = GPT2Tokenizer(vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
+        print("encoder", tokenizer.byte_encoder)
         os.remove(vocab_file)
         os.remove(merges_file)
 

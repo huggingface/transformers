@@ -59,6 +59,7 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
+    _chr = unichr if sys.version_info[0] == 2 else chr
     bs = list(range(ord("!"), ord("~")+1))+list(range(ord("¡"), ord("¬")+1))+list(range(ord("®"), ord("ÿ")+1))
     cs = bs[:]
     n = 0
@@ -67,7 +68,7 @@ def bytes_to_unicode():
             bs.append(b)
             cs.append(2**8+n)
             n += 1
-    cs = [chr(n) for n in cs]
+    cs = [_chr(n) for n in cs]
     return dict(zip(bs, cs))
 
 def get_pairs(word):
@@ -219,7 +220,7 @@ class GPT2Tokenizer(object):
         """ Tokenize a string. """
         bpe_tokens = []
         for token in re.findall(self.pat, text):
-            token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
+            token = ''.join(self.byte_encoder[ord(b)] for b in token.encode('utf-8'))
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
         return bpe_tokens
 
