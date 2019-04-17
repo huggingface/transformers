@@ -242,7 +242,10 @@ def get_from_cache(url, cache_dir=None):
             meta = {'url': url, 'etag': etag}
             meta_path = cache_path + '.json'
             with open(meta_path, 'w') as meta_file:
-                meta_file.write(json.dumps(meta, indent=4))
+                output_string = json.dumps(meta)
+                if sys.version_info[0] == 2 and isinstance(output_string, str):
+                    output_string = unicode(output_string, 'utf-8')  # The beauty of python 2
+                meta_file.write(output_string)
 
             logger.info("removing temp file %s", temp_file.name)
 
