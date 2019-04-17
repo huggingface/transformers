@@ -17,8 +17,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
+import shutil
+import pytest
 
-from pytorch_pretrained_bert.tokenization_openai import OpenAIGPTTokenizer
+from pytorch_pretrained_bert.tokenization_openai import OpenAIGPTTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
 
 
 class OpenAIGPTTokenizationTest(unittest.TestCase):
@@ -63,6 +65,14 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
              tokenizer.special_tokens, tokenizer.special_tokens_decoder],
             [tokenizer_2.encoder, tokenizer_2.decoder, tokenizer_2.bpe_ranks,
              tokenizer_2.special_tokens, tokenizer_2.special_tokens_decoder])
+
+    @pytest.mark.slow
+    def test_tokenizer_from_pretrained(self):
+        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
+            tokenizer = OpenAIGPTTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(tokenizer)
 
 
 if __name__ == '__main__':
