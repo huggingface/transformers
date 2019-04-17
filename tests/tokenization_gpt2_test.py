@@ -66,7 +66,7 @@ class GPT2TokenizationTest(unittest.TestCase):
             [tokenizer_2.encoder, tokenizer_2.decoder, tokenizer_2.bpe_ranks,
              tokenizer_2.special_tokens, tokenizer_2.special_tokens_decoder])
 
-    @pytest.mark.slow
+    # @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
         cache_dir = "/tmp/pytorch_pretrained_bert_test/"
         for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
