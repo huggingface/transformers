@@ -20,12 +20,14 @@ import os
 import unittest
 import json
 import random
+import shutil
+import pytest
 
 import torch
 
 from pytorch_pretrained_bert import (GPT2Config, GPT2Model,
                                      GPT2LMHeadModel, GPT2DoubleHeadsModel)
-
+from pytorch_pretrained_bert.modeling_gpt2 import PRETRAINED_MODEL_ARCHIVE_MAP
 
 class GPT2ModelTest(unittest.TestCase):
     class GPT2ModelTester(object):
@@ -184,6 +186,14 @@ class GPT2ModelTest(unittest.TestCase):
         config_second = GPT2Config.from_json_file(json_file_path)
         os.remove(json_file_path)
         self.assertEqual(config_second.to_dict(), config_first.to_dict())
+
+    @pytest.mark.slow
+    def test_model_from_pretrained(self):
+        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        for model_name in list(PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = GPT2Model.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(model)
 
     def run_tester(self, tester):
         config_and_inputs = tester.prepare_config_and_inputs()
