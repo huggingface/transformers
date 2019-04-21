@@ -21,4 +21,4 @@ from .modeling_gpt2 import (GPT2Config, GPT2Model,
 from .optimization import BertAdam
 from .optimization_openai import OpenAIAdam
 
-from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE, cached_path
+from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE, cached_path, WEIGHTS_NAME, CONFIG_NAME

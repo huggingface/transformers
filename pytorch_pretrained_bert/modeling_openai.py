@@ -34,7 +34,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .file_utils import cached_path
+from .file_utils import cached_path, CONFIG_NAME, WEIGHTS_NAME
 from .modeling import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
@@ -42,8 +42,6 @@ logger = logging.getLogger(__name__)
 PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-pytorch_model.bin"}
 PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-config.json"}
 
-CONFIG_NAME = "config.json"
-WEIGHTS_NAME = "pytorch_model.bin"
 
 def load_tf_weights_in_openai_gpt(model, openai_checkpoint_folder_path):
     """ Load tf pre-trained weights in a pytorch model (from NumPy arrays here)
@@ -224,6 +222,11 @@ class OpenAIGPTConfig(object):
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
+    def to_json_file(self, json_file_path):
+        """ Save this instance to a json file."""
+        with open(json_file_path, "w", encoding='utf-8') as writer:
+            writer.write(self.to_json_string())
 
 
 class Conv1D(nn.Module):
@@ -473,7 +476,7 @@ class OpenAIGPTPreTrainedModel(nn.Module):
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
-            state_dict = torch.load(resolved_archive_file, map_location='cpu' if not torch.cuda.is_available() else None)
+            state_dict = torch.load(resolved_archive_file, map_location='cpu')
         if from_tf:
             # Directly load from a TensorFlow checkpoint (stored as NumPy array)
             return load_tf_weights_in_openai_gpt(model, resolved_archive_file)
@@ -605,14 +608,13 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             return
         # Update config
         self.config.n_special = num_special_tokens
-        # # Build new embeddings and initialize
+        # Build new embeddings and initialize all new embeddings (in particular the special tokens)
         old_embed = self.tokens_embed
         self.tokens_embed = nn.Embedding(self.config.total_tokens_embeddings, self.config.n_embd)
-        # Initialize all new embeddings (in particular the special tokens)
+        self.tokens_embed.to(old_embed.weight.device)
         self.init_weights(self.tokens_embed)
-        # Copy word and positional embeddings from the previous weights
-        self.tokens_embed.weight.data[: self.config.vocab_size, :] = old_embed.weight.data[: self.config.vocab_size, :]
-        self.tokens_embed.weight.data[-self.config.n_positions :, :] = old_embed.weight.data[-self.config.n_positions :, :]
+        # Copy word embeddings from the previous weights
+        self.tokens_embed.weight.data[:self.config.vocab_size, :] = old_embed.weight.data[:self.config.vocab_size, :]
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None):
         if position_ids is None:
@@ -717,9 +719,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[:, :-1].contiguous()
-            shift_labels = lm_labels[:, 1:].contiguous()
-
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = lm_labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
@@ -809,11 +810,10 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
         if lm_labels is not None:
-            shift_logits = lm_logits[:, :-1].contiguous()
-            shift_labels = lm_labels[:, 1:].contiguous()
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = lm_labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(shift_logits.view(-1,
-                          shift_logits.size(-1)), shift_labels.view(-1)))
+            losses.append(loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)))
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
             losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))
