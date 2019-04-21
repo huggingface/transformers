@@ -17,10 +17,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 from io import open
+import shutil
+import pytest
 
-from pytorch_pretrained_bert.tokenization_transfo_xl import (TransfoXLTokenizer,
-                                                  _is_control, _is_punctuation,
-                                                  _is_whitespace)
+from pytorch_pretrained_bert.tokenization_transfo_xl import TransfoXLTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
 
 
 class TransfoXLTokenizationTest(unittest.TestCase):
@@ -37,54 +37,44 @@ class TransfoXLTokenizationTest(unittest.TestCase):
         tokenizer.build_vocab()
         os.remove(vocab_file)
 
-        tokens = tokenizer.tokenize(u"<unk> UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
 
+        vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
+        tokenizer.from_pretrained(vocab_file)
+        os.remove(vocab_file)
+
+        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
+        self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
+
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
+
+
     def test_full_tokenizer_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(u" \tHeLLo!how  \n Are yoU?  "),
+            tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
             ["hello", "!", "how", "are", "you", "?"])
-        self.assertListEqual(tokenizer.tokenize(u"H\u00E9llo"), ["hello"])
 
     def test_full_tokenizer_no_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(u" \tHeLLo!how  \n Are yoU?  "),
+            tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
             ["HeLLo", "!", "how", "Are", "yoU", "?"])
 
-    def test_is_whitespace(self):
-        self.assertTrue(_is_whitespace(u" "))
-        self.assertTrue(_is_whitespace(u"\t"))
-        self.assertTrue(_is_whitespace(u"\r"))
-        self.assertTrue(_is_whitespace(u"\n"))
-        self.assertTrue(_is_whitespace(u"\u00A0"))
-
-        self.assertFalse(_is_whitespace(u"A"))
-        self.assertFalse(_is_whitespace(u"-"))
-
-    def test_is_control(self):
-        self.assertTrue(_is_control(u"\u0005"))
-
-        self.assertFalse(_is_control(u"A"))
-        self.assertFalse(_is_control(u" "))
-        self.assertFalse(_is_control(u"\t"))
-        self.assertFalse(_is_control(u"\r"))
-
-    def test_is_punctuation(self):
-        self.assertTrue(_is_punctuation(u"-"))
-        self.assertTrue(_is_punctuation(u"$"))
-        self.assertTrue(_is_punctuation(u"`"))
-        self.assertTrue(_is_punctuation(u"."))
-
-        self.assertFalse(_is_punctuation(u"A"))
-        self.assertFalse(_is_punctuation(u" "))
-
+    @pytest.mark.slow
+    def test_tokenizer_from_pretrained(self):
+        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
+            tokenizer = TransfoXLTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(tokenizer)
 
 if __name__ == '__main__':
     unittest.main()
