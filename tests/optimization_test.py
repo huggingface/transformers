@@ -21,9 +21,10 @@ import unittest
 import torch
 
 from pytorch_pretrained_bert import BertAdam
-from pytorch_pretrained_bert.optimization import WarmupCosineWithWarmupRestartsSchedule
-#from matplotlib import pyplot as plt
+from pytorch_pretrained_bert import OpenAIAdam
+from pytorch_pretrained_bert.optimization import ConstantLR, WarmupLinearSchedule, WarmupCosineWithWarmupRestartsSchedule
 import numpy as np
+
 
 class OptimizationTest(unittest.TestCase):
 
@@ -49,13 +50,33 @@ class OptimizationTest(unittest.TestCase):
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
 
 
+class ScheduleInitTest(unittest.TestCase):
+    def test_bert_sched_init(self):
+        m = torch.nn.Linear(50, 50)
+        optim = BertAdam(m.parameters(), lr=0.001, warmup=.1, t_total=1000, schedule=None)
+        self.assertTrue(isinstance(optim.param_groups[0]["schedule"], ConstantLR))
+        optim = BertAdam(m.parameters(), lr=0.001, warmup=.1, t_total=1000, schedule="none")
+        self.assertTrue(isinstance(optim.param_groups[0]["schedule"], ConstantLR))
+        optim = BertAdam(m.parameters(), lr=0.001, warmup=.01, t_total=1000)
+        self.assertTrue(isinstance(optim.param_groups[0]["schedule"], WarmupLinearSchedule))
+        # shouldn't fail
+
+    def test_openai_sched_init(self):
+        m = torch.nn.Linear(50, 50)
+        optim = OpenAIAdam(m.parameters(), lr=0.001, warmup=.1, t_total=1000, schedule=None)
+        self.assertTrue(isinstance(optim.param_groups[0]["schedule"], ConstantLR))
+        optim = OpenAIAdam(m.parameters(), lr=0.001, warmup=.1, t_total=1000, schedule="none")
+        self.assertTrue(isinstance(optim.param_groups[0]["schedule"], ConstantLR))
+        optim = OpenAIAdam(m.parameters(), lr=0.001, warmup=.01, t_total=1000)
+        self.assertTrue(isinstance(optim.param_groups[0]["schedule"], WarmupLinearSchedule))
+        # shouldn't fail
+
+
 class WarmupCosineWithRestartsTest(unittest.TestCase):
     def test_it(self):
         m = WarmupCosineWithWarmupRestartsSchedule(warmup=0.05, t_total=1000., cycles=5)
         x = np.arange(0, 1000)
         y = [m.get_lr(xe) for xe in x]
-        # plt.plot(y)
-        # plt.show(block=False)
         y = np.asarray(y)
         expected_zeros = y[[0, 200, 400, 600, 800]]
         print(expected_zeros)

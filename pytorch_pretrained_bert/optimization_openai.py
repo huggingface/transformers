@@ -20,7 +20,8 @@ from torch.optim import Optimizer
 from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
 import logging
-from .optimization import *
+from .optimization import SCHEDULES, _LRSchedule, WarmupCosineWithWarmupRestartsSchedule, \
+    WarmupCosineWithHardRestartsSchedule, WarmupCosineSchedule, WarmupLinearSchedule, WarmupConstantSchedule
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class OpenAIAdam(Optimizer):
                  vector_l2=False, max_grad_norm=-1, **kwargs):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
-        if not isinstance(schedule, LRSchedule) and schedule not in SCHEDULES:
+        if not isinstance(schedule, _LRSchedule) and schedule not in SCHEDULES:
             raise ValueError("Invalid schedule parameter: {}".format(schedule))
         if not 0.0 <= b1 < 1.0:
             raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
@@ -42,7 +43,7 @@ class OpenAIAdam(Optimizer):
         if not e >= 0.0:
             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
         # initialize schedule object
-        if not isinstance(schedule, LRSchedule):
+        if not isinstance(schedule, _LRSchedule):
             schedule_type = SCHEDULES[schedule]
             schedule = schedule_type(warmup=warmup, t_total=t_total)
         else:
