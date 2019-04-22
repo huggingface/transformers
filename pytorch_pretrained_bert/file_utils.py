@@ -5,11 +5,13 @@ Copyright by the AllenNLP authors.
 """
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 
+import sys
 import json
 import logging
 import os
 import shutil
 import tempfile
+import fnmatch
 from functools import wraps
 from hashlib import sha256
 import sys
@@ -32,6 +34,9 @@ try:
 except (AttributeError, ImportError):
     PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
                                               os.path.join(os.path.expanduser("~"), '.pytorch_pretrained_bert'))
+
+CONFIG_NAME = "config.json"
+WEIGHTS_NAME = "pytorch_model.bin"
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -188,16 +193,29 @@ def get_from_cache(url, cache_dir=None):
     if url.startswith("s3://"):
         etag = s3_etag(url)
     else:
-        response = requests.head(url, allow_redirects=True)
-        if response.status_code != 200:
-            raise IOError("HEAD request failed for url {} with status code {}"
-                          .format(url, response.status_code))
-        etag = response.headers.get("ETag")
+        try:
+            response = requests.head(url, allow_redirects=True)
+            if response.status_code != 200:
+                etag = None
+            else:
+                etag = response.headers.get("ETag")
+        except EnvironmentError:
+            etag = None
 
+    if sys.version_info[0] == 2 and etag is not None:
+        etag = etag.decode('utf-8')
     filename = url_to_filename(url, etag)
 
     # get cache path to put the file
     cache_path = os.path.join(cache_dir, filename)
+
+    # If we don't have a connection (etag is None) and can't identify the file
+    # try to get the last downloaded one
+    if not os.path.exists(cache_path) and etag is None:
+        matching_files = fnmatch.filter(os.listdir(cache_dir), filename + '.*')
+        matching_files = list(filter(lambda s: not s.endswith('.json'), matching_files))
+        if matching_files:
+            cache_path = os.path.join(cache_dir, matching_files[-1])
 
     if not os.path.exists(cache_path):
         # Download to temporary file, then copy to cache dir once finished.
@@ -223,8 +241,11 @@ def get_from_cache(url, cache_dir=None):
             logger.info("creating metadata file for %s", cache_path)
             meta = {'url': url, 'etag': etag}
             meta_path = cache_path + '.json'
-            with open(meta_path, 'w', encoding="utf-8") as meta_file:
-                json.dump(meta, meta_file)
+            with open(meta_path, 'w') as meta_file:
+                output_string = json.dumps(meta)
+                if sys.version_info[0] == 2 and isinstance(output_string, str):
+                    output_string = unicode(output_string, 'utf-8')  # The beauty of python 2
+                meta_file.write(output_string)
 
             logger.info("removing temp file %s", temp_file.name)
 

@@ -32,7 +32,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .file_utils import cached_path
+from .file_utils import cached_path, WEIGHTS_NAME, CONFIG_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,7 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased.tar.gz",
     'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
 }
-CONFIG_NAME = 'bert_config.json'
-WEIGHTS_NAME = 'pytorch_model.bin'
+BERT_CONFIG_NAME = 'bert_config.json'
 TF_WEIGHTS_NAME = 'model.ckpt'
 
 def load_tf_weights_in_bert(model, tf_checkpoint_path):
@@ -219,6 +218,11 @@ class BertConfig(object):
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
+    def to_json_file(self, json_file_path):
+        """ Save this instance to a json file."""
+        with open(json_file_path, "w", encoding='utf-8') as writer:
+            writer.write(self.to_json_string())
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
@@ -581,13 +585,16 @@ class BertPreTrainedModel(nn.Module):
             serialization_dir = tempdir
         # Load config
         config_file = os.path.join(serialization_dir, CONFIG_NAME)
+        if not os.path.exists(config_file):
+            # Backward compatibility with old naming format
+            config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
         config = BertConfig.from_json_file(config_file)
         logger.info("Model config {}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
             weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
-            state_dict = torch.load(weights_path, map_location='cpu' if not torch.cuda.is_available() else None)
+            state_dict = torch.load(weights_path, map_location='cpu')
         if tempdir:
             # Clean up temp dir
             shutil.rmtree(tempdir)
@@ -930,7 +937,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
+            with the word token indices in the vocabulary. Items in the batch should begin with the special "CLS" token. (see the tokens preprocessing logic in the scripts
             `extract_features.py`, `run_classifier.py` and `run_squad.py`)
         `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
             types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
