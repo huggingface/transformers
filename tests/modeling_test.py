@@ -16,9 +16,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import unittest
 import json
 import random
+import shutil
+import pytest
 
 import torch
 
@@ -26,6 +29,7 @@ from pytorch_pretrained_bert import (BertConfig, BertModel, BertForMaskedLM,
                                      BertForNextSentencePrediction, BertForPreTraining,
                                      BertForQuestionAnswering, BertForSequenceClassification,
                                      BertForTokenClassification)
+from pytorch_pretrained_bert.modeling import PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 class BertModelTest(unittest.TestCase):
@@ -250,6 +254,22 @@ class BertModelTest(unittest.TestCase):
         obj = json.loads(config.to_json_string())
         self.assertEqual(obj["vocab_size"], 99)
         self.assertEqual(obj["hidden_size"], 37)
+
+    def test_config_to_json_file(self):
+        config_first = BertConfig(vocab_size_or_config_json_file=99, hidden_size=37)
+        json_file_path = "/tmp/config.json"
+        config_first.to_json_file(json_file_path)
+        config_second = BertConfig.from_json_file(json_file_path)
+        os.remove(json_file_path)
+        self.assertEqual(config_second.to_dict(), config_first.to_dict())
+
+    @pytest.mark.slow
+    def test_model_from_pretrained(self):
+        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        for model_name in list(PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(model)
 
     def run_tester(self, tester):
         config_and_inputs = tester.prepare_config_and_inputs()

@@ -16,6 +16,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import sys
 import json
 import logging
 import os
@@ -45,6 +46,7 @@ PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
 }
 VOCAB_NAME = 'vocab.json'
 MERGES_NAME = 'merges.txt'
+SPECIAL_TOKENS_NAME = 'special_tokens.txt'
 
 @lru_cache()
 def bytes_to_unicode():
@@ -57,6 +59,7 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
+    _chr = unichr if sys.version_info[0] == 2 else chr
     bs = list(range(ord("!"), ord("~")+1))+list(range(ord("¡"), ord("¬")+1))+list(range(ord("®"), ord("ÿ")+1))
     cs = bs[:]
     n = 0
@@ -65,7 +68,7 @@ def bytes_to_unicode():
             bs.append(b)
             cs.append(2**8+n)
             n += 1
-    cs = [chr(n) for n in cs]
+    cs = [_chr(n) for n in cs]
     return dict(zip(bs, cs))
 
 def get_pairs(word):
@@ -94,9 +97,15 @@ class GPT2Tokenizer(object):
         if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
             vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
             merges_file = PRETRAINED_MERGES_ARCHIVE_MAP[pretrained_model_name_or_path]
+            special_tokens_file = None
         else:
             vocab_file = os.path.join(pretrained_model_name_or_path, VOCAB_NAME)
             merges_file = os.path.join(pretrained_model_name_or_path, MERGES_NAME)
+            special_tokens_file = os.path.join(pretrained_model_name_or_path, SPECIAL_TOKENS_NAME)
+            if not os.path.exists(special_tokens_file):
+                special_tokens_file = None
+            else:
+                logger.info("loading special tokens file {}".format(special_tokens_file))
         # redirect to the cache, if necessary
         try:
             resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
@@ -125,10 +134,14 @@ class GPT2Tokenizer(object):
             max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name_or_path]
             kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
         # Instantiate tokenizer.
-        tokenizer = cls(resolved_vocab_file, resolved_merges_file, *inputs, **kwargs)
+        if special_tokens_file and 'special_tokens' not in kwargs:
+            special_tokens = open(special_tokens_file, encoding='utf-8').read().split('\n')[:-1]
+        else:
+            special_tokens = kwargs.pop('special_tokens', [])
+        tokenizer = cls(resolved_vocab_file, resolved_merges_file, special_tokens=special_tokens, *inputs, **kwargs)
         return tokenizer
 
-    def __init__(self, vocab_file, merges_file, errors='replace', max_len=None):
+    def __init__(self, vocab_file, merges_file, errors='replace', special_tokens=None, max_len=None):
         self.max_len = max_len if max_len is not None else int(1e12)
         self.encoder = json.load(open(vocab_file))
         self.decoder = {v:k for k,v in self.encoder.items()}
@@ -143,8 +156,25 @@ class GPT2Tokenizer(object):
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+        self.special_tokens = {}
+        self.special_tokens_decoder = {}
+        self.set_special_tokens(special_tokens)
+
     def __len__(self):
-        return len(self.encoder)
+        return len(self.encoder) + len(self.special_tokens)
+
+    def set_special_tokens(self, special_tokens):
+        """ Add a list of additional tokens to the encoder.
+            The additional tokens are indexed starting from the last index of the
+            current vocabulary in the order of the `special_tokens` list.
+        """
+        if not special_tokens:
+            self.special_tokens = {}
+            self.special_tokens_decoder = {}
+            return
+        self.special_tokens = dict((tok, len(self.encoder) + i) for i, tok in enumerate(special_tokens))
+        self.special_tokens_decoder = {v:k for k, v in self.special_tokens.items()}
+        logger.info("Special tokens {}".format(self.special_tokens))
 
     def bpe(self, token):
         if token in self.cache:
@@ -187,20 +217,85 @@ class GPT2Tokenizer(object):
         self.cache[token] = word
         return word
 
-    def encode(self, text):
+    def tokenize(self, text):
+        """ Tokenize a string. """
         bpe_tokens = []
         for token in re.findall(self.pat, text):
-            token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
-            bpe_tokens.extend(self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' '))
-        if len(bpe_tokens) > self.max_len:
+            token = ''.join(self.byte_encoder[ord(b)] for b in token)
+            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
+        return bpe_tokens
+
+    def convert_tokens_to_ids(self, tokens):
+        """ Converts a sequence of tokens into ids using the vocab. """
+        ids = []
+        if isinstance(tokens, str) or (sys.version_info[0] == 2 and isinstance(tokens, unicode)):
+            if tokens in self.special_tokens:
+                return self.special_tokens[tokens]
+            else:
+                return self.encoder.get(tokens, 0)
+        for token in tokens:
+            if token in self.special_tokens:
+                ids.append(self.special_tokens[token])
+            else:
+                ids.append(self.encoder.get(token, 0))
+        if len(ids) > self.max_len:
             logger.warning(
                 "Token indices sequence length is longer than the specified maximum "
-                " sequence length for this OpenAI GPT-2 model ({} > {}). Running this"
-                " sequence through the model will result in indexing errors".format(len(bpe_tokens), self.max_len)
+                " sequence length for this OpenAI GPT model ({} > {}). Running this"
+                " sequence through the model will result in indexing errors".format(len(ids), self.max_len)
             )
-        return bpe_tokens
+        return ids
+
+    def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
+        """Converts a sequence of ids in BPE tokens using the vocab."""
+        tokens = []
+        for i in ids:
+            if i in self.special_tokens_decoder:
+                if not skip_special_tokens:
+                    tokens.append(self.special_tokens_decoder[i])
+            else:
+                tokens.append(self.decoder[i])
+        return tokens
+
+    def encode(self, text):
+        return self.convert_tokens_to_ids(self.tokenize(text))
 
     def decode(self, tokens):
         text = ''.join([self.decoder[token] for token in tokens])
         text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
         return text
+
+    def save_vocabulary(self, vocab_path):
+        """Save the tokenizer vocabulary and merge files to a directory."""
+        if not os.path.isdir(vocab_path):
+            logger.error("Vocabulary path ({}) should be a directory".format(vocab_path))
+            return
+        vocab_file = os.path.join(vocab_path, VOCAB_NAME)
+        merge_file = os.path.join(vocab_path, MERGES_NAME)
+        special_tokens_file = os.path.join(vocab_path, SPECIAL_TOKENS_NAME)
+
+        with open(vocab_file, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(self.encoder, ensure_ascii=False))
+
+        index = 0
+        with open(merge_file, "w", encoding="utf-8") as writer:
+            writer.write(u'#version: 0.2\n')
+            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning("Saving vocabulary to {}: BPE merge indices are not consecutive."
+                                   " Please check that the tokenizer is not corrupted!".format(merge_file))
+                    index = token_index
+                writer.write(' '.join(bpe_tokens) + u'\n')
+                index += 1
+
+        index = len(self.encoder)
+        with open(special_tokens_file, 'w', encoding='utf-8') as writer:
+            for token, token_index in sorted(self.special_tokens.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning("Saving special tokens vocabulary to {}: BPE indices are not consecutive."
+                                   " Please check that the tokenizer is not corrupted!".format(special_tokens_file))
+                    index = token_index
+                writer.write(token + u'\n')
+                index += 1
+
+        return vocab_file, merge_file, special_tokens_file

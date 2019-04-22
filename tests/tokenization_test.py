@@ -17,12 +17,14 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 from io import open
+import shutil
+import pytest
 
 from pytorch_pretrained_bert.tokenization import (BasicTokenizer,
                                                   BertTokenizer,
                                                   WordpieceTokenizer,
                                                   _is_control, _is_punctuation,
-                                                  _is_whitespace)
+                                                  _is_whitespace, PRETRAINED_VOCAB_ARCHIVE_MAP)
 
 
 class TokenizationTest(unittest.TestCase):
@@ -45,6 +47,24 @@ class TokenizationTest(unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+
+        vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
+        tokenizer.from_pretrained(vocab_file)
+        os.remove(vocab_file)
+
+        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
+        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+
+    @pytest.mark.slow
+    def test_tokenizer_from_pretrained(self):
+        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
+            tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(tokenizer)
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()
