@@ -91,7 +91,8 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
             elif l[0] == 'output_weights':
                 pointer = getattr(pointer, 'weight')
             elif l[0] == 'squad':
-                pointer = getattr(pointer, 'classifier')
+                outputs = 'qa_outputs' if hasattr(pointer, 'qa_outputs') else 'classifier'
+                pointer = getattr(pointer, outputs)
             else:
                 try:
                     pointer = getattr(pointer, l[0])

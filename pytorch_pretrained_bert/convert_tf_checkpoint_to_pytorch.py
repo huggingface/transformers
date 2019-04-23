@@ -25,13 +25,20 @@ import tensorflow as tf
 import torch
 import numpy as np
 
-from pytorch_pretrained_bert.modeling import BertConfig, BertForPreTraining, load_tf_weights_in_bert
+from pytorch_pretrained_bert.modeling import BertConfig, BertForQuestionAnswering, BertForPreTraining, \
+    load_tf_weights_in_bert
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
+
+def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path, bert_model):
     # Initialise PyTorch model
     config = BertConfig.from_json_file(bert_config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = BertForPreTraining(config)
+
+    # Dynamically choose the model type based on input type
+    if bert_model == "qa":
+        model = BertForQuestionAnswering(config)
+    else:
+        model = BertForPreTraining(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_bert(model, tf_checkpoint_path)
@@ -60,7 +67,15 @@ if __name__ == "__main__":
                         type = str,
                         required = True,
                         help = "Path to the output PyTorch model.")
+    ## Optional parameters
+    parser.add_argument("--bert_model",
+                        default = None,
+                        type = str,
+                        required = False,
+                        help = "Type of the model which is going to be converted. \n"
+                               "This specifies the final layer.")
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path,
                                      args.bert_config_file,
-                                     args.pytorch_dump_path)
+                                     args.pytorch_dump_path,
+                                     args.bert_model)
