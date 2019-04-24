@@ -452,7 +452,7 @@ def main():
                     loss = loss * args.loss_scale
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
-                tr_loss += loss.item()
+                tr_loss += loss.item() * args.gradient_accumulation_steps
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
 
