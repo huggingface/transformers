@@ -1034,7 +1034,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         self.num_choices = num_choices
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, num_choices)
+        self.classifier = nn.Linear(config.hidden_size, 1)
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
