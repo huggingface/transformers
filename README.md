@@ -984,7 +984,10 @@ The optimizer accepts the following arguments:
 - `warmup` : portion of `t_total` for the warmup, `-1`  means no warmup. Default : `-1`
 - `t_total` : total number of training steps for the learning
     rate schedule, `-1`  means constant learning rate. Default : `-1`
-- `schedule` : schedule to use for the warmup (see above). Default : `'warmup_linear'`
+- `schedule` : schedule to use for the warmup (see above).
+    Can be `'warmup_linear'`, `'warmup_constant'`, `'warmup_cosine'`, `'none'`, `None` or a `_LRSchedule` object (see below).
+    If `None` or `'none'`, learning rate is always kept constant.
+    Default : `'warmup_linear'`
 - `b1` : Adams b1. Default : `0.9`
 - `b2` : Adams b2. Default : `0.999`
 - `e` : Adams epsilon. Default : `1e-6`
@@ -997,6 +1000,32 @@ The optimizer accepts the following arguments:
 The differences with `BertAdam` is that `OpenAIGPTAdam` compensate for bias as in the regular Adam optimizer.
 
 `OpenAIGPTAdam` accepts the same arguments as `BertAdam`.
+
+#### Learning Rate Schedules
+The `.optimization` module also provides additional schedules in the form of schedule objects that inherit from `_LRSchedule`.
+All `_LRSchedule` subclasses accept `warmup` and `t_total` arguments at construction.
+When an `_LRSchedule` object is passed into `BertAdam` or `OpenAIAdam`, 
+the `warmup` and `t_total` arguments on the optimizer are ignored and the ones in the `_LRSchedule` object are used. 
+An overview of the implemented schedules:
+- `ConstantLR`: always returns learning rate 1.
+- `WarmupConstantSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    Keeps learning rate equal to 1. after warmup.
+    ![](docs/imgs/warmup_constant_schedule.png)
+- `WarmupLinearSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    Linearly decreases learning rate from 1. to 0. over remaining `1 - warmup` steps.
+    ![](docs/imgs/warmup_linear_schedule.png)
+-  `WarmupCosineSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    Decreases learning rate from 1. to 0. over remaining `1 - warmup` steps following a cosine curve.
+    If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
+    ![](docs/imgs/warmup_cosine_schedule.png)
+- `WarmupCosineWithHardRestartsSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    If `cycles` (default=1.) is different from default, learning rate follows `cycles` times a cosine decaying learning rate (with hard restarts).
+    ![](docs/imgs/warmup_cosine_hard_restarts_schedule.png)
+- `WarmupCosineWithWarmupRestartsSchedule`: All training progress is divided in `cycles` (default=1.) parts of equal length.
+    Every part follows a schedule with the first `warmup` fraction of the training steps linearly increasing from 0. to 1.,
+    followed by a learning rate decreasing from 1. to 0. following a cosine curve.
+    Note that the total number of all warmup steps over all cycles together is equal to `warmup` * `cycles`
+    ![](docs/imgs/warmup_cosine_warm_restarts_schedule.png)
 
 ## Examples
 
