@@ -126,7 +126,7 @@ This package comprises the following classes that can be imported in Python and 
   - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
 - Optimizer for **OpenAI GPT** (in the [`optimization_openai.py`](./pytorch_pretrained_bert/optimization_openai.py) file):
-  - `OpenAIGPTAdam` - OpenAI GPT version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
+  - `OpenAIAdam` - OpenAI GPT version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
 - Configuration classes for BERT, OpenAI GPT and Transformer-XL (in the respective [`modeling.py`](./pytorch_pretrained_bert/modeling.py), [`modeling_openai.py`](./pytorch_pretrained_bert/modeling_openai.py), [`modeling_transfo_xl.py`](./pytorch_pretrained_bert/modeling_transfo_xl.py) files):
   - `BertConfig` - Configuration class to store the configuration of a `BertModel` with utilities to read and write from JSON configuration files.
@@ -994,12 +994,12 @@ The optimizer accepts the following arguments:
 - `weight_decay:` Weight decay. Default : `0.01`
 - `max_grad_norm` : Maximum norm for the gradients (`-1` means no clipping). Default : `1.0`
 
-#### `OpenAIGPTAdam`
+#### `OpenAIAdam`
 
-`OpenAIGPTAdam` is similar to `BertAdam`.
-The differences with `BertAdam` is that `OpenAIGPTAdam` compensate for bias as in the regular Adam optimizer.
+`OpenAIAdam` is similar to `BertAdam`.
+The differences with `BertAdam` is that `OpenAIAdam` compensate for bias as in the regular Adam optimizer.
 
-`OpenAIGPTAdam` accepts the same arguments as `BertAdam`.
+`OpenAIAdam` accepts the same arguments as `BertAdam`.
 
 #### Learning Rate Schedules
 The `.optimization` module also provides additional schedules in the form of schedule objects that inherit from `_LRSchedule`.
