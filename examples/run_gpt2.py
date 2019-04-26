@@ -58,7 +58,7 @@ def run_model():
     parser.add_argument("--nsamples", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=-1)
     parser.add_argument("--length", type=int, default=-1)
-    parser.add_argument("--temperature", type=int, default=1)
+    parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_k", type=int, default=0)
     parser.add_argument('--unconditional', action='store_true', help='If true, unconditional generation.')
     args = parser.parse_args()
@@ -107,25 +107,23 @@ def run_model():
                     print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
                     print(text)
             print("=" * 80)
-    if args.unconditional:
-        generated = 0
-        for _ in range(args.nsamples // args.batch_size):
-            out = sample_sequence(
-                model=model, length=args.length,
-                context=None,
-                start_token=enc.encoder['<|endoftext|>'],
-                batch_size=args.batch_size,
-                temperature=args.temperature, top_k=args.top_k, device=device
-            )
-            out = out[:,1:].tolist()
-            for i in range(args.batch_size):
-                generated += 1
-                text = enc.decode(out[i])
-                print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
-                print(text)
-        print("=" * 80)
-        if args.unconditional:
-            break
+        else:
+            generated = 0
+            for _ in range(args.nsamples // args.batch_size):
+                out = sample_sequence(
+                    model=model, length=args.length,
+                    context=None,
+                    start_token=enc.encoder['<|endoftext|>'],
+                    batch_size=args.batch_size,
+                    temperature=args.temperature, top_k=args.top_k, device=device
+                )
+                out = out[:,1:].tolist()
+                for i in range(args.batch_size):
+                    generated += 1
+                    text = enc.decode(out[i])
+                    print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
+                    print(text)
+            print("=" * 80)
 
 if __name__ == '__main__':
     run_model()
