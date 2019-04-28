@@ -221,7 +221,8 @@ class GPT2Tokenizer(object):
         """ Tokenize a string. """
         bpe_tokens = []
         for token in re.findall(self.pat, text):
-            token = ''.join(self.byte_encoder[ord(b)] for b in token)
+            token_ord = [ord(b) for b in token] if sys.version_info[0] == 2 else token.encode('utf-8')
+            token = ''.join(self.byte_encoder[o] for o in token_ord)
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
         return bpe_tokens
 
