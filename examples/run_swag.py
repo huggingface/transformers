@@ -452,7 +452,7 @@ def main():
                     loss = loss * args.loss_scale
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
-                tr_loss += loss.item() * args.gradient_accumulation_steps
+                tr_loss += loss.item()
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
 
@@ -537,7 +537,7 @@ def main():
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
                   'global_step': global_step,
-                  'loss': tr_loss/nb_tr_steps}
+                  'loss': tr_loss/global_step}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
