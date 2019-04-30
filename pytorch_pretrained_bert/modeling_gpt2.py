@@ -107,6 +107,7 @@ class GPT2Config(object):
     def __init__(
         self,
         vocab_size_or_config_json_file=50257,
+        n_special=0,
         n_positions=1024,
         n_ctx=1024,
         n_embd=768,
@@ -119,6 +120,7 @@ class GPT2Config(object):
 
         Args:
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `GPT2Model` or a configuration json file.
+            n_special: The number of special tokens to learn during fine-tuning ('[SEP]', '[CLF]', ...)
             n_positions: Number of positional embeddings.
             n_ctx: Size of the causal mask (usually same as n_positions).
             n_embd: Dimensionality of the embeddings and hidden states.
@@ -137,6 +139,7 @@ class GPT2Config(object):
                 self.__dict__[key] = value
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
+            self.n_special = n_special
             self.n_ctx = n_ctx
             self.n_positions = n_positions
             self.n_embd = n_embd
@@ -149,6 +152,10 @@ class GPT2Config(object):
                 "First argument must be either a vocabulary size (int)"
                 "or the path to a pretrained model config file (str)"
             )
+
+    @property
+    def total_tokens_embeddings(self):
+        return self.vocab_size + self.n_special
 
     @classmethod
     def from_dict(cls, json_object):
@@ -290,11 +297,12 @@ class GPT2LMHead(nn.Module):
     def __init__(self, model_embeddings_weights, config):
         super(GPT2LMHead, self).__init__()
         self.n_embd = config.n_embd
+        embed_shape = model_embeddings_weights.shape
+        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.set_embeddings_weights(model_embeddings_weights)
 
     def set_embeddings_weights(self, model_embeddings_weights):
         embed_shape = model_embeddings_weights.shape
-        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.decoder.weight = model_embeddings_weights  # Tied weights
 
     def forward(self, hidden_state):
@@ -345,7 +353,7 @@ class GPT2PreTrainedModel(nn.Module):
             )
         self.config = config
 
-    def set_tied(self):
+    def set_num_special_tokens(self, num_special_tokens):
         pass
 
     def init_weights(self, module):
@@ -475,13 +483,31 @@ class GPT2PreTrainedModel(nn.Module):
                 "Error(s) in loading state_dict for {}:\n\t{}".format(model.__class__.__name__, "\n\t".join(error_msgs))
             )
 
-        # Make sure we are still sharing the output and input embeddings after loading weights
-        model.set_tied()
+        # Add additional embeddings for special tokens if needed
+        # This step also make sure we are still sharing the output and input embeddings after loading weights
+        model.set_num_special_tokens(num_special_tokens if num_special_tokens is not None else config.n_special)
         return model
 
 
 class GPT2Model(GPT2PreTrainedModel):
     """OpenAI GPT-2 model ("Language Models are Unsupervised Multitask Learners").
+
+    GPT-2 use a single embedding matrix to store the word and special embeddings.
+    Special tokens embeddings are additional tokens that are not pre-trained: [SEP], [CLS]...
+    Special tokens need to be trained during the fine-tuning if you use them.
+    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
+
+    The embeddings are ordered as follow in the token embeddings matrice:
+        [0,                                                         ----------------------
+         ...                                                        -> word embeddings
+         config.vocab_size - 1,                                     ______________________
+         config.vocab_size,
+         ...                                                        -> special embeddings
+         config.vocab_size + config.n_special - 1]                  ______________________
+
+    where total_tokens_embeddings can be obtained as config.total_tokens_embeddings and is:
+        total_tokens_embeddings = config.vocab_size + config.n_special
+    You should use the associate indices to index the embeddings.
 
     Params:
         config: a GPT2Config class instance with the configuration to build a new model
@@ -528,6 +554,20 @@ class GPT2Model(GPT2PreTrainedModel):
         self.ln_f = LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.apply(self.init_weights)
+
+    def set_num_special_tokens(self, num_special_tokens):
+        " Update input embeddings with new embedding matrice if needed "
+        if self.config.n_special == num_special_tokens:
+            return
+        # Update config
+        self.config.n_special = num_special_tokens
+        # Build new embeddings and initialize all new embeddings (in particular the special tokens)
+        old_embed = self.wte
+        self.wte = nn.Embedding(self.config.total_tokens_embeddings, self.config.n_embd)
+        self.wte.to(old_embed.weight.device)
+        self.init_weights(self.wte)
+        # Copy word embeddings from the previous weights
+        self.wte.weight.data[:self.config.vocab_size, :] = old_embed.weight.data[:self.config.vocab_size, :]
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, past=None):
         if past is None:
@@ -610,9 +650,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
         self.apply(self.init_weights)
 
-    def set_tied(self):
-        """ Make sure we are sharing the embeddings
+    def set_num_special_tokens(self, num_special_tokens):
+        """ Update input and output embeddings with new embedding matrice
+            Make sure we are sharing the embeddings
         """
+        self.transformer.set_num_special_tokens(num_special_tokens)
         self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None):
@@ -687,9 +729,11 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         self.multiple_choice_head = GPT2MultipleChoiceHead(config)
         self.apply(self.init_weights)
 
-    def set_tied(self):
-        """ Make sure we are sharing the embeddings
+    def set_num_special_tokens(self, num_special_tokens):
+        """ Update input and output embeddings with new embedding matrice
+            Make sure we are sharing the embeddings
         """
+        self.transformer.set_num_special_tokens(num_special_tokens)
         self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
 
     def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None, position_ids=None, past=None):

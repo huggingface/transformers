@@ -344,11 +344,12 @@ class OpenAIGPTLMHead(nn.Module):
     def __init__(self, model_embeddings_weights, config):
         super(OpenAIGPTLMHead, self).__init__()
         self.n_embd = config.n_embd
+        embed_shape = model_embeddings_weights.shape
+        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.set_embeddings_weights(model_embeddings_weights)
 
     def set_embeddings_weights(self, model_embeddings_weights):
         embed_shape = model_embeddings_weights.shape
-        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.decoder.weight = model_embeddings_weights  # Tied weights
 
     def forward(self, hidden_state):
@@ -592,8 +593,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
     def __init__(self, config):
         super(OpenAIGPTModel, self).__init__(config)
-        num_tokens = config.vocab_size + config.n_special
-        self.tokens_embed = nn.Embedding(num_tokens, config.n_embd)
+        self.tokens_embed = nn.Embedding(config.total_tokens_embeddings, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
         block = Block(config.n_ctx, config, scale=True)
