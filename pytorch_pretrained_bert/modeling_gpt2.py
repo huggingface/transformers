@@ -371,7 +371,7 @@ class GPT2PreTrainedModel(nn.Module):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path, state_dict=None, cache_dir=None, from_tf=False, *inputs, **kwargs
+        cls, pretrained_model_name_or_path, num_special_tokens=None, state_dict=None, cache_dir=None, from_tf=False, *inputs, **kwargs
     ):
         """
         Instantiate a GPT2PreTrainedModel from a pre-trained model file or a pytorch state dict.
