@@ -939,7 +939,7 @@ def main():
         elif output_mode == "regression":
             preds = np.squeeze(preds)
         result = compute_metrics(task_name, preds, all_label_ids.numpy())
-        loss = tr_loss/nb_tr_steps if args.do_train else None
+        loss = tr_loss/global_step if args.do_train else None
 
         result['eval_loss'] = eval_loss
         result['global_step'] = global_step
@@ -1007,7 +1007,7 @@ def main():
             preds = preds[0]
             preds = np.argmax(preds, axis=1)
             result = compute_metrics(task_name, preds, all_label_ids.numpy())
-            loss = tr_loss/nb_tr_steps if args.do_train else None
+            loss = tr_loss/global_step if args.do_train else None
 
             result['eval_loss'] = eval_loss
             result['global_step'] = global_step
