@@ -21,7 +21,6 @@ import numpy as np
 from pytorch_pretrained_bert.modeling import BertConfig, BertModel
 
 
-
 def convert_hf_checkpoint_to_tf(model:BertModel, ckpt_dir:str):
 
     """
