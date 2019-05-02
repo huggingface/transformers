@@ -121,11 +121,11 @@ if __name__ == "__main__":
                         default=None,
                         type=str,
                         required=True,
-                        help="path to a folder in which the TF model will be cached.")
+                        help="Path to a folder in which the TF model will be cached.")
     args = parser.parse_args()
 
     model = BertModel(
         config=BertConfig(args.config_file_path)
     ).from_pretrained(args.pretrained_model_name_or_path)
 
-    convert_hf_checkpoint_to_tf(model=model, ckpt_dir=args.cache_)
+    convert_hf_checkpoint_to_tf(model=model, ckpt_dir=args.cache_dir)
