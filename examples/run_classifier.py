@@ -271,7 +271,7 @@ class StsbProcessor(DataProcessor):
 
 
 class QqpProcessor(DataProcessor):
-    """Processor for the STS-B data set (GLUE version)."""
+    """Processor for the QQP data set (GLUE version)."""
 
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -306,7 +306,7 @@ class QqpProcessor(DataProcessor):
 
 
 class QnliProcessor(DataProcessor):
-    """Processor for the STS-B data set (GLUE version)."""
+    """Processor for the QNLI data set (GLUE version)."""
 
     def get_train_examples(self, data_dir):
         """See base class."""
