@@ -900,7 +900,7 @@ def main():
         train_examples = read_squad_examples(
             input_file=args.train_file, is_training=True, version_2_with_negative=args.version_2_with_negative)
         num_train_optimization_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
+            math.ceil(float(len(train_examples)) / args.train_batch_size) / args.gradient_accumulation_steps) * args.num_train_epochs
         if args.local_rank != -1:
             num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
