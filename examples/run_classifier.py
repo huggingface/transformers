@@ -23,6 +23,7 @@ import logging
 import os
 import random
 import sys
+import math
 
 import numpy as np
 import torch
@@ -740,7 +741,7 @@ def main():
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
         num_train_optimization_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
+            math.ceil(len(train_examples) / args.train_batch_size) / args.gradient_accumulation_steps) * args.num_train_epochs
         if args.local_rank != -1:
             num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
