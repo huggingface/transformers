@@ -113,6 +113,9 @@ class GPT2Config(object):
         n_embd=768,
         n_layer=12,
         n_head=12,
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         predict_special_tokens=True
@@ -129,6 +132,11 @@ class GPT2Config(object):
             n_head: Number of attention heads for each attention layer in
                 the Transformer encoder.
             layer_norm_epsilon: epsilon to use in the layer norm layers
+            resid_pdrop: The dropout probabilitiy for all fully connected
+                layers in the embeddings, encoder, and pooler.
+            attn_pdrop: The dropout ratio for the attention
+                probabilities.
+            embd_pdrop: The dropout ratio for the embeddings.
             initializer_range: The sttdev of the truncated_normal_initializer for
                 initializing all weight matrices.
             predict_special_tokens: should we predict special tokens (when the model has a LM head)
@@ -147,6 +155,9 @@ class GPT2Config(object):
             self.n_embd = n_embd
             self.n_layer = n_layer
             self.n_head = n_head
+            self.resid_pdrop = resid_pdrop
+            self.embd_pdrop = embd_pdrop
+            self.attn_pdrop = attn_pdrop
             self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
             self.predict_special_tokens = predict_special_tokens
@@ -221,6 +232,8 @@ class Attention(nn.Module):
         self.scale = scale
         self.c_attn = Conv1D(n_state * 3, nx)
         self.c_proj = Conv1D(n_state, nx)
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def _attn(self, q, k, v):
         w = torch.matmul(q, k)
@@ -231,6 +244,7 @@ class Attention(nn.Module):
         w = w * b - 1e4 * (1 - b)
 
         w = nn.Softmax(dim=-1)(w)
+        w = self.attn_dropout(w)
         return torch.matmul(w, v)
 
     def merge_heads(self, x):
@@ -260,6 +274,7 @@ class Attention(nn.Module):
         a = self._attn(query, key, value)
         a = self.merge_heads(a)
         a = self.c_proj(a)
+        a = self.resid_dropout(a)
         return a, present
 
 
@@ -270,11 +285,12 @@ class MLP(nn.Module):
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
         self.act = gelu
+        self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
         h = self.act(self.c_fc(x))
         h2 = self.c_proj(h)
-        return h2
+        return self.dropout(h2)
 
 
 class Block(nn.Module):
@@ -323,6 +339,7 @@ class GPT2MultipleChoiceHead(nn.Module):
     def __init__(self, config):
         super(GPT2MultipleChoiceHead, self).__init__()
         self.n_embd = config.n_embd
+        self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
         self.linear = nn.Linear(config.n_embd, 1)
 
         nn.init.normal_(self.linear.weight, std=0.02)
@@ -552,6 +569,7 @@ class GPT2Model(GPT2PreTrainedModel):
         super(GPT2Model, self).__init__(config)
         self.wte = nn.Embedding(config.total_tokens_embeddings, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
+        self.drop = nn.Dropout(config.embd_pdrop)
         block = Block(config.n_ctx, config, scale=True)
         self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(config.n_layer)])
         self.ln_f = LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
@@ -594,6 +612,8 @@ class GPT2Model(GPT2PreTrainedModel):
         else:
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
+        hidden_states = self.drop(hidden_states)
+
         presents = []
         for block, layer_past in zip(self.h, past):
             hidden_states, present = block(hidden_states, layer_past)
