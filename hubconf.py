@@ -84,7 +84,7 @@ def bertTokenizer(*args, **kwargs):
 
     Example:
         >>> sentence = 'Hello, World!'
-        >>> tokenizer = torch.hub.load('ailzhang/pytorch-pretrained-BERT:hubconf', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False, force_reload=False)
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT:hubconf', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False, force_reload=False)
         >>> toks = tokenizer.tokenize(sentence)
         ['Hello', '##,', 'World', '##!']
         >>> ids = tokenizer.convert_tokens_to_ids(toks)
