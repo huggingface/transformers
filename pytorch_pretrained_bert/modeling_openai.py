@@ -383,7 +383,6 @@ class OpenAIGPTMultipleChoiceHead(nn.Module):
     def __init__(self, config):
         super(OpenAIGPTMultipleChoiceHead, self).__init__()
         self.n_embd = config.n_embd
-        # self.multiple_choice_token = multiple_choice_token
         self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
         self.linear = nn.Linear(config.n_embd, 1)
 
@@ -651,9 +650,9 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             token_type_embeds = self.tokens_embed(token_type_ids)
         else:
             token_type_embeds = 0
-        # Add the position information to the input embeddings
-        # h = e.sum(dim=2)
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
+        hidden_states = self.drop(hidden_states)
+
         all_attentions = []
         for block in self.h:
             if self.output_attentions:
