@@ -37,9 +37,11 @@ logger = logging.getLogger(__name__)
 
 PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
+    'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
 }
 PRETRAINED_MERGES_ARCHIVE_MAP = {
     'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
+    'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
 }
 PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
     'gpt2': 1024,
@@ -263,9 +265,14 @@ class GPT2Tokenizer(object):
     def encode(self, text):
         return self.convert_tokens_to_ids(self.tokenize(text))
 
-    def decode(self, tokens, skip_special_tokens=False):
+    def decode(self, tokens, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = ''.join(self.convert_ids_to_tokens(tokens, skip_special_tokens=skip_special_tokens))
         text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
+        if clean_up_tokenization_spaces:
+            text = text.replace('<unk>', '')
+            text = text.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
+                    ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
+                    ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
         return text
 
     def save_vocabulary(self, vocab_path):
