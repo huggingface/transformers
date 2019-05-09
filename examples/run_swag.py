@@ -385,39 +385,40 @@ def main():
         model = torch.nn.DataParallel(model)
 
     # Prepare optimizer
-    param_optimizer = list(model.named_parameters())
+    if args.do_train:
+        param_optimizer = list(model.named_parameters())
 
-    # hack to remove pooler, which is not used
-    # thus it produce None grad that break apex
-    param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
+        # hack to remove pooler, which is not used
+        # thus it produce None grad that break apex
+        param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
 
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-    if args.fp16:
-        try:
-            from apex.optimizers import FP16_Optimizer
-            from apex.optimizers import FusedAdam
-        except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            ]
+        if args.fp16:
+            try:
+                from apex.optimizers import FP16_Optimizer
+                from apex.optimizers import FusedAdam
+            except ImportError:
+                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
 
-        optimizer = FusedAdam(optimizer_grouped_parameters,
-                              lr=args.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+            optimizer = FusedAdam(optimizer_grouped_parameters,
+                                  lr=args.learning_rate,
+                                  bias_correction=False,
+                                  max_grad_norm=1.0)
+            if args.loss_scale == 0:
+                optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+            else:
+                optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
+            warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
+                                                 t_total=num_train_optimization_steps)
         else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-        warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
-                                             t_total=num_train_optimization_steps)
-    else:
-        optimizer = BertAdam(optimizer_grouped_parameters,
-                             lr=args.learning_rate,
-                             warmup=args.warmup_proportion,
-                             t_total=num_train_optimization_steps)
+            optimizer = BertAdam(optimizer_grouped_parameters,
+                                 lr=args.learning_rate,
+                                 warmup=args.warmup_proportion,
+                                 t_total=num_train_optimization_steps)
 
     global_step = 0
     if args.do_train:
