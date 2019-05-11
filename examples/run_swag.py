@@ -362,8 +362,20 @@ def main():
     num_train_optimization_steps = None
     if args.do_train:
         train_examples = read_swag_examples(os.path.join(args.data_dir, 'train.csv'), is_training = True)
-        num_train_optimization_steps = int(
-            len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
+        train_features = convert_examples_to_features(
+            train_examples, tokenizer, args.max_seq_length, True)
+        all_input_ids = torch.tensor(select_field(train_features, 'input_ids'), dtype=torch.long)
+        all_input_mask = torch.tensor(select_field(train_features, 'input_mask'), dtype=torch.long)
+        all_segment_ids = torch.tensor(select_field(train_features, 'segment_ids'), dtype=torch.long)
+        all_label = torch.tensor([f.label for f in train_features], dtype=torch.long)
+        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
+        if args.local_rank == -1:
+            train_sampler = RandomSampler(train_data)
+        else:
+            train_sampler = DistributedSampler(train_data)
+        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+
+        num_train_optimization_steps = len(train_dataloader) / args.gradient_accumulation_steps * args.num_train_epochs
         if args.local_rank != -1:
             num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
@@ -422,22 +434,10 @@ def main():
 
     global_step = 0
     if args.do_train:
-        train_features = convert_examples_to_features(
-            train_examples, tokenizer, args.max_seq_length, True)
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_optimization_steps)
-        all_input_ids = torch.tensor(select_field(train_features, 'input_ids'), dtype=torch.long)
-        all_input_mask = torch.tensor(select_field(train_features, 'input_mask'), dtype=torch.long)
-        all_segment_ids = torch.tensor(select_field(train_features, 'segment_ids'), dtype=torch.long)
-        all_label = torch.tensor([f.label for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label)
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_data)
-        else:
-            train_sampler = DistributedSampler(train_data)
-        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
         for _ in trange(int(args.num_train_epochs), desc="Epoch"):
