@@ -358,9 +358,27 @@ def main():
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
-    train_examples = None
-    num_train_optimization_steps = None
+    # Prepare model
+    model = BertForMultipleChoice.from_pretrained(args.bert_model,
+        cache_dir=os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(args.local_rank)),
+        num_choices=4)
+    if args.fp16:
+        model.half()
+    model.to(device)
+    if args.local_rank != -1:
+        try:
+            from apex.parallel import DistributedDataParallel as DDP
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+
+        model = DDP(model)
+    elif n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
     if args.do_train:
+
+        # Prepare data loader
+
         train_examples = read_swag_examples(os.path.join(args.data_dir, 'train.csv'), is_training = True)
         train_features = convert_examples_to_features(
             train_examples, tokenizer, args.max_seq_length, True)
@@ -379,25 +397,8 @@ def main():
         if args.local_rank != -1:
             num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
-    # Prepare model
-    model = BertForMultipleChoice.from_pretrained(args.bert_model,
-        cache_dir=os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(args.local_rank)),
-        num_choices=4)
-    if args.fp16:
-        model.half()
-    model.to(device)
-    if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+        # Prepare optimizer
 
-        model = DDP(model)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
-    # Prepare optimizer
-    if args.do_train:
         param_optimizer = list(model.named_parameters())
 
         # hack to remove pooler, which is not used
@@ -432,8 +433,8 @@ def main():
                                  warmup=args.warmup_proportion,
                                  t_total=num_train_optimization_steps)
 
-    global_step = 0
-    if args.do_train:
+        global_step = 0
+
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
