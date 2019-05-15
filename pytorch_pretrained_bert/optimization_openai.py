@@ -51,8 +51,8 @@ class OpenAIAdam(Optimizer):
                 logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
                                "Please specify custom warmup and t_total in _LRSchedule object.")
         defaults = dict(lr=lr, schedule=schedule,
-                        b1=b1, b2=b2, e=e, weight_decay=weight_decay, vector_l2=vector_l2,
-                        max_grad_norm=max_grad_norm)
+                        b1=b1, b2=b2, e=e, weight_decay=weight_decay, vector_l2=vector_l2)
+        self.max_grad_norm = max_grad_norm
         super(OpenAIAdam, self).__init__(params, defaults)
 
     def get_lr(self):
@@ -78,6 +78,11 @@ class OpenAIAdam(Optimizer):
         if closure is not None:
             loss = closure()
 
+        # Add grad clipping
+        if self.max_grad_norm > 0:
+            allparams = [param for paramgroup in self.param_groups for param in paramgroup["params"]]
+            clip_grad_norm_(allparams, self.max_grad_norm)
+
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
@@ -100,10 +105,6 @@ class OpenAIAdam(Optimizer):
                 beta1, beta2 = group['b1'], group['b2']
 
                 state['step'] += 1
-
-                # Add grad clipping
-                if group['max_grad_norm'] > 0:
-                    clip_grad_norm_(p, group['max_grad_norm'])
 
                 # Decay the first and second moment running average coefficient
                 exp_avg.mul_(beta1).add_(1 - beta1, grad)
