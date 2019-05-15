@@ -218,8 +218,8 @@ class BertAdam(Optimizer):
                 logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
                                "Please specify custom warmup and t_total in _LRSchedule object.")
         defaults = dict(lr=lr, schedule=schedule,
-                        b1=b1, b2=b2, e=e, weight_decay=weight_decay,
-                        max_grad_norm=max_grad_norm)
+                        b1=b1, b2=b2, e=e, weight_decay=weight_decay)
+        self.max_grad_norm = max_grad_norm
         super(BertAdam, self).__init__(params, defaults)
 
     def get_lr(self):
@@ -245,6 +245,11 @@ class BertAdam(Optimizer):
         if closure is not None:
             loss = closure()
 
+        # Add grad clipping
+        if self.max_grad_norm > 0:
+            allparams = [param for paramgroup in self.param_groups for param in paramgroup["params"]]
+            clip_grad_norm_(allparams, self.max_grad_norm)
+
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
@@ -265,10 +270,6 @@ class BertAdam(Optimizer):
 
                 next_m, next_v = state['next_m'], state['next_v']
                 beta1, beta2 = group['b1'], group['b2']
-
-                # Add grad clipping
-                if group['max_grad_norm'] > 0:
-                    clip_grad_norm_(p, group['max_grad_norm'])
 
                 # Decay the first and second moment running average coefficient
                 # In-place operations to update the averages at the same time
