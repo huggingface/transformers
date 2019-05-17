@@ -1345,7 +1345,7 @@ A command-line interface is provided to convert a TensorFlow checkpoint in a PyT
 
 You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](./pytorch_pretrained_bert/convert_tf_checkpoint_to_pytorch.py ) script.
 
-This CLI takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in [`extract_features.py`](./examples/extract_features.py), [`run_classifier.py`](./examples/run_classifier.py) and [`run_squad.py`](./examples/run_squad.py)).
+This CLI takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated converter configuration file (`converter_config.json` see below), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in [`extract_features.py`](./examples/extract_features.py), [`run_classifier.py`](./examples/run_classifier.py) and [`run_squad.py`](./examples/run_squad.py)).
 
 You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow checkpoint (the three files starting with `bert_model.ckpt`) but be sure to keep the configuration file (`bert_config.json`) and the vocabulary file (`vocab.txt`) as these are needed for the PyTorch model too.
 
@@ -1353,13 +1353,50 @@ To run this specific conversion script you will need to have TensorFlow and PyTo
 
 Here is an example of the conversion process for a pre-trained `BERT-Base Uncased` model:
 
+
 ```shell
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
 pytorch_pretrained_bert convert_tf_checkpoint_to_pytorch \
   $BERT_BASE_DIR/bert_model.ckpt \
-  $BERT_BASE_DIR/bert_config.json \
+  converter_config.json \
   $BERT_BASE_DIR/pytorch_model.bin
+```
+
+Examples of `converter_config.json`:
+
+Converter config fields:
+1. (**Required**) `bert_config_path` - path to original BERT configuration file 
+2. (**Required**) `bert_model_class` - name of the PyTorch class which the TF model will be converted to, i.e. subclass of `BertPreTrainedModel`
+3. `tf_torch_mappings` - key-value formatted mappings from original TF model layer names to the corresponding PyTorch ones (`bert_model_class` specific)
+4. `args`- key-value formatted arguments passed to the `bert_model_class`'s constructor. The names should match exactly with constructor's (e.g. `num_labels` for `BertForTokenClassification`)
+
+Converter config for `QuestionAnswering` pre-trained on SQuAD:
+```json
+
+{
+   "bert_config_path":"$BERT_BASE_DIR/bert_config.json",
+   "bert_model_class":"BertForQuestionAnswering",
+   "tf_torch_mappings":{
+      "tf_output_layer_name":"qa_output"
+   }
+}
+```
+
+Converter config for `TokenClassification` with two output labels:
+```json
+
+{
+   "bert_config_path":"$BERT_BASE_DIR/bert_config.json",
+   "bert_model_class":"BertForTokenClassification",
+   "tf_torch_mappings":{
+      "tf_output_layer_name":"classifier"
+   },
+   "args":{
+      "num_labels":2,
+   }
+}
+
 ```
 
 You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).

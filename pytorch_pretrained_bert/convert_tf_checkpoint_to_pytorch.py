@@ -25,25 +25,19 @@ import tensorflow as tf
 import torch
 import numpy as np
 
-from pytorch_pretrained_bert.modeling import BertConfig, BertForQuestionAnswering, BertForPreTraining, \
-    load_tf_weights_in_bert
+from pytorch_pretrained_bert.modeling import TFCheckpointConverter, load_tf_weights_in_bert
 
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path, bert_model):
+def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, converter_config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = BertConfig.from_json_file(bert_config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    checkpoint_conv = TFCheckpointConverter.from_json_file(converter_config_file)
+    print("Building PyTorch model from configuration: {}".format(str(checkpoint_conv.bert_config)))
 
-    # Dynamically choose the model type based on input type
-    if bert_model == "qa":
-        model = BertForQuestionAnswering(config)
-    else:
-        model = BertForPreTraining(config)
+    model = checkpoint_conv.model
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_bert(model, tf_checkpoint_path)
+    load_tf_weights_in_bert(model, tf_checkpoint_path, checkpoint_conv.tf_torch_mappings)
 
-    # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))
     torch.save(model.state_dict(), pytorch_dump_path)
 
@@ -56,26 +50,19 @@ if __name__ == "__main__":
                         type = str,
                         required = True,
                         help = "Path the TensorFlow checkpoint path.")
-    parser.add_argument("--bert_config_file",
+    parser.add_argument("--converter_config_file",
                         default = None,
                         type = str,
                         required = True,
-                        help = "The config json file corresponding to the pre-trained BERT model. \n"
+                        help = "The config json file corresponding to the convert settings file. \n"
                             "This specifies the model architecture.")
     parser.add_argument("--pytorch_dump_path",
                         default = None,
                         type = str,
                         required = True,
                         help = "Path to the output PyTorch model.")
-    ## Optional parameters
-    parser.add_argument("--bert_model",
-                        default = None,
-                        type = str,
-                        required = False,
-                        help = "Type of the model which is going to be converted. \n"
-                               "This specifies the final layer.")
+
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path,
-                                     args.bert_config_file,
-                                     args.pytorch_dump_path,
-                                     args.bert_model)
+                                     args.converter_config_file,
+                                     args.pytorch_dump_path)
