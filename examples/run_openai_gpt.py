@@ -183,19 +183,20 @@ def main():
     eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # Prepare optimizer
-    param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-    num_train_optimization_steps = len(train_data) * args.num_train_epochs // args.train_batch_size
-    optimizer = OpenAIAdam(optimizer_grouped_parameters,
-                           lr=args.learning_rate,
-                           warmup=args.warmup_proportion,
-                           max_grad_norm=args.max_grad_norm,
-                           weight_decay=args.weight_decay,
-                           t_total=num_train_optimization_steps)
+    if args.do_train:
+        param_optimizer = list(model.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            ]
+        num_train_optimization_steps = len(train_data) * args.num_train_epochs // args.train_batch_size
+        optimizer = OpenAIAdam(optimizer_grouped_parameters,
+                               lr=args.learning_rate,
+                               warmup=args.warmup_proportion,
+                               max_grad_norm=args.max_grad_norm,
+                               weight_decay=args.weight_decay,
+                               t_total=num_train_optimization_steps)
 
     if args.do_train:
         nb_tr_steps, tr_loss, exp_average_loss = 0, 0, None
