@@ -56,7 +56,6 @@ def convert_hf_checkpoint_to_tf(model:type(BertModel), ckpt_dir:str):
         name = name.replace('LayerNorm/weight',             'LayerNorm/gamma')
         name = name.replace('LayerNorm/bias',               'LayerNorm/beta')
         name = name.replace('weight',                       'kernel')
-        # name += ':0'
         return 'bert/{}'.format(name)
 
     def assign_tf_var(tensor:np.ndarray, name:str):
@@ -86,7 +85,7 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_model_dir",
                         default=None,
                         type=str,
-                        required=True,
+                        required=False,
                         help="Directory containing pytorch model")
     parser.add_argument("--pytorch_model_name",
                         default=None,
