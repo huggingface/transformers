@@ -22,7 +22,7 @@ import tensorflow as tf
 from pytorch_pretrained_bert.modeling import BertConfig, BertModel
 
 
-def convert_pytorch_checkpoint_to_tf(model:type(BertModel), ckpt_dir:str):
+def convert_pytorch_checkpoint_to_tf(model:BertModel, ckpt_dir:str):
 
     """
     :param model:BertModel Pytorch model instance to be converted
