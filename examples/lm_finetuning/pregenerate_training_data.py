@@ -235,7 +235,7 @@ def main():
     parser.add_argument("--output_dir", type=Path, required=True)
     parser.add_argument("--bert_model", type=str, required=True,
                         choices=["bert-base-uncased", "bert-large-uncased", "bert-base-cased",
-                                 "bert-base-multilingual", "bert-base-chinese"])
+                                 "bert-base-multilingual-uncased", "bert-base-chinese", "bert-base-multilingual-cased"])
     parser.add_argument("--do_lower_case", action="store_true")
 
     parser.add_argument("--reduce_memory", action="store_true",
