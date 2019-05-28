@@ -30,8 +30,9 @@ class LazyDataset(Dataset):
 
         self.file = open(self.lazy_file, 'rb')
         if self.use_mmap:
+            print('Memory map `%s`' % path)
             # In distributed setting, it's useful to cache file in ramdisk
-            self.f = mmap.mmap(self.file.fileno(), 0, prot=mmap.PROT_READ)
+            self.file = mmap.mmap(self.file.fileno(), 0, prot=mmap.PROT_READ)
 
         self.read_lock = Lock()
 

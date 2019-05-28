@@ -94,21 +94,21 @@ if __name__ == '__main__':
         model = DDP(model)
 
     print('Loading data and creating iterators...')
-    wiki_dataset = LazyDataset('/home/nathan/data/wiki/enwiki.txt', use_mmap=True)
+    wiki_dataset = LazyDataset('/home/nathan/data/wiki/enwiki.txt', use_mmap=False)
     wiki_dataset = JSONDataset(wiki_dataset, key='text')
 
     #bookcorpus_dataset = LazyDataset('')
 
     dataset = BertDataset(wiki_dataset, tokenizer)
-    print(len(dataset))
 
-    iterator = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
+    iterator = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, shuffle=True)
 
     t = time.time()
     n_iters = args.train_iters
     for i, batch in enumerate(iterator):
         if i == n_iters:
             break
+
         # move to batch to gpu
         for k, v in batch.items():
             batch[k] = batch[k].cuda()
