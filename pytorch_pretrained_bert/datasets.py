@@ -276,16 +276,125 @@ class BertDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
+class PreprocessedBertDataset(Dataset):
+
+    def __init__(self, dataset, tokenizer, max_seq_length=512,
+                 masked_lm_prob=0.15, max_predictions_per_seq=80):
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.max_seq_length = max_seq_length
+        self.masked_lm_prob = masked_lm_prob
+        self.max_predictions_per_seq = max_predictions_per_seq
+
+    def __getitem__(self, index):
+        sample = self.dataset[index]
+        tokens_a = sample['tokens_a']
+        tokens_b = sample['tokens_b']
+        is_random_next = sample['is_random_next']
+        target_seq_length = sample['target_seq_length']
+
+        self.truncate_seq_pair(tokens_a, tokens_b, target_seq_length, random)
+
+        # [CLS], tokens_a.. [SEP] tokens_b... [SEP]
+        tokens = list()
+        segment_ids = list()
+        tokens.append('[CLS]')
+        for tok in tokens_a:
+            tokens.append(tok)
+            segment_ids.append(0)
+
+        tokens.append('[SEP]')
+        segment_ids.append(0)
+
+        for tok in tokens_b:
+            tokens.append(tok)
+            segment_ids.append(1)
+
+        tokens.append("[SEP]")
+        segment_ids.append(1)
+
+        # pad sequences to max length
+        attention_mask = [1] * 512
+        attention_mask[len(tokens):] = [0] * (512 - len(tokens))
+        self.pad_seq(tokens, self.max_seq_length, '[PAD]')
+        self.pad_seq(segment_ids, self.max_seq_length, 0)
+
+        # randomly mask inputs
+        input_tokens, lm_labels = self.create_masked_lm_predictions(tokens, random)
+
+        input_tokens = self.tokenizer.convert_tokens_to_ids(input_tokens)
+
+        sample = dict()
+        sample['input_tokens'] = torch.LongTensor(input_tokens)
+        sample['segment_ids'] = torch.LongTensor(segment_ids)
+        sample['attention_mask'] = torch.LongTensor(attention_mask)
+        sample['lm_labels'] = torch.LongTensor(lm_labels)
+        sample['is_random_next'] = torch.LongTensor([int(is_random_next)])
+        return sample
+
+    def truncate_seq_pair(self, tokens_a, tokens_b, max_num_tokens, rng):
+        """Truncates a pair of sequences to a maximum sequence length."""
+        while True:
+            total_length = len(tokens_a) + len(tokens_b)
+            if total_length <= max_num_tokens:
+                break
+
+            trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
+            assert len(trunc_tokens) >= 1
+
+            # We want to sometimes truncate from the front and sometimes from the
+            # back to add more randomness and avoid biases.
+            if rng.random() < 0.5:
+                del trunc_tokens[0]
+            else:
+                trunc_tokens.pop()
+
+    def create_masked_lm_predictions(self, tokens, rng):
+        cand_indexes = [i for i, tok in enumerate(tokens) if tok not in ('[SEP]', '[CLS]', '[PAD]')]
+        rng.shuffle(cand_indexes)
+        output_tokens = list(tokens)
+        num_to_predict = min(self.max_predictions_per_seq,
+                             max(1, int(round(len(cand_indexes) * self.masked_lm_prob))))
+        lm_labels = [-1]*len(tokens)
+        for index in cand_indexes[:num_to_predict]:
+            masked_token = None
+            # 80% of the time, replace with [MASK]
+            if rng.random() < 0.8:
+                masked_token = "[MASK]"
+            else:
+                # 10% of the time, keep original
+                if rng.random() < 0.5:
+                    masked_token = tokens[index]
+                # 10% of the time, replace with random word
+                else:
+                    random_tok_ind = rng.randint(0, len(self.tokenizer.vocab) - 1)
+                    masked_token = self.tokenizer.ids_to_tokens[random_tok_ind]
+
+            output_tokens[index] = masked_token
+            lm_labels[index] = self.tokenizer.vocab[tokens[index]]
+
+        return output_tokens, lm_labels
+
+    def pad_seq(self, seq, max_len, val):
+        while len(seq) < max_len:
+            seq.append(val)
+
+    def __len__(self):
+        return len(self.dataset)
 
 if __name__ == '__main__':
     from pytorch_pretrained_bert.tokenization import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
 
-    wiki_dataset = LazyDataset('/home/nathan/data/wiki/enwiki.txt', use_mmap=True)
-    wiki_dataset = JSONDataset(wiki_dataset, key='text')
+    dataset = JSONDataset(LazyDataset('/home/hdvries/data/preprocessed_test.txt'))
+    dataset = PreprocessedBertDataset(dataset, tokenizer)
 
-    dataset = BertDataset(wiki_dataset, tokenizer)
+
+    # wiki_dataset = LazyDataset('/home/nathan/data/wiki/enwiki.txt', use_mmap=True)
+    # wiki_dataset = JSONDataset(wiki_dataset, key='text')
+    #
+    # dataset = BertDataset(wiki_dataset, tokenizer)
     sampler = BatchSampler(RandomSampler(dataset), 4, True)
 
     iterator = DataLoader(dataset, batch_sampler=sampler, num_workers=1, pin_memory=True)

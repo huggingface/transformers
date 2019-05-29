@@ -1,14 +1,20 @@
 import argparse
+import math
 import time
 import torch
+import random
 import os
 
+from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torch.utils.data.dataset import random_split, Subset
+from torch.utils.data.sampler import RandomSampler, BatchSampler
+from torch.utils.data.distributed import DistributedSampler
 from apex import amp
 from apex.optimizers import FusedAdam
 from apex.parallel import DistributedDataParallel as DDP
 
-from pytorch_pretrained_bert.datasets import LazyDataset, JSONDataset, BertDataset
+from pytorch_pretrained_bert.datasets import LazyDataset, JSONDataset, BertDataset, PreprocessedBertDataset
 from pytorch_pretrained_bert.modeling import BertForPreTraining, BertConfig
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 
@@ -36,6 +42,8 @@ def get_args():
                        help='maximum number of position embeddings to use')
 
     opt_group = parser.add_argument_group('train', 'optimization configuration')
+    opt_group.add_argument('--seed', type=int, default=1,
+                           help='Random seed of experiment..')
     opt_group.add_argument('--batch-size', type=int, default=4,
                        help='Data Loader batch size')
     opt_group.add_argument('--num-workers', type=int, default=1,
@@ -50,12 +58,66 @@ def get_args():
     return parser.parse_args()
 
 
+def train_epoch(model, iterator, optimizer):
+    model.train()
+    total_loss  = 0.0
+    n_iters = 0
+
+    for batch in tqdm(iterator):
+        n_iters += 1
+
+        # move to batch to gpu
+        for k, v in batch.items():
+            batch[k] = batch[k].cuda()
+
+        # forward pass
+        loss = model.forward(batch['input_tokens'],
+                             batch['segment_ids'],
+                             batch['attention_mask'],
+                             batch['lm_labels'],
+                             batch['is_random_next'])
+        total_loss += loss.item()
+        # backward pass
+        with amp.scale_loss(loss, optimizer) as scaled_loss:
+            scaled_loss.backward()
+
+        # optimizer step
+        optimizer.step()
+        optimizer.zero_grad()
+    return total_loss/n_iters
+
+def eval_epoch(model, iterator):
+    model.eval()
+
+    total_loss = 0.0
+    n_iters = 0
+
+    with torch.no_grad():
+        for batch in tqdm(iterator):
+            n_iters += 1
+
+            # move to batch to gpu
+            for k, v in batch.items():
+                batch[k] = batch[k].cuda()
+
+            # forward pass
+            loss = model.forward(batch['input_tokens'],
+                                 batch['segment_ids'],
+                                 batch['attention_mask'],
+                                 batch['lm_labels'],
+                                 batch['is_random_next'])
+            total_loss += loss.item()
+    return total_loss/n_iters
+
 if __name__ == '__main__':
     args = get_args()
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
 
+    rank = 0
     local_rank = 0
     world_size = 1
-
 
     distributed = ('WORLD_SIZE' in os.environ) and (int(os.environ['WORLD_SIZE']) > 1)
     if 'WORLD_SIZE' in os.environ:
@@ -64,6 +126,7 @@ if __name__ == '__main__':
                                              init_method='env://')
         local_rank = int(os.environ['LOCAL_RANK'])
         torch.cuda.set_device(local_rank)
+        rank = int(os.environ['RANK'])
 
     print('Loading tokenizer...')
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
@@ -94,39 +157,47 @@ if __name__ == '__main__':
         model = DDP(model)
 
     print('Loading data and creating iterators...')
-    wiki_dataset = LazyDataset('/home/nathan/data/wiki/enwiki.txt', use_mmap=False)
-    wiki_dataset = JSONDataset(wiki_dataset, key='text')
+    dataset = LazyDataset('/home/hdvries/data/preprocessed_test.txt', use_mmap=True)
+    dataset = JSONDataset(dataset)
+    dataset = PreprocessedBertDataset(dataset, tokenizer)
 
-    #bookcorpus_dataset = LazyDataset('')
+    num_train_examples = math.ceil(len(dataset)*0.9)
+    train_set, valid_set = random_split(dataset, [num_train_examples, len(dataset) - num_train_examples])
+    # train_set = Subset(dataset, range(12))
+    # valid_set = Subset(dataset, [i+12 for i in range(12)])
 
-    dataset = BertDataset(wiki_dataset, tokenizer)
+    if distributed:
+        train_sampler = DistributedSampler(train_set)
+        valid_sampler = DistributedSampler(valid_set)
+    else:
+        train_sampler = RandomSampler(train_set)
+        valid_sampler = RandomSampler(valid_set)
 
-    iterator = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, shuffle=True)
+    train_sampler = BatchSampler(train_sampler, args.batch_size, drop_last=True)
+    train_iterator = DataLoader(train_set, batch_sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)
+
+    valid_sampler = BatchSampler(valid_sampler, args.batch_size, drop_last=True)
+    valid_iterator = DataLoader(valid_set, batch_sampler=valid_sampler, num_workers=args.num_workers, pin_memory=True)
 
     t = time.time()
     n_iters = args.train_iters
-    for i, batch in enumerate(iterator):
-        if i == n_iters:
-            break
+    it = 0
 
-        # move to batch to gpu
-        for k, v in batch.items():
-            batch[k] = batch[k].cuda()
+    for epoch in range(10):
+        train_loss = train_epoch(model, train_iterator, optimizer)
+        valid_loss = eval_epoch(model, valid_iterator)
 
-        # forward pass
-        loss = model.forward(batch['input_tokens'],
-                             batch['segment_ids'],
-                             batch['attention_mask'],
-                             batch['lm_labels'],
-                             batch['is_random_next'])
-        # backward pass
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
+        log_str  = ' epoch{:2d} |'.format(epoch)
+        log_str += ' train_loss: {:.3E} |'.format(train_loss)
+        log_str += ' valid_loss: {:.3E} |'.format(valid_loss)
+        print(log_str)
 
-        # optimizer step
-        optimizer.step()
-        optimizer.zero_grad()
 
-    print(n_iters/(time.time() - t))
+
+
+
+
+
+
 
 
