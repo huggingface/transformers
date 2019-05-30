@@ -7,7 +7,7 @@ NGPUS=8
 
 for i in "${!NODES[@]}"; do
     HOST=${NODES[$i]}
-    CMD="cd code/pytorch-pretrained-BERT && bash scripts/launch_docker.sh \"bash scripts/run_pretraining_distributed.sh $MASTER $NNODES $i $NGPUS\""
+    CMD="cd pytorch-pretrained-BERT && bash scripts/launch_docker.sh \"bash scripts/run_pretraining_distributed.sh $MASTER $NNODES $i $NGPUS\""
     echo $MD
     ssh -tt $HOST $CMD &
 done

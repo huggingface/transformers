@@ -52,7 +52,7 @@ def get_args():
                        help='weight decay coefficient for L2 regularization')
     opt_group.add_argument('--train-iters', type=int, default=100,
                            help='Number of training iterations')
-    opt_group.add_argument('--use-fp16', type=bool, default=True,
+    opt_group.add_argument('--use-fp16', action='store_true',
                            help='Training with FP16?')
 
     return parser.parse_args()
@@ -77,9 +77,13 @@ def train_epoch(model, iterator, optimizer):
                              batch['lm_labels'],
                              batch['is_random_next'])
         total_loss += loss.item()
-        # backward pass
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
+
+        if args.use_fp16:
+            # backward pass
+            with amp.scale_loss(loss, optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
 
         # optimizer step
         optimizer.step()
@@ -111,6 +115,8 @@ def eval_epoch(model, iterator):
 
 if __name__ == '__main__':
     args = get_args()
+    print(args)
+
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
@@ -143,7 +149,9 @@ if __name__ == '__main__':
         sum([p.nelement() for p in model.parameters()])))
     model.cuda()
 
-    optimizer = FusedAdam(model.parameters())
+    # optimizer = FusedAdam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+
 
     opt_level = 'O0' # FP32
     if args.use_fp16:
@@ -183,14 +191,15 @@ if __name__ == '__main__':
     n_iters = args.train_iters
     it = 0
 
-    for epoch in range(10):
-        train_loss = train_epoch(model, train_iterator, optimizer)
-        valid_loss = eval_epoch(model, valid_iterator)
+    with open('/home/hdvries/logs/log.%s.txt' % str(rank), 'w', encoding='utf-8') as f:
+        for epoch in range(200):
+            train_loss = train_epoch(model, train_iterator, optimizer)
+            valid_loss = eval_epoch(model, valid_iterator)
 
-        log_str  = ' epoch{:2d} |'.format(epoch)
-        log_str += ' train_loss: {:.3E} |'.format(train_loss)
-        log_str += ' valid_loss: {:.3E} |'.format(valid_loss)
-        print(log_str)
+            log_str  = ' epoch{:2d} |'.format(epoch)
+            log_str += ' train_loss: {:.3E} |'.format(train_loss)
+            log_str += ' valid_loss: {:.3E} |'.format(valid_loss)
+            f.write(log_str)
 
 
 
