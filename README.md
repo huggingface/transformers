@@ -1033,7 +1033,7 @@ An overview of the implemented schedules:
 |-|-|
 | [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
 | [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `run_lm_finetuning.py` |
-| [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#Fine-tuning-with-OpenAI-GPT-Transformer-XL-and-GPT-2) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
+| [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#openai-gpt-transformer-xl-and-gpt-2-running-the-examples) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
 | [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
 ### Training large models: introduction, tools and examples
