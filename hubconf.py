@@ -84,7 +84,7 @@ def bertTokenizer(*args, **kwargs):
 
     Example:
         >>> sentence = 'Hello, World!'
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT:hubconf', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False, force_reload=False)
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False, force_reload=False)
         >>> toks = tokenizer.tokenize(sentence)
         ['Hello', '##,', 'World', '##!']
         >>> ids = tokenizer.convert_tokens_to_ids(toks)
@@ -100,6 +100,26 @@ def bertModel(*args, **kwargs):
     BertModel is the basic BERT Transformer model with a layer of summed token,
     position and sequence embeddings followed by a series of identical
     self-attention blocks (12 for BERT-base, 24 for BERT-large).
+
+    Example:
+        # Load the tokenizer
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False, force_reload=False)
+        #  Prepare tokenized input
+        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        >>> tokenized_text = tokenizer.tokenize(text)
+        ['[CLS]', 'Who', 'was', 'Jim', 'He', '##nson', '?', '[SEP]', 'Jim', 'He', '##nson', 'was', 'a', 'puppet', '##eer', '[SEP]']
+        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        >>> tokens_tensor = torch.tensor([indexed_tokens])
+        tensor([[101,  2627,  1108,  3104,  1124, 15703, 136, 102, 3104, 1124, 15703, 1108, 170, 16797, 8284, 102]])
+        >>> segments_tensors = torch.tensor([segments_ids])
+        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]])
+        # Load bertModel
+        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertModel', 'bert-base-cased', force_reload=False)
+        >>> model.eval()
+        # Predict hidden states features for each layer
+        >>> with torch.no_grad():
+                encoded_layers, _ = model(tokens_tensor, segments_tensors)
     """
     model = BertModel.from_pretrained(*args, **kwargs)
     return model
@@ -133,6 +153,29 @@ def bertForMaskedLM(*args, **kwargs):
     """
     BertForMaskedLM includes the BertModel Transformer followed by the
     (possibly) pre-trained masked language modeling head.
+
+    Example:
+        # Load the tokenizer
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False, force_reload=False)
+        #  Prepare tokenized input
+        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        >>> tokenized_text = tokenizer.tokenize(text)
+        >>> masked_index = 8
+        >>> tokenized_text[masked_index] = '[MASK]'
+        ['[CLS]', 'who', 'was', 'jim', 'henson', '?', '[SEP]', 'jim', '[MASK]', 'was', 'a', 'puppet', '##eer', '[SEP]']
+        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        >>> tokens_tensor = torch.tensor([indexed_tokens])
+        >>> segments_tensors = torch.tensor([segments_ids])
+        # Load bertForMaskedLM
+        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertForMaskedLM', 'bert-base-cased', force_reload=False)
+        >>> model.eval()
+        # Predict all tokens
+        >>> with torch.no_grad():
+                predictions = model(tokens_tensor, segments_tensors)
+        >>> predicted_index = torch.argmax(predictions[0, masked_index]).item()
+        >>> predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+        'henson'
     """
     model = BertForMaskedLM.from_pretrained(*args, **kwargs)
     return model
