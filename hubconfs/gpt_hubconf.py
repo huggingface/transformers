@@ -5,6 +5,9 @@ from pytorch_pretrained_bert.modeling_openai import (
 	OpenAIGPTDoubleHeadsModel
 )
 
+# Dependecies that are not specified in global hubconf.py
+specific_dependencies = ['spacy', 'ftfy']
+
 # A lot of models share the same param doc. Use a decorator
 # to save typing
 gpt_docstring = """
@@ -55,7 +58,7 @@ def openAIGPTTokenizer(*args, **kwargs):
     Instantiate a BPE tokenizer for OpenAI GPT from a pre-trained/customized vocab file.
 	Peculiarities:
         - lower case all inputs
-        - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
+        - uses SpaCy tokenizer ('en' model) and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
         - argument special_tokens and function set_special_tokens:
             can be used to add additional symbols (ex: "__classify__") to a vocabulary.
 
@@ -79,6 +82,7 @@ def openAIGPTTokenizer(*args, **kwargs):
 		>>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
         >>> tokenized_text = tokenizer.tokenize(text)
         >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        [763, 509, 4265, 2298, 945, 257, 4265, 2298, 945, 509, 246, 10148, 39041, 483]
     """
     tokenizer = OpenAIGPTTokenizer.from_pretrained(*args, **kwargs)
     return tokenizer
@@ -143,7 +147,7 @@ def openAIGPTLMHeadModel(*args, **kwargs):
 		>>> predicted_index = torch.argmax(predictions[0, -1, :]).item()
 		>>> predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
     """
-    model = OpenAIGPTDoubleHeadsModel.from_pretrained(*args, **kwargs)
+    model = OpenAIGPTLMHeadModel.from_pretrained(*args, **kwargs)
     return model
 
 
