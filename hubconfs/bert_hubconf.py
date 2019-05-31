@@ -10,8 +10,6 @@ from pytorch_pretrained_bert.modeling import (
         BertForTokenClassification,
         )
 
-dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex']
-
 # A lot of models share the same param doc. Use a decorator
 # to save typing
 bert_docstring = """
