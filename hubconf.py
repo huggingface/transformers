@@ -10,8 +10,8 @@ from hubconfs.bert_hubconf import (
     bertForTokenClassification
 )
 from hubconfs.gpt_hubconf import (
-    OpenAIGPTTokenizer,
-    OpenAIGPTModel,
-    OpenAIGPTLMHeadModel,
-    OpenAIGPTDoubleHeadsModel
+    openAIGPTTokenizer,
+    openAIGPTModel,
+    openAIGPTLMHeadModel,
+    openAIGPTDoubleHeadsModel
 )
