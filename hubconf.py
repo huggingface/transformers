@@ -1,3 +1,5 @@
+dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex', 'ftfy', 'spacy']
+
 from hubconfs.bert_hubconf import (
     bertTokenizer,
     bertModel,

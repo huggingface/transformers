@@ -5,8 +5,6 @@ from pytorch_pretrained_bert.modeling_openai import (
 	OpenAIGPTDoubleHeadsModel
 )
 
-dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex', 'ftfy', 'spacy']
-
 # A lot of models share the same param doc. Use a decorator
 # to save typing
 gpt_docstring = """
