@@ -14,8 +14,6 @@ def get_wiki_docs(wiki_path):
         for i, line in enumerate(f):
             doc = json.loads(line)['text']
             all_documents.append(doc)
-            if i == 50000:
-                break
     return all_documents
 
 def get_bookcorpus_docs(bookcorpus_dir):
@@ -127,9 +125,9 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
     rng = random.Random()
 
-    with open('/home/hdvries/data/preprocessed_test.txt', 'w', encoding='utf-8') as f_out:
+    with open('/home/hdvries/data/preprocessed_all.txt', 'w', encoding='utf-8') as f_out:
 
-        def _process_documents(f_out, dataset='wiki', n_cores=60):
+        def _process_documents(f_out, dataset='wiki', n_cores=40):
             global all_documents
             pool = Pool(n_cores)
             tokenized_documents = list()
@@ -153,5 +151,5 @@ if __name__ == '__main__':
         all_documents = get_wiki_docs('/home/nathan/data/wiki/enwiki.txt')
         _process_documents(f_out, 'wiki')
 
-        # all_documents = get_bookcorpus_docs('/home/hdvries/DeepLearningExamples/TensorFlow/LanguageModeling/BERT/data/bookcorpus/download/')
-        # _process_documents(f_out, 'bookcorpus')
+        all_documents = get_bookcorpus_docs('/home/hdvries/DeepLearningExamples/TensorFlow/LanguageModeling/BERT/data/bookcorpus/download/')
+        _process_documents(f_out, 'bookcorpus')

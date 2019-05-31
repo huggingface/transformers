@@ -287,6 +287,7 @@ class PreprocessedBertDataset(Dataset):
         self.max_predictions_per_seq = max_predictions_per_seq
 
     def __getitem__(self, index):
+        # random.seed(index)
         sample = self.dataset[index]
         tokens_a = sample['tokens_a']
         tokens_b = sample['tokens_b']
