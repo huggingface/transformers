@@ -91,7 +91,6 @@ def gpt2Model(*args, **kwargs):
         >>> with torch.no_grad():
                 hidden_states_1, past = model(tokens_tensor_1)
 				hidden_states_2, past = model(tokens_tensor_2, past=past)
-				
     """
     model = GPT2Model.from_pretrained(*args, **kwargs)
     return model
