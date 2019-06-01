@@ -1,5 +1,5 @@
 from pytorch_pretrained_bert.tokenization_gpt2 import GPT2Tokenizer
-from pytorch_pretrained_bert.modeling_openai import (
+from pytorch_pretrained_bert.modeling_gpt2 import (
 	GPT2Model,
 	GPT2LMHeadModel,
 	GPT2DoubleHeadsModel
@@ -152,7 +152,7 @@ def gpt2DoubleHeadsModel(*args, **kwargs):
         >>> tokens_tensor = torch.tensor([indexed_tokens])
 		>>> mc_token_ids = torch.LongTensor([ [len(tokenized_text)] ])
 
-        # Load openAIGPTDoubleHeadsModel
+        # Load gpt2DoubleHeadsModel
         >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'gpt2DoubleHeadsModel', 'gpt2')
         >>> model.eval()
 
