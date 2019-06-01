@@ -680,7 +680,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     config = modeling_gpt2.GPT2Config()
 
-    model = modeling_gpt2.GPT2LMHeadModel(config)
+    model = modeling_gpt2.GPT2DoubleHeadsModel(config)
     lm_logits, multiple_choice_logits, presents = model(input_ids, mc_token_ids)
     ```
     """
