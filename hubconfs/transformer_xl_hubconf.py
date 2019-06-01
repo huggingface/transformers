@@ -59,9 +59,7 @@ def transformerXLTokenizer(*args, **kwargs):
 @_append_from_pretrained_docstring(transformer_xl_docstring)
 def transformerXLModel(*args, **kwargs):
     """
-    gpt2Model is the basic OpenAI GPT-2 Transformer model based on
-    identical stacked masked self-attention blocks and pre-trained
-    on large scale dataset using language modeling signal.
+    transformerXLModel is the basic Transformer XL model.
 
     Example:
         # Load the tokenizer
@@ -95,7 +93,7 @@ def transformerXLModel(*args, **kwargs):
 @_append_from_pretrained_docstring(transformer_xl_docstring)
 def transformerXLLMHeadModel(*args, **kwargs):
     """
-    gpt2LMHeadModel is the OpenAI GPT-2 Transformer model with the
+    transformerXLModel is the basic Transformer XL model with the
     tied (pre-trained) language modeling head on top.
 
     Example:
