@@ -132,25 +132,23 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
 
-    rank = 0
-    local_rank = 0
-    world_size = 1
+    rank = int(os.environ.get('RANK', 0))
+    local_rank = int(os.environ.get('LOCAL_RANK', 0))
+    world_size = int(os.environ.get('WORLD_SIZE', 1))
 
-    distributed = ('WORLD_SIZE' in os.environ) and (int(os.environ['WORLD_SIZE']) > 1)
-    if 'WORLD_SIZE' in os.environ:
+    if rank == 0:
+        if os.path.exists(args.exp_dir):
+            raise ValueError('Experiment directory `%s` already exists.' % args.exp_dir)
+
+        os.mkdir(args.exp_dir)
+        os.mkdir(os.path.join(args.exp_dir, 'logs'))
+        os.mkdir(os.path.join(args.exp_dir, 'checkpoints'))
+
+    is_distributed = (world_size > 1)
+    if is_distributed:
         torch.distributed.init_process_group(backend='nccl',
                                              init_method='env://')
-        local_rank = int(os.environ['LOCAL_RANK'])
-        torch.cuda.set_device(local_rank)
-        rank = int(os.environ['RANK'])
-
-    if os.path.exists(args.exp_dir):
-        raise ValueError('Experiment directory `%s` already exists' % args.exp_dir)
-
-    # create directories to store logs and checkpoints
-    os.mkdir(args.exp_dir)
-    os.mkdir(os.path.join(args.exp_dir, 'checkpoints'))
-    os.mkdir(os.path.join(args.exp_dir, 'logs'))
+    torch.cuda.set_device(local_rank)
 
     logger = create_logger(os.path.join(args.exp_dir, 'logs', 'log.%s.txt' % rank))
     logger.info(args)
@@ -173,11 +171,11 @@ if __name__ == '__main__':
     model.cuda()
 
     # optimizer = FusedAdam(model.parameters(), lr=1e-5)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-6, weight_decay=args.weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=args.weight_decay)
     if args.use_fp16:
         optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
 
-    if distributed:
+    if is_distributed:
         model = DDP(model, delay_allreduce=True)
 
     logger.info('Loading data and creating iterators...')
@@ -190,7 +188,7 @@ if __name__ == '__main__':
     # train_set = Subset(dataset, range(12))
     # valid_set = Subset(dataset, [i+12 for i in range(12)])
 
-    if distributed:
+    if is_distributed:
         train_sampler = DistributedSampler(train_set)
         valid_sampler = DistributedSampler(valid_set)
     else:
