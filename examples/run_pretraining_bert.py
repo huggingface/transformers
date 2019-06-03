@@ -7,7 +7,7 @@ import random
 import os
 
 from apex import amp
-from apex.optimizers import FusedAdam
+from apex.fp16_utils import FP16_Optimizer
 from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
@@ -23,6 +23,18 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 
 def get_args():
     parser = argparse.ArgumentParser()
+
+    exp_group = parser.add_argument_group('exp', 'exp configuration')
+    exp_group.add_argument('--data-path', type=str, default='/home/hdvries/data/preprocessed_all.txt',
+                           help='path to dataset')
+    exp_group.add_argument('--exp-dir', type=str, default='/home/hdvries/experiments/test',
+                           help='path to dataset')
+    exp_group.add_argument('--report-iter', type=int, default=100,
+                           help='Report statistics every `report_iter` iterations')
+    exp_group.add_argument('--save-iter', type=int, default=10000,
+                           help='Save checkpoint every `save_iter` iterations')
+    exp_group.add_argument('--seed', type=int, default=1,
+                           help='Random seed of experiment..')
 
     model_group = parser.add_argument_group('model', 'model configuration')
 
@@ -44,15 +56,14 @@ def get_args():
                        help='maximum number of position embeddings to use')
 
     opt_group = parser.add_argument_group('train', 'optimization configuration')
-    opt_group.add_argument('--seed', type=int, default=1,
-                           help='Random seed of experiment..')
+
     opt_group.add_argument('--batch-size', type=int, default=4,
                        help='Data Loader batch size')
     opt_group.add_argument('--num-workers', type=int, default=1,
                            help='Number of workers in DataLoader')
     opt_group.add_argument('--weight-decay', type=float, default=0.01,
                        help='weight decay coefficient for L2 regularization')
-    opt_group.add_argument('--train-iters', type=int, default=100,
+    opt_group.add_argument('--train-iters', type=int, default=1000000,
                            help='Number of training iterations')
     opt_group.add_argument('--use-fp16', action='store_true',
                            help='Training with FP16?')
@@ -64,51 +75,13 @@ def calc_loss(scores, labels):
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-1)
     flat_scores = scores.view(-1, scores.shape[-1])
     flat_labels = labels.view(-1)
-    _, ind = flat_scores.max(1)
-    accuracy = float(sum(flat_labels==ind))/float((sum(flat_labels != -1)))
+    # _, ind = flat_scores.max(1)
+    # accuracy = 0.0
+    # if float((sum(flat_labels != -1))) > 0.0:
+    #     accuracy = float(sum(flat_labels==ind))/float((sum(flat_labels != -1)))
     loss = loss_fn(flat_scores, flat_labels)
-    return loss, accuracy
+    return loss
 
-
-
-def train_epoch(model, iterator, optimizer):
-    model.train()
-    total_lm_loss = 0.0
-    total_nsp_loss = 0.0
-    total_lm_acc = 0.0
-    total_nsp_acc = 0.0
-    n_iters = 0
-
-    for batch in tqdm(iterator):
-        n_iters += 1
-
-        # move to batch to gpu
-        for k, v in batch.items():
-            batch[k] = batch[k].cuda()
-
-        # forward pass
-        lm_scores, nsp_scores = model.forward(batch['input_tokens'],
-                                             batch['segment_ids'],
-                                             batch['attention_mask'])
-        lm_loss, lm_acc = calc_loss(lm_scores.view(-1, lm_scores.shape[-1]), batch['lm_labels'].view(-1))
-        nsp_loss, nsp_acc = calc_loss(nsp_scores.view(-1, 2), batch['is_random_next'].view(-1))
-        loss = lm_loss + nsp_loss
-        total_nsp_acc += nsp_acc
-        total_lm_acc += lm_acc
-        total_nsp_loss += nsp_loss.item()
-        total_lm_loss += lm_loss.item()
-
-        if args.use_fp16:
-            # backward pass
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            loss.backward()
-
-        # optimizer step
-        optimizer.step()
-        optimizer.zero_grad()
-    return total_lm_loss/n_iters, total_nsp_loss/n_iters, total_lm_acc/n_iters, total_nsp_acc/n_iters
 
 def eval_epoch(model, iterator):
     model.eval()
@@ -171,7 +144,15 @@ if __name__ == '__main__':
         torch.cuda.set_device(local_rank)
         rank = int(os.environ['RANK'])
 
-    logger = create_logger('/home/hdvries/logs/log.%s.txt' % rank)
+    if os.path.exists(args.exp_dir):
+        raise ValueError('Experiment directory `%s` already exists' % args.exp_dir)
+
+    # create directories to store logs and checkpoints
+    os.mkdir(args.exp_dir)
+    os.mkdir(os.path.join(args.exp_dir, 'checkpoints'))
+    os.mkdir(os.path.join(args.exp_dir, 'logs'))
+
+    logger = create_logger(os.path.join(args.exp_dir, 'logs', 'log.%s.txt' % rank))
     logger.info(args)
 
     logger.info('Loading tokenizer...')
@@ -187,33 +168,27 @@ if __name__ == '__main__':
     model = BertForPreTraining(model_config)
     logger.info(' > number of parameters: {}'.format(
         sum([p.nelement() for p in model.parameters()])))
+    if args.use_fp16:
+        model = model.half()
     model.cuda()
 
     # optimizer = FusedAdam(model.parameters(), lr=1e-5)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
-
-
-    opt_level = 'O0' # FP32
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-6, weight_decay=args.weight_decay)
     if args.use_fp16:
-        opt_level = 'O2'
-
-    model, optimizer = amp.initialize(model, optimizer,
-                                      opt_level=opt_level,
-                                      loss_scale='dynamic',
-                                      keep_batchnorm_fp32=False)
+        optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
 
     if distributed:
-        model = DDP(model)
+        model = DDP(model, delay_allreduce=True)
 
     logger.info('Loading data and creating iterators...')
-    dataset = LazyDataset('/home/hdvries/data/preprocessed_test.txt', use_mmap=True)
+    dataset = LazyDataset(args.data_path, use_mmap=True)
     dataset = JSONDataset(dataset)
     dataset = PreprocessedBertDataset(dataset, tokenizer)
 
     num_train_examples = math.ceil(len(dataset)*0.9)
-    # train_set, valid_set = random_split(dataset, [num_train_examples, len(dataset) - num_train_examples])
-    train_set = Subset(dataset, range(12))
-    valid_set = Subset(dataset, [i+12 for i in range(12)])
+    train_set, valid_set = random_split(dataset, [num_train_examples, len(dataset) - num_train_examples])
+    # train_set = Subset(dataset, range(12))
+    # valid_set = Subset(dataset, [i+12 for i in range(12)])
 
     if distributed:
         train_sampler = DistributedSampler(train_set)
@@ -223,27 +198,68 @@ if __name__ == '__main__':
         valid_sampler = RandomSampler(valid_set)
 
     train_sampler = BatchSampler(train_sampler, args.batch_size, drop_last=True)
-    train_iterator = DataLoader(train_set, batch_sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)
+    train_loader = DataLoader(train_set, batch_sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)
 
     valid_sampler = BatchSampler(valid_sampler, args.batch_size, drop_last=True)
-    valid_iterator = DataLoader(valid_set, batch_sampler=valid_sampler, num_workers=args.num_workers, pin_memory=True)
+    valid_loader = DataLoader(valid_set, batch_sampler=valid_sampler, num_workers=args.num_workers, pin_memory=True)
 
-    t = time.time()
     n_iters = args.train_iters
-    it = 0
+    epoch = 1
 
-    # with open('/home/hdvries/logs/log.%s.txt' % str(rank), 'w', encoding='utf-8') as f:
-    for epoch in range(200):
-        train_lm_loss, train_nsp_loss, train_lm_acc, train_nsp_acc = train_epoch(model, train_iterator, optimizer)
-        valid_loss = eval_epoch(model, valid_iterator)
+    train_iterator = iter(train_loader)
+    train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
+    for it in range(1, n_iters+1):
+        try:
+            batch = next(train_iterator)
+        except StopIteration:
+            train_iterator = iter(train_loader)
+            logger.info("End of epoch %s" % str(epoch))
+            epoch += 1
+            batch = next(train_iterator)
 
-        log_str  = ' epoch{:2d} |'.format(epoch)
-        log_str += ' train_lm_loss: {:.3E} |'.format(train_lm_loss)
-        log_str += ' train_nsp_loss: {:.3E} |'.format(train_nsp_loss)
-        log_str += ' train_lm_acc: {:.3E} |'.format(train_lm_acc)
-        log_str += ' train_nsp_acc: {:.3E} |'.format(train_nsp_acc)
-        log_str += ' valid_loss: {:.3E} |'.format(valid_loss)
-        logger.info(log_str)
+        # move to batch to gpu
+        for k, v in batch.items():
+            batch[k] = batch[k].cuda()
+
+        lm_scores, nsp_scores = model.forward(batch['input_tokens'],
+                                              batch['segment_ids'],
+                                              batch['attention_mask'])
+        lm_loss = calc_loss(lm_scores.view(-1, lm_scores.shape[-1]), batch['lm_labels'].view(-1))
+        nsp_loss = calc_loss(nsp_scores.view(-1, 2), batch['is_random_next'].view(-1))
+        loss = lm_loss + nsp_loss
+        train_nsp_loss += nsp_loss.item()
+        train_lm_loss += lm_loss.item()
+
+        if args.use_fp16:
+            # backward pass
+            optimizer.backward(loss)
+        else:
+            loss.backward()
+
+        # optimizer step
+        optimizer.step()
+        optimizer.zero_grad()
+
+        # report statistics every `args.report_iter` iterations
+        if it % args.report_iter == 0:
+            log_str  = ' epoch{:2d} |'.format(epoch)
+            log_str += ' iteration: {:7d} |'.format(it)
+            log_str += ' train_lm_loss: {:.3E} |'.format(train_lm_loss/args.report_iter)
+            log_str += ' train_nsp_loss: {:.3E} |'.format(train_nsp_loss/args.report_iter)
+            log_str += ' time per batch: {:4F}ms |'.format(1000*(time.time() - process_time)/args.report_iter)
+            logger.info(log_str)
+            train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
+
+        # save checkpoint every `args.save_iter` iterations
+        if it % args.save_iter == 0 and rank == 0:
+            save_dict = dict()
+            save_dict['model'] = model.state_dict()
+            save_dict['opt'] = optimizer.state_dict()
+            save_dict['it'] = it
+            save_path = os.path.join(args.exp_dir, 'checkpoints', 'chkpt.%s.pt' % str(it))
+            torch.save(save_dict, save_path)
+            logger.info('Saved checkpoint to `%s`' % save_path)
+
 
 
 
