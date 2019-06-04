@@ -1,7 +1,7 @@
 #!/bin/bash
 
 MASTER=192.168.170.99
-NODES=(dgx01 dgx02 dgx04 dgx05)
+NODES=(dgx01 dgx02 dgx04 dgx05 dgx06)
 NNODES=${#NODES[@]}
 NGPUS=8
 

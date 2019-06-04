@@ -31,6 +31,7 @@ from io import open
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from torch.utils.checkpoint import checkpoint
 
 from .file_utils import cached_path, WEIGHTS_NAME, CONFIG_NAME
 
@@ -121,8 +122,8 @@ def gelu(x):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         Also see https://arxiv.org/abs/1606.08415
     """
-    return x * 0.5 * (1.0 + torch.erf(x / 1.4142135623730951))
 
+    return x * 0.5 * (1.0 + torch.erf(x / 1.4142135623730951))
 
 def swish(x):
     return x * torch.sigmoid(x)
@@ -365,7 +366,7 @@ class BertIntermediate(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = checkpoint(self.intermediate_act_fn, hidden_states, preserve_rng_state=False)
         return hidden_states
 
 

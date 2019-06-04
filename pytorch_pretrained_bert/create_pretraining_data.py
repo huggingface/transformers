@@ -31,7 +31,7 @@ def tokenize_document(document_index):
     document = [tokenizer.tokenize(line) for line in document]
     return document
 
-def create_instances_from_document(document_index, max_seq_length=512, short_seq_prob=0.1):
+def create_instances_from_document(document_index, max_seq_length=128, short_seq_prob=0.0):
     global all_documents
     """Creates `TrainingInstance`s for a single document."""
     document = all_documents[document_index]
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
     rng = random.Random()
 
-    with open('/home/hdvries/data/preprocessed_all.txt', 'w', encoding='utf-8') as f_out:
+    with open('/home/hdvries/data/preprocessed_128.txt', 'w', encoding='utf-8') as f_out:
 
         def _process_documents(f_out, dataset='wiki', n_cores=40):
             global all_documents

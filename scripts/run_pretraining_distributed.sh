@@ -12,4 +12,21 @@ DISTRIBUTED_ARGS="--nproc_per_node $N_GPUS --nnodes $NNODES --node_rank $NODE_RA
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 python -m torch.distributed.launch $DISTRIBUTED_ARGS \
-  examples/run_pretraining_bert.py --batch-size 4 --use-fp16
+  examples/run_pretraining_bert.py \
+    --exp-dir /home/hdvries/experiments/bert_large \
+    --max-position-embeddings 512 \
+    --num-layers 24 \
+    --hidden-size 1024 \
+    --intermediate-size 4096 \
+    --num-attention-heads 16 \
+    --hidden-dropout 0.1 \
+    --attention-dropout 0.1 \
+    --train-iters 1000000 \
+    --report-every 100 \
+    --save-every 10000 \
+    --learning-rate 1e-4 \
+    --warmup-proportion 0.01 \
+    --weight-decay 0.01 \
+    --max-grad-norm 1.0 \
+    --batch-size 6 \
+    --use-fp16 \
