@@ -180,7 +180,19 @@ if __name__ == '__main__':
         model = model.half()
     model.cuda()
 
-    optimizer = FusedAdam(model.parameters(),
+    param_optimizer = list(model.named_parameters())
+
+    # hack to remove pooler, which is not used
+    # thus it produce None grad that break apex
+    param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
+
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+
+    optimizer = FusedAdam(optimizer_grouped_parameters,
                           lr=args.learning_rate,
                           bias_correction=False,
                           weight_decay=args.weight_decay,
@@ -201,7 +213,7 @@ if __name__ == '__main__':
 
     num_train_examples = math.ceil(len(dataset)*0.9)
     train_set, valid_set = random_split(dataset, [num_train_examples, len(dataset) - num_train_examples])
-    # train_set = Subset(dataset, range(500))
+    # train_set = Subset(dataset, range(240))
     # valid_set = Subset(dataset, [i+40 for i in range(40)])
 
     if is_distributed:
