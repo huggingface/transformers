@@ -105,13 +105,10 @@ def bertModel(*args, **kwargs):
         #  Prepare tokenized input
         >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
         >>> tokenized_text = tokenizer.tokenize(text)
-        ['[CLS]', 'Who', 'was', 'Jim', 'He', '##nson', '?', '[SEP]', 'Jim', 'He', '##nson', 'was', 'a', 'puppet', '##eer', '[SEP]']
         >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
         >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
         >>> tokens_tensor = torch.tensor([indexed_tokens])
-        tensor([[101,  2627,  1108,  3104,  1124, 15703, 136, 102, 3104, 1124, 15703, 1108, 170, 16797, 8284, 102]])
         >>> segments_tensors = torch.tensor([segments_ids])
-        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]])
         # Load bertModel
         >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'bertModel', 'bert-base-cased')
         >>> model.eval()
@@ -190,7 +187,6 @@ def bertForMaskedLM(*args, **kwargs):
         >>> tokenized_text = tokenizer.tokenize(text)
         >>> masked_index = 8
         >>> tokenized_text[masked_index] = '[MASK]'
-        ['[CLS]', 'who', 'was', 'jim', 'henson', '?', '[SEP]', 'jim', '[MASK]', 'was', 'a', 'puppet', '##eer', '[SEP]']
         >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
         >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
         >>> tokens_tensor = torch.tensor([indexed_tokens])
