@@ -214,7 +214,8 @@ def bertForSequenceClassification(*args, **kwargs):
     """
     BertForSequenceClassification is a fine-tuning model that includes
     BertModel and a sequence-level (sequence or pair of sequences) classifier
-    on top of the BertModel.
+    on top of the BertModel. Note that the classification head is only initialized
+    and has to be trained.
 
     The sequence-level classifier is a linear layer that takes as input the
     last hidden state of the first character in the input sequence
@@ -252,7 +253,8 @@ def bertForSequenceClassification(*args, **kwargs):
 def bertForMultipleChoice(*args, **kwargs):
     """
     BertForMultipleChoice is a fine-tuning model that includes BertModel and a
-    linear layer on top of the BertModel.
+    linear layer on top of the BertModel. Note that the multiple choice head is
+    only initialized and has to be trained.
 
     Args:
     num_choices: the number (>=2) of classes for the classifier.
@@ -287,7 +289,8 @@ def bertForQuestionAnswering(*args, **kwargs):
     """
     BertForQuestionAnswering is a fine-tuning model that includes BertModel
     with a token-level classifiers on top of the full sequence of last hidden
-    states.
+    states. Note that the classification head is only initialized
+    and has to be trained.
 
     Example:
         # Load the tokenizer
@@ -318,7 +321,8 @@ def bertForQuestionAnswering(*args, **kwargs):
 def bertForTokenClassification(*args, **kwargs):
     """
     BertForTokenClassification is a fine-tuning model that includes BertModel
-    and a token-level classifier on top of the BertModel.
+    and a token-level classifier on top of the BertModel. Note that the classification
+    head is only initialized and has to be trained.
 
     The token-level classifier is a linear layer that takes as input the last
     hidden state of the sequence.
