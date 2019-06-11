@@ -25,6 +25,7 @@ from pytorch_pretrained_bert.modeling import BertForPreTraining, BertConfig
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import WarmupLinearSchedule
 
+from tensorboardX import SummaryWriter
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -117,7 +118,6 @@ def eval_epoch(model, iterator):
             total_loss += loss.item()
     return total_loss/n_iters
 
-
 def create_logger(save_path):
     logger = logging.getLogger()
     # Debug = write everything
@@ -146,6 +146,7 @@ if __name__ == '__main__':
     rank = int(os.environ.get('RANK', 0))
     local_rank = int(os.environ.get('LOCAL_RANK', 0))
     world_size = int(os.environ.get('WORLD_SIZE', 1))
+    global_step = 0
 
     if rank == 0:
         if os.path.exists(args.exp_dir):
@@ -154,6 +155,13 @@ if __name__ == '__main__':
         os.mkdir(args.exp_dir)
         os.mkdir(os.path.join(args.exp_dir, 'logs'))
         os.mkdir(os.path.join(args.exp_dir, 'checkpoints'))
+
+        os.mkdir(os.path.join(args.exp_dir, 'tensorboard'))
+        event_writer = SummaryWriter(os.path.join(args.exp_dir, 'tensorboard'))
+
+    def log_tb(tag, val):
+        event_writer.add_scalar(tag, val, global_step)
+
 
     is_distributed = (world_size > 1)
     if is_distributed:
@@ -254,6 +262,8 @@ if __name__ == '__main__':
             loss = lm_loss + nsp_loss
             train_nsp_loss += nsp_loss.item()
             train_lm_loss += lm_loss.item()
+
+            global_step += args.batch_size * world_size
 
             if args.use_fp16:
                 # backward pass

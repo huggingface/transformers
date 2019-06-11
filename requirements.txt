@@ -8,3 +8,6 @@ boto3
 requests
 # For OpenAI GPT
 regex
+
+# For logging metrics
+tensorboardX
