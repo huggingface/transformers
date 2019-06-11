@@ -7,13 +7,14 @@ import random
 import os
 
 
-from apex.optimizers import FusedAdam, FP16_Optimizer
+from apex.optimizers import FusedAdam
 # from apex.fp16_utils import FP16_Optimizer
-from apex.parallel import DistributedDataParallel as DDP
+from fp16_opt import FP16_Module, FP16_Optimizer
+#from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
 
-# from torch.distributed import DistributedDataParallel as DDP
+from torch.distributed import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split, Subset
 from torch.utils.data.sampler import RandomSampler, BatchSampler
@@ -176,9 +177,11 @@ if __name__ == '__main__':
     model = BertForPreTraining(model_config)
     logger.info(' > number of parameters: {}'.format(
         sum([p.nelement() for p in model.parameters()])))
-    if args.use_fp16:
-        model = model.half()
+
     model.cuda()
+
+    if args.use_fp16:
+        model = FP16_Module(model)
 
     param_optimizer = list(model.named_parameters())
 
@@ -201,7 +204,10 @@ if __name__ == '__main__':
     warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
                                          t_total=args.train_iters)
     if args.use_fp16:
-        optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+        optimizer = FP16_Optimizer(optimizer,
+                                   dynamic_loss_scale=True,
+                                   dynamic_loss_args={'init_scale': 2 ** 16},
+                                   verbose=False)
 
     if is_distributed:
         model = DDP(model, delay_allreduce=False)
