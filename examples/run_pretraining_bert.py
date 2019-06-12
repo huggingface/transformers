@@ -13,7 +13,7 @@ from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
 
-from torch.distributed import DistributedDataParallel as DDP
+#from torch.distributed import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split, Subset
 from torch.utils.data.sampler import RandomSampler, BatchSampler
