@@ -7,8 +7,9 @@ import random
 import os
 
 
-from apex.optimizers import FusedAdam, FP16_Optimizer
+# from pytorch_lamb import Lamb, log_lamb_rs
 # from apex.fp16_utils import FP16_Optimizer
+from apex.optimizers import FusedAdam, FP16_Optimizer
 from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
@@ -22,7 +23,7 @@ from torch.utils.data.distributed import DistributedSampler
 from pytorch_pretrained_bert.datasets import LazyDataset, JSONDataset, BertDataset, PreprocessedBertDataset
 from pytorch_pretrained_bert.modeling import BertForPreTraining, BertConfig
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.optimization import WarmupLinearSchedule
+from pytorch_pretrained_bert.optimization import WarmupLinearSchedule, WarmupConstantSchedule
 
 
 def get_args():
@@ -33,6 +34,8 @@ def get_args():
                            help='path to dataset')
     exp_group.add_argument('--exp-dir', type=str, default='/home/hdvries/experiments/test2',
                            help='path to dataset')
+    exp_group.add_argument('--load-ckpt', type=str, default=None,
+                           help='Start training from checkpoint?')
     exp_group.add_argument('--report-every', type=int, default=100,
                            help='Report statistics every `report_iter` iterations')
     exp_group.add_argument('--save-every', type=int, default=10000,
@@ -63,6 +66,8 @@ def get_args():
 
     opt_group.add_argument('--batch-size', type=int, default=5,
                        help='Data Loader batch size')
+    model_group.add_argument('--max-seq-length', type=int, default=512,
+                             help='Maximum sequence length during training')
     opt_group.add_argument('--learning-rate', type=float, default=1e-4,
                            help='Learning rate')
     opt_group.add_argument('--warmup-proportion', type=float, default=0.01,
@@ -91,30 +96,6 @@ def calc_loss(scores, labels):
     #     accuracy = float(sum(flat_labels==ind))/float((sum(flat_labels != -1)))
     loss = loss_fn(flat_scores, flat_labels)
     return loss
-
-
-def eval_epoch(model, iterator):
-    model.eval()
-
-    total_loss = 0.0
-    n_iters = 0
-
-    with torch.no_grad():
-        for batch in tqdm(iterator):
-            n_iters += 1
-
-            # move to batch to gpu
-            for k, v in batch.items():
-                batch[k] = batch[k].cuda()
-
-            # forward pass
-            loss = model.forward(batch['input_tokens'],
-                                 batch['segment_ids'],
-                                 batch['attention_mask'],
-                                 batch['lm_labels'],
-                                 batch['is_random_next'])
-            total_loss += loss.item()
-    return total_loss/n_iters
 
 
 def create_logger(save_path):
@@ -192,28 +173,48 @@ if __name__ == '__main__':
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
-    optimizer = FusedAdam(optimizer_grouped_parameters,
+    if args.use_fp16:
+        optimizer = FusedAdam(optimizer_grouped_parameters,
                           lr=args.learning_rate,
                           bias_correction=False,
-                          weight_decay=args.weight_decay,
                           max_grad_norm=args.max_grad_norm)
-
-    warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
-                                         t_total=args.train_iters)
-    if args.use_fp16:
         optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+    else:
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters,
+                                     lr=args.learning_rate)
+
+
+    # optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=args.learning_rate)
+
+    # optimizer = Lamb(optimizer_grouped_parameters, lr=args.learning_rate)
+
+
+    lr_schedule = WarmupLinearSchedule(warmup=args.warmup_proportion,
+                                       t_total=args.train_iters)
+    # lr_schedule = WarmupConstantSchedule(warmup=args.warmup_proportion,
+    #                                      t_total=args.train_iters)
+
+    it = 1
+    if args.load_ckpt is not None:
+        logger.info('Start training from checkpoint `%s`' % args.load_ckpt)
+        ckpt = torch.load(args.load_ckpt)
+        model.load_state_dict(ckpt['model'])
+        # optimizer.load_state_dict(ckpt['opt'])
+        it = ckpt['it']
+
 
     if is_distributed:
         model = DDP(model, delay_allreduce=False)
 
+
     logger.info('Loading data and creating iterators...')
     dataset = LazyDataset(args.data_path, use_mmap=True)
     dataset = JSONDataset(dataset)
-    dataset = PreprocessedBertDataset(dataset, tokenizer)
+    dataset = PreprocessedBertDataset(dataset, tokenizer, max_seq_length=args.max_seq_length)
 
     num_train_examples = math.ceil(len(dataset)*0.9)
     train_set, valid_set = random_split(dataset, [num_train_examples, len(dataset) - num_train_examples])
-    # train_set = Subset(dataset, range(240))
+    # train_set = Subset(dataset, range(48))
     # valid_set = Subset(dataset, [i+40 for i in range(40)])
 
     if is_distributed:
@@ -233,7 +234,6 @@ if __name__ == '__main__':
     epoch = 1
 
     train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
-    it = 1
     while it < n_iters+1:
         for batch in iter(train_loader):
             # move to batch to gpu
@@ -256,7 +256,7 @@ if __name__ == '__main__':
                 loss.backward()
 
             # set the learning rate
-            lr_this_step = args.learning_rate * warmup_linear.get_lr(it, args.warmup_proportion)
+            lr_this_step = args.learning_rate * lr_schedule.get_lr(it, args.warmup_proportion)
             for param_group in optimizer.param_groups:
                 param_group['lr'] = lr_this_step
 
@@ -271,14 +271,19 @@ if __name__ == '__main__':
                 log_str += ' train_lm_loss: {:.3E} |'.format(train_lm_loss/args.report_every)
                 log_str += ' train_nsp_loss: {:.3E} |'.format(train_nsp_loss/args.report_every)
                 log_str += ' time per batch: {:4F}ms |'.format(1000*(time.time() - process_time)/args.report_every)
+                log_str += ' lr: {:.3E} |'.format(lr_this_step)
+                # log_str += ' loss scale: {:7d} |'.format(int(optimizer.cur_scale))
                 logger.info(log_str)
                 train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
 
             # save checkpoint every `args.save_iter` iterations
-            if it % args.save_every== 0 and rank == 0:
+            if it % args.save_every == 0 and rank == 0:
                 save_dict = dict()
-                save_dict['model'] = model.state_dict()
-                save_dict['opt'] = optimizer.state_dict()
+                if is_distributed:
+                    save_dict['model'] = model.module.state_dict()
+                else:
+                    save_dict['model'] = model.state_dict()
+                save_dict['opt'] = optimizer.optimizer.state_dict()
                 save_dict['it'] = it
                 save_path = os.path.join(args.exp_dir, 'checkpoints', 'chkpt.%s.pt' % str(it))
                 torch.save(save_dict, save_path)

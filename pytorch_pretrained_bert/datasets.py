@@ -315,8 +315,8 @@ class PreprocessedBertDataset(Dataset):
         segment_ids.append(1)
 
         # pad sequences to max length
-        attention_mask = [1] * 512
-        attention_mask[len(tokens):] = [0] * (512 - len(tokens))
+        attention_mask = [1] * self.max_seq_length
+        attention_mask[len(tokens):] = [0] * (self.max_seq_length - len(tokens))
         self.pad_seq(tokens, self.max_seq_length, '[PAD]')
         self.pad_seq(segment_ids, self.max_seq_length, 0)
 
@@ -388,8 +388,8 @@ if __name__ == '__main__':
 
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
 
-    dataset = JSONDataset(LazyDataset('/home/hdvries/data/preprocessed_test.txt'))
-    dataset = PreprocessedBertDataset(dataset, tokenizer)
+    dataset = JSONDataset(LazyDataset('/home/hdvries/data/prep_128.txt'))
+    dataset = PreprocessedBertDataset(dataset, tokenizer, max_seq_length=128)
 
 
     # wiki_dataset = LazyDataset('/home/nathan/data/wiki/enwiki.txt', use_mmap=True)
@@ -401,4 +401,4 @@ if __name__ == '__main__':
     iterator = DataLoader(dataset, batch_sampler=sampler, num_workers=1, pin_memory=True)
 
     for batch in iterator:
-        print(batch.keys())
+        print(batch['input_tokens'].shape)
