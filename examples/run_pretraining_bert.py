@@ -13,7 +13,7 @@ from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
 
-from torch.distributed import DistributedDataParallel as DDP
+#from torch.distributed import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split, Subset
 from torch.utils.data.sampler import RandomSampler, BatchSampler
@@ -286,6 +286,11 @@ if __name__ == '__main__':
                 log_str += ' train_nsp_loss: {:.3E} |'.format(train_nsp_loss/args.report_every)
                 log_str += ' time per batch: {:4F}ms |'.format(1000*(time.time() - process_time)/args.report_every)
                 logger.info(log_str)
+
+                log_tb('train_lm_loss', train_lm_loss)
+                log_tb('train_nsp_loss', train_nsp_loss)
+                log_tb('time_per_batch', 1000*(time.time() - process_time)/args.report_every)
+
                 train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
 
             # save checkpoint every `args.save_iter` iterations
