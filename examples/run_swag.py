@@ -390,7 +390,7 @@ def main():
 
         # hack to remove pooler, which is not used
         # thus it produce None grad that break apex
-        param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
+        param_optimizer = [n for n in param_optimizer]
 
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
