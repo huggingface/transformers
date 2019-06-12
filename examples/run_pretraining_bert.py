@@ -7,10 +7,9 @@ import random
 import os
 
 
-from apex.optimizers import FusedAdam
+from apex.optimizers import FusedAdam, FP16_Optimizer
 # from apex.fp16_utils import FP16_Optimizer
-from fp16_opt import FP16_Module, FP16_Optimizer
-#from apex.parallel import DistributedDataParallel as DDP
+from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
 
@@ -146,7 +145,7 @@ if __name__ == '__main__':
     rank = int(os.environ.get('RANK', 0))
     local_rank = int(os.environ.get('LOCAL_RANK', 0))
     world_size = int(os.environ.get('WORLD_SIZE', 1))
-    global_step = 0
+    global_batch_count = 0
 
     if rank == 0:
         if os.path.exists(args.exp_dir):
@@ -160,8 +159,7 @@ if __name__ == '__main__':
         event_writer = SummaryWriter(os.path.join(args.exp_dir, 'tensorboard'))
 
     def log_tb(tag, val):
-        event_writer.add_scalar(tag, val, global_step)
-
+        event_writer.add_scalar(tag, val, global_batch_count)
 
     is_distributed = (world_size > 1)
     if is_distributed:
@@ -189,7 +187,7 @@ if __name__ == '__main__':
     model.cuda()
 
     if args.use_fp16:
-        model = FP16_Module(model)
+        model = model.half()
 
     param_optimizer = list(model.named_parameters())
 
@@ -263,7 +261,7 @@ if __name__ == '__main__':
             train_nsp_loss += nsp_loss.item()
             train_lm_loss += lm_loss.item()
 
-            global_step += args.batch_size * world_size
+            global_batch_count += args.batch_size * world_size
 
             if args.use_fp16:
                 # backward pass
