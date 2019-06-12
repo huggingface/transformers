@@ -13,7 +13,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 
 python -m torch.distributed.launch $DISTRIBUTED_ARGS \
   examples/run_pretraining_bert.py \
-    --exp-dir /home/hdvries/experiments/bert_large \
+    --exp-dir /home/nathan/experiments/fp16 \
     --max-position-embeddings 512 \
     --num-layers 24 \
     --hidden-size 1024 \

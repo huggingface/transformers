@@ -8,8 +8,6 @@ import os
 
 
 from apex.optimizers import FusedAdam, FP16_Optimizer
-# from apex.fp16_utils import FP16_Optimizer
-from fp16util import FP16Model
 from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
@@ -147,6 +145,7 @@ if __name__ == '__main__':
     local_rank = int(os.environ.get('LOCAL_RANK', 0))
     world_size = int(os.environ.get('WORLD_SIZE', 1))
     global_batch_count = 0
+    event_writer = None
 
     if rank == 0:
         if os.path.exists(args.exp_dir):
@@ -160,7 +159,8 @@ if __name__ == '__main__':
         event_writer = SummaryWriter(os.path.join(args.exp_dir, 'tensorboard'))
 
     def log_tb(tag, val):
-        event_writer.add_scalar(tag, val, global_batch_count)
+        if event_writer:
+            event_writer.add_scalar(tag, val, global_batch_count)
 
     is_distributed = (world_size > 1)
     if is_distributed:
@@ -188,7 +188,10 @@ if __name__ == '__main__':
     model.cuda()
 
     if args.use_fp16:
-        model = FP16Model(model)
+        model = model.half()
+
+    if is_distributed:
+        model = DDP(model)
 
     param_optimizer = list(model.named_parameters())
 
@@ -211,13 +214,7 @@ if __name__ == '__main__':
     warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
                                          t_total=args.train_iters)
     if args.use_fp16:
-        optimizer = FP16_Optimizer(optimizer,
-                                   dynamic_loss_scale=True,
-                                   dynamic_loss_args={'init_scale': 2 ** 16},
-                                   verbose=False)
-
-    if is_distributed:
-        model = DDP(model, delay_allreduce=False)
+        optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
 
     logger.info('Loading data and creating iterators...')
     dataset = LazyDataset(args.data_path, use_mmap=True)
