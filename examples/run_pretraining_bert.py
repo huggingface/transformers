@@ -9,6 +9,7 @@ import os
 
 from apex.optimizers import FusedAdam, FP16_Optimizer
 # from apex.fp16_utils import FP16_Optimizer
+from fp16util import FP16Model
 from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
@@ -187,7 +188,7 @@ if __name__ == '__main__':
     model.cuda()
 
     if args.use_fp16:
-        model = model.half()
+        model = FP16Model(model)
 
     param_optimizer = list(model.named_parameters())
 
@@ -280,16 +281,21 @@ if __name__ == '__main__':
 
             # report statistics every `args.report_iter` iterations
             if it % args.report_every == 0:
+                time_per_batch = 1000*(time.time() - process_time)/args.report_every
+                avg_train_lm_loss = train_lm_loss/args.report_every
+                avg_train_nsp_loss = train_nsp_loss/args.report_every
+                
+
                 log_str  = ' epoch{:2d} |'.format(epoch)
                 log_str += ' iteration: {:7d} |'.format(it)
-                log_str += ' train_lm_loss: {:.3E} |'.format(train_lm_loss/args.report_every)
-                log_str += ' train_nsp_loss: {:.3E} |'.format(train_nsp_loss/args.report_every)
-                log_str += ' time per batch: {:4F}ms |'.format(1000*(time.time() - process_time)/args.report_every)
+                log_str += ' train_lm_loss: {:.3E} |'.format(avg_train_lm_loss)
+                log_str += ' train_nsp_loss: {:.3E} |'.format(avg_train_nsp_loss)
+                log_str += ' time per batch: {:4F}ms |'.format(time_per_batch)
                 logger.info(log_str)
 
-                log_tb('train_lm_loss', train_lm_loss)
-                log_tb('train_nsp_loss', train_nsp_loss)
-                log_tb('time_per_batch', 1000*(time.time() - process_time)/args.report_every)
+                log_tb('train_lm_loss', avg_train_lm_loss)
+                log_tb('train_nsp_loss', avg_train_nsp_loss)
+                log_tb('time_per_batch', time_per_batch)
 
                 train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
 
