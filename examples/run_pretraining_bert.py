@@ -253,6 +253,8 @@ if __name__ == '__main__':
     n_iters = args.train_iters
     epoch = 1
 
+    model.train()
+
     train_lm_loss, train_nsp_loss, process_time = 0.0, 0.0, time.time()
     while it < n_iters+1:
         for batch in iter(train_loader):
