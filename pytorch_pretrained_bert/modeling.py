@@ -229,10 +229,10 @@ class BertConfig(object):
             writer.write(self.to_json_string())
 
 try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
+    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
 except ImportError:
-    logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    class BertLayerNorm(nn.Module):
+    print("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex.")
+    class LayerNorm(nn.Module):
         def __init__(self, hidden_size, eps=1e-12):
             """Construct a layernorm module in the TF style (epsilon inside the square root).
             """
@@ -246,6 +246,28 @@ except ImportError:
             s = (x - u).pow(2).mean(-1, keepdim=True)
             x = (x - u) / torch.sqrt(s + self.variance_epsilon)
             return self.weight * x + self.bias
+
+
+class BertLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-12):
+        """fp32 wrapper around LayerNorm
+        """
+        super(BertLayerNorm, self).__init__()
+        self.ln = LayerNorm(hidden_size, eps).half()
+
+    def forward(self, x):
+        t = x.type()
+        x = x.type_as(self.ln.weight)
+        out = self.ln(x)
+        return out.type(t)
+
+    @property
+    def bias(self):
+        return self.ln.bias
+
+    @property
+    def weight(self):
+        return self.ln.weight
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
@@ -273,6 +295,7 @@ class BertEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = words_embeddings + position_embeddings + token_type_embeddings
+        embeddings = embeddings.type_as(self.LayerNorm.weight)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -463,7 +486,9 @@ class BertLMPredictionHead(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states) + self.bias
+        t = hidden_states.type()
+        hidden_states = hidden_states.type_as(self.decoder.weight)
+        hidden_states = self.decoder(hidden_states).type(t) + self.bias
         return hidden_states
 
 
@@ -729,10 +754,12 @@ class BertModel(BertPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.encoder.parameters()).dtype) # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         embedding_output = self.embeddings(input_ids, token_type_ids)
+        embedding_output = embedding_output.to(dtype=next(self.encoder.parameters()).dtype) # fp16 compatibility
+
         encoded_layers = self.encoder(embedding_output,
                                       extended_attention_mask,
                                       output_all_encoded_layers=output_all_encoded_layers)

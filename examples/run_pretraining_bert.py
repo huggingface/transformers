@@ -7,7 +7,9 @@ import random
 import os
 
 
-from apex.optimizers import FusedAdam, FP16_Optimizer
+#from apex.optimizers import FusedAdam, FP16_Optimizer
+from apex.fp16_utils import FP16_Optimizer
+from fp16_opt import FP16_Module
 from apex.parallel import DistributedDataParallel as DDP
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
@@ -188,7 +190,15 @@ if __name__ == '__main__':
     model.cuda()
 
     if args.use_fp16:
-        model = model.half()
+        model = FP16_Module(model)
+        model.module.bert.embeddings.word_embeddings.float()
+        model.module.bert.embeddings.position_embeddings.float()
+        model.module.bert.embeddings.token_type_embeddings.float()
+        for name, _module in model.named_modules():
+            if 'LayerNorm' in name:
+                _module.float()
+
+        print(model)
 
     if is_distributed:
         model = DDP(model)
@@ -205,16 +215,22 @@ if __name__ == '__main__':
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
-    optimizer = FusedAdam(optimizer_grouped_parameters,
+    if args.use_fp16:
+        """
+        optimizer = FusedAdam(optimizer_grouped_parameters,
                           lr=args.learning_rate,
                           bias_correction=False,
-                          weight_decay=args.weight_decay,
                           max_grad_norm=args.max_grad_norm)
+        """
+        pass
+
+    optimizer = torch.optim.Adam(optimizer_grouped_parameters,
+                                 lr=args.learning_rate)
 
     warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
                                          t_total=args.train_iters)
     if args.use_fp16:
-        optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+        optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True, verbose=False)
 
     logger.info('Loading data and creating iterators...')
     dataset = LazyDataset(args.data_path, use_mmap=True)
