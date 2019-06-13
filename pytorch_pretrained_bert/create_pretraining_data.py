@@ -3,10 +3,16 @@ import random
 import os
 import time
 import tqdm
+import copy
+import sys
+import multiprocessing as mp
 
 
 from multiprocessing import Pool
 from tokenization import BertTokenizer
+
+tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
+rng = random.Random()
 
 def get_wiki_docs(wiki_path):
     all_documents = list()
@@ -25,17 +31,15 @@ def get_bookcorpus_docs(bookcorpus_dir):
     return all_documents
 
 def tokenize_document(document_index):
-    global all_documents
     document = all_documents[document_index]
-    document = [line for line in document.split('\n') if line]
-    document = [tokenizer.tokenize(line) for line in document]
-    return document
+    lines = [line for line in document.split('\n') if line]
+    list_of_tokens = [tokenizer.tokenize(line) for line in lines]
+    return list_of_tokens
 
 def create_instances_from_document(document_index, max_seq_length=128, short_seq_prob=0.0):
-    global all_documents
     """Creates `TrainingInstance`s for a single document."""
-    document = all_documents[document_index]
-
+    global tokenized_documents
+    document = tokenized_documents[document_index]
     # Account for [CLS], [SEP], [SEP]
     max_num_tokens = max_seq_length - 3
 
@@ -86,14 +90,13 @@ def create_instances_from_document(document_index, max_seq_length=128, short_seq
                     # corpora. However, just to be careful, we try to make sure that
                     # the random document is not the same as the document
                     # we're processing.
-                    random_document_index = rng.randint(0, len(all_documents) - 1)
+                    random_document_index = rng.randint(0, len(tokenized_documents) - 1)
                     for _ in range(10):
                         if random_document_index != document_index:
                             break
-                        random_document_index = rng.randint(0, len(all_documents) - 1)
+                        random_document_index = rng.randint(0, len(tokenized_documents) - 1)
 
-
-                    random_document = all_documents[random_document_index]
+                    random_document = tokenized_documents[random_document_index]
                     random_start = rng.randint(0, len(random_document) - 1)
                     for j in range(random_start, len(random_document)):
                         tokens_b.extend(random_document[j])
@@ -122,34 +125,50 @@ def create_instances_from_document(document_index, max_seq_length=128, short_seq
 
 
 if __name__ == '__main__':
-    tokenizer = BertTokenizer.from_pretrained('bert-large-uncased', cache_dir='./data')
-    rng = random.Random()
+    mp.set_start_method('fork')
+    n_cores = 30
 
-    with open('/home/hdvries/data/preprocessed_128.txt', 'w', encoding='utf-8') as f_out:
+    out_path = '/home/hdvries/data/prep_128.txt'
+    all_documents = get_wiki_docs('/home/nathan/data/wiki/enwiki.txt')
+    pool = Pool(n_cores)
+    tokenized_documents = list()
 
-        def _process_documents(f_out, dataset='wiki', n_cores=40):
-            global all_documents
-            pool = Pool(n_cores)
-            tokenized_documents = list()
-            for doc in tqdm.tqdm(pool.imap_unordered(tokenize_document, range(len(all_documents))),
-                                 total=len(all_documents)):
-                tokenized_documents.append(doc)
-            pool.close()
-            pool.join()
+    for doc in tqdm.tqdm(pool.imap_unordered(tokenize_document, range(len(all_documents))),
+                         total=len(all_documents)):
+        tokenized_documents.append(doc)
+    pool.close()
 
-            all_documents = tokenized_documents
-            pool = Pool(n_cores)
-            for results in tqdm.tqdm(pool.imap_unordered(create_instances_from_document, range(len(all_documents))),
-                                     total=len(all_documents)):
-                for r in results:
-                    r['dataset'] = dataset
-                    f_out.write(json.dumps(r))
-                    f_out.write('\n')
-            pool.close()
-            pool.join()
+    del all_documents
 
-        all_documents = get_wiki_docs('/home/nathan/data/wiki/enwiki.txt')
-        _process_documents(f_out, 'wiki')
+    pool = Pool(n_cores, maxtasksperchild=100000)
+    with open(out_path, 'a', encoding='utf-8') as f_out:
+        for results in tqdm.tqdm(pool.imap_unordered(create_instances_from_document, range(len(tokenized_documents))),
+                                 total=len(tokenized_documents)):
+            for r in results:
+                r['dataset'] = 'wiki'
+                f_out.write(json.dumps(r))
+                f_out.write('\n')
+    pool.close()
 
-        all_documents = get_bookcorpus_docs('/home/hdvries/DeepLearningExamples/TensorFlow/LanguageModeling/BERT/data/bookcorpus/download/')
-        _process_documents(f_out, 'bookcorpus')
+    del tokenized_documents
+
+    all_documents = get_bookcorpus_docs('/home/hdvries/DeepLearningExamples/TensorFlow/LanguageModeling/BERT/data/bookcorpus/download/')
+    pool = Pool(n_cores)
+    tokenized_documents = list()
+
+    for doc in tqdm.tqdm(pool.imap_unordered(tokenize_document, range(len(all_documents))),
+                         total=len(all_documents)):
+        tokenized_documents.append(doc)
+    pool.close()
+
+    del all_documents
+
+    pool = Pool(n_cores, maxtasksperchild=10000)
+    with open(out_path, 'a', encoding='utf-8') as f_out:
+        for results in tqdm.tqdm(pool.imap_unordered(create_instances_from_document, range(len(tokenized_documents))),
+                                 total=len(tokenized_documents)):
+            for r in results:
+                r['dataset'] = 'bookcorpus'
+                f_out.write(json.dumps(r))
+                f_out.write('\n')
+    pool.close()
