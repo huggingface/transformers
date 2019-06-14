@@ -1,0 +1,8 @@
+[run]
+source=pytorch_pretrained_bert
+[report]
+exclude_lines =
+    pragma: no cover
+    raise
+    except
+    register_parameter

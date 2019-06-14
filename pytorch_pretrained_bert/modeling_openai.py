@@ -143,6 +143,7 @@ class OpenAIGPTConfig(object):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+        predict_special_tokens=True
     ):
         """Constructs OpenAIGPTConfig.
 
@@ -165,6 +166,7 @@ class OpenAIGPTConfig(object):
             layer_norm_epsilon: epsilon to use in the layer norm layers
             initializer_range: The sttdev of the truncated_normal_initializer for
                 initializing all weight matrices.
+            predict_special_tokens: should we predict special tokens (when the model has a LM head)
         """
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
                         and isinstance(vocab_size_or_config_json_file, unicode)):
@@ -186,6 +188,7 @@ class OpenAIGPTConfig(object):
             self.attn_pdrop = attn_pdrop
             self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
+            self.predict_special_tokens = predict_special_tokens
         else:
             raise ValueError(
                 "First argument must be either a vocabulary size (int)"
@@ -253,7 +256,7 @@ class Conv1D(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False):
+    def __init__(self, nx, n_ctx, config, scale=False, output_attentions=False):
         super(Attention, self).__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -262,6 +265,7 @@ class Attention(nn.Module):
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
+        self.output_attentions = output_attentions
         self.c_attn = Conv1D(n_state * 3, 1, nx)
         self.c_proj = Conv1D(n_state, 1, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -278,6 +282,8 @@ class Attention(nn.Module):
 
         w = nn.Softmax(dim=-1)(w)
         w = self.attn_dropout(w)
+        if self.output_attentions:
+            return w, torch.matmul(w, v)
         return torch.matmul(w, v)
 
     def merge_heads(self, x):
@@ -300,9 +306,13 @@ class Attention(nn.Module):
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
         a = self._attn(query, key, value)
+        if self.output_attentions:
+            attentions, a = a
         a = self.merge_heads(a)
         a = self.c_proj(a)
         a = self.resid_dropout(a)
+        if self.output_attentions:
+            return attentions, a
         return a
 
 
@@ -322,19 +332,24 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, scale=False):
+    def __init__(self, n_ctx, config, scale=False, output_attentions=False):
         super(Block, self).__init__()
         nx = config.n_embd
-        self.attn = Attention(nx, n_ctx, config, scale)
+        self.output_attentions = output_attentions
+        self.attn = Attention(nx, n_ctx, config, scale, output_attentions)
         self.ln_1 = LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = LayerNorm(nx, eps=config.layer_norm_epsilon)
 
     def forward(self, x):
         a = self.attn(x)
+        if self.output_attentions:
+            attentions, a = a
         n = self.ln_1(x + a)
         m = self.mlp(n)
         h = self.ln_2(n + m)
+        if self.output_attentions:
+            return attentions, h
         return h
 
 
@@ -344,17 +359,21 @@ class OpenAIGPTLMHead(nn.Module):
     def __init__(self, model_embeddings_weights, config):
         super(OpenAIGPTLMHead, self).__init__()
         self.n_embd = config.n_embd
-        self.set_embeddings_weights(model_embeddings_weights)
-
-    def set_embeddings_weights(self, model_embeddings_weights):
+        self.vocab_size = config.vocab_size
+        self.predict_special_tokens = config.predict_special_tokens
         embed_shape = model_embeddings_weights.shape
         self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
+        self.set_embeddings_weights(model_embeddings_weights)
+
+    def set_embeddings_weights(self, model_embeddings_weights, predict_special_tokens=True):
+        self.predict_special_tokens = predict_special_tokens
+        embed_shape = model_embeddings_weights.shape
         self.decoder.weight = model_embeddings_weights  # Tied weights
 
     def forward(self, hidden_state):
-        # Truncated Language modeling logits (we remove the last token)
-        # h_trunc = h[:, :-1].contiguous().view(-1, self.n_embd)
         lm_logits = self.decoder(hidden_state)
+        if not self.predict_special_tokens:
+            lm_logits = lm_logits[..., :self.vocab_size]
         return lm_logits
 
 
@@ -364,7 +383,6 @@ class OpenAIGPTMultipleChoiceHead(nn.Module):
     def __init__(self, config):
         super(OpenAIGPTMultipleChoiceHead, self).__init__()
         self.n_embd = config.n_embd
-        # self.multiple_choice_token = multiple_choice_token
         self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
         self.linear = nn.Linear(config.n_embd, 1)
 
@@ -414,9 +432,6 @@ class OpenAIGPTPreTrainedModel(nn.Module):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-    def set_num_special_tokens(self, num_special_tokens):
-        pass
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, num_special_tokens=None, *inputs, **kwargs):
@@ -594,17 +609,16 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     ```
     """
 
-    def __init__(self, config):
+    def __init__(self, config, output_attentions=False):
         super(OpenAIGPTModel, self).__init__(config)
-        num_tokens = config.vocab_size + config.n_special
-        self.tokens_embed = nn.Embedding(num_tokens, config.n_embd)
+        self.output_attentions = output_attentions
+        self.tokens_embed = nn.Embedding(config.total_tokens_embeddings, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
-        block = Block(config.n_ctx, config, scale=True)
+        block = Block(config.n_ctx, config, scale=True, output_attentions=output_attentions)
         self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(config.n_layer)])
 
         self.apply(self.init_weights)
-        # nn.init.normal_(self.embed.weight, std=0.02)
 
     def set_num_special_tokens(self, num_special_tokens):
         " Update input embeddings with new embedding matrice if needed "
@@ -640,12 +654,19 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             token_type_embeds = self.tokens_embed(token_type_ids)
         else:
             token_type_embeds = 0
-        # Add the position information to the input embeddings
-        # h = e.sum(dim=2)
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
+        hidden_states = self.drop(hidden_states)
+
+        all_attentions = []
         for block in self.h:
-            hidden_states = block(hidden_states)
+            if self.output_attentions:
+                attentions, hidden_states = block(hidden_states)
+                all_attentions.append(attentions)
+            else:
+                hidden_states = block(hidden_states)
         output_shape = input_shape + (hidden_states.size(-1),)
+        if self.output_attentions:
+            return all_attentions, hidden_states.view(*output_shape)
         return hidden_states.view(*output_shape)
 
 
@@ -705,21 +726,24 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     ```
     """
 
-    def __init__(self, config):
+    def __init__(self, config, output_attentions=False):
         super(OpenAIGPTLMHeadModel, self).__init__(config)
-        self.transformer = OpenAIGPTModel(config)
+        self.transformer = OpenAIGPTModel(config, output_attentions=output_attentions)
         self.lm_head = OpenAIGPTLMHead(self.transformer.tokens_embed.weight, config)
         self.apply(self.init_weights)
 
-    def set_num_special_tokens(self, num_special_tokens):
+    def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
         """ Update input and output embeddings with new embedding matrice
             Make sure we are sharing the embeddings
         """
+        self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
         self.transformer.set_num_special_tokens(num_special_tokens)
-        self.lm_head.set_embeddings_weights(self.transformer.tokens_embed.weight)
+        self.lm_head.set_embeddings_weights(self.transformer.tokens_embed.weight, predict_special_tokens=predict_special_tokens)
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None):
         hidden_states = self.transformer(input_ids, position_ids, token_type_ids)
+        if self.transformer.output_attentions:
+            all_attentions, hidden_states = hidden_states
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
             # Shift so that tokens < n predict n
@@ -730,6 +754,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
             return loss
+        if self.transformer.output_attentions:
+            return all_attentions, lm_logits
         return lm_logits
 
 
@@ -794,22 +820,25 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     ```
     """
 
-    def __init__(self, config):
+    def __init__(self, config, output_attentions=False):
         super(OpenAIGPTDoubleHeadsModel, self).__init__(config)
-        self.transformer = OpenAIGPTModel(config)
+        self.transformer = OpenAIGPTModel(config, output_attentions=output_attentions)
         self.lm_head = OpenAIGPTLMHead(self.transformer.tokens_embed.weight, config)
         self.multiple_choice_head = OpenAIGPTMultipleChoiceHead(config)
         self.apply(self.init_weights)
 
-    def set_num_special_tokens(self, num_special_tokens):
+    def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
         """ Update input and output embeddings with new embedding matrice
             Make sure we are sharing the embeddings
         """
+        self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
         self.transformer.set_num_special_tokens(num_special_tokens)
-        self.lm_head.set_embeddings_weights(self.transformer.tokens_embed.weight)
+        self.lm_head.set_embeddings_weights(self.transformer.tokens_embed.weight, predict_special_tokens=predict_special_tokens)
 
     def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None, position_ids=None):
         hidden_states = self.transformer(input_ids, position_ids, token_type_ids)
+        if self.transformer.output_attentions:
+            all_attentions, hidden_states = hidden_states
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
@@ -823,4 +852,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))
         if losses:
             return losses
+        if self.transformer.output_attentions:
+            return all_attentions, lm_logits, mc_logits
         return lm_logits, mc_logits
