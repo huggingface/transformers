@@ -667,7 +667,7 @@ class BertPreTrainedModel(nn.Module):
         TensorFlow checkpoint file, instead of an archive / folder.
 
         Params:
-            bert_config_path: a path to a locally saved `bert_config.json`
+            config_file: a path to a locally saved `bert_config.json`
             tf_ckpt_path: path to a locally saved TensorFlow checkpoint:
                     (ex: `/full/path/to/folder/model.ckpt-240000`)
             *inputs, **kwargs: additional input for the specific Bert class
