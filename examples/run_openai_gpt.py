@@ -190,7 +190,7 @@ def main():
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
             ]
-        num_train_optimization_steps = len(train_data) * args.num_train_epochs // args.train_batch_size
+        num_train_optimization_steps = len(train_dataloader) * args.num_train_epochs
         optimizer = OpenAIAdam(optimizer_grouped_parameters,
                                lr=args.learning_rate,
                                warmup=args.warmup_proportion,
