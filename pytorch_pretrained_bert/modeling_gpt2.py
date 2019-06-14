@@ -432,6 +432,8 @@ class GPT2PreTrainedModel(nn.Module):
         kwargs.pop('cache_dir', None)
         from_tf = kwargs.get('from_tf', False)
         kwargs.pop('from_tf', None)
+        num_special_tokens = kwargs.get('num_special_tokens', None)
+        kwargs.pop('num_special_tokens', None)
 
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
