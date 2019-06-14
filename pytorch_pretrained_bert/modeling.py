@@ -56,7 +56,7 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        print("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+        print("Loading TensorFlow models in PyTorch requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
@@ -233,7 +233,7 @@ except ImportError:
     logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
     class BertLayerNorm(nn.Module):
         def __init__(self, hidden_size, eps=1e-12):
-            """Construct a layernorm module in the TF style (epsilon inside the square root).
+            """Construct a layernorm module in TF style (epsilon inside the square root).
             """
             super(BertLayerNorm, self).__init__()
             self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -655,6 +655,80 @@ class BertPreTrainedModel(nn.Module):
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                model.__class__.__name__, "\n\t".join(error_msgs)))
+        return model
+    
+    @classmethod
+    def from_tf_ckpt(cls, config_file, tf_ckpt_path, *inputs, **kwargs):
+        """
+        Instantiate a BertPreTrainedModel from a pre-trained TensorFlow checkpoint.
+
+        The difference between this method and `from_pretrained()` with `from_tf`
+        set to `True` is that this method allows you to directly load a specific
+        TensorFlow checkpoint file, instead of an archive / folder.
+
+        Params:
+            bert_config_path: a path to a locally saved `bert_config.json`
+            tf_ckpt_path: path to a locally saved TensorFlow checkpoint:
+                    (ex: `/full/path/to/folder/model.ckpt-240000`)
+            *inputs, **kwargs: additional input for the specific Bert class
+                (ex: num_labels for BertForSequenceClassification)
+        """
+        # Load config
+        config = BertConfig.from_json_file(config_file)
+        logger.info("Model config {}".format(config))
+
+        # Converting TensorFlow checkpoint to PyTorch state dict
+        model = BertForPreTraining(config)
+        load_tf_weights_in_bert(model, tf_ckpt_path)
+        state_dict = model.state_dict()
+
+        # Instantiate model.
+        model = cls(config, *inputs, **kwargs)
+
+        # Load from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in state_dict.keys():
+            new_key = None
+            if 'gamma' in key:
+                new_key = key.replace('gamma', 'weight')
+            if 'beta' in key:
+                new_key = key.replace('beta', 'bias')
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            state_dict[new_key] = state_dict.pop(old_key)
+
+        missing_keys = []
+        unexpected_keys = []
+        error_msgs = []
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, '_metadata', None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        def load(module, prefix=''):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            module._load_from_state_dict(
+                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + '.')
+        start_prefix = ''
+        if not hasattr(model, 'bert') and any(s.startswith('bert.') for s in state_dict.keys()):
+            start_prefix = 'bert.'
+        load(model, prefix=start_prefix)
+        if len(missing_keys) > 0:
+            logger.info("Weights of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, missing_keys))
+        if len(unexpected_keys) > 0:
+            logger.info("Weights from pretrained model not used in {}: {}".format(
+                model.__class__.__name__, unexpected_keys))
+        if len(error_msgs) > 0:
+            raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
+                            model.__class__.__name__, "\n\t".join(error_msgs)))
         return model
 
 
