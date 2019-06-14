@@ -272,7 +272,7 @@ class OpenAIGPTTokenizer(object):
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
         if clean_up_tokenization_spaces:
             out_string = out_string.replace('<unk>', '')
-            out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ',').replace(' ,', ','
+            out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
                     ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
                     ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
         return out_string
