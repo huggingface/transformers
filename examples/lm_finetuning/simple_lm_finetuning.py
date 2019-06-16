@@ -29,9 +29,10 @@ from torch.utils.data import DataLoader, Dataset, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
+from pytorch_pretrained_bert import WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.modeling import BertForPreTraining
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
+from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -534,34 +535,37 @@ def main():
         model = torch.nn.DataParallel(model)
 
     # Prepare optimizer
-    param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
+    if args.do_train:
+        param_optimizer = list(model.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            ]
 
-    if args.fp16:
-        try:
-            from apex.optimizers import FP16_Optimizer
-            from apex.optimizers import FusedAdam
-        except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+        if args.fp16:
+            try:
+                from apex.optimizers import FP16_Optimizer
+                from apex.optimizers import FusedAdam
+            except ImportError:
+                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
 
-        optimizer = FusedAdam(optimizer_grouped_parameters,
-                              lr=args.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+            optimizer = FusedAdam(optimizer_grouped_parameters,
+                                  lr=args.learning_rate,
+                                  bias_correction=False,
+                                  max_grad_norm=1.0)
+            if args.loss_scale == 0:
+                optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+            else:
+                optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
+            warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
+                                                 t_total=num_train_optimization_steps)
+
         else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-
-    else:
-        optimizer = BertAdam(optimizer_grouped_parameters,
-                             lr=args.learning_rate,
-                             warmup=args.warmup_proportion,
-                             t_total=num_train_optimization_steps)
+            optimizer = BertAdam(optimizer_grouped_parameters,
+                                 lr=args.learning_rate,
+                                 warmup=args.warmup_proportion,
+                                 t_total=num_train_optimization_steps)
 
     global_step = 0
     if args.do_train:
@@ -601,7 +605,7 @@ def main():
                     if args.fp16:
                         # modify learning rate with special warm up BERT uses
                         # if args.fp16 is False, BertAdam is used that handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
+                        lr_this_step = args.learning_rate * warmup_linear.get_lr(global_step, args.warmup_proportion)
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
                     optimizer.step()
@@ -611,9 +615,12 @@ def main():
         # Save a trained model
         logger.info("** ** * Saving fine - tuned model ** ** * ")
         model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-        output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+        output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
+        output_config_file = os.path.join(args.output_dir, CONFIG_NAME)
         if args.do_train:
             torch.save(model_to_save.state_dict(), output_model_file)
+            model_to_save.config.to_json_file(output_config_file)
+            tokenizer.save_vocabulary(args.output_dir)
 
 
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
