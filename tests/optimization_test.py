@@ -22,7 +22,8 @@ import torch
 
 from pytorch_pretrained_bert import BertAdam
 from pytorch_pretrained_bert import OpenAIAdam
-from pytorch_pretrained_bert.optimization import ConstantLR, WarmupLinearSchedule, WarmupCosineWithWarmupRestartsSchedule
+from pytorch_pretrained_bert.optimization import ConstantLR, WarmupLinearSchedule, WarmupConstantSchedule, \
+    WarmupCosineWithWarmupRestartsSchedule, WarmupCosineWithHardRestartsSchedule, WarmupCosineSchedule
 import numpy as np
 
 
@@ -84,8 +85,6 @@ class WarmupCosineWithRestartsTest(unittest.TestCase):
         print(expected_ones)
         self.assertTrue(np.allclose(expected_ones, 1))
         self.assertTrue(np.allclose(expected_zeros, 0))
-
-
 
 
 if __name__ == "__main__":

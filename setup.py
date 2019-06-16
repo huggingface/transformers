@@ -38,7 +38,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="pytorch_pretrained_bert",
-    version="0.6.1",
+    version="0.6.2",
     author="Thomas Wolf, Victor Sanh, Tim Rault, Google AI Language Team Authors, Open AI team Authors",
     author_email="thomas@huggingface.co",
     description="PyTorch version of Google AI BERT model with script to load Google pre-trained models",

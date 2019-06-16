@@ -85,7 +85,9 @@ class ConstantLR(_LRSchedule):
 
 class WarmupCosineSchedule(_LRSchedule):
     """
-    Cosine learning rate schedule with linear warmup. Cosine after warmup is without restarts.
+    Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    Decreases learning rate from 1. to 0. over remaining `1 - warmup` steps following a cosine curve.
+    If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
     """
     warn_t_total = True
     def __init__(self, warmup=0.002, t_total=-1, cycles=.5, **kw):
@@ -108,7 +110,9 @@ class WarmupCosineSchedule(_LRSchedule):
 
 class WarmupCosineWithHardRestartsSchedule(WarmupCosineSchedule):
     """
-    Cosine learning rate schedule with linear warmup and hard restarts (if cycles > 1).
+    Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    If `cycles` (default=1.) is different from default, learning rate follows `cycles` times a cosine decaying
+    learning rate (with hard restarts).
     """
     def __init__(self, warmup=0.002, t_total=-1, cycles=1., **kw):
         super(WarmupCosineWithHardRestartsSchedule, self).__init__(warmup=warmup, t_total=t_total, cycles=cycles, **kw)
@@ -125,9 +129,9 @@ class WarmupCosineWithHardRestartsSchedule(WarmupCosineSchedule):
 
 class WarmupCosineWithWarmupRestartsSchedule(WarmupCosineWithHardRestartsSchedule):
     """
-    Cosine learning rate schedule with linear warmups and linear warmup restarts.
-    The same warmup rate is used for warmup restarts as for initial warmup.
-    The total effective fraction of warmup steps over all cycles is warmup * cycles!
+    All training progress is divided in `cycles` (default=1.) parts of equal length.
+    Every part follows a schedule with the first `warmup` fraction of the training steps linearly increasing from 0. to 1.,
+    followed by a learning rate decreasing from 1. to 0. following a cosine curve.
     """
     def __init__(self, warmup=0.002, t_total=-1, cycles=1., **kw):
         assert(warmup * cycles < 1.)
@@ -146,7 +150,8 @@ class WarmupCosineWithWarmupRestartsSchedule(WarmupCosineWithHardRestartsSchedul
 
 class WarmupConstantSchedule(_LRSchedule):
     """
-    Applies linear warmup. After warmup always returns 1..
+    Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    Keeps learning rate equal to 1. after warmup.
     """
     def get_lr_(self, progress):
         if progress < self.warmup:
@@ -156,7 +161,8 @@ class WarmupConstantSchedule(_LRSchedule):
 
 class WarmupLinearSchedule(_LRSchedule):
     """
-    Linear warmup. Linear decay after warmup.
+    Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    Linearly decreases learning rate from 1. to 0. over remaining `1 - warmup` steps.
     """
     warn_t_total = True
     def get_lr_(self, progress):
@@ -182,8 +188,9 @@ class BertAdam(Optimizer):
         t_total: total number of training steps for the learning
             rate schedule, -1  means constant learning rate of 1. (no warmup regardless of warmup setting). Default: -1
         schedule: schedule to use for the warmup (see above).
-            Can be 'warmup_linear', 'warmup_constant', 'warmup_cosine', or a LRSchedule object.
-            Default: 'warmup_linear'
+            Can be `'warmup_linear'`, `'warmup_constant'`, `'warmup_cosine'`, `'none'`, `None` or a `_LRSchedule` object (see below).
+            If `None` or `'none'`, learning rate is always kept constant.
+            Default : `'warmup_linear'`
         b1: Adams b1. Default: 0.9
         b2: Adams b2. Default: 0.999
         e: Adams epsilon. Default: 1e-6
@@ -208,8 +215,8 @@ class BertAdam(Optimizer):
             schedule = schedule_type(warmup=warmup, t_total=t_total)
         else:
             if warmup != -1 or t_total != -1:
-                logger.warning("Non-default warmup and t_total are ineffective when LRSchedule object is provided. "
-                               "Please specify custom warmup and t_total in LRSchedule object.")
+                logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
+                               "Please specify custom warmup and t_total in _LRSchedule object.")
         defaults = dict(lr=lr, schedule=schedule,
                         b1=b1, b2=b2, e=e, weight_decay=weight_decay,
                         max_grad_norm=max_grad_norm)
