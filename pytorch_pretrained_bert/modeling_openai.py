@@ -815,7 +815,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
 
     config = modeling_openai.OpenAIGPTConfig()
 
-    model = modeling_openai.OpenAIGPTLMHeadModel(config)
+    model = modeling_openai.OpenAIGPTDoubleHeadsModel(config)
     lm_logits, multiple_choice_logits = model(input_ids, mc_token_ids)
     ```
     """
