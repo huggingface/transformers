@@ -646,13 +646,18 @@ class BertPreTrainedModel(nn.Module):
         try:
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
         except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find any file "
-                "associated to this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
-                    archive_file))
+            if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained weights.".format(
+                        archive_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find any file "
+                    "associated to this path or url.".format(
+                        pretrained_model_name_or_path,
+                        ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
+                        archive_file))
             return None
         if resolved_archive_file == archive_file:
             logger.info("loading archive file {}".format(archive_file))

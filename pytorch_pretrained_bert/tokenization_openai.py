@@ -101,14 +101,19 @@ class OpenAIGPTTokenizer(object):
             resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
             resolved_merges_file = cached_path(merges_file, cache_dir=cache_dir)
         except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                    pretrained_model_name_or_path,
-                    vocab_file, merges_file))
+            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download vocabulary.".format(
+                        vocab_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find files {} and {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path,
+                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
+                        pretrained_model_name_or_path,
+                        vocab_file, merges_file))
             return None
         if resolved_vocab_file == vocab_file and resolved_merges_file == merges_file:
             logger.info("loading vocabulary file {}".format(vocab_file))

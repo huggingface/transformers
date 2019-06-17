@@ -926,14 +926,19 @@ class TransfoXLPreTrainedModel(nn.Module):
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
             resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
         except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
-                    pretrained_model_name_or_path,
-                    archive_file, config_file))
+            if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained weights.".format(
+                        archive_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find files {} and {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path,
+                        ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
+                        pretrained_model_name_or_path,
+                        archive_file, config_file))
             return None
         if resolved_archive_file == archive_file and resolved_config_file == config_file:
             logger.info("loading weights file {}".format(archive_file))
