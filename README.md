@@ -309,6 +309,28 @@ predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
 assert predicted_token == '.</w>'
 ```
 
+And how to use `OpenAIGPTDoubleHeadsModel`
+
+```python
+# Load pre-trained model (weights)
+model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+model.eval()
+
+#  Prepare tokenized input
+text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+tokenized_text1 = tokenizer.tokenize(text1)
+tokenized_text2 = tokenizer.tokenize(text2)
+indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+
+# Predict hidden states features for each layer
+with torch.no_grad():
+    lm_logits, multiple_choice_logits = model(tokens_tensor, mc_token_ids)
+```
+
 ### Transformer-XL
 
 Here is a quick-start example using `TransfoXLTokenizer`, `TransfoXLModel` and `TransfoXLModelLMHeadModel` class with the Transformer-XL model pre-trained on WikiText-103. See the [doc section](#doc) below for all the details on these classes.
@@ -455,6 +477,29 @@ with torch.no_grad():
 predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
 predicted_token = tokenizer.decode([predicted_index])
 ```
+
+And how to use `GPT2DoubleHeadsModel`
+
+```python
+# Load pre-trained model (weights)
+model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+model.eval()
+
+#  Prepare tokenized input
+text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+tokenized_text1 = tokenizer.tokenize(text1)
+tokenized_text2 = tokenizer.tokenize(text2)
+indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+
+# Predict hidden states features for each layer
+with torch.no_grad():
+    lm_logits, multiple_choice_logits, past = model(tokens_tensor, mc_token_ids)
+```
+
 
 ## Doc
 
