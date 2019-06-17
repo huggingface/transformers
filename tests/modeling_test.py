@@ -293,6 +293,47 @@ class BertModelTest(unittest.TestCase):
                     [self.batch_size, self.num_attention_heads, self.seq_length, self.seq_length])
 
 
+        def create_and_check_bert_for_headmasking(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            for model_class in (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
+                                BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
+                                BertForTokenClassification):
+                if model_class in [BertForSequenceClassification,
+                                   BertForTokenClassification]:
+                    model = model_class(config=config,
+                                        num_labels=self.num_labels,
+                                        keep_multihead_output=True)
+                else:
+                    model = model_class(config=config, keep_multihead_output=True)
+                model.eval()
+                head_mask = torch.ones(self.num_attention_heads).to(input_ids.device)
+                head_mask[0] = 0.0
+                head_mask[-1] = 0.0  # Mask all but the first and last heads
+                output = model(input_ids, token_type_ids, input_mask, head_mask=head_mask)
+
+                if isinstance(model, BertModel):
+                    output = sum(t.sum() for t in output[0])
+                elif isinstance(output, (list, tuple)):
+                    output = sum(t.sum() for t in output)
+                output = output.sum()
+                output.backward()
+                multihead_outputs = (model if isinstance(model, BertModel) else model.bert).get_multihead_outputs()
+
+                self.parent.assertEqual(len(multihead_outputs), self.num_hidden_layers)
+                self.parent.assertListEqual(
+                    list(multihead_outputs[0].size()),
+                    [self.batch_size, self.num_attention_heads,
+                     self.seq_length, self.hidden_size // self.num_attention_heads])
+                self.parent.assertEqual(
+                    len(multihead_outputs[0][:, 1:(self.num_attention_heads-1), :, :].nonzero()),
+                    0)
+                self.parent.assertEqual(
+                    len(multihead_outputs[0][:, 0, :, :].nonzero()),
+                    self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
+                self.parent.assertEqual(
+                    len(multihead_outputs[0][:, self.num_attention_heads-1, :, :].nonzero()),
+                    self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
+
+
     def test_default(self):
         self.run_tester(BertModelTest.BertModelTester(self))
 
@@ -352,6 +393,7 @@ class BertModelTest(unittest.TestCase):
         tester.check_loss_output(output_result)
 
         tester.create_and_check_bert_for_attentions(*config_and_inputs)
+        tester.create_and_check_bert_for_headmasking(*config_and_inputs)
 
     @classmethod
     def ids_tensor(cls, shape, vocab_size, rng=None, name=None):
