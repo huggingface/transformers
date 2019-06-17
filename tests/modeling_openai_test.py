@@ -125,8 +125,9 @@ class OpenAIGPTModelTest(unittest.TestCase):
             return outputs
 
         def check_openai_model_output(self, result):
+            self.parent.assertEqual(len(result["hidden_states"]), self.n_layer + 1)
             self.parent.assertListEqual(
-                list(result["hidden_states"].size()),
+                list(result["hidden_states"][0].size()),
                 [self.batch_size, self.n_choices, self.seq_length, self.n_embd])
 
 
@@ -195,7 +196,10 @@ class OpenAIGPTModelTest(unittest.TestCase):
                 else:
                     output = model(input_ids, head_mask=head_mask)
 
-                output = sum(t.sum() for t in output[:-1])
+                if isinstance(model, OpenAIGPTModel):
+                    output = sum(t.sum() for t in output[0])
+                elif isinstance(output, (list, tuple)):
+                    output = sum(t.sum() for t in output)
                 output = output.sum()
                 output.backward()
                 multihead_outputs = (model if isinstance(model, OpenAIGPTModel) else model.transformer).get_multihead_outputs()
@@ -229,7 +233,10 @@ class OpenAIGPTModelTest(unittest.TestCase):
                 else:
                     output = model(input_ids)
 
-                output = sum(t.sum() for t in output[:-1])
+                if isinstance(model, OpenAIGPTModel):
+                    output = sum(t.sum() for t in output[0])
+                elif isinstance(output, (list, tuple)):
+                    output = sum(t.sum() for t in output)
                 output = output.sum()
                 output.backward()
                 multihead_outputs = transformer.get_multihead_outputs()
