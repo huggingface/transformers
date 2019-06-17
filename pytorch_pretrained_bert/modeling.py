@@ -235,60 +235,6 @@ class BertConfig(object):
         with open(json_file_path, "w", encoding='utf-8') as writer:
             writer.write(self.to_json_string())
 
-class TFCheckpointConverter(object):
-    """Checkpoint converter class to store the model instance and layer name mappings
-    used in `convert_tf_checkpoint_to_pytorch`.
-    """
-    def __init__(self,
-                 bert_config_path,
-                 bert_model_cls=BertForPreTraining,
-                 tf_torch_mappings={},
-                 **kwargs
-                 ):
-        """Constructs TFCheckpointConverter.
-
-        Args:
-            bert_config_path: Path to original BERT configuration file.
-            bert_model_cls: Name of the PyTorch class which the TF model will be converted to.
-            tf_torch_mappings: Key-value formatted mappings from original
-                TF model layer names to the corresponding PyTorch ones. (ex: 'squad':'qa_outputs')
-            **kwargs: additional input for the specific Bert class
-                (ex: num_labels for BertForSequenceClassification)
-        """
-
-        self.tf_torch_mappings = tf_torch_mappings
-        self.bert_config = BertConfig.from_json_file(json_file=bert_config_path)
-
-        # Should retain only arguments contained in the constructor
-        cargs = inspect.getargspec(bert_model_cls.__init__)
-        kwargs = { k: v for k, v in kwargs.items() if k in cargs.args}
-
-        self.model = bert_model_cls(self.bert_config, **kwargs)
-
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `ConverterHolder` from a Python dictionary of parameters."""
-
-        # Try to instantiate the `bert_model_class` from the current module.
-        class_name = json_object['bert_model_class']
-        module = sys.modules[__name__]
-        class_ = getattr(module, class_name)
-
-        bert_config_path = json_object['bert_config_path']
-        tf_torch_mappings = json_object.get('tf_torch_mappings', {})
-        kwargs = json_object.get('args', {})
-
-        config = cls(bert_config_path, bert_model_cls=class_, tf_torch_mappings=tf_torch_mappings, **kwargs)
-
-        return config
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `ConverterHolder` from a json file of parameters."""
-        with open(json_file, "r", encoding='utf-8') as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
@@ -1352,3 +1298,57 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         elif self.output_attentions:
             return all_attentions, start_logits, end_logits
         return start_logits, end_logits
+
+class TFCheckpointConverter(object):
+    """Checkpoint converter class to store the model instance and layer name mappings
+    used in `convert_tf_checkpoint_to_pytorch`.
+    """
+    def __init__(self,
+                 bert_config_path,
+                 bert_model_cls=BertForPreTraining,
+                 tf_torch_mappings={},
+                 **kwargs
+                 ):
+        """Constructs TFCheckpointConverter.
+
+        Args:
+            bert_config_path: Path to original BERT configuration file.
+            bert_model_cls: Name of the PyTorch class which the TF model will be converted to.
+            tf_torch_mappings: Key-value formatted mappings from original
+                TF model layer names to the corresponding PyTorch ones. (ex: 'squad':'qa_outputs')
+            **kwargs: additional input for the specific Bert class
+                (ex: num_labels for BertForSequenceClassification)
+        """
+
+        self.tf_torch_mappings = tf_torch_mappings
+        self.bert_config = BertConfig.from_json_file(json_file=bert_config_path)
+
+        # Should retain only arguments contained in the constructor
+        cargs = inspect.getargspec(bert_model_cls.__init__)
+        kwargs = { k: v for k, v in kwargs.items() if k in cargs.args}
+
+        self.model = bert_model_cls(self.bert_config, **kwargs)
+
+    @classmethod
+    def from_dict(cls, json_object):
+        """Constructs a `ConverterHolder` from a Python dictionary of parameters."""
+
+        # Try to instantiate the `bert_model_class` from the current module.
+        class_name = json_object['bert_model_class']
+        module = sys.modules[__name__]
+        class_ = getattr(module, class_name)
+
+        bert_config_path = json_object['bert_config_path']
+        tf_torch_mappings = json_object.get('tf_torch_mappings', {})
+        kwargs = json_object.get('args', {})
+
+        config = cls(bert_config_path, bert_model_cls=class_, tf_torch_mappings=tf_torch_mappings, **kwargs)
+
+        return config
+
+    @classmethod
+    def from_json_file(cls, json_file):
+        """Constructs a `ConverterHolder` from a json file of parameters."""
+        with open(json_file, "r", encoding='utf-8') as reader:
+            text = reader.read()
+        return cls.from_dict(json.loads(text))
