@@ -11,7 +11,7 @@ gpt2_docstring = """
     Params:
         pretrained_model_name_or_path: either:
             - a str with the name of a pre-trained model to load selected in the list of:
-                . `gpt2`
+                . `gpt2`, `gpt2-medium`
             - a path or url to a pretrained model archive containing:
                 . `gpt2_config.json` a configuration file for the model
                 . `pytorch_model.bin` a PyTorch dump of a GPT2Model instance
@@ -147,10 +147,14 @@ def gpt2DoubleHeadsModel(*args, **kwargs):
         >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'gpt2Tokenizer', 'gpt2')
 
         #  Prepare tokenized input
-        >>> text = "Who was Jim Henson ?"
-        >>> indexed_tokens = tokenizer.encode(text)
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> mc_token_ids = torch.LongTensor([ [len(indexed_tokens)] ])
+        >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        >>> text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+        >>> tokenized_text1 = tokenizer.tokenize(text1)
+        >>> tokenized_text2 = tokenizer.tokenize(text2)
+        >>> indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+        >>> indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+        >>> tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+        >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
         # Load gpt2DoubleHeadsModel
         >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'gpt2DoubleHeadsModel', 'gpt2')

@@ -126,7 +126,7 @@ def openAIGPTLMHeadModel(*args, **kwargs):
 
 	Example:
         # Load the tokenizer
-		>>> import torch
+        >>> import torch
         >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
@@ -161,15 +161,18 @@ def openAIGPTDoubleHeadsModel(*args, **kwargs):
 
 	Example:
         # Load the tokenizer
-		>>> import torch
+        >>> import torch
         >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
-        >>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-		>>> mc_token_ids = torch.LongTensor([ [len(tokenized_text)] ])
+        >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        >>> text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+        >>> tokenized_text1 = tokenizer.tokenize(text1)
+        >>> tokenized_text2 = tokenizer.tokenize(text2)
+        >>> indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+        >>> indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+        >>> tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+        >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
         # Load openAIGPTDoubleHeadsModel
         >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTDoubleHeadsModel', 'openai-gpt')
