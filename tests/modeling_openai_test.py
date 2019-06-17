@@ -182,6 +182,73 @@ class OpenAIGPTModelTest(unittest.TestCase):
                 [list(l.size()) for l in result["loss"]],
                 [[], []])
 
+        def create_and_check_openai_for_headmasking(self, config, input_ids, token_type_ids, position_ids,
+                                                mc_labels, lm_labels, mc_token_ids):
+            for model_class in (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel):
+                model = model_class(config=config, keep_multihead_output=True)
+                model.eval()
+                head_mask = torch.ones(self.n_head).to(input_ids.device)
+                head_mask[0] = 0.0
+                head_mask[-1] = 0.0  # Mask all but the first and last heads
+                if isinstance(model, OpenAIGPTDoubleHeadsModel):
+                    output = model(input_ids, mc_token_ids, head_mask=head_mask)
+                else:
+                    output = model(input_ids, head_mask=head_mask)
+
+                output = sum(t.sum() for t in output[:-1])
+                output = output.sum()
+                output.backward()
+                multihead_outputs = (model if isinstance(model, OpenAIGPTModel) else model.transformer).get_multihead_outputs()
+
+                self.parent.assertEqual(len(multihead_outputs), self.n_layer)
+                self.parent.assertListEqual(
+                    list(multihead_outputs[0].size()),
+                    [self.batch_size * self.n_choices, self.n_head,
+                        self.seq_length, self.n_embd // self.n_head])
+                self.parent.assertEqual(
+                    len(multihead_outputs[0][:, 1:(self.n_head-1), :, :].nonzero()),
+                    0)
+                self.parent.assertEqual(
+                    len(multihead_outputs[0][:, 0, :, :].nonzero()),
+                    self.batch_size * self.n_choices * self.seq_length * self.n_embd // self.n_head)
+                self.parent.assertEqual(
+                    len(multihead_outputs[0][:, self.n_head-1, :, :].nonzero()),
+                    self.batch_size * self.n_choices * self.seq_length * self.n_embd // self.n_head)
+
+        def create_and_check_openai_for_head_pruning(self, config, input_ids, token_type_ids, position_ids,
+                                                     mc_labels, lm_labels, mc_token_ids):
+            for model_class in (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel):
+                model = model_class(config=config, keep_multihead_output=True)
+                model.eval()
+                transformer = model if isinstance(model, OpenAIGPTModel) else model.transformer
+                heads_to_prune = {0: list(range(1, self.n_head)),
+                                  -1: [0]}
+                transformer.prune_heads(heads_to_prune)
+                if isinstance(model, OpenAIGPTDoubleHeadsModel):
+                    output = model(input_ids, mc_token_ids)
+                else:
+                    output = model(input_ids)
+
+                output = sum(t.sum() for t in output[:-1])
+                output = output.sum()
+                output.backward()
+                multihead_outputs = transformer.get_multihead_outputs()
+
+                self.parent.assertEqual(len(multihead_outputs), self.n_layer)
+                self.parent.assertListEqual(
+                    list(multihead_outputs[0].size()),
+                    [self.batch_size * self.n_choices, 1,
+                        self.seq_length, self.n_embd // self.n_head])
+                self.parent.assertListEqual(
+                    list(multihead_outputs[1].size()),
+                    [self.batch_size * self.n_choices, self.n_head,
+                        self.seq_length, self.n_embd // self.n_head])
+                self.parent.assertListEqual(
+                    list(multihead_outputs[-1].size()),
+                    [self.batch_size * self.n_choices, self.n_head-1,
+                        self.seq_length, self.n_embd // self.n_head])
+
+
     def test_default(self):
         self.run_tester(OpenAIGPTModelTest.OpenAIGPTModelTester(self))
 
@@ -219,6 +286,9 @@ class OpenAIGPTModelTest(unittest.TestCase):
         output_result = tester.create_openai_double_heads(*config_and_inputs)
         tester.check_openai_double_heads_output(output_result)
         tester.check_openai_double_heads_loss_output(output_result)
+
+        tester.create_and_check_openai_for_headmasking(*config_and_inputs)
+        tester.create_and_check_openai_for_head_pruning(*config_and_inputs)
 
     @classmethod
     def ids_tensor(cls, shape, vocab_size, rng=None, name=None):
