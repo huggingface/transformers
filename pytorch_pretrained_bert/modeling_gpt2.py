@@ -610,7 +610,10 @@ class GPT2Model(GPT2PreTrainedModel):
     You should use the associate indices to index the embeddings.
 
     Params:
-        config: a GPT2Config class instance with the configuration to build a new model
+        `config`: a GPT2Config class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
@@ -625,10 +628,12 @@ class GPT2Model(GPT2PreTrainedModel):
         `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
             (key and values in the attention blocks) to speed up sequential decoding
             (this is the presents output of the model, cf. below).
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
     Outputs a tuple consisting of:
-        `hidden_states`: the encoded-hidden-states at the top of the model
-            as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
+        `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings)
+            as torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
             (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
         `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as
             torch.FloatTensors. They can be reused to speed up sequential decoding.
@@ -698,13 +703,17 @@ class GPT2Model(GPT2PreTrainedModel):
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we mask the head
         # attention_probs has shape bsz x n_heads x N x N
+        # head_mask has shape n_layer x batch x n_heads x N x N
         if head_mask is not None:
             if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.expand_as(self.config.n_layer, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each instance in batch
+                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
             head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
             head_mask = (1.0 - head_mask)
+        else:
+            head_mask = [None] * self.config.n_layer
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_ids.size(-1))
@@ -725,9 +734,9 @@ class GPT2Model(GPT2PreTrainedModel):
         presents = []
         all_attentions = []
         all_hidden_states = []
-        for block, layer_past in zip(self.h, past):
+        for i, (block, layer_past) in enumerate(zip(self.h, past)):
             all_hidden_states.append(hidden_states.view(*output_shape))
-            outputs = block(hidden_states, layer_past, head_mask)
+            outputs = block(hidden_states, layer_past, head_mask[i])
             if self.output_attentions:
                 attentions, hidden_states, present = outputs
                 all_attentions.append(attentions)
@@ -746,7 +755,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     """OpenAI GPT-2 model with a Language Modeling head ("Language Models are Unsupervised Multitask Learners").
 
     Params:
-        config: a GPT2Config class instance with the configuration to build a new model
+        `config`: a GPT2Config class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
@@ -764,6 +776,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
             (key and values in the attention blocks) to speed up sequential decoding
             (this is the presents output of the model, cf. below).
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
     Outputs:
         if `lm_labels` is not `None`:
@@ -828,7 +842,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """OpenAI GPT-2 model with a Language Modeling and a Multiple Choice head ("Language Models are Unsupervised Multitask Learners").
 
     Params:
-        config: a GPT2Config class instance with the configuration to build a new model
+        `config`: a GPT2Config class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length] with the BPE token
@@ -850,6 +867,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
             (key and values in the attention blocks) to speed up sequential decoding
             (this is the presents output of the model, cf. below).
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
     Outputs:
         if `lm_labels` and `multiple_choice_labels` are not `None`:

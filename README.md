@@ -474,7 +474,7 @@ Here is a detailed documentation of the classes in the package and how to use th
 To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated as
 
 ```python
-model = BERT_CLASS.from_pretrained(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None)
+model = BERT_CLASS.from_pretrained(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None, from_tf=False, state_dict=None, *input, **kwargs)
 ```
 
 where
@@ -505,7 +505,12 @@ where
     - `pytorch_model.bin` a PyTorch dump of a pre-trained instance of `BertForPreTraining`, `OpenAIGPTModel`, `TransfoXLModel`, `GPT2LMHeadModel` (saved with the usual `torch.save()`)
 
   If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
+
 - `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information).
+- `from_tf`: should we load the weights from a locally saved TensorFlow checkpoint
+- `state_dict`: an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
+- `*inputs`, `**kwargs`: additional input for the specific Bert class (ex: num_labels for BertForSequenceClassification)
+
 
 `Uncased` means that the text has been lowercased before WordPiece tokenization, e.g., `John Smith` becomes `john smith`. The Uncased model also strips out any accent markers. `Cased` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the [Multilingual README](https://github.com/google-research/bert/blob/master/multilingual.md) or the original TensorFlow repository.
 
@@ -631,6 +636,13 @@ These configuration classes contains a few utilities to load and save configurat
 
 `BertModel` is the basic BERT Transformer model with a layer of summed token, position and sequence embeddings followed by a series of identical self-attention blocks (12 for BERT-base, 24 for BERT-large).
 
+Instantiation:
+The model can be instantiated with the following arguments:
+
+- `config`: a `BertConfig` class instance with the configuration to build a new model.
+- `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+- `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient. This can be used to compute head importance metrics. Default: False
+
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
@@ -639,6 +651,7 @@ We detail them here. This model takes as *inputs*:
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
 - `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if some input sequence lengths are smaller than the max input sequence length of the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
 - `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 This model *outputs* a tuple composed of:
 
@@ -756,6 +769,13 @@ where total_tokens_embeddings can be obtained as config.total_tokens_embeddings 
     `total_tokens_embeddings = config.vocab_size + config.n_special`
 You should use the associate indices to index the embeddings.
 
+Instantiation:
+The model can be instantiated with the following arguments:
+
+- `config`: a `OpenAIConfig` class instance with the configuration to build a new model.
+- `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+- `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient. This can be used to compute head importance metrics. Default: False
+
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
@@ -766,9 +786,10 @@ We detail them here. This model takes as *inputs*:
 - `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
     You can use it to add a third type of embedding to each input token in the sequence
     (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 This model *outputs*:
-- `hidden_states`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+- `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
 
 #### 10. `OpenAIGPTLMHeadModel`
 
@@ -848,6 +869,13 @@ all_hidden_states = lower_hidden_states + [hidden_states]
 
 `GPT2Model` is the OpenAI GPT-2 Transformer model with a layer of summed token and position embeddings followed by a series of 12 identical self-attention blocks.
 
+Instantiation:
+The model can be instantiated with the following arguments:
+
+- `config`: a `GPT2Config` class instance with the configuration to build a new model.
+- `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+- `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient. This can be used to compute head importance metrics. Default: False
+
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
@@ -859,9 +887,10 @@ We detail them here. This model takes as *inputs*:
     You can use it to add a third type of embedding to each input token in the sequence
     (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
 - `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states (key and values in the attention blocks) to speed up sequential decoding (this is the `presents` output of the model, cf. below).
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 This model *outputs*:
-- `hidden_states`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+- `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
 - `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
 
 #### 15. `GPT2LMHeadModel`

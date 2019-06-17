@@ -305,9 +305,9 @@ class BertModelTest(unittest.TestCase):
                 else:
                     model = model_class(config=config, keep_multihead_output=True)
                 model.eval()
-                head_mask = torch.ones(self.num_attention_heads).to(input_ids.device)
-                head_mask[0] = 0.0
-                head_mask[-1] = 0.0  # Mask all but the first and last heads
+                head_mask = torch.zeros(self.num_hidden_layers, self.num_attention_heads).to(input_ids.device)
+                head_mask[0, 1:-1] = 1.0 # Mask all but the first and last heads on the first layer
+                head_mask[-1, 1:] = 1.0  # Mask all but the first head on the last layer
                 output = model(input_ids, token_type_ids, input_mask, head_mask=head_mask)
 
                 if isinstance(model, BertModel):
@@ -331,6 +331,25 @@ class BertModelTest(unittest.TestCase):
                     self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
                 self.parent.assertEqual(
                     len(multihead_outputs[0][:, self.num_attention_heads-1, :, :].nonzero()),
+                    self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
+
+                self.parent.assertListEqual(
+                    list(multihead_outputs[1].size()),
+                    [self.batch_size, self.num_attention_heads,
+                     self.seq_length, self.hidden_size // self.num_attention_heads])
+                self.parent.assertEqual(
+                    len(multihead_outputs[1].nonzero()),
+                    multihead_outputs[1].numel())
+
+                self.parent.assertListEqual(
+                    list(multihead_outputs[-1].size()),
+                    [self.batch_size, self.num_attention_heads,
+                     self.seq_length, self.hidden_size // self.num_attention_heads])
+                self.parent.assertEqual(
+                    len(multihead_outputs[-1][:, 1:, :, :].nonzero()),
+                    0)
+                self.parent.assertEqual(
+                    len(multihead_outputs[-1][:, 0, :, :].nonzero()),
                     self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
 
 

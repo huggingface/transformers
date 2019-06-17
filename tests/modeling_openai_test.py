@@ -188,9 +188,9 @@ class OpenAIGPTModelTest(unittest.TestCase):
             for model_class in (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel):
                 model = model_class(config=config, keep_multihead_output=True)
                 model.eval()
-                head_mask = torch.ones(self.n_head).to(input_ids.device)
-                head_mask[0] = 0.0
-                head_mask[-1] = 0.0  # Mask all but the first and last heads
+                head_mask = torch.zeros(self.n_layer, self.n_head).to(input_ids.device)
+                head_mask[0, 1:-1] = 1.0 # Mask all but the first and last heads on the first layer
+                head_mask[-1, 1:] = 1.0  # Mask all but the first head on the last layer
                 if isinstance(model, OpenAIGPTDoubleHeadsModel):
                     output = model(input_ids, mc_token_ids, head_mask=head_mask)
                 else:
@@ -218,6 +218,26 @@ class OpenAIGPTModelTest(unittest.TestCase):
                 self.parent.assertEqual(
                     len(multihead_outputs[0][:, self.n_head-1, :, :].nonzero()),
                     self.batch_size * self.n_choices * self.seq_length * self.n_embd // self.n_head)
+
+                self.parent.assertListEqual(
+                    list(multihead_outputs[1].size()),
+                    [self.batch_size * self.n_choices, self.n_head,
+                     self.seq_length, self.n_embd // self.n_head])
+                self.parent.assertEqual(
+                    len(multihead_outputs[1].nonzero()),
+                    multihead_outputs[1].numel())
+
+                self.parent.assertListEqual(
+                    list(multihead_outputs[-1].size()),
+                    [self.batch_size * self.n_choices, self.n_head,
+                     self.seq_length, self.n_embd // self.n_head])
+                self.parent.assertEqual(
+                    len(multihead_outputs[-1][:, 1:, :, :].nonzero()),
+                    0)
+                self.parent.assertEqual(
+                    len(multihead_outputs[-1][:, 0, :, :].nonzero()),
+                    self.batch_size * self.n_choices * self.seq_length * self.n_embd // self.n_head)
+
 
         def create_and_check_openai_for_head_pruning(self, config, input_ids, token_type_ids, position_ids,
                                                      mc_labels, lm_labels, mc_token_ids):
