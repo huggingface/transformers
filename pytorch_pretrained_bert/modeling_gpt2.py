@@ -720,9 +720,13 @@ class GPT2Model(GPT2PreTrainedModel):
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
         hidden_states = self.drop(hidden_states)
 
+        output_shape = input_shape + (hidden_states.size(-1),)
+
         presents = []
         all_attentions = []
+        all_hidden_states = []
         for block, layer_past in zip(self.h, past):
+            all_hidden_states.append(hidden_states.view(*output_shape))
             outputs = block(hidden_states, layer_past, head_mask)
             if self.output_attentions:
                 attentions, hidden_states, present = outputs
@@ -731,10 +735,11 @@ class GPT2Model(GPT2PreTrainedModel):
                 hidden_states, present = outputs
             presents.append(present)
         hidden_states = self.ln_f(hidden_states)
-        output_shape = input_shape + (hidden_states.size(-1),)
+        all_hidden_states.append(hidden_states.view(*output_shape))
+
         if self.output_attentions:
-            return all_attentions, hidden_states.view(*output_shape), presents
-        return hidden_states.view(*output_shape), presents
+            return all_attentions, all_hidden_states, presents
+        return all_hidden_states, presents
 
 
 class GPT2LMHeadModel(GPT2PreTrainedModel):
@@ -802,6 +807,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             all_attentions, hidden_states, presents = transformer_output
         else:
             hidden_states, presents = transformer_output
+        hidden_states = hidden_states[-1]
+
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
             # Shift so that tokens < n predict n
@@ -889,6 +896,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             all_attentions, hidden_states, presents = transformer_output
         else:
             hidden_states, presents = transformer_output
+        hidden_states = hidden_states[-1]
+
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
