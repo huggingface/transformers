@@ -516,7 +516,9 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 ### Loading Google AI or OpenAI pre-trained weights or PyTorch dump
 
-To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated as
+### `from_pretrained()` method
+
+To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated using the `from_pretrained()` method:
 
 ```python
 model = BERT_CLASS.from_pretrained(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None, from_tf=False, state_dict=None, *input, **kwargs)
@@ -581,6 +583,22 @@ model = GPT2Model.from_pretrained('gpt2')
 
 ```
 
+#### Cache directory
+
+`pytorch_pretrained_bert` save the pretrained weights in a cache directory which is located at (in this order of priority):
+
+- `cache_dir` optional arguments to the `from_pretrained()` method (see above),
+- shell environment variable `PYTORCH_PRETRAINED_BERT_CACHE`,
+- PyTorch cache home + `/pytorch_pretrained_bert/`
+  where PyTorch cache home is defined by (in this order):
+  - shell environment variable `ENV_TORCH_HOME`
+  - shell environment variable `ENV_XDG_CACHE_HOME` + `/torch/`)
+  - default: `~/.cache/torch/`
+
+Usually, if you don't set any specific environment variable, `pytorch_pretrained_bert` cache will be at `~/.cache/torch/pytorch_pretrained_bert/`.
+
+You can alsways safely delete `pytorch_pretrained_bert` cache but the pretrained model weights and vocabulary files wil have to be re-downloaded from our S3.
+
 ### Serialization best-practices
 
 This section explain how you can save and re-load a fine-tuned model (BERT, GPT, GPT-2 and Transformer-XL).
@@ -589,6 +607,13 @@ There are three types of files you need to save to be able to reload a fine-tune
 - the model it-self which should be saved following PyTorch serialization [best practices](https://pytorch.org/docs/stable/notes/serialization.html#best-practices),
 - the configuration file of the model which is saved as a JSON file, and
 - the vocabulary (and the merges for the BPE-based models GPT and GPT-2).
+
+The defaults files names of these files are as follow:
+
+- the model weights file: `pytorch_model.bin`,
+- the configuration file: `config.json`,
+- the vocabulary file: `vocab.txt` for BERT and Transformer-XL, `vocab.json` for GPT/GPT-2 (BPE vocabulary),
+- for GPT/GPT-2 (BPE vocabulary) the additional merges file: `merges.txt`.
 
 Here is the recommended way of saving the model, configuration and vocabulary to an `output_dir` directory and reloading the model and tokenizer afterwards:
 
@@ -1430,6 +1455,25 @@ python ./run_squad.py \
 The results were similar to the above FP32 results (actually slightly higher):
 ```bash
 {"exact_match": 84.65468306527909, "f1": 91.238669287002}
+```
+
+Here is an example with the recent `bert-large-uncased-whole-word-masking`:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8 \
+  run_squad.py \
+  --bert_model bert-large-uncased-whole-word-masking \
+  --do_train \
+  --do_predict \
+  --do_lower_case \
+  --train_file $SQUAD_DIR/train-v1.1.json \
+  --predict_file $SQUAD_DIR/dev-v1.1.json \
+  --train_batch_size 12 \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir /tmp/debug_squad/
 ```
 
 ## Notebooks
