@@ -443,7 +443,7 @@ def main():
             nb_eval_steps += 1
             if len(preds) == 0:
                 preds.append(logits.detach().cpu().numpy())
-                out_label_ids = label_ids.detach().cpu().numpy())
+                out_label_ids = label_ids.detach().cpu().numpy()
             else:
                 preds[0] = np.append(
                     preds[0], logits.detach().cpu().numpy(), axis=0)
@@ -523,7 +523,7 @@ def main():
                 nb_eval_steps += 1
                 if len(preds) == 0:
                     preds.append(logits.detach().cpu().numpy())
-                    out_label_ids = label_ids.detach().cpu().numpy())
+                    out_label_ids = label_ids.detach().cpu().numpy()
                 else:
                     preds[0] = np.append(
                         preds[0], logits.detach().cpu().numpy(), axis=0)
