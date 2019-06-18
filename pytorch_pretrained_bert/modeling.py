@@ -22,9 +22,6 @@ import json
 import logging
 import math
 import os
-import shutil
-import tarfile
-import tempfile
 import sys
 from io import open
 
@@ -37,16 +34,28 @@ from .file_utils import cached_path, WEIGHTS_NAME, CONFIG_NAME
 logger = logging.getLogger(__name__)
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased.tar.gz",
-    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased.tar.gz",
-    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased.tar.gz",
-    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased.tar.gz",
-    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased.tar.gz",
-    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased.tar.gz",
-    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
-    'bert-base-german-cased': "https://int-deepset-models-bert.s3.eu-central-1.amazonaws.com/pytorch/bert-base-german-cased.tar.gz",
-    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking.tar.gz",
-    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking.tar.gz",
+    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-pytorch_model.bin",
+    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-pytorch_model.bin",
+    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin",
+    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-pytorch_model.bin",
+    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-pytorch_model.bin",
+    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-pytorch_model.bin",
+    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-pytorch_model.bin",
+    'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-pytorch_model.bin",
+    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-pytorch_model.bin",
+    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-pytorch_model.bin",
+}
+PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",
+    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-config.json",
+    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-config.json",
+    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-config.json",
+    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-config.json",
+    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-config.json",
+    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-config.json",
+    'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-config.json",
+    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-config.json",
+    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-config.json",
 }
 BERT_CONFIG_NAME = 'bert_config.json'
 TF_WEIGHTS_NAME = 'model.ckpt'
@@ -642,11 +651,14 @@ class BertPreTrainedModel(nn.Module):
 
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
+            config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
         else:
-            archive_file = pretrained_model_name_or_path
+            archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+            config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         # redirect to the cache, if necessary
         try:
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
+            resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
         except EnvironmentError:
             if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
                 logger.error(
@@ -661,22 +673,26 @@ class BertPreTrainedModel(nn.Module):
                         ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
                         archive_file))
             return None
-        if resolved_archive_file == archive_file:
-            logger.info("loading archive file {}".format(archive_file))
+        if resolved_archive_file == archive_file and resolved_config_file == config_file:
+            logger.info("loading weights file {}".format(archive_file))
+            logger.info("loading configuration file {}".format(config_file))
         else:
-            logger.info("loading archive file {} from cache at {}".format(
+            logger.info("loading weights file {} from cache at {}".format(
                 archive_file, resolved_archive_file))
-        tempdir = None
-        if os.path.isdir(resolved_archive_file) or from_tf:
-            serialization_dir = resolved_archive_file
-        else:
-            # Extract archive to temp dir
-            tempdir = tempfile.mkdtemp()
-            logger.info("extracting archive file {} to temp dir {}".format(
-                resolved_archive_file, tempdir))
-            with tarfile.open(resolved_archive_file, 'r:gz') as archive:
-                archive.extractall(tempdir)
-            serialization_dir = tempdir
+            logger.info("loading configuration file {} from cache at {}".format(
+                config_file, resolved_config_file))
+        ### Switching to split config/weight files configuration
+        # tempdir = None
+        # if os.path.isdir(resolved_archive_file) or from_tf:
+        #     serialization_dir = resolved_archive_file
+        # else:
+        #     # Extract archive to temp dir
+        #     tempdir = tempfile.mkdtemp()
+        #     logger.info("extracting archive file {} to temp dir {}".format(
+        #         resolved_archive_file, tempdir))
+        #     with tarfile.open(resolved_archive_file, 'r:gz') as archive:
+        #         archive.extractall(tempdir)
+        #     serialization_dir = tempdir
         # Load config
         config_file = os.path.join(serialization_dir, CONFIG_NAME)
         if not os.path.exists(config_file):
@@ -689,9 +705,9 @@ class BertPreTrainedModel(nn.Module):
         if state_dict is None and not from_tf:
             weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
             state_dict = torch.load(weights_path, map_location='cpu')
-        if tempdir:
-            # Clean up temp dir
-            shutil.rmtree(tempdir)
+        # if tempdir:
+        #     # Clean up temp dir
+        #     shutil.rmtree(tempdir)
         if from_tf:
             # Directly load from a TensorFlow checkpoint
             weights_path = os.path.join(serialization_dir, TF_WEIGHTS_NAME)

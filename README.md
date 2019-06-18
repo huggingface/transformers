@@ -1432,6 +1432,25 @@ The results were similar to the above FP32 results (actually slightly higher):
 {"exact_match": 84.65468306527909, "f1": 91.238669287002}
 ```
 
+Here is an example with the recent `bert-large-uncased-whole-word-masking`:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8 \
+  run_squad.py \
+  --bert_model bert-large-uncased-whole-word-masking \
+  --do_train \
+  --do_predict \
+  --do_lower_case \
+  --train_file $SQUAD_DIR/train-v1.1.json \
+  --predict_file $SQUAD_DIR/dev-v1.1.json \
+  --train_batch_size 12 \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir /tmp/debug_squad/
+```
+
 ## Notebooks
 
 We include [three Jupyter Notebooks](https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/notebooks) that can be used to check that the predictions of the PyTorch model are identical to the predictions of the original TensorFlow model.

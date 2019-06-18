@@ -23,9 +23,6 @@ import json
 import logging
 import math
 import os
-import shutil
-import tarfile
-import tempfile
 import sys
 from io import open
 
