@@ -386,7 +386,7 @@ def main():
                         str(task_name)))
         try:
             with open(cached_eval_features_file, "rb") as reader:
-                train_features = pickle.load(reader)
+                eval_features = pickle.load(reader)
         except:
             eval_features = convert_examples_to_features(
                 eval_examples, label_list, args.max_seq_length, tokenizer, output_mode)
