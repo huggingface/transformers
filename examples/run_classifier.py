@@ -420,7 +420,7 @@ def main():
         eval_loss = 0
         nb_eval_steps = 0
         preds = []
-        out_label_ids = []
+        out_label_ids = None
 
         for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader, desc="Evaluating"):
             input_ids = input_ids.to(device)
@@ -443,12 +443,12 @@ def main():
             nb_eval_steps += 1
             if len(preds) == 0:
                 preds.append(logits.detach().cpu().numpy())
-                out_label_ids.append(label_ids.detach().cpu().numpy())
+                out_label_ids = label_ids.detach().cpu().numpy())
             else:
                 preds[0] = np.append(
                     preds[0], logits.detach().cpu().numpy(), axis=0)
-                out_label_ids[0] = np.append(
-                    out_label_ids[0], label_ids.detach().cpu().numpy(), axis=0)
+                out_label_ids = np.append(
+                    out_label_ids, label_ids.detach().cpu().numpy(), axis=0)
 
         eval_loss = eval_loss / nb_eval_steps
         preds = preds[0]
@@ -505,7 +505,7 @@ def main():
             eval_loss = 0
             nb_eval_steps = 0
             preds = []
-            out_label_ids = []
+            out_label_ids = None
 
             for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader, desc="Evaluating"):
                 input_ids = input_ids.to(device)
@@ -523,13 +523,12 @@ def main():
                 nb_eval_steps += 1
                 if len(preds) == 0:
                     preds.append(logits.detach().cpu().numpy())
-                    out_label_ids.append(label_ids.detach().cpu().numpy())
+                    out_label_ids = label_ids.detach().cpu().numpy())
                 else:
                     preds[0] = np.append(
                         preds[0], logits.detach().cpu().numpy(), axis=0)
-                    out_label_ids[0] = np.append(
-                        out_label_ids[0], label_ids.detach().cpu().numpy(), axis=0)
-
+                    out_label_ids = np.append(
+                        out_label_ids, label_ids.detach().cpu().numpy(), axis=0)
 
             eval_loss = eval_loss / nb_eval_steps
             preds = preds[0]
