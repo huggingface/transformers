@@ -1272,27 +1272,20 @@ python run_classifier.py \
 ```
 
 **Distributed training**
-Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking model to reach a F1 > 93 on SQuAD:
+Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking model to reach a F1 > 92 on MRPC:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 \
- run_classifier.py \
-  --bert_model bert-large-cased-whole-word-masking  \
-  --task_name MRPC \
-  --do_train \
-  --do_eval \
-  --do_lower_case \
-  --data_dir $GLUE_DIR/MRPC/ \
-  --max_seq_length 128 \
-  --train_batch_size 64 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/mrpc_output/
+python -m torch.distributed.launch --nproc_per_node 8 run_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name MRPC --do_train   --do_eval   --do_lower_case   --data_dir $GLUE_DIR/MRPC/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0  --output_dir /tmp/mrpc_output/
 ```
 
 Training with these hyper-parameters gave us the following results:
 ```bash
-{"exact_match": 86.91579943235573, "f1": 93.1532499015869}
+  acc = 0.8823529411764706
+  acc_and_f1 = 0.901702786377709
+  eval_loss = 0.3418912578906332
+  f1 = 0.9210526315789473
+  global_step = 174
+  loss = 0.07231863956341798
 ```
 
 #### SQuAD
