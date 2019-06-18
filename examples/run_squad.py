@@ -183,10 +183,12 @@ def main():
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
+    if args.local_rank not in [-1, 0]:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-
-    # Prepare model
     model = BertForQuestionAnswering.from_pretrained(args.bert_model)
+    if args.local_rank == 0:
+        torch.distributed.barrier()
 
     if args.fp16:
         model.half()
