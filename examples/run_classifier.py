@@ -222,6 +222,10 @@ def main():
     elif n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
+    global_step = 0
+    nb_tr_steps = 0
+    tr_loss = 0
+
     if args.do_train:
         if args.local_rank in [-1, 0]:
             tb_writer = SummaryWriter()
@@ -292,10 +296,6 @@ def main():
                                  lr=args.learning_rate,
                                  warmup=args.warmup_proportion,
                                  t_total=num_train_optimization_steps)
-
-        global_step = 0
-        nb_tr_steps = 0
-        tr_loss = 0
 
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
