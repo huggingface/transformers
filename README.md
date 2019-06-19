@@ -1322,12 +1322,14 @@ python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json /tmp/debug_squad/pre
 {"f1": 88.52381567990474, "exact_match": 81.22043519394512}
 ```
 
-Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking model to reach a F1 > 93 on SQuAD:
+**distributed training**
+
+Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=8 \
  run_squad.py \
- --bert_model bert-large-cased-whole-word-masking  \
+ --bert_model bert-large-uncased-whole-word-masking  \
  --do_train \
  --do_predict \
  --do_lower_case \
@@ -1337,15 +1339,29 @@ python -m torch.distributed.launch --nproc_per_node=8 \
  --num_train_epochs 2 \
  --max_seq_length 384 \
  --doc_stride 128 \
- --output_dir ../models/train_squad_large_cased_wwm/ \
+ --output_dir ../models/wwm_uncased_finetuned_squad/ \
  --train_batch_size 24 \
  --gradient_accumulation_steps 12
 ```
 
 Training with these hyper-parameters gave us the following results:
 ```bash
-python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/train_squad_large_cased_wwm/predictions.json
+python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncased_finetuned_squad/predictions.json
 {"exact_match": 86.91579943235573, "f1": 93.1532499015869}
+```
+
+This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-squad`.
+
+And here is the model provided as `bert-large-cased-whole-word-masking-finetuned-squad`:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8  run_squad.py  --bert_model bert-large-cased-whole-word-masking   --do_train  --do_predict  --do_lower_case  --train_file $SQUAD_DIR/train-v1.1.json  --predict_file $SQUAD_DIR/dev-v1.1.json  --learning_rate 3e-5  --num_train_epochs 2  --max_seq_length 384  --doc_stride 128  --output_dir ../models/wwm_cased_finetuned_squad/  --train_batch_size 24  --gradient_accumulation_steps 12
+```
+
+Training with these hyper-parameters gave us the following results:
+```bash
+python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncased_finetuned_squad/predictions.json
+{"exact_match": 84.18164616840113, "f1": 91.58645594850135}
 ```
 
 #### SWAG
