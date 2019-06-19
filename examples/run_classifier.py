@@ -187,7 +187,7 @@ def main():
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-    if not os.path.exists(args.output_dir):
+    if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
 
     task_name = args.task_name.lower()
@@ -361,6 +361,10 @@ def main():
         # Load a trained model and vocabulary that you have fine-tuned
         model = BertForSequenceClassification.from_pretrained(args.output_dir, num_labels=num_labels)
         tokenizer = BertTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+
+        # Good practice: save your training arguments together with the trained model
+        output_args_file = os.path.join(args.output_dir, 'training_args.bin')
+        torch.save(args, output_args_file)
     else:
         model = BertForSequenceClassification.from_pretrained(args.bert_model)
 

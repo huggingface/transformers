@@ -331,6 +331,10 @@ def main():
         # Load a trained model and vocabulary that you have fine-tuned
         model = BertForQuestionAnswering.from_pretrained(args.output_dir)
         tokenizer = BertTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+
+        # Good practice: save your training arguments together with the trained model
+        output_args_file = os.path.join(args.output_dir, 'training_args.bin')
+        torch.save(args, output_args_file)
     else:
         model = BertForQuestionAnswering.from_pretrained(args.bert_model)
 
