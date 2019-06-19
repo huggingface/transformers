@@ -1288,6 +1288,29 @@ Training with these hyper-parameters gave us the following results:
   loss = 0.07231863956341798
 ```
 
+Here is an example on MNLI:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node 8 run_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --do_lower_case   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
+```
+
+```bash
+***** Eval results *****
+  acc = 0.8679706601466992
+  eval_loss = 0.4911287787382479
+  global_step = 18408
+  loss = 0.04755385363816904
+
+***** Eval results *****
+  acc = 0.8747965825874695
+  eval_loss = 0.45516540421714036
+  global_step = 18408
+  loss = 0.04755385363816904
+```
+
+This is the example of the `bert-large-uncased-whole-word-masking-finetuned-mnli` model
+
+
 #### SQuAD
 
 This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) on a single tesla V100 16GB.
