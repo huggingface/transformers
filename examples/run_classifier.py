@@ -366,7 +366,7 @@ def main():
         output_args_file = os.path.join(args.output_dir, 'training_args.bin')
         torch.save(args, output_args_file)
     else:
-        model = BertForSequenceClassification.from_pretrained(args.bert_model)
+        model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
 
     model.to(device)
 

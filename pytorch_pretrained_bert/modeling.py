@@ -707,36 +707,15 @@ class BertPreTrainedModel(nn.Module):
                 archive_file, resolved_archive_file))
             logger.info("loading configuration file {} from cache at {}".format(
                 config_file, resolved_config_file))
-        ### Switching to split config/weight files configuration
-        # tempdir = None
-        # if os.path.isdir(resolved_archive_file) or from_tf:
-        #     serialization_dir = resolved_archive_file
-        # else:
-        #     # Extract archive to temp dir
-        #     tempdir = tempfile.mkdtemp()
-        #     logger.info("extracting archive file {} to temp dir {}".format(
-        #         resolved_archive_file, tempdir))
-        #     with tarfile.open(resolved_archive_file, 'r:gz') as archive:
-        #         archive.extractall(tempdir)
-        #     serialization_dir = tempdir
-        # config_file = os.path.join(serialization_dir, CONFIG_NAME)
-        # if not os.path.exists(config_file):
-        #     # Backward compatibility with old naming format
-        #     config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
         # Load config
         config = BertConfig.from_json_file(resolved_config_file)
         logger.info("Model config {}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
-            # weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
-        # if tempdir:
-        #     # Clean up temp dir
-        #     shutil.rmtree(tempdir)
         if from_tf:
             # Directly load from a TensorFlow checkpoint
-            # weights_path = os.path.join(serialization_dir, TF_WEIGHTS_NAME)
             return load_tf_weights_in_bert(model, weights_path)
         # Load from a PyTorch state_dict
         old_keys = []
