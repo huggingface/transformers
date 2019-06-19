@@ -27,10 +27,13 @@ from pytorch_pretrained_bert.modeling_gpt2 import (CONFIG_NAME, WEIGHTS_NAME,
                                                      load_tf_weights_in_gpt2)
 
 
-def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path):
+def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path, model_size):
     # Construct model
     if gpt2_config_file == "":
-        config = GPT2Config()
+        if model_size == "117M":
+            config = GPT2Config()
+        else:
+            config = GPT2Config(n_embd=1024, n_layer=24, n_head=16)
     else:
         config = GPT2Config(gpt2_config_file)
     model = GPT2Model(config)
@@ -66,7 +69,16 @@ if __name__ == "__main__":
                         type = str,
                         help = "An optional config json file corresponding to the pre-trained OpenAI model. \n"
                             "This specifies the model architecture.")
+    parser.add_argument("--model_size",
+                        default = "117M",
+                        type = str,
+                        help = "An optional argument that specifies whether the checkpoint to convert is from the 117M or the 345M model.")
     args = parser.parse_args()
+
+    if args.model_size != "117M" or args.model_size != "345M":
+        parser.error("--model_size must be either 117M or 345M.")
+
     convert_gpt2_checkpoint_to_pytorch(args.gpt2_checkpoint_path,
                                          args.gpt2_config_file,
-                                         args.pytorch_dump_folder_path)
+                                         args.pytorch_dump_folder_path,
+                                         args.model_size)
