@@ -274,6 +274,8 @@ class Attention(nn.Module):
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
         mask = torch.ones(self.n_head, self.split_size // self.n_head)
         for head in heads:
             mask[head] = 0
@@ -710,7 +712,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we mask the head
+        # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # head_mask has shape n_layer x batch x n_heads x N x N
         if head_mask is not None:
@@ -720,7 +722,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
             head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
-            head_mask = (1.0 - head_mask)
         else:
             head_mask = [None] * self.config.n_layer
 
