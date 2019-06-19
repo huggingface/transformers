@@ -55,7 +55,7 @@ def prune_conv1d_layer(layer, index, dim=1):
         b = layer.bias[index].clone().detach()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
-    new_layer = Conv1D(new_size[1], new_size[0])
+    new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
     new_layer.weight.requires_grad = False
     new_layer.weight.copy_(W.contiguous())
     new_layer.weight.requires_grad = True
