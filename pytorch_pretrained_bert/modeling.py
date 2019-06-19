@@ -408,6 +408,8 @@ class BertAttention(nn.Module):
         self.output = BertSelfOutput(config)
 
     def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
         mask = torch.ones(self.self.num_attention_heads, self.self.attention_head_size)
         for head in heads:
             mask[head] = 0
@@ -858,9 +860,10 @@ class BertModel(BertPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we mask the head
+        # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape num_hidden_layers x batch x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
@@ -868,7 +871,6 @@ class BertModel(BertPreTrainedModel):
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
             head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
-            head_mask = (1.0 - head_mask)
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
