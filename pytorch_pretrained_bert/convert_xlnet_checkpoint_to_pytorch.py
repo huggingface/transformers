@@ -21,13 +21,13 @@ from __future__ import print_function
 import argparse
 import torch
 
-from pytorch_pretrained_bert.modeling_xlnet import XLNetConfig, XLNetRunConfig, XLNetModel, load_tf_weights_in_xlnet
+from pytorch_pretrained_bert.modeling_xlnet import XLNetConfig, XLNetRunConfig, XLNetLMHeadModel, load_tf_weights_in_xlnet
 
 def convert_xlnet_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
     # Initialise PyTorch model
     config = XLNetConfig.from_json_file(bert_config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = XLNetModel(config)
+    model = XLNetLMHeadModel(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_xlnet(model, tf_checkpoint_path)
