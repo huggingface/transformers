@@ -114,10 +114,10 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             logit = self._compute_logit(hidden, self.out_layers[0].weight,
                                         self.out_layers[0].bias, self.out_projs[0])
             if target is not None:
-                output = -F.log_softmax(logit, dim=-1) \
+                out = -F.log_softmax(logit, dim=-1) \
                         .gather(1, target.unsqueeze(1)).squeeze(1)
             else:
-                output = F.log_softmax(logit, dim=-1)
+                out = F.log_softmax(logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []

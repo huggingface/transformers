@@ -37,9 +37,11 @@ logger = logging.getLogger(__name__)
 
 PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
+    'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
 }
 PRETRAINED_MERGES_ARCHIVE_MAP = {
     'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
+    'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
 }
 PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
     'gpt2': 1024,
@@ -91,7 +93,7 @@ class GPT2Tokenizer(object):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
         """
-        Instantiate a PreTrainedBertModel from a pre-trained model file.
+        Instantiate a GPT2Tokenizer from a pre-trained model file.
         Download and cache the pre-trained model file if needed.
         """
         if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
@@ -111,14 +113,19 @@ class GPT2Tokenizer(object):
             resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
             resolved_merges_file = cached_path(merges_file, cache_dir=cache_dir)
         except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                    pretrained_model_name_or_path,
-                    vocab_file, merges_file))
+            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download vocabulary.".format(
+                        vocab_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find files {} and {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path,
+                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
+                        pretrained_model_name_or_path,
+                        vocab_file, merges_file))
             return None
         if resolved_vocab_file == vocab_file and resolved_merges_file == merges_file:
             logger.info("loading vocabulary file {}".format(vocab_file))
@@ -263,9 +270,14 @@ class GPT2Tokenizer(object):
     def encode(self, text):
         return self.convert_tokens_to_ids(self.tokenize(text))
 
-    def decode(self, tokens):
-        text = ''.join([self.decoder[token] for token in tokens])
+    def decode(self, tokens, skip_special_tokens=False, clean_up_tokenization_spaces=True):
+        text = ''.join(self.convert_ids_to_tokens(tokens, skip_special_tokens=skip_special_tokens))
         text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
+        if clean_up_tokenization_spaces:
+            text = text.replace('<unk>', '')
+            text = text.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
+                    ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
+                    ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
         return text
 
     def save_vocabulary(self, vocab_path):
