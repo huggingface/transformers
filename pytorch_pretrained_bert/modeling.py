@@ -718,7 +718,7 @@ class BertPreTrainedModel(nn.Module):
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
         if from_tf:
             # Directly load from a TensorFlow checkpoint
-            return load_tf_weights_in_bert(model, weights_path)
+            return load_tf_weights_in_bert(model, resolved_archive_file)
         # Load from a PyTorch state_dict
         old_keys = []
         new_keys = []
