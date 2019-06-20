@@ -236,7 +236,7 @@ class TransfoXLConfig(object):
             dropout: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
             dropatt: The dropout ratio for the attention probabilities.
-            untie_r: untie relative position biases           
+            untie_r: untie relative position biases
             embd_pdrop: The dropout ratio for the embeddings.
             init: parameter initializer to use
             init_range: parameters initialized by U(-init_range, init_range).
