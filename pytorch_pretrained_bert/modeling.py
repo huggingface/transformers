@@ -44,6 +44,9 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-pytorch_model.bin",
     'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-pytorch_model.bin",
     'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-pytorch_model.bin",
+    'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
 }
 PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",
@@ -56,6 +59,9 @@ PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-config.json",
     'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-config.json",
     'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-config.json",
+    'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-config.json",
+    'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-config.json",
+    'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-config.json",
 }
 BERT_CONFIG_NAME = 'bert_config.json'
 TF_WEIGHTS_NAME = 'model.ckpt'
@@ -74,7 +80,7 @@ def prune_linear_layer(layer, index, dim=0):
             b = layer.bias[index].clone().detach()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
-    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None)
+    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
     new_layer.weight.requires_grad = False
     new_layer.weight.copy_(W.contiguous())
     new_layer.weight.requires_grad = True
@@ -402,6 +408,8 @@ class BertAttention(nn.Module):
         self.output = BertSelfOutput(config)
 
     def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
         mask = torch.ones(self.self.num_attention_heads, self.self.attention_head_size)
         for head in heads:
             mask[head] = 0
@@ -701,36 +709,15 @@ class BertPreTrainedModel(nn.Module):
                 archive_file, resolved_archive_file))
             logger.info("loading configuration file {} from cache at {}".format(
                 config_file, resolved_config_file))
-        ### Switching to split config/weight files configuration
-        # tempdir = None
-        # if os.path.isdir(resolved_archive_file) or from_tf:
-        #     serialization_dir = resolved_archive_file
-        # else:
-        #     # Extract archive to temp dir
-        #     tempdir = tempfile.mkdtemp()
-        #     logger.info("extracting archive file {} to temp dir {}".format(
-        #         resolved_archive_file, tempdir))
-        #     with tarfile.open(resolved_archive_file, 'r:gz') as archive:
-        #         archive.extractall(tempdir)
-        #     serialization_dir = tempdir
-        # config_file = os.path.join(serialization_dir, CONFIG_NAME)
-        # if not os.path.exists(config_file):
-        #     # Backward compatibility with old naming format
-        #     config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
         # Load config
         config = BertConfig.from_json_file(resolved_config_file)
         logger.info("Model config {}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
-            # weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
-        # if tempdir:
-        #     # Clean up temp dir
-        #     shutil.rmtree(tempdir)
         if from_tf:
             # Directly load from a TensorFlow checkpoint
-            # weights_path = os.path.join(serialization_dir, TF_WEIGHTS_NAME)
             return load_tf_weights_in_bert(model, weights_path)
         # Load from a PyTorch state_dict
         old_keys = []
@@ -873,9 +860,10 @@ class BertModel(BertPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we mask the head
+        # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape num_hidden_layers x batch x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
@@ -883,7 +871,6 @@ class BertModel(BertPreTrainedModel):
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
             head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
-            head_mask = (1.0 - head_mask)
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
