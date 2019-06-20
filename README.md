@@ -309,6 +309,28 @@ predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
 assert predicted_token == '.</w>'
 ```
 
+And how to use `OpenAIGPTDoubleHeadsModel`
+
+```python
+# Load pre-trained model (weights)
+model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+model.eval()
+
+#  Prepare tokenized input
+text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+tokenized_text1 = tokenizer.tokenize(text1)
+tokenized_text2 = tokenizer.tokenize(text2)
+indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+
+# Predict hidden states features for each layer
+with torch.no_grad():
+    lm_logits, multiple_choice_logits = model(tokens_tensor, mc_token_ids)
+```
+
 ### Transformer-XL
 
 Here is a quick-start example using `TransfoXLTokenizer`, `TransfoXLModel` and `TransfoXLModelLMHeadModel` class with the Transformer-XL model pre-trained on WikiText-103. See the [doc section](#doc) below for all the details on these classes.
@@ -456,6 +478,29 @@ predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
 predicted_token = tokenizer.decode([predicted_index])
 ```
 
+And how to use `GPT2DoubleHeadsModel`
+
+```python
+# Load pre-trained model (weights)
+model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+model.eval()
+
+#  Prepare tokenized input
+text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+tokenized_text1 = tokenizer.tokenize(text1)
+tokenized_text2 = tokenizer.tokenize(text2)
+indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+
+# Predict hidden states features for each layer
+with torch.no_grad():
+    lm_logits, multiple_choice_logits, past = model(tokens_tensor, mc_token_ids)
+```
+
+
 ## Doc
 
 Here is a detailed documentation of the classes in the package and how to use them:
@@ -471,10 +516,12 @@ Here is a detailed documentation of the classes in the package and how to use th
 
 ### Loading Google AI or OpenAI pre-trained weights or PyTorch dump
 
-To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated as
+### `from_pretrained()` method
+
+To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of `BertForPreTraining` saved with `torch.save()`), the PyTorch model classes and the tokenizer can be instantiated using the `from_pretrained()` method:
 
 ```python
-model = BERT_CLASS.from_pretrained(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None)
+model = BERT_CLASS.from_pretrained(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None, from_tf=False, state_dict=None, *input, **kwargs)
 ```
 
 where
@@ -491,9 +538,13 @@ where
     - `bert-base-multilingual-uncased`: (Orig, not recommended) 102 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `bert-base-multilingual-cased`: **(New, recommended)** 104 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `bert-base-chinese`: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
-    - `openai-gpt`: OpenAI English model, 12-layer, 768-hidden, 12-heads, 110M parameters
-    - `transfo-xl-wt103`: Transformer-XL English model trained on wikitext-103, 18-layer, 1024-hidden, 16-heads, 257M parameters
+    - `bert-base-german-cased`: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters [Performance Evaluation](https://deepset.ai/german-bert)
+    - `bert-large-uncased-whole-word-masking`: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
+    - `bert-large-cased-whole-word-masking`: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
+    - `openai-gpt`: OpenAI GPT English model, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `gpt2`: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
+    - `gpt2-medium`: OpenAI GPT-2 English model, 24-layer, 1024-hidden, 16-heads, 345M parameters
+    - `transfo-xl-wt103`: Transformer-XL English model trained on wikitext-103, 18-layer, 1024-hidden, 16-heads, 257M parameters
 
   - a path or url to a pretrained model archive containing:
 
@@ -501,7 +552,12 @@ where
     - `pytorch_model.bin` a PyTorch dump of a pre-trained instance of `BertForPreTraining`, `OpenAIGPTModel`, `TransfoXLModel`, `GPT2LMHeadModel` (saved with the usual `torch.save()`)
 
   If `PRE_TRAINED_MODEL_NAME_OR_PATH` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links [here](pytorch_pretrained_bert/modeling.py)) and stored in a cache folder to avoid future download (the cache folder can be found at `~/.pytorch_pretrained_bert/`).
+
 - `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information).
+- `from_tf`: should we load the weights from a locally saved TensorFlow checkpoint
+- `state_dict`: an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
+- `*inputs`, `**kwargs`: additional input for the specific Bert class (ex: num_labels for BertForSequenceClassification)
+
 
 `Uncased` means that the text has been lowercased before WordPiece tokenization, e.g., `John Smith` becomes `john smith`. The Uncased model also strips out any accent markers. `Cased` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the [Multilingual README](https://github.com/google-research/bert/blob/master/multilingual.md) or the original TensorFlow repository.
 
@@ -527,6 +583,22 @@ model = GPT2Model.from_pretrained('gpt2')
 
 ```
 
+#### Cache directory
+
+`pytorch_pretrained_bert` save the pretrained weights in a cache directory which is located at (in this order of priority):
+
+- `cache_dir` optional arguments to the `from_pretrained()` method (see above),
+- shell environment variable `PYTORCH_PRETRAINED_BERT_CACHE`,
+- PyTorch cache home + `/pytorch_pretrained_bert/`
+  where PyTorch cache home is defined by (in this order):
+  - shell environment variable `ENV_TORCH_HOME`
+  - shell environment variable `ENV_XDG_CACHE_HOME` + `/torch/`)
+  - default: `~/.cache/torch/`
+
+Usually, if you don't set any specific environment variable, `pytorch_pretrained_bert` cache will be at `~/.cache/torch/pytorch_pretrained_bert/`.
+
+You can alsways safely delete `pytorch_pretrained_bert` cache but the pretrained model weights and vocabulary files wil have to be re-downloaded from our S3.
+
 ### Serialization best-practices
 
 This section explain how you can save and re-load a fine-tuned model (BERT, GPT, GPT-2 and Transformer-XL).
@@ -535,6 +607,13 @@ There are three types of files you need to save to be able to reload a fine-tune
 - the model it-self which should be saved following PyTorch serialization [best practices](https://pytorch.org/docs/stable/notes/serialization.html#best-practices),
 - the configuration file of the model which is saved as a JSON file, and
 - the vocabulary (and the merges for the BPE-based models GPT and GPT-2).
+
+The defaults files names of these files are as follow:
+
+- the model weights file: `pytorch_model.bin`,
+- the configuration file: `config.json`,
+- the vocabulary file: `vocab.txt` for BERT and Transformer-XL, `vocab.json` for GPT/GPT-2 (BPE vocabulary),
+- for GPT/GPT-2 (BPE vocabulary) the additional merges file: `merges.txt`.
 
 Here is the recommended way of saving the model, configuration and vocabulary to an `output_dir` directory and reloading the model and tokenizer afterwards:
 
@@ -627,6 +706,13 @@ These configuration classes contains a few utilities to load and save configurat
 
 `BertModel` is the basic BERT Transformer model with a layer of summed token, position and sequence embeddings followed by a series of identical self-attention blocks (12 for BERT-base, 24 for BERT-large).
 
+Instantiation:
+The model can be instantiated with the following arguments:
+
+- `config`: a `BertConfig` class instance with the configuration to build a new model.
+- `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+- `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient. This can be used to compute head importance metrics. Default: False
+
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
@@ -635,6 +721,7 @@ We detail them here. This model takes as *inputs*:
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
 - `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if some input sequence lengths are smaller than the max input sequence length of the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
 - `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 This model *outputs* a tuple composed of:
 
@@ -752,6 +839,13 @@ where total_tokens_embeddings can be obtained as config.total_tokens_embeddings 
     `total_tokens_embeddings = config.vocab_size + config.n_special`
 You should use the associate indices to index the embeddings.
 
+Instantiation:
+The model can be instantiated with the following arguments:
+
+- `config`: a `OpenAIConfig` class instance with the configuration to build a new model.
+- `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+- `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient. This can be used to compute head importance metrics. Default: False
+
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
@@ -762,9 +856,10 @@ We detail them here. This model takes as *inputs*:
 - `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
     You can use it to add a third type of embedding to each input token in the sequence
     (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 This model *outputs*:
-- `hidden_states`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+- `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
 
 #### 10. `OpenAIGPTLMHeadModel`
 
@@ -844,6 +939,13 @@ all_hidden_states = lower_hidden_states + [hidden_states]
 
 `GPT2Model` is the OpenAI GPT-2 Transformer model with a layer of summed token and position embeddings followed by a series of 12 identical self-attention blocks.
 
+Instantiation:
+The model can be instantiated with the following arguments:
+
+- `config`: a `GPT2Config` class instance with the configuration to build a new model.
+- `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+- `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient. This can be used to compute head importance metrics. Default: False
+
 The inputs and output are **identical to the TensorFlow model inputs and outputs**.
 
 We detail them here. This model takes as *inputs*:
@@ -855,9 +957,10 @@ We detail them here. This model takes as *inputs*:
     You can use it to add a third type of embedding to each input token in the sequence
     (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
 - `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states (key and values in the attention blocks) to speed up sequential decoding (this is the `presents` output of the model, cf. below).
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 This model *outputs*:
-- `hidden_states`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
+- `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
 - `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
 
 #### 15. `GPT2LMHeadModel`
@@ -1033,7 +1136,7 @@ An overview of the implemented schedules:
 |-|-|
 | [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
 | [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `run_lm_finetuning.py` |
-| [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#Fine-tuning-with-OpenAI-GPT-Transformer-XL-and-GPT-2) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
+| [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#openai-gpt-transformer-xl-and-gpt-2-running-the-examples) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
 | [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
 ### Training large models: introduction, tools and examples
@@ -1352,6 +1455,25 @@ python ./run_squad.py \
 The results were similar to the above FP32 results (actually slightly higher):
 ```bash
 {"exact_match": 84.65468306527909, "f1": 91.238669287002}
+```
+
+Here is an example with the recent `bert-large-uncased-whole-word-masking`:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8 \
+  run_squad.py \
+  --bert_model bert-large-uncased-whole-word-masking \
+  --do_train \
+  --do_predict \
+  --do_lower_case \
+  --train_file $SQUAD_DIR/train-v1.1.json \
+  --predict_file $SQUAD_DIR/dev-v1.1.json \
+  --train_batch_size 12 \
+  --learning_rate 3e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 384 \
+  --doc_stride 128 \
+  --output_dir /tmp/debug_squad/
 ```
 
 ## Notebooks
