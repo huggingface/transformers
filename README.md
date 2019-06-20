@@ -541,6 +541,7 @@ where
     - `bert-base-german-cased`: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters [Performance Evaluation](https://deepset.ai/german-bert)
     - `bert-large-uncased-whole-word-masking`: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     - `bert-large-cased-whole-word-masking`: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
+    - `bert-large-uncased-whole-word-masking-finetuned-squad`: The `bert-large-uncased-whole-word-masking` model finetuned on SQuAD (using the `run_squad.py` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
     - `openai-gpt`: OpenAI GPT English model, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `gpt2`: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
     - `gpt2-medium`: OpenAI GPT-2 English model, 24-layer, 1024-hidden, 16-heads, 345M parameters
@@ -608,12 +609,14 @@ There are three types of files you need to save to be able to reload a fine-tune
 - the configuration file of the model which is saved as a JSON file, and
 - the vocabulary (and the merges for the BPE-based models GPT and GPT-2).
 
-The defaults files names of these files are as follow:
+The *default filenames* of these files are as follow:
 
 - the model weights file: `pytorch_model.bin`,
 - the configuration file: `config.json`,
 - the vocabulary file: `vocab.txt` for BERT and Transformer-XL, `vocab.json` for GPT/GPT-2 (BPE vocabulary),
 - for GPT/GPT-2 (BPE vocabulary) the additional merges file: `merges.txt`.
+
+**If you save a model using these *default filenames*, you can then re-load the model and tokenizer using the `from_pretrained()` method.**
 
 Here is the recommended way of saving the model, configuration and vocabulary to an `output_dir` directory and reloading the model and tokenizer afterwards:
 
@@ -721,7 +724,7 @@ We detail them here. This model takes as *inputs*:
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
 - `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if some input sequence lengths are smaller than the max input sequence length of the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
 - `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
-- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 0.0 => head is fully masked, 1.0 => head is not masked.
 
 This model *outputs* a tuple composed of:
 
@@ -856,7 +859,7 @@ We detail them here. This model takes as *inputs*:
 - `token_type_ids`: an optional torch.LongTensor with the same shape as input_ids
     You can use it to add a third type of embedding to each input token in the sequence
     (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
-- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 0.0 => head is fully masked, 1.0 => head is not masked.
 
 This model *outputs*:
 - `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
@@ -957,7 +960,7 @@ We detail them here. This model takes as *inputs*:
     You can use it to add a third type of embedding to each input token in the sequence
     (the previous two being the word and position embeddings). The input, position and token_type embeddings are summed inside the Transformer before the first self-attention block.
 - `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states (key and values in the attention blocks) to speed up sequential decoding (this is the `presents` output of the model, cf. below).
-- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+- `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 0.0 => head is fully masked, 1.0 => head is not masked.
 
 This model *outputs*:
 - `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
@@ -1268,6 +1271,46 @@ python run_classifier.py \
   --fp16
 ```
 
+**Distributed training**
+Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking model to reach a F1 > 92 on MRPC:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node 8 run_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name MRPC --do_train   --do_eval   --do_lower_case   --data_dir $GLUE_DIR/MRPC/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0  --output_dir /tmp/mrpc_output/
+```
+
+Training with these hyper-parameters gave us the following results:
+```bash
+  acc = 0.8823529411764706
+  acc_and_f1 = 0.901702786377709
+  eval_loss = 0.3418912578906332
+  f1 = 0.9210526315789473
+  global_step = 174
+  loss = 0.07231863956341798
+```
+
+Here is an example on MNLI:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node 8 run_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --do_lower_case   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
+```
+
+```bash
+***** Eval results *****
+  acc = 0.8679706601466992
+  eval_loss = 0.4911287787382479
+  global_step = 18408
+  loss = 0.04755385363816904
+
+***** Eval results *****
+  acc = 0.8747965825874695
+  eval_loss = 0.45516540421714036
+  global_step = 18408
+  loss = 0.04755385363816904
+```
+
+This is the example of the `bert-large-uncased-whole-word-masking-finetuned-mnli` model
+
+
 #### SQuAD
 
 This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) on a single tesla V100 16GB.
@@ -1298,7 +1341,50 @@ python run_squad.py \
 
 Training with the previous hyper-parameters gave us the following results:
 ```bash
+python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json /tmp/debug_squad/predictions.json
 {"f1": 88.52381567990474, "exact_match": 81.22043519394512}
+```
+
+**distributed training**
+
+Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8 \
+ run_squad.py \
+ --bert_model bert-large-uncased-whole-word-masking  \
+ --do_train \
+ --do_predict \
+ --do_lower_case \
+ --train_file $SQUAD_DIR/train-v1.1.json \
+ --predict_file $SQUAD_DIR/dev-v1.1.json \
+ --learning_rate 3e-5 \
+ --num_train_epochs 2 \
+ --max_seq_length 384 \
+ --doc_stride 128 \
+ --output_dir ../models/wwm_uncased_finetuned_squad/ \
+ --train_batch_size 24 \
+ --gradient_accumulation_steps 12
+```
+
+Training with these hyper-parameters gave us the following results:
+```bash
+python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncased_finetuned_squad/predictions.json
+{"exact_match": 86.91579943235573, "f1": 93.1532499015869}
+```
+
+This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-squad`.
+
+And here is the model provided as `bert-large-cased-whole-word-masking-finetuned-squad`:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node=8  run_squad.py  --bert_model bert-large-cased-whole-word-masking   --do_train  --do_predict  --do_lower_case  --train_file $SQUAD_DIR/train-v1.1.json  --predict_file $SQUAD_DIR/dev-v1.1.json  --learning_rate 3e-5  --num_train_epochs 2  --max_seq_length 384  --doc_stride 128  --output_dir ../models/wwm_cased_finetuned_squad/  --train_batch_size 24  --gradient_accumulation_steps 12
+```
+
+Training with these hyper-parameters gave us the following results:
+```bash
+python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncased_finetuned_squad/predictions.json
+{"exact_match": 84.18164616840113, "f1": 91.58645594850135}
 ```
 
 #### SWAG
@@ -1468,12 +1554,13 @@ python -m torch.distributed.launch --nproc_per_node=8 \
   --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
-  --train_batch_size 12 \
   --learning_rate 3e-5 \
-  --num_train_epochs 2.0 \
+  --num_train_epochs 2 \
   --max_seq_length 384 \
   --doc_stride 128 \
-  --output_dir /tmp/debug_squad/
+  --output_dir /tmp/debug_squad/ \
+  --train_batch_size 24 \
+  --gradient_accumulation_steps 2
 ```
 
 ## Notebooks
