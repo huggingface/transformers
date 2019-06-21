@@ -730,12 +730,17 @@ class XLNetPreTrainedModel(nn.Module):
 
         # Load config
         config = XLNetConfig.from_json_file(resolved_config_file)
-        logger.info("Model config {}".format(config))
 
         # Update config with kwargs if needed
-        for key, value in kwargs:
+        to_remove = []
+        for key, value in kwargs.items():
             if hasattr(config, key):
                 setattr(config, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+
+        logger.info("Model config {}".format(config))
 
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
