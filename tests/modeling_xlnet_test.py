@@ -74,9 +74,9 @@ class XLNetModelTest(unittest.TestCase):
             self.type_vocab_size = type_vocab_size
 
         def prepare_config_and_inputs(self):
-            input_ids_1 = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.vocab_size)
-            input_ids_2 = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.vocab_size)
-            segment_ids = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.type_vocab_size)
+            input_ids_1 = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids_2 = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            segment_ids = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
             # inp_k: int32 Tensor in shape [len, bsz], the input token IDs.
             # seg_id: int32 Tensor in shape [len, bsz], the input segment IDs.
@@ -101,7 +101,7 @@ class XLNetModelTest(unittest.TestCase):
 
             lm_labels = None
             if self.use_labels:
-                lm_labels = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.vocab_size)
+                lm_labels = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = XLNetConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
@@ -155,7 +155,7 @@ class XLNetModelTest(unittest.TestCase):
                 [])
             self.parent.assertListEqual(
                 list(result["lm_logits_1"].size()),
-                [self.seq_length, self.batch_size, self.vocab_size])
+                [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1a"]),
                 [[self.seq_length, self.batch_size, self.d_model]] * self.n_layer)
@@ -171,7 +171,7 @@ class XLNetModelTest(unittest.TestCase):
                 [])
             self.parent.assertListEqual(
                 list(result["lm_logits_2"].size()),
-                [self.seq_length, self.batch_size, self.vocab_size])
+                [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2a"]),
                 [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)

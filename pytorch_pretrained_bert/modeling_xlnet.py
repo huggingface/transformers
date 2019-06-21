@@ -165,12 +165,12 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
 
 
 def gelu(x):
-    """Implementation of the gelu activation function.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    """ Implementation of the gelu activation function.
+        XLNet is using OpenAI GPT's gelu (not exactly the same as BERT)
         Also see https://arxiv.org/abs/1606.08415
     """
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+    cdf = 0.5 * (1.0 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    return x * cdf
 
 
 def swish(x):
@@ -657,7 +657,7 @@ class XLNetPreTrainedModel(nn.Module):
                 - a str with the name of a pre-trained model to load selected in the list of:
                     . `xlnet-large-cased`
                 - a path or url to a pretrained model archive containing:
-                    . `xlnet_config.json` a configuration file for the model
+                    . `config.json` a configuration file for the model
                     . `pytorch_model.bin` a PyTorch dump of a XLNetForPreTraining instance
                 - a path or url to a pretrained model archive containing:
                     . `xlnet_config.json` a configuration file for the model
@@ -767,6 +767,8 @@ class XLNetPreTrainedModel(nn.Module):
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                model.__class__.__name__, "\n\t".join(error_msgs)))
+        if isinstance(model, XLNetLMHeadModel):
+            model.tie_weights()  # make sure word embedding weights are still tied
         return model
 
 
@@ -894,23 +896,23 @@ class XLNetModel(XLNetPreTrainedModel):
                 output_all_encoded_layers=True, head_mask=None):
         """
         Args:
-            inp_k: int32 Tensor in shape [len, bsz], the input token IDs.
-            seg_id: int32 Tensor in shape [len, bsz], the input segment IDs.
-            input_mask: [optional] float32 Tensor in shape [len, bsz], the input mask.
+            inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
+            seg_id: int32 Tensor in shape [bsz, len], the input segment IDs.
+            input_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
             mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
-            perm_mask: [optional] float32 Tensor in shape [len, len, bsz].
-                If perm_mask[i, j, k] = 0, i attend to j in batch k;
-                if perm_mask[i, j, k] = 1, i does not attend to j in batch k.
+            perm_mask: [optional] float32 Tensor in shape [bsz, len, len].
+                If perm_mask[k, i, j] = 0, i attend to j in batch k;
+                if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
                 If None, each position attends to all the others.
-            target_mapping: [optional] float32 Tensor in shape [num_predict, len, bsz].
-                If target_mapping[i, j, k] = 1, the i-th predict in batch k is
+            target_mapping: [optional] float32 Tensor in shape [bsz, num_predict, len].
+                If target_mapping[k, i, j] = 1, the i-th predict in batch k is
                 on the j-th token.
                 Only used during pretraining for partial prediction.
                 Set to None during finetuning.
-            inp_q: [optional] float32 Tensor in shape [len, bsz].
+            inp_q: [optional] float32 Tensor in shape [bsz, len].
                 1 for tokens with losses and 0 for tokens without losses.
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
@@ -926,6 +928,16 @@ class XLNetModel(XLNetPreTrainedModel):
             summary_type: str, "last", "first", "mean", or "attn". The method
                 to pool the input to get a vector representation.
         """
+        # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
+        # but we want a unified interface in the library with the batch size on the first dimension
+        # so we move here the first dimension (batch) to the end
+        inp_k = inp_k.transpose(0, 1).contiguous()
+        seg_id = seg_id.transpose(0, 1).contiguous() if seg_id is not None else None
+        input_mask = input_mask.transpose(0, 1).contiguous() if input_mask is not None else None
+        perm_mask = perm_mask.permute(1, 2, 0).contiguous() if perm_mask is not None else None
+        target_mapping = target_mapping.permute(1, 2, 0).contiguous() if target_mapping is not None else None
+        inp_q = inp_q.transpose(0, 1).contiguous() if inp_q is not None else None
+
         qlen, bsz = inp_k.shape[0], inp_k.shape[1]
         mlen = mems[0].shape[0] if mems is not None else 0
         klen = mlen + qlen
@@ -1020,6 +1032,7 @@ class XLNetModel(XLNetPreTrainedModel):
         if mems is None:
             mems = [None] * len(self.layer)
 
+        hidden_states = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
             new_mems.append(self.cache_mem(output_h, mems[i]))
@@ -1029,10 +1042,14 @@ class XLNetModel(XLNetPreTrainedModel):
                                               r=pos_emb, seg_mat=seg_mat,
                                               mems=mems[i], target_mapping=target_mapping,
                                               head_mask=head_mask)
-
+            hidden_states.append(output_h)
         output = self.dropout(output_g if output_g is not None else output_h)
 
-        return output, new_mems
+        # We transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
+        output = output.permute(1, 0, 2).contiguous()
+        hidden_states = [hs.permute(1, 0, 2).contiguous() for hs in hidden_states]
+
+        return output, hidden_states, new_mems
 
 
 class XLNetLMHeadModel(XLNetPreTrainedModel):
@@ -1110,23 +1127,23 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
                 target=None, output_all_encoded_layers=True, head_mask=None):
         """
         Args:
-            inp_k: int32 Tensor in shape [len, bsz], the input token IDs.
-            seg_id: int32 Tensor in shape [len, bsz], the input segment IDs.
-            input_mask: float32 Tensor in shape [len, bsz], the input mask.
+            inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
+            seg_id: int32 Tensor in shape [bsz, len], the input segment IDs.
+            input_mask: float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
             mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
-            perm_mask: float32 Tensor in shape [len, len, bsz].
-                If perm_mask[i, j, k] = 0, i attend to j in batch k;
-                if perm_mask[i, j, k] = 1, i does not attend to j in batch k.
+            perm_mask: float32 Tensor in shape [bsz, len, len].
+                If perm_mask[k, i, j] = 0, i attend to j in batch k;
+                if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
                 If None, each position attends to all the others.
-            target_mapping: float32 Tensor in shape [num_predict, len, bsz].
-                If target_mapping[i, j, k] = 1, the i-th predict in batch k is
+            target_mapping: float32 Tensor in shape [bsz, num_predict, len].
+                If target_mapping[k, i, j] = 1, the i-th predict in batch k is
                 on the j-th token.
                 Only used during pretraining for partial prediction.
                 Set to None during finetuning.
-            inp_q: float32 Tensor in shape [len, bsz].
+            inp_q: float32 Tensor in shape [bsz, len].
                 1 for tokens with losses and 0 for tokens without losses.
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
@@ -1134,7 +1151,131 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             summary_type: str, "last", "first", "mean", or "attn". The method
                 to pool the input to get a vector representation.
         """
-        output, new_mems = self.transformer(inp_k, seg_id, input_mask,
+        output, hidden_states, new_mems = self.transformer(inp_k, seg_id, input_mask,
+                                            mems, perm_mask, target_mapping, inp_q,
+                                            output_all_encoded_layers, head_mask)
+
+        logits = self.lm_loss(output)
+
+        if target is not None:
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss = loss_fct(logits.view(-1, logits.size(-1)),
+                            target.view(-1))
+            return loss, new_mems
+
+        # if self.output_attentions:
+        #     all_attentions, encoded_layers = encoded_layers
+        # sequence_output = encoded_layers[-1]
+        # pooled_output = self.pooler(sequence_output)
+        # if not output_all_encoded_layers:
+        #     encoded_layers = encoded_layers[-1]
+        # if self.output_attentions:
+        return logits, new_mems
+        #     return all_attentions, encoded_layers, pooled_output
+
+
+class XLNetForSequenceClassification(XLNetPreTrainedModel):
+    """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
+
+    Params:
+        `config`: a XLNetConfig class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
+        `summary_type`: str, "last", "first", "mean", or "attn". The method
+            to pool the input to get a vector representation. Default: last
+
+    Inputs:
+        inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
+        seg_id: int32 Tensor in shape [bsz, len], the input segment IDs.
+        input_mask: float32 Tensor in shape [bsz, len], the input mask.
+            0 for real tokens and 1 for padding.
+        mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
+            from previous batches. The length of the list equals n_layer.
+            If None, no memory is used.
+        perm_mask: float32 Tensor in shape [bsz, len, len].
+            If perm_mask[k, i, j] = 0, i attend to j in batch k;
+            if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
+            If None, each position attends to all the others.
+        target_mapping: float32 Tensor in shape [bsz, num_predict, len].
+            If target_mapping[k, i, j] = 1, the i-th predict in batch k is
+            on the j-th token.
+            Only used during pretraining for partial prediction.
+            Set to None during finetuning.
+        inp_q: float32 Tensor in shape [bsz, len].
+            1 for tokens with losses and 0 for tokens without losses.
+            Only used during pretraining for two-stream attention.
+            Set to None during finetuning.
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+
+
+    Outputs: Tuple of (logits or loss, mems)
+        `logits or loss`:
+            if target is None:
+                Token logits with shape [batch_size, sequence_length] 
+            else:
+                CrossEntropy loss with the targets
+        `new_mems`: list (num layers) of updated mem states at the entry of each layer
+            each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
+            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `target`
+
+    Example usage:
+    ```python
+    # Already been converted into WordPiece token ids
+    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+    config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
+        n_layer=12, num_attention_heads=12, intermediate_size=3072)
+
+    model = modeling.XLNetModel(config=config)
+    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+    ```
+    """
+    def __init__(self, config, summary_type="last", output_attentions=False, keep_multihead_output=False):
+        super(XLNetForSequenceClassification, self).__init__(config)
+        self.output_attentions = output_attentions
+        self.attn_type = config.attn_type
+        self.same_length = config.same_length
+        self.summary_type = summary_type
+
+        self.transformer = XLNetModel(config, output_attentions=output_attentions,
+                                              keep_multihead_output=keep_multihead_output)
+        self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
+
+        self.apply(self.init_xlnet_weights)
+        self.tie_weights()
+
+    def forward(self, inp_k, seg_id=None, input_mask=None,
+                mems=None, perm_mask=None, target_mapping=None, inp_q=None,
+                target=None, output_all_encoded_layers=True, head_mask=None):
+        """
+        Args:
+            inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
+            seg_id: int32 Tensor in shape [bsz, len], the input segment IDs.
+            input_mask: float32 Tensor in shape [bsz, len], the input mask.
+                0 for real tokens and 1 for padding.
+            mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
+                from previous batches. The length of the list equals n_layer.
+                If None, no memory is used.
+            perm_mask: float32 Tensor in shape [bsz, len, len].
+                If perm_mask[k, i, j] = 0, i attend to j in batch k;
+                if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
+                If None, each position attends to all the others.
+            target_mapping: float32 Tensor in shape [bsz, num_predict, len].
+                If target_mapping[k, i, j] = 1, the i-th predict in batch k is
+                on the j-th token.
+                Only used during pretraining for partial prediction.
+                Set to None during finetuning.
+            inp_q: float32 Tensor in shape [bsz, len].
+                1 for tokens with losses and 0 for tokens without losses.
+                Only used during pretraining for two-stream attention.
+                Set to None during finetuning.
+        """
+        output, hidden_states, new_mems = self.transformer(inp_k, seg_id, input_mask,
                                             mems, perm_mask, target_mapping, inp_q,
                                             output_all_encoded_layers, head_mask)
 

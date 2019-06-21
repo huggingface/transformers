@@ -3,7 +3,7 @@ from .tokenization import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .tokenization_gpt2 import GPT2Tokenizer
-from .tokenization_xlnet import XLNetTokenizer
+from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 
 from .modeling import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
