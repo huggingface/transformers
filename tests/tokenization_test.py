@@ -49,7 +49,7 @@ class TokenizationTest(unittest.TestCase):
             tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
         vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
-        tokenizer.from_pretrained(vocab_file)
+        tokenizer = tokenizer.from_pretrained(vocab_file)
         os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")

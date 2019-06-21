@@ -1034,14 +1034,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
 
-            mem_len: int, the number of tokens to cache.
-            reuse_len: int, the number of tokens in the currect batch to be cached
-                and reused in the future.
-            bi_data: bool, whether to use bidirectional input pipeline.
-                Usually set to True during pretraining and False during finetuning.
-            clamp_len: int, clamp all relative distances larger than clamp_len.
-                -1 means no clamping.
-            same_length: bool, whether to use the same attention length for each token.
             summary_type: str, "last", "first", "mean", or "attn". The method
                 to pool the input to get a vector representation.
         """
@@ -1068,4 +1060,4 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         #     encoded_layers = encoded_layers[-1]
         # if self.output_attentions:
         #     return all_attentions, encoded_layers, pooled_output
-        return output, new_mems
+        return logits, new_mems
