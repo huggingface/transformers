@@ -44,7 +44,7 @@ class TransfoXLTokenizationTest(unittest.TestCase):
             tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
 
         vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
-        tokenizer.from_pretrained(vocab_file)
+        tokenizer = tokenizer.from_pretrained(vocab_file)
         os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"<unk> UNwanted , running")

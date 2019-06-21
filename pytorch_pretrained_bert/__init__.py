@@ -3,6 +3,7 @@ from .tokenization import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_xlnet import XLNetTokenizer
 
 from .modeling import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
@@ -24,4 +25,5 @@ from .modeling_xlnet import (XLNetBaseConfig, XLNetConfig, XLNetRunConfig,
 from .optimization import BertAdam
 from .optimization_openai import OpenAIAdam
 
-from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE, cached_path, WEIGHTS_NAME, CONFIG_NAME
+from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path,
+                         WEIGHTS_NAME, CONFIG_NAME)

@@ -35,8 +35,8 @@ class XLNetModelTest(unittest.TestCase):
                      parent,
                      batch_size=13,
                      seq_length=7,
-                     mem_len=30,
-                     clamp_len=15,
+                     mem_len=10,
+                     clamp_len=-1,
                      reuse_len=15,
                      is_training=True,
                      use_labels=True,
@@ -78,6 +78,27 @@ class XLNetModelTest(unittest.TestCase):
             input_ids_2 = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.vocab_size)
             segment_ids = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.type_vocab_size)
 
+            # inp_k: int32 Tensor in shape [len, bsz], the input token IDs.
+            # seg_id: int32 Tensor in shape [len, bsz], the input segment IDs.
+            # input_mask: float32 Tensor in shape [len, bsz], the input mask.
+            #     0 for real tokens and 1 for padding.
+            # mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
+            #     from previous batches. The length of the list equals n_layer.
+            #     If None, no memory is used.
+            # perm_mask: float32 Tensor in shape [len, len, bsz].
+            #     If perm_mask[i, j, k] = 0, i attend to j in batch k;
+            #     if perm_mask[i, j, k] = 1, i does not attend to j in batch k.
+            #     If None, each position attends to all the others.
+            # target_mapping: float32 Tensor in shape [num_predict, len, bsz].
+            #     If target_mapping[i, j, k] = 1, the i-th predict in batch k is
+            #     on the j-th token.
+            #     Only used during pretraining for partial prediction.
+            #     Set to None during finetuning.
+            # inp_q: float32 Tensor in shape [len, bsz].
+            #     1 for tokens with losses and 0 for tokens without losses.
+            #     Only used during pretraining for two-stream attention.
+            #     Set to None during finetuning.
+
             lm_labels = None
             if self.use_labels:
                 lm_labels = XLNetModelTest.ids_tensor([self.seq_length, self.batch_size], self.vocab_size)
@@ -106,44 +127,15 @@ class XLNetModelTest(unittest.TestCase):
             random.seed(self.seed)
             torch.manual_seed(self.seed)
 
-        def create_transfo_xl_model(self, config, input_ids_1, input_ids_2, segment_ids, lm_labels):
-            model = XLNetLMHeadModel(config)
-            model.eval()
-
-            hidden_states_1, mems_1 = model(input_ids_1, seg_id=segment_ids)
-            hidden_states_2, mems_2 = model(input_ids_2, seg_id=segment_ids, mems=mems_1)
-            outputs = {
-                "hidden_states_1": hidden_states_1,
-                "mems_1": mems_1,
-                "hidden_states_2": hidden_states_2,
-                "mems_2": mems_2,
-            }
-            return outputs
-
-        def check_transfo_xl_model_output(self, result):
-            self.parent.assertListEqual(
-                list(result["hidden_states_1"].size()),
-                [self.seq_length, self.batch_size, self.d_model])
-            self.parent.assertListEqual(
-                list(result["hidden_states_2"].size()),
-                [self.seq_length, self.batch_size, self.d_model])
-            self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-
-
         def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, segment_ids, lm_labels):
             model = XLNetLMHeadModel(config)
             model.eval()
 
-            loss_1, mems_1a = model(input_ids_1, target=lm_labels)
-            lm_logits_1, mems_1b = model(input_ids_1)
+            loss_1, mems_1a = model(input_ids_1, seg_id=segment_ids, target=lm_labels)
+            lm_logits_1, mems_1b = model(input_ids_1, seg_id=segment_ids)
 
-            loss_2, mems_2a = model(input_ids_2, target=lm_labels, mems=mems_1a)
-            lm_logits_2, mems_2b = model(input_ids_2, mems=mems_1b)
+            loss_2, mems_2a = model(input_ids_2, seg_id=segment_ids, target=lm_labels, mems=mems_1a)
+            lm_logits_2, mems_2b = model(input_ids_2, seg_id=segment_ids, mems=mems_1b)
 
             outputs = {
                 "loss_1": loss_1,
@@ -160,23 +152,23 @@ class XLNetModelTest(unittest.TestCase):
         def check_transfo_xl_lm_head_output(self, result):
             self.parent.assertListEqual(
                 list(result["loss_1"].size()),
-                [self.seq_length, self.batch_size])
+                [])
             self.parent.assertListEqual(
                 list(result["lm_logits_1"].size()),
                 [self.seq_length, self.batch_size, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1a"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
+                [[self.seq_length, self.batch_size, self.d_model]] * self.n_layer)
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1b"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
+                [[self.seq_length, self.batch_size, self.d_model]] * self.n_layer)
             self.parent.assertListEqual(
                 list(mem[~torch.isnan(mem)].sum() for mem in result["mems_1a"]),
                 list(mem[~torch.isnan(mem)].sum() for mem in result["mems_1b"]))
 
             self.parent.assertListEqual(
                 list(result["loss_2"].size()),
-                [self.seq_length, self.batch_size])
+                [])
             self.parent.assertListEqual(
                 list(result["lm_logits_2"].size()),
                 [self.seq_length, self.batch_size, self.vocab_size])
@@ -219,16 +211,28 @@ class XLNetModelTest(unittest.TestCase):
         config_and_inputs = tester.prepare_config_and_inputs()
 
         tester.set_seed()
-        output_result = tester.create_transfo_xl_model(*config_and_inputs)
-        tester.check_transfo_xl_model_output(output_result)
-
-        tester.set_seed()
         output_result = tester.create_transfo_xl_lm_head(*config_and_inputs)
         tester.check_transfo_xl_lm_head_output(output_result)
 
     @classmethod
     def ids_tensor(cls, shape, vocab_size, rng=None, name=None):
         """Creates a random int32 tensor of the shape within the vocab size."""
+        if rng is None:
+            rng = random.Random()
+
+        total_dims = 1
+        for dim in shape:
+            total_dims *= dim
+
+        values = []
+        for _ in range(total_dims):
+            values.append(rng.randint(0, vocab_size - 1))
+
+        return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+
+    @classmethod
+    def mask_tensor(cls, shape, vocab_size, rng=None, name=None):
+        """Creates a tensor with padding on the right (0.0 for )."""
         if rng is None:
             rng = random.Random()
 
