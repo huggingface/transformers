@@ -20,7 +20,9 @@ from io import open
 import shutil
 import pytest
 
-from pytorch_pretrained_bert.tokenization_xlnet import (XLNetTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP)
+from pytorch_pretrained_bert.tokenization_xlnet import (XLNetTokenizer,
+                                                        PRETRAINED_VOCAB_ARCHIVE_MAP,
+                                                        SPIECE_UNDERLINE)
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(
                     os.path.dirname(os.path.abspath(__file__))),
@@ -45,9 +47,9 @@ class XLNetTokenizationTest(unittest.TestCase):
         os.remove(special_tokens_file)
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(tokens, ['▁I', '▁was', '▁b', 'or', 'n', '▁in', '▁',
-                                      '9', '2', '0', '0', '0', ',', '▁and', '▁this',
-                                      '▁is', '▁f', 'al', 's', 'é', '.'])
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE + 'I', SPIECE_UNDERLINE + 'was', SPIECE_UNDERLINE + 'b', 'or', 'n', SPIECE_UNDERLINE + 'in', SPIECE_UNDERLINE + '',
+                                      '9', '2', '0', '0', '0', ',', SPIECE_UNDERLINE + 'and', SPIECE_UNDERLINE + 'this',
+                                      SPIECE_UNDERLINE + 'is', SPIECE_UNDERLINE + 'f', 'al', 's', 'é', '.'])
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
             ids, [8, 21, 84, 55, 24, 19, 7, 0,
@@ -55,9 +57,9 @@ class XLNetTokenizationTest(unittest.TestCase):
                             46, 72, 80, 6, 0, 4])
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        self.assertListEqual(back_tokens, ['▁I', '▁was', '▁b', 'or', 'n', '▁in',
-                                           '▁', '<unk>', '2', '0', '0', '0', ',',
-                                           '▁and', '▁this', '▁is', '▁f', 'al', 's',
+        self.assertListEqual(back_tokens, [SPIECE_UNDERLINE + 'I', SPIECE_UNDERLINE + 'was', SPIECE_UNDERLINE + 'b', 'or', 'n', SPIECE_UNDERLINE + 'in',
+                                           SPIECE_UNDERLINE + '', '<unk>', '2', '0', '0', '0', ',',
+                                           SPIECE_UNDERLINE + 'and', SPIECE_UNDERLINE + 'this', SPIECE_UNDERLINE + 'is', SPIECE_UNDERLINE + 'f', 'al', 's',
                                            '<unk>', '.'])
 
     @pytest.mark.slow
@@ -71,17 +73,17 @@ class XLNetTokenizationTest(unittest.TestCase):
     def test_tokenizer_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=True)
         tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
-        self.assertListEqual(tokens, ['▁', 'i', '▁was', '▁b', 'or', 'n', '▁in', '▁',
-                                      '9', '2', '0', '0', '0', ',', '▁and', '▁this',
-                                      '▁is', '▁f', 'al', 'se', '.'])
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE + '', 'i', SPIECE_UNDERLINE + 'was', SPIECE_UNDERLINE + 'b', 'or', 'n', SPIECE_UNDERLINE + 'in', SPIECE_UNDERLINE + '',
+                                      '9', '2', '0', '0', '0', ',', SPIECE_UNDERLINE + 'and', SPIECE_UNDERLINE + 'this',
+                                      SPIECE_UNDERLINE + 'is', SPIECE_UNDERLINE + 'f', 'al', 'se', '.'])
         self.assertListEqual(tokenizer.tokenize(u"H\u00E9llo"), ["▁he", "ll", "o"])
 
     def test_tokenizer_no_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=False)
         tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
-        self.assertListEqual(tokens, ['▁I', '▁was', '▁b', 'or', 'n', '▁in', '▁',
-                                      '9', '2', '0', '0', '0', ',', '▁and', '▁this',
-                                      '▁is', '▁f', 'al', 'se', '.'])
+        self.assertListEqual(tokens, [SPIECE_UNDERLINE + 'I', SPIECE_UNDERLINE + 'was', SPIECE_UNDERLINE + 'b', 'or', 'n', SPIECE_UNDERLINE + 'in', SPIECE_UNDERLINE + '',
+                                      '9', '2', '0', '0', '0', ',', SPIECE_UNDERLINE + 'and', SPIECE_UNDERLINE + 'this',
+                                      SPIECE_UNDERLINE + 'is', SPIECE_UNDERLINE + 'f', 'al', 'se', '.'])
 
 
 if __name__ == '__main__':
