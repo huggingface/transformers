@@ -186,13 +186,13 @@ class XLNetModelTest(unittest.TestCase):
         self.run_tester(XLNetModelTest.XLNetModelTester(self))
 
     def test_config_to_json_string(self):
-        config = XLNetConfig(vocab_size_or_config_json_file=96, d_model=37)
+        config = XLNetConfig(vocab_size_or_config_json_file=96, d_model=16*4)
         obj = json.loads(config.to_json_string())
         self.assertEqual(obj["n_token"], 96)
-        self.assertEqual(obj["d_model"], 37)
+        self.assertEqual(obj["d_model"], 16*4)
 
     def test_config_to_json_file(self):
-        config_first = XLNetConfig(vocab_size_or_config_json_file=96, d_model=37)
+        config_first = XLNetConfig(vocab_size_or_config_json_file=96, d_model=16*4)
         json_file_path = "/tmp/config.json"
         config_first.to_json_file(json_file_path)
         config_second = XLNetConfig.from_json_file(json_file_path)
