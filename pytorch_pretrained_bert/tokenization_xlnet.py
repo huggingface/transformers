@@ -36,7 +36,29 @@ PRETRAINED_VOCAB_ARCHIVE_MAP = {
 VOCAB_NAME = 'spiece.model'
 SPECIAL_TOKENS_NAME = 'special_tokens.txt'
 
-SPIECE_UNDERLINE = '▁'
+SPIECE_UNDERLINE = u'▁'
+
+# Tokens
+special_symbols = {
+    "<unk>"  : 0,
+    "<s>"    : 1,
+    "</s>"   : 2,
+    "<cls>"  : 3,
+    "<sep>"  : 4,
+    "<pad>"  : 5,
+    "<mask>" : 6,
+    "<eod>"  : 7,
+    "<eop>"  : 8,
+}
+
+VOCAB_SIZE = 32000
+UNK_ID = special_symbols["<unk>"]
+CLS_ID = special_symbols["<cls>"]
+SEP_ID = special_symbols["<sep>"]
+MASK_ID = special_symbols["<mask>"]
+EOD_ID = special_symbols["<eod>"]
+
+# Segments (not really needed)
 SEG_ID_A   = 0
 SEG_ID_B   = 1
 SEG_ID_CLS = 2
