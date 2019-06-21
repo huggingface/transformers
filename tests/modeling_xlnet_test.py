@@ -78,23 +78,30 @@ class XLNetModelTest(unittest.TestCase):
             input_ids_2 = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             segment_ids = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
-            # inp_k: int32 Tensor in shape [len, bsz], the input token IDs.
-            # seg_id: int32 Tensor in shape [len, bsz], the input segment IDs.
-            # input_mask: float32 Tensor in shape [len, bsz], the input mask.
+            input_ids_q = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
+            perm_mask = torch.zeros(self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float)
+            perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
+            target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float)
+            target_mapping[:, 0, -1] = 1.0  # predict last token
+            inp_q = target_mapping[:, 0, :].clone()  # predict last token
+
+            # inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
+            # seg_id: int32 Tensor in shape [bsz, len], the input segment IDs.
+            # input_mask: float32 Tensor in shape [bsz, len], the input mask.
             #     0 for real tokens and 1 for padding.
-            # mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
+            # mems: a list of float32 Tensors in shape [bsz, mem_len, d_model], memory
             #     from previous batches. The length of the list equals n_layer.
             #     If None, no memory is used.
-            # perm_mask: float32 Tensor in shape [len, len, bsz].
-            #     If perm_mask[i, j, k] = 0, i attend to j in batch k;
-            #     if perm_mask[i, j, k] = 1, i does not attend to j in batch k.
+            # perm_mask: float32 Tensor in shape [bsz, len, len].
+            #     If perm_mask[k, i, j] = 0, i attend to j in batch k;
+            #     if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
             #     If None, each position attends to all the others.
-            # target_mapping: float32 Tensor in shape [num_predict, len, bsz].
-            #     If target_mapping[i, j, k] = 1, the i-th predict in batch k is
+            # target_mapping: float32 Tensor in shape [bsz, num_predict, len].
+            #     If target_mapping[k, i, j] = 1, the i-th predict in batch k is
             #     on the j-th token.
             #     Only used during pretraining for partial prediction.
             #     Set to None during finetuning.
-            # inp_q: float32 Tensor in shape [len, bsz].
+            # inp_q: float32 Tensor in shape [bsz, len].
             #     1 for tokens with losses and 0 for tokens without losses.
             #     Only used during pretraining for two-stream attention.
             #     Set to None during finetuning.
@@ -121,30 +128,35 @@ class XLNetModelTest(unittest.TestCase):
 
             config.update(run_config)
 
-            return (config, input_ids_1, input_ids_2, segment_ids, lm_labels)
+            return (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels)
 
         def set_seed(self):
             random.seed(self.seed)
             torch.manual_seed(self.seed)
 
-        def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, segment_ids, lm_labels):
+        def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels):
             model = XLNetLMHeadModel(config)
             model.eval()
 
             loss_1, mems_1a = model(input_ids_1, seg_id=segment_ids, target=lm_labels)
-            lm_logits_1, mems_1b = model(input_ids_1, seg_id=segment_ids)
+            all_logits_1, mems_1b = model(input_ids_1, seg_id=segment_ids)
 
             loss_2, mems_2a = model(input_ids_2, seg_id=segment_ids, target=lm_labels, mems=mems_1a)
-            lm_logits_2, mems_2b = model(input_ids_2, seg_id=segment_ids, mems=mems_1b)
+            all_logits_2, mems_2b = model(input_ids_2, seg_id=segment_ids, mems=mems_1b)
+
+            logits, _ = model(input_ids_q,
+                                    perm_mask=perm_mask,
+                                    target_mapping=target_mapping,
+                                    inp_q=inp_q)
 
             outputs = {
                 "loss_1": loss_1,
                 "mems_1a": mems_1a,
-                "lm_logits_1": lm_logits_1,
+                "all_logits_1": all_logits_1,
                 "mems_1b": mems_1b,
                 "loss_2": loss_2,
                 "mems_2a": mems_2a,
-                "lm_logits_2": lm_logits_2,
+                "all_logits_2": all_logits_2,
                 "mems_2b": mems_2b,
             }
             return outputs
@@ -154,7 +166,7 @@ class XLNetModelTest(unittest.TestCase):
                 list(result["loss_1"].size()),
                 [])
             self.parent.assertListEqual(
-                list(result["lm_logits_1"].size()),
+                list(result["all_logits_1"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1a"]),
@@ -170,7 +182,7 @@ class XLNetModelTest(unittest.TestCase):
                 list(result["loss_2"].size()),
                 [])
             self.parent.assertListEqual(
-                list(result["lm_logits_2"].size()),
+                list(result["all_logits_2"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2a"]),

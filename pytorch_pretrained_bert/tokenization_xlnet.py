@@ -37,6 +37,11 @@ VOCAB_NAME = 'spiece.model'
 SPECIAL_TOKENS_NAME = 'special_tokens.txt'
 
 SPIECE_UNDERLINE = '▁'
+SEG_ID_A   = 0
+SEG_ID_B   = 1
+SEG_ID_CLS = 2
+SEG_ID_SEP = 3
+SEG_ID_PAD = 4
 
 class XLNetTokenizer(object):
     """
@@ -52,6 +57,16 @@ class XLNetTokenizer(object):
         if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
             vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
             special_tokens_file = None
+            if '-cased' in pretrained_model_name_or_path and kwargs.get('do_lower_case', True):
+                logger.warning("The pre-trained model you are loading is a cased model but you have not set "
+                               "`do_lower_case` to False. We are setting `do_lower_case=False` for you but "
+                               "you may want to check this behavior.")
+                kwargs['do_lower_case'] = False
+            elif '-cased' not in pretrained_model_name_or_path and not kwargs.get('do_lower_case', True):
+                logger.warning("The pre-trained model you are loading is an uncased model but you have set "
+                               "`do_lower_case` to False. We are setting `do_lower_case=True` for you "
+                               "but you may want to check this behavior.")
+                kwargs['do_lower_case'] = True
         else:
             vocab_file = os.path.join(pretrained_model_name_or_path, VOCAB_NAME)
             special_tokens_file = os.path.join(pretrained_model_name_or_path, SPECIAL_TOKENS_NAME)
