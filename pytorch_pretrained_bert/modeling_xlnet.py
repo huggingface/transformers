@@ -1268,6 +1268,11 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
         self.apply(self.init_xlnet_weights)
         self.tie_weights()
+        
+    def tie_weights(self):
+        """ Make sure we are sharing the embeddings
+        """
+        self.lm_loss.weight = self.transformer.word_embedding.weight
 
     def forward(self, inp_k, seg_id=None, input_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
