@@ -241,7 +241,7 @@ class XLNetTokenizer(object):
             )
         return ids
 
-    def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
+    def convert_ids_to_tokens(self, ids, return_unicode=True, skip_special_tokens=False):
         """Converts a sequence of ids in tokens."""
         tokens = []
         for i in ids:
@@ -250,6 +250,14 @@ class XLNetTokenizer(object):
                     tokens.append(self.special_tokens_decoder[i])
             else:
                 tokens.append(self.sp_model.IdToPiece(i))
+
+        if six.PY2 and return_unicode:
+            ret_pieces = []
+            for piece in tokens:
+                if isinstance(piece, str):
+                    piece = piece.decode('utf-8')
+                ret_pieces.append(piece)
+            tokens = ret_pieces
         return tokens
 
     def encode(self, text, sample=False):
