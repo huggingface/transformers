@@ -757,7 +757,7 @@ An example on how to use this class is given in the [`extract_features.py`](./ex
   - the masked language modeling logits, and
   - the next sentence classification logits.
 
-An example on how to use this class is given in the [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) script which can be used to fine-tune the BERT language model on your specific different text corpus. This should improve model performance, if the language style is different from the original BERT training corpus (Wiki + BookCorpus).
+There are two examples on how to use this class is given in the [`lm_finetuning/`](./examples/lm_finetuning/) directory. The scripts in this directory can be used to fine-tune the BERT language model. This should improve model performance, if the language style is different from the original BERT training corpus (Wiki + BookCorpus).
 
 
 #### 3. `BertForMaskedLM`
@@ -1138,7 +1138,7 @@ An overview of the implemented schedules:
 | Sub-section | Description |
 |-|-|
 | [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
-| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `run_lm_finetuning.py` |
+| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `lm_finetuning/simple_lm_finetuning.py` |
 | [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#openai-gpt-transformer-xl-and-gpt-2-running-the-examples) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
 | [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
