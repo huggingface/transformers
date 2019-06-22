@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from pathlib import Path
+import os
 import torch
 import logging
 import json
@@ -12,9 +13,10 @@ from torch.utils.data import DataLoader, Dataset, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
+from pytorch_pretrained_bert import WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.modeling import BertForPreTraining
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
+from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
 InputFeatures = namedtuple("InputFeatures", "input_ids input_mask segment_ids lm_label_ids is_next")
 
@@ -268,7 +270,8 @@ def main():
             optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
         else:
             optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-
+        warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
+                                             t_total=num_train_optimization_steps)
     else:
         optimizer = BertAdam(optimizer_grouped_parameters,
                              lr=args.learning_rate,
@@ -314,8 +317,7 @@ def main():
                     if args.fp16:
                         # modify learning rate with special warm up BERT uses
                         # if args.fp16 is False, BertAdam is used that handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps,
-                                                                          args.warmup_proportion)
+                        lr_this_step = args.learning_rate * warmup_linear.get_lr(global_step, args.warmup_proportion)
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
                     optimizer.step()
@@ -325,8 +327,13 @@ def main():
     # Save a trained model
     logging.info("** ** * Saving fine-tuned model ** ** * ")
     model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-    output_model_file = args.output_dir / "pytorch_model.bin"
-    torch.save(model_to_save.state_dict(), str(output_model_file))
+    
+    output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
+    output_config_file = os.path.join(args.output_dir, CONFIG_NAME)
+
+    torch.save(model_to_save.state_dict(), output_model_file)
+    model_to_save.config.to_json_file(output_config_file)
+    tokenizer.save_vocabulary(args.output_dir)
 
 
 if __name__ == '__main__':

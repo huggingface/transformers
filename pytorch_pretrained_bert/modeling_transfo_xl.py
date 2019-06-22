@@ -25,9 +25,6 @@ import copy
 import json
 import math
 import logging
-import tarfile
-import tempfile
-import shutil
 import collections
 import sys
 from io import open
@@ -888,8 +885,7 @@ class TransfoXLPreTrainedModel(nn.Module):
         pass
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, state_dict=None, cache_dir=None,
-                        from_tf=False, *inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         """
         Instantiate a TransfoXLPreTrainedModel from a pre-trained model file or a pytorch state dict.
         Download and cache the pre-trained model file if needed.
@@ -897,19 +893,25 @@ class TransfoXLPreTrainedModel(nn.Module):
         Params:
             pretrained_model_name_or_path: either:
                 - a str with the name of a pre-trained model to load selected in the list of:
-                    . `transfo-xl`
+                    . `transfo-xl-wt103`
                 - a path or url to a pretrained model archive containing:
                     . `transfo_xl_config.json` a configuration file for the model
                     . `pytorch_model.bin` a PyTorch dump of a TransfoXLModel instance
                 - a path or url to a pretrained model archive containing:
-                    . `bert_config.json` a configuration file for the model
+                    . `transfo_xl_config.json` a configuration file for the model
                     . `model.chkpt` a TensorFlow checkpoint
             from_tf: should we load the weights from a locally saved TensorFlow checkpoint
             cache_dir: an optional path to a folder in which the pre-trained models will be cached.
             state_dict: an optional state dictionnary (collections.OrderedDict object) to use instead of pre-trained models
-            *inputs, **kwargs: additional input for the specific Bert class
-                (ex: num_labels for BertForSequenceClassification)
+            *inputs, **kwargs: additional input for the specific TransformerXL class
         """
+        state_dict = kwargs.get('state_dict', None)
+        kwargs.pop('state_dict', None)
+        cache_dir = kwargs.get('cache_dir', None)
+        kwargs.pop('cache_dir', None)
+        from_tf = kwargs.get('from_tf', False)
+        kwargs.pop('from_tf', None)
+
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
             config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
@@ -919,16 +921,37 @@ class TransfoXLPreTrainedModel(nn.Module):
         # redirect to the cache, if necessary
         try:
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
+        except EnvironmentError:
+            if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained weights.".format(
+                        archive_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find file {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path, ", ".join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
+                        archive_file
+                    )
+                )
+            return None
+        try:
             resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
         except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
-                    pretrained_model_name_or_path,
-                    archive_file, config_file))
+            if pretrained_model_name_or_path in PRETRAINED_CONFIG_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
+                        config_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find file {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path, ", ".join(PRETRAINED_CONFIG_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
+                        config_file
+                    )
+                )
             return None
         if resolved_archive_file == archive_file and resolved_config_file == config_file:
             logger.info("loading weights file {}".format(archive_file))

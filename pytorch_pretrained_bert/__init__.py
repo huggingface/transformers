@@ -1,4 +1,4 @@
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 from .tokenization import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
@@ -15,7 +15,7 @@ from .modeling_openai import (OpenAIGPTConfig, OpenAIGPTModel,
 from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel,
                                   load_tf_weights_in_transfo_xl)
 from .modeling_gpt2 import (GPT2Config, GPT2Model,
-                            GPT2LMHeadModel, GPT2DoubleHeadsModel,
+                            GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2MultipleChoiceHead,
                             load_tf_weights_in_gpt2)
 
 from .optimization import BertAdam

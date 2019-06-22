@@ -23,9 +23,6 @@ import json
 import logging
 import math
 import os
-import shutil
-import tarfile
-import tempfile
 import sys
 from io import open
 
@@ -39,8 +36,34 @@ from .modeling import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-pytorch_model.bin"}
-PRETRAINED_CONFIG_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json"}
+PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-pytorch_model.bin",
+                                "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-pytorch_model.bin"}
+PRETRAINED_CONFIG_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
+                                 "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json"}
+
+def prune_conv1d_layer(layer, index, dim=1):
+    """ Prune a Conv1D layer (a model parameters) to keep only entries in index.
+        A Conv1D work as a Linear layer (see e.g. BERT) but the weights are transposed.
+        Return the pruned layer as a new layer with requires_grad=True.
+        Used to remove heads.
+    """
+    index = index.to(layer.weight.device)
+    W = layer.weight.index_select(dim, index).clone().detach()
+    if dim == 0:
+        b = layer.bias.clone().detach()
+    else:
+        b = layer.bias[index].clone().detach()
+    new_size = list(layer.weight.size())
+    new_size[dim] = len(index)
+    new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
+    new_layer.weight.requires_grad = False
+    new_layer.weight.copy_(W.contiguous())
+    new_layer.weight.requires_grad = True
+    new_layer.bias.requires_grad = False
+    new_layer.bias.copy_(b.contiguous())
+    new_layer.bias.requires_grad = True
+    return new_layer
+
 
 def load_tf_weights_in_gpt2(model, gpt2_checkpoint_path):
     """ Load tf checkpoints in a pytorch model
@@ -107,18 +130,24 @@ class GPT2Config(object):
     def __init__(
         self,
         vocab_size_or_config_json_file=50257,
+        n_special=0,
         n_positions=1024,
         n_ctx=1024,
         n_embd=768,
         n_layer=12,
         n_head=12,
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+        predict_special_tokens=True
     ):
         """Constructs GPT2Config.
 
         Args:
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `GPT2Model` or a configuration json file.
+            n_special: The number of special tokens to learn during fine-tuning ('[SEP]', '[CLF]', ...)
             n_positions: Number of positional embeddings.
             n_ctx: Size of the causal mask (usually same as n_positions).
             n_embd: Dimensionality of the embeddings and hidden states.
@@ -126,8 +155,14 @@ class GPT2Config(object):
             n_head: Number of attention heads for each attention layer in
                 the Transformer encoder.
             layer_norm_epsilon: epsilon to use in the layer norm layers
+            resid_pdrop: The dropout probabilitiy for all fully connected
+                layers in the embeddings, encoder, and pooler.
+            attn_pdrop: The dropout ratio for the attention
+                probabilities.
+            embd_pdrop: The dropout ratio for the embeddings.
             initializer_range: The sttdev of the truncated_normal_initializer for
                 initializing all weight matrices.
+            predict_special_tokens: should we predict special tokens (when the model has a LM head)
         """
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
                         and isinstance(vocab_size_or_config_json_file, unicode)):
@@ -137,18 +172,27 @@ class GPT2Config(object):
                 self.__dict__[key] = value
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
+            self.n_special = n_special
             self.n_ctx = n_ctx
             self.n_positions = n_positions
             self.n_embd = n_embd
             self.n_layer = n_layer
             self.n_head = n_head
+            self.resid_pdrop = resid_pdrop
+            self.embd_pdrop = embd_pdrop
+            self.attn_pdrop = attn_pdrop
             self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
+            self.predict_special_tokens = predict_special_tokens
         else:
             raise ValueError(
                 "First argument must be either a vocabulary size (int)"
                 "or the path to a pretrained model config file (str)"
             )
+
+    @property
+    def total_tokens_embeddings(self):
+        return self.vocab_size + self.n_special
 
     @classmethod
     def from_dict(cls, json_object):
@@ -200,7 +244,7 @@ class Conv1D(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False):
+    def __init__(self, nx, n_ctx, config, scale=False, output_attentions=False, keep_multihead_output=False):
         super(Attention, self).__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -209,10 +253,33 @@ class Attention(nn.Module):
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
+
+        self.output_attentions = output_attentions
+        self.keep_multihead_output = keep_multihead_output
+        self.multihead_output = None
+
         self.c_attn = Conv1D(n_state * 3, nx)
         self.c_proj = Conv1D(n_state, nx)
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
-    def _attn(self, q, k, v):
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        mask = torch.ones(self.n_head, self.split_size // self.n_head)
+        for head in heads:
+            mask[head] = 0
+        mask = mask.view(-1).contiguous().eq(1)
+        index = torch.arange(len(mask))[mask].long()
+        index_attn = torch.cat([index, index + self.split_size, index + (2*self.split_size)])
+        # Prune conv1d layers
+        self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
+        self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
+        # Update hyper params
+        self.split_size = (self.split_size // self.n_head) * (self.n_head - len(heads))
+        self.n_head = self.n_head - len(heads)
+
+    def _attn(self, q, k, v, head_mask=None):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
@@ -221,6 +288,14 @@ class Attention(nn.Module):
         w = w * b - 1e4 * (1 - b)
 
         w = nn.Softmax(dim=-1)(w)
+        w = self.attn_dropout(w)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            w = w * head_mask
+
+        if self.output_attentions:
+            return w, torch.matmul(w, v)
         return torch.matmul(w, v)
 
     def merge_heads(self, x):
@@ -236,7 +311,7 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
-    def forward(self, x, layer_past=None):
+    def forward(self, x, layer_past=None, head_mask=None):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
@@ -247,9 +322,19 @@ class Attention(nn.Module):
             key = torch.cat((past_key, key), dim=-1)
             value = torch.cat((past_value, value), dim=-2)
         present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
-        a = self._attn(query, key, value)
+
+        a = self._attn(query, key, value, head_mask)
+        if self.keep_multihead_output:
+            self.multihead_output = a
+            self.multihead_output.retain_grad()
+
+        if self.output_attentions:
+            attentions, a = a
         a = self.merge_heads(a)
         a = self.c_proj(a)
+        a = self.resid_dropout(a)
+        if self.output_attentions:
+            return attentions, a, present
         return a, present
 
 
@@ -260,27 +345,35 @@ class MLP(nn.Module):
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
         self.act = gelu
+        self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
         h = self.act(self.c_fc(x))
         h2 = self.c_proj(h)
-        return h2
+        return self.dropout(h2)
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, scale=False):
+    def __init__(self, n_ctx, config, scale=False, output_attentions=False, keep_multihead_output=False):
         super(Block, self).__init__()
         nx = config.n_embd
+        self.output_attentions = output_attentions
         self.ln_1 = LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.attn = Attention(nx, n_ctx, config, scale)
+        self.attn = Attention(nx, n_ctx, config, scale, output_attentions, keep_multihead_output)
         self.ln_2 = LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, layer_past=None):
-        a, present = self.attn(self.ln_1(x), layer_past=layer_past)
+    def forward(self, x, layer_past=None, head_mask=None):
+        output_attn = self.attn(self.ln_1(x), layer_past=layer_past, head_mask=head_mask)
+        if self.output_attentions:
+            attentions, a, present = output_attn
+        else:
+            a, present = output_attn
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
+        if self.output_attentions:
+            return attentions, x, present
         return x, present
 
 
@@ -290,17 +383,20 @@ class GPT2LMHead(nn.Module):
     def __init__(self, model_embeddings_weights, config):
         super(GPT2LMHead, self).__init__()
         self.n_embd = config.n_embd
-        self.set_embeddings_weights(model_embeddings_weights)
-
-    def set_embeddings_weights(self, model_embeddings_weights):
+        self.vocab_size = config.vocab_size
+        self.predict_special_tokens = config.predict_special_tokens
         embed_shape = model_embeddings_weights.shape
         self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
+        self.set_embeddings_weights(model_embeddings_weights)
+
+    def set_embeddings_weights(self, model_embeddings_weights, predict_special_tokens=True):
+        self.predict_special_tokens = predict_special_tokens
         self.decoder.weight = model_embeddings_weights  # Tied weights
 
     def forward(self, hidden_state):
-        # Truncated Language modeling logits (we remove the last token)
-        # h_trunc = h[:, :-1].contiguous().view(-1, self.n_embd)
         lm_logits = self.decoder(hidden_state)
+        if not self.predict_special_tokens:
+            lm_logits = lm_logits[..., :self.vocab_size]
         return lm_logits
 
 
@@ -310,6 +406,7 @@ class GPT2MultipleChoiceHead(nn.Module):
     def __init__(self, config):
         super(GPT2MultipleChoiceHead, self).__init__()
         self.n_embd = config.n_embd
+        self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
         self.linear = nn.Linear(config.n_embd, 1)
 
         nn.init.normal_(self.linear.weight, std=0.02)
@@ -323,6 +420,7 @@ class GPT2MultipleChoiceHead(nn.Module):
         # (bsz, num_choices, 1, hidden_size)
         multiple_choice_h = hidden_states.gather(2, mc_token_ids).squeeze(2)
         # (bsz, num_choices, hidden_size)
+        multiple_choice_h = self.dropout(multiple_choice_h.transpose(1, 2)).transpose(1, 2)
         multiple_choice_logits = self.linear(multiple_choice_h).squeeze(-1)
         # (bsz, num_choices)
         return multiple_choice_logits
@@ -345,9 +443,6 @@ class GPT2PreTrainedModel(nn.Module):
             )
         self.config = config
 
-    def set_tied(self):
-        pass
-
     def init_weights(self, module):
         """ Initialize the weights.
         """
@@ -362,9 +457,7 @@ class GPT2PreTrainedModel(nn.Module):
             module.bias.data.zero_()
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path, state_dict=None, cache_dir=None, from_tf=False, *inputs, **kwargs
-    ):
+    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         """
         Instantiate a GPT2PreTrainedModel from a pre-trained model file or a pytorch state dict.
         Download and cache the pre-trained model file if needed.
@@ -382,8 +475,17 @@ class GPT2PreTrainedModel(nn.Module):
             from_tf: should we load the weights from a locally saved TensorFlow checkpoint
             cache_dir: an optional path to a folder in which the pre-trained models will be cached.
             state_dict: an optional state dictionary (collections.OrderedDict object) to use instead of pre-trained models
-            *inputs, **kwargs: additional input for the specific GPT class
+            *inputs, **kwargs: additional input for the specific GPT2 class
         """
+        state_dict = kwargs.get('state_dict', None)
+        kwargs.pop('state_dict', None)
+        cache_dir = kwargs.get('cache_dir', None)
+        kwargs.pop('cache_dir', None)
+        from_tf = kwargs.get('from_tf', False)
+        kwargs.pop('from_tf', None)
+        num_special_tokens = kwargs.get('num_special_tokens', None)
+        kwargs.pop('num_special_tokens', None)
+
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
             config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
@@ -393,16 +495,37 @@ class GPT2PreTrainedModel(nn.Module):
         # redirect to the cache, if necessary
         try:
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
+        except EnvironmentError:
+            if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained weights.".format(
+                        archive_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find file {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path, ", ".join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
+                        archive_file
+                    )
+                )
+            return None
+        try:
             resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
         except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path, ", ".join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
-                    archive_file, config_file
+            if pretrained_model_name_or_path in PRETRAINED_CONFIG_ARCHIVE_MAP:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
+                        config_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find file {} "
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path, ", ".join(PRETRAINED_CONFIG_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
+                        config_file
+                    )
                 )
-            )
             return None
         if resolved_archive_file == archive_file and resolved_config_file == config_file:
             logger.info("loading weights file {}".format(archive_file))
@@ -475,16 +598,37 @@ class GPT2PreTrainedModel(nn.Module):
                 "Error(s) in loading state_dict for {}:\n\t{}".format(model.__class__.__name__, "\n\t".join(error_msgs))
             )
 
-        # Make sure we are still sharing the output and input embeddings after loading weights
-        model.set_tied()
+        # Add additional embeddings for special tokens if needed
+        # This step also make sure we are still sharing the output and input embeddings after loading weights
+        model.set_num_special_tokens(num_special_tokens if num_special_tokens is not None else config.n_special)
         return model
 
 
 class GPT2Model(GPT2PreTrainedModel):
     """OpenAI GPT-2 model ("Language Models are Unsupervised Multitask Learners").
 
+    GPT-2 use a single embedding matrix to store the word and special embeddings.
+    Special tokens embeddings are additional tokens that are not pre-trained: [SEP], [CLS]...
+    Special tokens need to be trained during the fine-tuning if you use them.
+    The number of special embeddings can be controled using the `set_num_special_tokens(num_special_tokens)` function.
+
+    The embeddings are ordered as follow in the token embeddings matrice:
+        [0,                                                         ----------------------
+         ...                                                        -> word embeddings
+         config.vocab_size - 1,                                     ______________________
+         config.vocab_size,
+         ...                                                        -> special embeddings
+         config.vocab_size + config.n_special - 1]                  ______________________
+
+    where total_tokens_embeddings can be obtained as config.total_tokens_embeddings and is:
+        total_tokens_embeddings = config.vocab_size + config.n_special
+    You should use the associate indices to index the embeddings.
+
     Params:
-        config: a GPT2Config class instance with the configuration to build a new model
+        `config`: a GPT2Config class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
@@ -499,10 +643,12 @@ class GPT2Model(GPT2PreTrainedModel):
         `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
             (key and values in the attention blocks) to speed up sequential decoding
             (this is the presents output of the model, cf. below).
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
     Outputs a tuple consisting of:
-        `hidden_states`: the encoded-hidden-states at the top of the model
-            as a torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
+        `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings)
+            as torch.FloatTensor of size [batch_size, sequence_length, hidden_size]
             (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
         `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as
             torch.FloatTensors. They can be reused to speed up sequential decoding.
@@ -519,17 +665,47 @@ class GPT2Model(GPT2PreTrainedModel):
     ```
     """
 
-    def __init__(self, config):
+    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
         super(GPT2Model, self).__init__(config)
-        self.wte = nn.Embedding(config.vocab_size, config.n_embd)
+        self.output_attentions = output_attentions
+        self.wte = nn.Embedding(config.total_tokens_embeddings, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
-        block = Block(config.n_ctx, config, scale=True)
+        self.drop = nn.Dropout(config.embd_pdrop)
+        block = Block(config.n_ctx, config, scale=True, output_attentions=output_attentions,
+                                                        keep_multihead_output=keep_multihead_output)
         self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(config.n_layer)])
         self.ln_f = LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.apply(self.init_weights)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, past=None):
+    def set_num_special_tokens(self, num_special_tokens):
+        " Update input embeddings with new embedding matrice if needed "
+        if self.config.n_special == num_special_tokens:
+            return
+        # Update config
+        self.config.n_special = num_special_tokens
+        # Build new embeddings and initialize all new embeddings (in particular the special tokens)
+        old_embed = self.wte
+        self.wte = nn.Embedding(self.config.total_tokens_embeddings, self.config.n_embd)
+        self.wte.to(old_embed.weight.device)
+        self.init_weights(self.wte)
+        # Copy word embeddings from the previous weights
+        self.wte.weight.data[:self.config.vocab_size, :] = old_embed.weight.data[:self.config.vocab_size, :]
+
+    def prune_heads(self, heads_to_prune):
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """
+        for layer, heads in heads_to_prune.items():
+            self.h[layer].attn.prune_heads(heads)
+
+    def get_multihead_outputs(self):
+        """ Gather all multi-head outputs.
+            Return: list (layers) of multihead module outputs with gradients
+        """
+        return [h.attn.multihead_output for h in self.h]
+
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, past=None, head_mask=None):
         if past is None:
             past_length = 0
             past = [None] * len(self.h)
@@ -538,6 +714,20 @@ class GPT2Model(GPT2PreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(past_length, input_ids.size(-1) + past_length, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # head_mask has shape n_layer x batch x n_heads x N x N
+        if head_mask is not None:
+            if head_mask.dim() == 1:
+                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.expand_as(self.config.n_layer, -1, -1, -1, -1)
+            elif head_mask.dim() == 2:
+                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
+            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+        else:
+            head_mask = [None] * self.config.n_layer
 
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_ids.size(-1))
@@ -551,20 +741,38 @@ class GPT2Model(GPT2PreTrainedModel):
         else:
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
+        hidden_states = self.drop(hidden_states)
+
+        output_shape = input_shape + (hidden_states.size(-1),)
+
         presents = []
-        for block, layer_past in zip(self.h, past):
-            hidden_states, present = block(hidden_states, layer_past)
+        all_attentions = []
+        all_hidden_states = []
+        for i, (block, layer_past) in enumerate(zip(self.h, past)):
+            all_hidden_states.append(hidden_states.view(*output_shape))
+            outputs = block(hidden_states, layer_past, head_mask[i])
+            if self.output_attentions:
+                attentions, hidden_states, present = outputs
+                all_attentions.append(attentions)
+            else:
+                hidden_states, present = outputs
             presents.append(present)
         hidden_states = self.ln_f(hidden_states)
-        output_shape = input_shape + (hidden_states.size(-1),)
-        return hidden_states.view(*output_shape), presents
+        all_hidden_states.append(hidden_states.view(*output_shape))
+
+        if self.output_attentions:
+            return all_attentions, all_hidden_states, presents
+        return all_hidden_states, presents
 
 
 class GPT2LMHeadModel(GPT2PreTrainedModel):
     """OpenAI GPT-2 model with a Language Modeling head ("Language Models are Unsupervised Multitask Learners").
 
     Params:
-        config: a GPT2Config class instance with the configuration to build a new model
+        `config`: a GPT2Config class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length]
@@ -582,6 +790,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
             (key and values in the attention blocks) to speed up sequential decoding
             (this is the presents output of the model, cf. below).
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
     Outputs:
         if `lm_labels` is not `None`:
@@ -604,30 +814,41 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     ```
     """
 
-    def __init__(self, config):
+    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
         super(GPT2LMHeadModel, self).__init__(config)
-        self.transformer = GPT2Model(config)
+        self.transformer = GPT2Model(config, output_attentions=output_attentions,
+                                             keep_multihead_output=keep_multihead_output)
         self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
         self.apply(self.init_weights)
 
-    def set_tied(self):
-        """ Make sure we are sharing the embeddings
+    def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
+        """ Update input and output embeddings with new embedding matrice
+            Make sure we are sharing the embeddings
         """
-        self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
+        self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
+        self.transformer.set_num_special_tokens(num_special_tokens)
+        self.lm_head.set_embeddings_weights(self.transformer.wte.weight, predict_special_tokens=predict_special_tokens)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None):
-        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past)
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None, head_mask=None):
+        transformer_output = self.transformer(input_ids, position_ids, token_type_ids, past, head_mask)
+        if self.transformer.output_attentions:
+            all_attentions, hidden_states, presents = transformer_output
+        else:
+            hidden_states, presents = transformer_output
+        hidden_states = hidden_states[-1]
+
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[:, :-1].contiguous()
-            shift_labels = lm_labels[:, 1:].contiguous()
-
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = lm_labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
             return loss
+        if self.transformer.output_attentions:
+            return all_attentions, lm_logits, presents
         return lm_logits, presents
 
 
@@ -635,7 +856,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """OpenAI GPT-2 model with a Language Modeling and a Multiple Choice head ("Language Models are Unsupervised Multitask Learners").
 
     Params:
-        config: a GPT2Config class instance with the configuration to build a new model
+        `config`: a GPT2Config class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length] with the BPE token
@@ -657,6 +881,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         `past`: an optional list of torch.LongTensor that contains pre-computed hidden-states
             (key and values in the attention blocks) to speed up sequential decoding
             (this is the presents output of the model, cf. below).
+        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
     Outputs:
         if `lm_labels` and `multiple_choice_labels` are not `None`:
@@ -675,37 +901,49 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     config = modeling_gpt2.GPT2Config()
 
-    model = modeling_gpt2.GPT2LMHeadModel(config)
+    model = modeling_gpt2.GPT2DoubleHeadsModel(config)
     lm_logits, multiple_choice_logits, presents = model(input_ids, mc_token_ids)
     ```
     """
 
-    def __init__(self, config):
+    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
         super(GPT2DoubleHeadsModel, self).__init__(config)
-        self.transformer = GPT2Model(config)
+        self.transformer = GPT2Model(config, output_attentions=output_attentions,
+                                             keep_multihead_output=keep_multihead_output)
         self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
         self.multiple_choice_head = GPT2MultipleChoiceHead(config)
         self.apply(self.init_weights)
 
-    def set_tied(self):
-        """ Make sure we are sharing the embeddings
+    def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
+        """ Update input and output embeddings with new embedding matrice
+            Make sure we are sharing the embeddings
         """
-        self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
+        self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
+        self.transformer.set_num_special_tokens(num_special_tokens)
+        self.lm_head.set_embeddings_weights(self.transformer.wte.weight, predict_special_tokens=predict_special_tokens)
 
-    def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None, position_ids=None, past=None):
-        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past)
+    def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None,
+                position_ids=None, past=None, head_mask=None):
+        transformer_output = self.transformer(input_ids, position_ids, token_type_ids, past, head_mask)
+        if self.transformer.output_attentions:
+            all_attentions, hidden_states, presents = transformer_output
+        else:
+            hidden_states, presents = transformer_output
+        hidden_states = hidden_states[-1]
+
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
         losses = []
         if lm_labels is not None:
-            shift_logits = lm_logits[:, :-1].contiguous()
-            shift_labels = lm_labels[:, 1:].contiguous()
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = lm_labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(shift_logits.view(-1,
-                          shift_logits.size(-1)), shift_labels.view(-1)))
+            losses.append(loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)))
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
             losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))
         if losses:
             return losses
+        if self.transformer.output_attentions:
+            return all_attentions, lm_logits, mc_logits, presents
         return lm_logits, mc_logits, presents
