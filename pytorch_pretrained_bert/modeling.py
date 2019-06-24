@@ -606,7 +606,7 @@ class BertPreTrainedModel(nn.Module):
                 ))
         self.config = config
 
-    def init_bert_weights(self, module):
+    def init_weights(self, module):
         """ Initialize the weights.
         """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -823,7 +823,7 @@ class BertModel(BertPreTrainedModel):
         self.encoder = BertEncoder(config, output_attentions=output_attentions,
                                            keep_multihead_output=keep_multihead_output)
         self.pooler = BertPooler(config)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -951,7 +951,7 @@ class BertForPreTraining(BertPreTrainedModel):
         self.bert = BertModel(config, output_attentions=output_attentions,
                                       keep_multihead_output=keep_multihead_output)
         self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, next_sentence_label=None, head_mask=None):
         outputs = self.bert(input_ids, token_type_ids, attention_mask,
@@ -1030,7 +1030,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         self.bert = BertModel(config, output_attentions=output_attentions,
                                       keep_multihead_output=keep_multihead_output)
         self.cls = BertOnlyMLMHead(config, self.bert.embeddings.word_embeddings.weight)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, head_mask=None):
         outputs = self.bert(input_ids, token_type_ids, attention_mask,
@@ -1105,7 +1105,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         self.bert = BertModel(config, output_attentions=output_attentions,
                                       keep_multihead_output=keep_multihead_output)
         self.cls = BertOnlyNSPHead(config)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, next_sentence_label=None, head_mask=None):
         outputs = self.bert(input_ids, token_type_ids, attention_mask,
@@ -1184,7 +1184,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
                                       keep_multihead_output=keep_multihead_output)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, num_labels)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
         outputs = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, head_mask=head_mask)
@@ -1261,7 +1261,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
                                       keep_multihead_output=keep_multihead_output)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
@@ -1343,7 +1343,7 @@ class BertForTokenClassification(BertPreTrainedModel):
                                       keep_multihead_output=keep_multihead_output)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, num_labels)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
         outputs = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, head_mask=head_mask)
@@ -1428,7 +1428,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         self.bert = BertModel(config, output_attentions=output_attentions,
                                       keep_multihead_output=keep_multihead_output)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
-        self.apply(self.init_bert_weights)
+        self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, start_positions=None,
                 end_positions=None, head_mask=None):
