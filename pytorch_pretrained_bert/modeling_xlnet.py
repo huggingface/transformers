@@ -1194,6 +1194,38 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         return logits, new_mems
         #     return all_attentions, encoded_layers, pooled_output
 
+class XLNetSequenceSummary(nn.Module):
+    def __init__(self, config, summary_type="last", use_proj=True,
+                 output_attentions=False, keep_multihead_output=False):
+        super(XLNetSequenceSummary, self).__init__()
+        self.summary_type = summary_type
+        if use_proj:
+            self.summary = nn.Linear(config.hidden_size, num_labels)
+        else:
+            self.summary = None
+        if summary_type == 'attn':
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+        self.dropout = nn.Dropout(config.dropout)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states, input_mask=None):
+        if self.summary_type == 'last':
+            output = hidden_states[-1]
+        elif self.summary_type == 'first':
+            output = hidden_states[0]
+        elif self.summary_type == 'mean':
+            output = hidden_states.mean(dim=0)
+        elif summary_type == 'attn':
+            raise NotImplementedError
+
+        output = self.summary(output)
+        output = self.dropout(output)
+        output = self.activation(output)
+        return output
+
 
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
     """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
@@ -1255,19 +1287,23 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, summary_type="last", output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, summary_type="last", use_proj=True, num_labels=2,
+                 is_regression=False, output_attentions=False, keep_multihead_output=False):
         super(XLNetForSequenceClassification, self).__init__(config)
         self.output_attentions = output_attentions
         self.attn_type = config.attn_type
         self.same_length = config.same_length
         self.summary_type = summary_type
+        self.is_regression = is_regression
 
         self.transformer = XLNetModel(config, output_attentions=output_attentions,
                                               keep_multihead_output=keep_multihead_output)
-        self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
 
-        self.apply(self.init_xlnet_weights)
-        self.tie_weights()
+        self.sequence_summary = XLNetSequenceSummary(config, summary_type=summary_type,
+                                                     use_proj=use_proj, output_attentions=output_attentions,
+                                                     keep_multihead_output=keep_multihead_output)
+        self.loss_proj = nn.Linear(config.d_model, num_classes if not is_regression else 1)
+        self.apply(self.init_bert_weights)
 
     def forward(self, inp_k, seg_id=None, input_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
@@ -1295,17 +1331,20 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
         """
-        output, hidden_states, new_mems = self.transformer(inp_k, seg_id, input_mask,
+        output, _, new_mems = self.transformer(inp_k, seg_id, input_mask,
                                             mems, perm_mask, target_mapping, inp_q,
                                             output_all_encoded_layers, head_mask)
 
-        logits = self.lm_loss(output)
+        output = self.sequence_summary(output)
+        logits = self.loss_proj(output)
 
         if target is not None:
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(logits.view(-1, logits.size(-1)),
-                            target.view(-1))
+            if self.is_regression:
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), target.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss(ignore_index=-1)
+                loss = loss_fct(logits.view(-1, logits.size(-1)), target.view(-1))
             return loss, new_mems
 
         # if self.output_attentions:

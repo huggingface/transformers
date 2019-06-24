@@ -35,11 +35,11 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from tensorboardX import SummaryWriter
 
 from pytorch_pretrained_bert.file_utils import WEIGHTS_NAME, CONFIG_NAME
-from pytorch_pretrained_bert.modeling import BertForSequenceClassification
-from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_pretrained_bert.modeling_xlnet import XLNetForSequenceClassification
+from pytorch_pretrained_bert.tokenization_xlnet import XLNetTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 
-from run_classifier_dataset_utils import processors, output_modes, convert_examples_to_features, compute_metrics
+from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -59,10 +59,8 @@ def main():
                         type=str,
                         required=True,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--bert_model", default=None, type=str, required=True,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                        "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
-                        "bert-base-multilingual-cased, bert-base-chinese.")
+    parser.add_argument("--xlnet_model", default="xlnet-large-cased", type=str,
+                        help="XLNet pre-trained model: currently only xlnet-large-cased.")
     parser.add_argument("--task_name",
                         default=None,
                         type=str,
@@ -203,8 +201,8 @@ def main():
 
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
+    tokenizer = XLNetTokenizer.from_pretrained(args.xlnet_model, do_lower_case=args.do_lower_case)
+    model = XLNetForSequenceClassification.from_pretrained(args.xlnet_model, num_labels=num_labels)
     if args.local_rank == 0:
         torch.distributed.barrier()
 
@@ -230,7 +228,7 @@ def main():
         # Prepare data loader
         train_examples = processor.get_train_examples(args.data_dir)
         cached_train_features_file = os.path.join(args.data_dir, 'train_{0}_{1}_{2}'.format(
-            list(filter(None, args.bert_model.split('/'))).pop(),
+            list(filter(None, args.xlnet_model.split('/'))).pop(),
                         str(args.max_seq_length),
                         str(task_name)))
         try:
@@ -359,14 +357,14 @@ def main():
         tokenizer.save_vocabulary(args.output_dir)
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = BertForSequenceClassification.from_pretrained(args.output_dir, num_labels=num_labels)
-        tokenizer = BertTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        model = XLNetForSequenceClassification.from_pretrained(args.output_dir, num_labels=num_labels)
+        tokenizer = XLNetTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
 
         # Good practice: save your training arguments together with the trained model
         output_args_file = os.path.join(args.output_dir, 'training_args.bin')
         torch.save(args, output_args_file)
     else:
-        model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
+        model = XLNetForSequenceClassification.from_pretrained(args.xlnet_model, num_labels=num_labels)
 
     model.to(device)
 
@@ -374,7 +372,7 @@ def main():
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         eval_examples = processor.get_dev_examples(args.data_dir)
         cached_eval_features_file = os.path.join(args.data_dir, 'dev_{0}_{1}_{2}'.format(
-            list(filter(None, args.bert_model.split('/'))).pop(),
+            list(filter(None, args.xlnet_model.split('/'))).pop(),
                         str(args.max_seq_length),
                         str(task_name)))
         try:
