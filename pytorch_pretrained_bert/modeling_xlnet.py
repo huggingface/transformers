@@ -46,7 +46,7 @@ XLNET_CONFIG_NAME = 'xlnet_config.json'
 TF_WEIGHTS_NAME = 'model.ckpt'
 
 
-def build_tf_xlnet_to_pytorch_map(model, config):
+def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
     """ A map of modules from TF to PyTorch.
         I use a map to keep the PyTorch model as
         identical to the original PyTorch model as possible.
@@ -55,8 +55,15 @@ def build_tf_xlnet_to_pytorch_map(model, config):
     tf_to_pt_map = {}
 
     if hasattr(model, 'transformer'):
-        # We are loading pre-trained weights in a XLNetLMHeadModel => we will load also the output bias
-        tf_to_pt_map['model/lm_loss/bias'] = model.lm_loss.bias
+        if hasattr(model, 'lm_loss'):
+            # We will load also the output bias
+            tf_to_pt_map['model/lm_loss/bias'] = model.lm_loss.bias
+        elif hasattr(model, 'sequence_summary') and 'model/sequnece_summary/summary/kernel' in tf_weights:
+            # We will load also the sequence summary
+            tf_to_pt_map['model/sequnece_summary/summary/kernel'] = model.sequence_summary.summary.weight
+            tf_to_pt_map['model/sequnece_summary/summary/bias'] = model.sequence_summary.summary.bias
+        elif hasattr(model, 'proj_loss') and any('model/regression' in name for name in tf_weights.keys()):
+            raise NotImplementedError
         # Now load the rest of the transformer
         model = model.transformer
 
@@ -116,9 +123,6 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
         print("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
-    # Build TF to PyTorch weights loading map
-    tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config)
-
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     tf_weights = {}
@@ -127,9 +131,14 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
         array = tf.train.load_variable(tf_path, name)
         tf_weights[name] = array
 
+    # Build TF to PyTorch weights loading map
+    tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights)
+
     for name, pointer in tf_to_pt_map.items():
         print("Importing {}".format(name))
-        assert name in tf_weights
+        if name not in tf_weights:
+            print("{} not in tf pre-trained weights, skipping".format(name))
+            continue
         array = tf_weights[name]
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
@@ -643,6 +652,11 @@ class XLNetPreTrainedModel(nn.Module):
         elif isinstance(module, XLNetLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, XLNetRelativeAttention):
+            for param in [module.q, module.k, module.v, module.o, module.r,
+                          module.r_r_bias, module.r_s_bias, module.r_w_bias,
+                          module.seg_embed]:
+                param.data.normal_(mean=0.0, std=self.config.initializer_range)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
@@ -904,15 +918,19 @@ class XLNetModel(XLNetPreTrainedModel):
         pos_emb = pos_emb.to(next(self.parameters()))
         return pos_emb
 
-    def forward(self, inp_k, token_type_ids=None, attention_mask=None,
+    def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 output_all_encoded_layers=True, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-            attention_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
+            input_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
+            attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+                but with 1 for real tokens and 0 for padding.
+                Added for easy compatibility with the BERT model (which uses this negative masking).
+                You can only uses one among `input_mask` and `attention_mask`
             mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
@@ -946,6 +964,7 @@ class XLNetModel(XLNetPreTrainedModel):
         # so we move here the first dimension (batch) to the end
         inp_k = inp_k.transpose(0, 1).contiguous()
         token_type_ids = token_type_ids.transpose(0, 1).contiguous() if token_type_ids is not None else None
+        input_mask = input_mask.transpose(0, 1).contiguous() if input_mask is not None else None
         attention_mask = attention_mask.transpose(0, 1).contiguous() if attention_mask is not None else None
         perm_mask = perm_mask.permute(1, 2, 0).contiguous() if perm_mask is not None else None
         target_mapping = target_mapping.permute(1, 2, 0).contiguous() if target_mapping is not None else None
@@ -969,11 +988,15 @@ class XLNetModel(XLNetPreTrainedModel):
             raise ValueError('Unsupported attention type: {}'.format(self.attn_type))
 
         # data mask: input mask & perm mask
-        if attention_mask is not None and perm_mask is not None:
-            data_mask = attention_mask[None] + perm_mask
-        elif attention_mask is not None and perm_mask is None:
-            data_mask = attention_mask[None]
-        elif attention_mask is None and perm_mask is not None:
+        assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
+        "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+        if input_mask is None and attention_mask is not None:
+            input_mask = 1.0 - attention_mask
+        if input_mask is not None and perm_mask is not None:
+            data_mask = input_mask[None] + perm_mask
+        elif input_mask is not None and perm_mask is None:
+            data_mask = input_mask[None]
+        elif input_mask is None and perm_mask is not None:
             data_mask = perm_mask
         else:
             data_mask = None
@@ -1077,8 +1100,12 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     Inputs:
         inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
         token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-        attention_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
+        input_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
             0 for real tokens and 1 for padding.
+        attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+            but with 1 for real tokens and 0 for padding.
+            Added for easy compatibility with the BERT model (which uses this negative masking).
+            You can only uses one among `input_mask` and `attention_mask`
         mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
             from previous batches. The length of the list equals n_layer.
             If None, no memory is used.
@@ -1112,14 +1139,14 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     ```python
     # Already been converted into WordPiece token ids
     input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    attention_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
     token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
 
     config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
         n_layer=12, num_attention_heads=12, intermediate_size=3072)
 
     model = modeling.XLNetModel(config=config)
-    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, attention_mask)
+    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
     def __init__(self, config, output_attentions=False, keep_multihead_output=False):
@@ -1142,15 +1169,19 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         """
         self.lm_loss.weight = self.transformer.word_embedding.weight
 
-    def forward(self, inp_k, token_type_ids=None, attention_mask=None,
+    def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 target=None, output_all_encoded_layers=True, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-            attention_mask: float32 Tensor in shape [bsz, len], the input mask.
+            input_mask: float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
+            attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+                but with 1 for real tokens and 0 for padding.
+                Added for easy compatibility with the BERT model (which uses this negative masking).
+                You can only uses one among `input_mask` and `attention_mask`
             mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
@@ -1171,7 +1202,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             summary_type: str, "last", "first", "mean", or "attn". The method
                 to pool the input to get a vector representation.
         """
-        output, hidden_states, new_mems = self.transformer(inp_k, token_type_ids, attention_mask,
+        output, hidden_states, new_mems = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
                                             mems, perm_mask, target_mapping, inp_q,
                                             output_all_encoded_layers, head_mask)
 
@@ -1242,8 +1273,12 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     Inputs:
         inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
         token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-        attention_mask: float32 Tensor in shape [bsz, len], the input mask.
+        input_mask: float32 Tensor in shape [bsz, len], the input mask.
             0 for real tokens and 1 for padding.
+        attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+            but with 1 for real tokens and 0 for padding.
+            Added for easy compatibility with the BERT model (which uses this negative masking).
+            You can only uses one among `input_mask` and `attention_mask`
         mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
             from previous batches. The length of the list equals n_layer.
             If None, no memory is used.
@@ -1278,14 +1313,14 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     ```python
     # Already been converted into WordPiece token ids
     input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    attention_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
     token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
 
     config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
         n_layer=12, num_attention_heads=12, intermediate_size=3072)
 
     model = modeling.XLNetModel(config=config)
-    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, attention_mask)
+    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
     def __init__(self, config, summary_type="last", use_proj=True, num_labels=2,
@@ -1306,15 +1341,19 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         self.loss_proj = nn.Linear(config.d_model, num_labels if not is_regression else 1)
         self.apply(self.init_weights)
 
-    def forward(self, inp_k, token_type_ids=None, attention_mask=None,
+    def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 target=None, output_all_encoded_layers=True, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-            attention_mask: float32 Tensor in shape [bsz, len], the input mask.
+            input_mask: float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
+            attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+                but with 1 for real tokens and 0 for padding.
+                Added for easy compatibility with the BERT model (which uses this negative masking).
+                You can only uses one among `input_mask` and `attention_mask`
             mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
@@ -1332,7 +1371,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
         """
-        output, _, new_mems = self.transformer(inp_k, token_type_ids, attention_mask,
+        output, _, new_mems = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
                                             mems, perm_mask, target_mapping, inp_q,
                                             output_all_encoded_layers, head_mask)
 
@@ -1372,11 +1411,15 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
             with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
-            `extract_features.py`, `run_classifier.py` and `run_squad.py`)
+            `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
         `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
             types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
             a `sentence B` token (see XLNet paper for more details).
-        `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+        `attention_mask`: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+            but with 1 for real tokens and 0 for padding.
+            Added for easy compatibility with the BERT model (which uses this negative masking).
+            You can only uses one among `input_mask` and `attention_mask`
+        `input_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
             input sequence length in the current batch. It's the mask that we typically use for attention when
             a batch has varying length sentences.
@@ -1400,14 +1443,14 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
     ```python
     # Already been converted into WordPiece token ids
     input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    attention_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
     token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
 
     config = XLNetConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
         num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
 
     model = XLNetForQuestionAnswering(config)
-    start_logits, end_logits = model(input_ids, token_type_ids, attention_mask)
+    start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
     def __init__(self, config, output_attentions=False, keep_multihead_output=False):
@@ -1418,11 +1461,11 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.apply(self.init_weights)
 
-    def forward(self, inp_k, token_type_ids=None, attention_mask=None,
+    def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 start_positions=None, end_positions=None,
                 output_all_encoded_layers=True, head_mask=None):
-        output, _, new_mems = self.transformer(inp_k, token_type_ids, attention_mask,
+        output, _, new_mems = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
                                             mems, perm_mask, target_mapping, inp_q,
                                             output_all_encoded_layers, head_mask)
 

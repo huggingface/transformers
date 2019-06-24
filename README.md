@@ -137,9 +137,9 @@ This package comprises the following classes that can be imported in Python and 
 The repository further comprises:
 
 - Five examples on how to use **BERT** (in the [`examples` folder](./examples)):
-  - [`extract_features.py`](./examples/extract_features.py) - Show how to extract hidden states from an instance of `BertModel`,
-  - [`run_classifier.py`](./examples/run_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
-  - [`run_squad.py`](./examples/run_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 and SQuAD v2.0 tasks.
+  - [`run_bert_extract_features.py`](./examples/run_bert_extract_features.py) - Show how to extract hidden states from an instance of `BertModel`,
+  - [`run_bert_classifier.py`](./examples/run_bert_classifier.py) - Show how to fine-tune an instance of `BertForSequenceClassification` on GLUE's MRPC task,
+  - [`run_bert_squad.py`](./examples/run_bert_squad.py) - Show how to fine-tune an instance of `BertForQuestionAnswering` on SQuAD v1.0 and SQuAD v2.0 tasks.
   - [`run_swag.py`](./examples/run_swag.py) - Show how to fine-tune an instance of `BertForMultipleChoice` on Swag task.
   - [`simple_lm_finetuning.py`](./examples/lm_finetuning/simple_lm_finetuning.py) - Show how to fine-tune an instance of `BertForPretraining` on a target text corpus.
 
@@ -541,7 +541,7 @@ where
     - `bert-base-german-cased`: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters [Performance Evaluation](https://deepset.ai/german-bert)
     - `bert-large-uncased-whole-word-masking`: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     - `bert-large-cased-whole-word-masking`: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
-    - `bert-large-uncased-whole-word-masking-finetuned-squad`: The `bert-large-uncased-whole-word-masking` model finetuned on SQuAD (using the `run_squad.py` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
+    - `bert-large-uncased-whole-word-masking-finetuned-squad`: The `bert-large-uncased-whole-word-masking` model finetuned on SQuAD (using the `run_bert_squad.py` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
     - `openai-gpt`: OpenAI GPT English model, 12-layer, 768-hidden, 12-heads, 110M parameters
     - `gpt2`: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
     - `gpt2-medium`: OpenAI GPT-2 English model, 24-layer, 1024-hidden, 16-heads, 345M parameters
@@ -720,7 +720,7 @@ The inputs and output are **identical to the TensorFlow model inputs and outputs
 
 We detail them here. This model takes as *inputs*:
 [`modeling.py`](./pytorch_pretrained_bert/modeling.py)
-- `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the vocabulary (see the tokens preprocessing logic in the scripts [`extract_features.py`](./examples/extract_features.py), [`run_classifier.py`](./examples/run_classifier.py) and [`run_squad.py`](./examples/run_squad.py)), and
+- `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the vocabulary (see the tokens preprocessing logic in the scripts [`run_bert_extract_features.py`](./examples/run_bert_extract_features.py), [`run_bert_classifier.py`](./examples/run_bert_classifier.py) and [`run_bert_squad.py`](./examples/run_bert_squad.py)), and
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
 - `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if some input sequence lengths are smaller than the max input sequence length of the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
 - `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
@@ -735,7 +735,7 @@ This model *outputs* a tuple composed of:
 
 - `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a classifier pretrained on top of the hidden state associated to the first character of the input (`CLF`) to train on the Next-Sentence task (see BERT's paper).
 
-An example on how to use this class is given in the [`extract_features.py`](./examples/extract_features.py) script which can be used to extract the hidden states of the model for a given input.
+An example on how to use this class is given in the [`run_bert_extract_features.py`](./examples/run_bert_extract_features.py) script which can be used to extract the hidden states of the model for a given input.
 
 #### 2. `BertForPreTraining`
 
@@ -792,7 +792,7 @@ An example on how to use this class is given in the [`run_lm_finetuning.py`](./e
 
 The sequence-level classifier is a linear layer that takes as input the last hidden state of the first character in the input sequence (see Figures 3a and 3b in the BERT paper).
 
-An example on how to use this class is given in the [`run_classifier.py`](./examples/run_classifier.py) script which can be used to fine-tune a single sequence (or pair of sequence) classifier using BERT, for example for the MRPC task.
+An example on how to use this class is given in the [`run_bert_classifier.py`](./examples/run_bert_classifier.py) script which can be used to fine-tune a single sequence (or pair of sequence) classifier using BERT, for example for the MRPC task.
 
 #### 6. `BertForMultipleChoice`
 
@@ -816,7 +816,7 @@ The token-level classifier is a linear layer that takes as input the last hidden
 
 The token-level classifier takes as input the full sequence of the last hidden state and compute several (e.g. two) scores for each tokens that can for example respectively be the score that a given token is a `start_span` and a `end_span` token (see Figures 3c and 3d in the BERT paper).
 
-An example on how to use this class is given in the [`run_squad.py`](./examples/run_squad.py) script which can be used to fine-tune a token classifier using BERT, for example for the SQuAD task.
+An example on how to use this class is given in the [`run_bert_squad.py`](./examples/run_bert_squad.py) script which can be used to fine-tune a token classifier using BERT, for example for the SQuAD task.
 
 #### 9. `OpenAIGPTModel`
 
@@ -1138,7 +1138,7 @@ An overview of the implemented schedules:
 | Sub-section | Description |
 |-|-|
 | [Training large models: introduction, tools and examples](#Training-large-models-introduction,-tools-and-examples) | How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models |
-| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_classifier.py`, `run_squad.py` and `run_lm_finetuning.py` |
+| [Fine-tuning with BERT: running the examples](#Fine-tuning-with-BERT-running-the-examples) | Running the examples in [`./examples`](./examples/): `extract_classif.py`, `run_bert_classifier.py`, `run_bert_squad.py` and `run_lm_finetuning.py` |
 | [Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2](#openai-gpt-transformer-xl-and-gpt-2-running-the-examples) | Running the examples in [`./examples`](./examples/): `run_openai_gpt.py`, `run_transfo_xl.py` and `run_gpt2.py` |
 | [Fine-tuning BERT-large on GPUs](#Fine-tuning-BERT-large-on-GPUs) | How to fine tune `BERT large`|
 
@@ -1146,7 +1146,7 @@ An overview of the implemented schedules:
 
 BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch size of 32).
 
-To help with fine-tuning these models, we have included several techniques that you can activate in the fine-tuning scripts [`run_classifier.py`](./examples/run_classifier.py) and [`run_squad.py`](./examples/run_squad.py): gradient-accumulation, multi-gpu training, distributed training and 16-bits training . For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that I published earlier this month.
+To help with fine-tuning these models, we have included several techniques that you can activate in the fine-tuning scripts [`run_bert_classifier.py`](./examples/run_bert_classifier.py) and [`run_bert_squad.py`](./examples/run_bert_squad.py): gradient-accumulation, multi-gpu training, distributed training and 16-bits training . For more details on how to use these techniques you can read [the tips on training large batches in PyTorch](https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255) that I published earlier this month.
 
 Here is how to use these techniques in our scripts:
 
@@ -1159,7 +1159,7 @@ To use 16-bits training and distributed training, you need to install NVIDIA's a
 
 Note: To use *Distributed Training*, you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see [the above mentioned blog post]((https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255)) for more details):
 ```bash
-python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
+python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_bert_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
 ```
 Where `$THIS_MACHINE_INDEX` is an sequential index assigned to each of your machine (0, 1, 2...) and the machine with rank 0 has an IP address `192.168.1.1` and an open port `1234`.
 
@@ -1201,7 +1201,7 @@ and unpack it to some directory `$GLUE_DIR`.
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
-python run_classifier.py \
+python run_bert_classifier.py \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
@@ -1234,7 +1234,7 @@ and unpack it to some directory `$GLUE_DIR`.
 ```shell
 export GLUE_DIR=/path/to/glue
 
-python run_classifier.py \
+python run_bert_classifier.py \
   --task_name MRPC \
   --do_train \
   --do_eval \
@@ -1256,7 +1256,7 @@ Then run
 ```shell
 export GLUE_DIR=/path/to/glue
 
-python run_classifier.py \
+python run_bert_classifier.py \
   --task_name MRPC \
   --do_train \
   --do_eval \
@@ -1275,7 +1275,7 @@ python run_classifier.py \
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking model to reach a F1 > 92 on MRPC:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node 8 run_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name MRPC --do_train   --do_eval   --do_lower_case   --data_dir $GLUE_DIR/MRPC/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0  --output_dir /tmp/mrpc_output/
+python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name MRPC --do_train   --do_eval   --do_lower_case   --data_dir $GLUE_DIR/MRPC/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0  --output_dir /tmp/mrpc_output/
 ```
 
 Training with these hyper-parameters gave us the following results:
@@ -1291,7 +1291,7 @@ Training with these hyper-parameters gave us the following results:
 Here is an example on MNLI:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node 8 run_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --do_lower_case   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
+python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --do_lower_case   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
 ```
 
 ```bash
@@ -1324,7 +1324,7 @@ The data for SQuAD can be downloaded with the following links and should be save
 ```shell
 export SQUAD_DIR=/path/to/SQUAD
 
-python run_squad.py \
+python run_bert_squad.py \
   --bert_model bert-base-uncased \
   --do_train \
   --do_predict \
@@ -1351,7 +1351,7 @@ Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=8 \
- run_squad.py \
+ run_bert_squad.py \
  --bert_model bert-large-uncased-whole-word-masking  \
  --do_train \
  --do_predict \
@@ -1378,7 +1378,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 And here is the model provided as `bert-large-cased-whole-word-masking-finetuned-squad`:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8  run_squad.py  --bert_model bert-large-cased-whole-word-masking   --do_train  --do_predict  --do_lower_case  --train_file $SQUAD_DIR/train-v1.1.json  --predict_file $SQUAD_DIR/dev-v1.1.json  --learning_rate 3e-5  --num_train_epochs 2  --max_seq_length 384  --doc_stride 128  --output_dir ../models/wwm_cased_finetuned_squad/  --train_batch_size 24  --gradient_accumulation_steps 12
+python -m torch.distributed.launch --nproc_per_node=8  run_bert_squad.py  --bert_model bert-large-cased-whole-word-masking   --do_train  --do_predict  --do_lower_case  --train_file $SQUAD_DIR/train-v1.1.json  --predict_file $SQUAD_DIR/dev-v1.1.json  --learning_rate 3e-5  --num_train_epochs 2  --max_seq_length 384  --doc_stride 128  --output_dir ../models/wwm_cased_finetuned_squad/  --train_batch_size 24  --gradient_accumulation_steps 12
 ```
 
 Training with these hyper-parameters gave us the following results:
@@ -1499,7 +1499,7 @@ Here is the full list of hyper-parameters for this run:
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
 
-python ./run_squad.py \
+python ./run_bert_squad.py \
   --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
@@ -1521,7 +1521,7 @@ Here is an example of hyper-parameters for a FP16 run we tried:
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
 
-python ./run_squad.py \
+python ./run_bert_squad.py \
   --bert_model bert-large-uncased \
   --do_train \
   --do_predict \
@@ -1547,7 +1547,7 @@ Here is an example with the recent `bert-large-uncased-whole-word-masking`:
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=8 \
-  run_squad.py \
+  run_bert_squad.py \
   --bert_model bert-large-uncased-whole-word-masking \
   --do_train \
   --do_predict \
@@ -1562,6 +1562,86 @@ python -m torch.distributed.launch --nproc_per_node=8 \
   --train_batch_size 24 \
   --gradient_accumulation_steps 2
 ```
+
+## Fine-tuning XLNet
+
+#### STS-B
+
+This example code fine-tunes XLNet on the STS-B corpus.
+
+Before running this example you should download the
+[GLUE data](https://gluebenchmark.com/tasks) by running
+[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
+and unpack it to some directory `$GLUE_DIR`.
+
+```shell
+export GLUE_DIR=/path/to/glue
+
+python run_xlnet_classifier.py \
+ --task_name STS-B \
+ --do_train \
+ --do_eval \
+ --do_lower_case \
+ --data_dir $GLUE_DIR/STS-B/ \
+ --max_seq_length 128 \
+ --train_batch_size 8 \
+ --gradient_accumulation_steps 1 \
+ --learning_rate 5e-5 \
+ --num_train_epochs 3.0 \
+ --output_dir /tmp/mrpc_output/
+```
+
+Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/zihangdai/xlnet#1-sts-b-sentence-pair-relevance-regression-with-gpus) gave evaluation results between 84% and 88%.
+
+**Distributed training**
+Here is an example using distributed training on 8 V100 GPUs to reach XXXX:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node 8 \
+ run_xlnet_classifier.py \
+ --task_name STS-B \
+ --do_train \
+ --do_eval \
+ --data_dir $GLUE_DIR/STS-B/ \
+ --max_seq_length 128 \
+ --train_batch_size 8 \
+ --gradient_accumulation_steps 1 \
+ --learning_rate 5e-5 \
+ --num_train_epochs 3.0 \
+ --output_dir /tmp/mrpc_output/
+```
+
+Training with these hyper-parameters gave us the following results:
+```bash
+  acc = 0.8823529411764706
+  acc_and_f1 = 0.901702786377709
+  eval_loss = 0.3418912578906332
+  f1 = 0.9210526315789473
+  global_step = 174
+  loss = 0.07231863956341798
+```
+
+Here is an example on MNLI:
+
+```bash
+python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
+```
+
+```bash
+***** Eval results *****
+  acc = 0.8679706601466992
+  eval_loss = 0.4911287787382479
+  global_step = 18408
+  loss = 0.04755385363816904
+
+***** Eval results *****
+  acc = 0.8747965825874695
+  eval_loss = 0.45516540421714036
+  global_step = 18408
+  loss = 0.04755385363816904
+```
+
+This is the example of the `bert-large-uncased-whole-word-masking-finetuned-mnli` model
 
 ## BERTology
 
@@ -1599,7 +1679,7 @@ A command-line interface is provided to convert a TensorFlow checkpoint in a PyT
 
 You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](./pytorch_pretrained_bert/convert_tf_checkpoint_to_pytorch.py ) script.
 
-This CLI takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in [`extract_features.py`](./examples/extract_features.py), [`run_classifier.py`](./examples/run_classifier.py) and [`run_squad.py`](./examples/run_squad.py)).
+This CLI takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using `torch.load()` (see examples in [`run_bert_extract_features.py`](./examples/run_bert_extract_features.py), [`run_bert_classifier.py`](./examples/run_bert_classifier.py) and [`run_bert_squad.py`](./examples/run_bert_squad.py)).
 
 You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow checkpoint (the three files starting with `bert_model.ckpt`) but be sure to keep the configuration file (`bert_config.json`) and the vocabulary file (`vocab.txt`) as these are needed for the PyTorch model too.
 
