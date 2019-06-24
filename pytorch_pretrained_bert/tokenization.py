@@ -58,7 +58,6 @@ PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
 }
 VOCAB_NAME = 'vocab.txt'
 
-
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
@@ -115,6 +114,46 @@ class BertTokenizer(object):
                                                 never_split=never_split)
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
         self.max_len = max_len if max_len is not None else int(1e12)
+
+    @property
+    def UNK_TOKEN(self):
+        return "[UNK]"
+
+    @property
+    def SEP_TOKEN(self):
+        return "[SEP]"
+
+    @property
+    def PAD_TOKEN(self):
+        return "[PAD]"
+
+    @property
+    def CLS_TOKEN(self):
+        return "[CLS]"
+
+    @property
+    def MASK_TOKEN(self):
+        return "[MASK]"
+
+    @property
+    def UNK_ID(self):
+        return self.vocab["[UNK]"]
+
+    @property
+    def SEP_ID(self):
+        return self.vocab["[SEP]"]
+
+    @property
+    def PAD_ID(self):
+        return self.vocab["[PAD]"]
+
+    @property
+    def CLS_ID(self):
+        return self.vocab["[CLS]"]
+
+    @property
+    def MASK_ID(self):
+        return self.vocab["[MASK]"]
 
     def tokenize(self, text):
         split_tokens = []

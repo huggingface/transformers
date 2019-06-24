@@ -203,7 +203,9 @@ def main():
                 train_features = pickle.load(reader)
         except:
             train_features = convert_examples_to_features(
-                train_examples, label_list, args.max_seq_length, tokenizer, output_mode)
+                train_examples, label_list, args.max_seq_length, tokenizer, output_mode,
+                cls_token_at_end=True, cls_token=tokenizer.CLS_TOKEN,
+                sep_token=tokenizer.SEP_TOKEN, cls_token_segment_id=2)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving train features into cached file %s", cached_train_features_file)
                 with open(cached_train_features_file, "wb") as writer:
@@ -347,7 +349,9 @@ def main():
                 eval_features = pickle.load(reader)
         except:
             eval_features = convert_examples_to_features(
-                eval_examples, label_list, args.max_seq_length, tokenizer, output_mode)
+                eval_examples, label_list, args.max_seq_length, tokenizer, output_mode,
+                cls_token_at_end=True, cls_token=tokenizer.CLS_TOKEN,
+                sep_token=tokenizer.SEP_TOKEN, cls_token_segment_id=2)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving eval features into cached file %s", cached_eval_features_file)
                 with open(cached_eval_features_file, "wb") as writer:

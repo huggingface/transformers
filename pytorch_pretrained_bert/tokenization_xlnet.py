@@ -38,26 +38,6 @@ SPECIAL_TOKENS_NAME = 'special_tokens.txt'
 
 SPIECE_UNDERLINE = u'▁'
 
-# Tokens
-special_symbols = {
-    "<unk>"  : 0,
-    "<s>"    : 1,
-    "</s>"   : 2,
-    "<cls>"  : 3,
-    "<sep>"  : 4,
-    "<pad>"  : 5,
-    "<mask>" : 6,
-    "<eod>"  : 7,
-    "<eop>"  : 8,
-}
-
-VOCAB_SIZE = 32000
-UNK_ID = special_symbols["<unk>"]
-CLS_ID = special_symbols["<cls>"]
-SEP_ID = special_symbols["<sep>"]
-MASK_ID = special_symbols["<mask>"]
-EOD_ID = special_symbols["<eod>"]
-
 # Segments (not really needed)
 SEG_ID_A   = 0
 SEG_ID_B   = 1
@@ -70,6 +50,18 @@ class XLNetTokenizer(object):
         SentencePiece based tokenizer. Peculiarities:
             - requires SentencePiece: https://github.com/google/sentencepiece
     """
+    # Tokens
+    special_symbols = {
+        "<unk>"  : 0,
+        "<s>"    : 1,
+        "</s>"   : 2,
+        "<cls>"  : 3,
+        "<sep>"  : 4,
+        "<pad>"  : 5,
+        "<mask>" : 6,
+        "<eod>"  : 7,
+        "<eop>"  : 8,
+    }
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
         """
@@ -146,6 +138,46 @@ class XLNetTokenizer(object):
         self.special_tokens = {}
         self.special_tokens_decoder = {}
         self.set_special_tokens(special_tokens)
+
+    @property
+    def UNK_TOKEN(self):
+        return "<unk>"
+
+    @property
+    def SEP_TOKEN(self):
+        return "<sep>"
+
+    @property
+    def PAD_TOKEN(self):
+        return "<pad>"
+
+    @property
+    def CLS_TOKEN(self):
+        return "<cls>"
+
+    @property
+    def MASK_TOKEN(self):
+        return "<mask>"
+
+    @property
+    def UNK_ID(self):
+        return self.special_symbols["<unk>"]
+
+    @property
+    def SEP_ID(self):
+        return self.special_symbols["<sep>"]
+
+    @property
+    def PAD_ID(self):
+        return self.special_symbols["<pad>"]
+
+    @property
+    def CLS_ID(self):
+        return self.special_symbols["<cls>"]
+
+    @property
+    def MASK_ID(self):
+        return self.special_symbols["<mask>"]
 
     def __len__(self):
         return len(self.encoder) + len(self.special_tokens)

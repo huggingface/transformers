@@ -86,7 +86,7 @@ class XLNetModelTest(unittest.TestCase):
             inp_q = target_mapping[:, 0, :].clone()  # predict last token
 
             # inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
-            # seg_id: int32 Tensor in shape [bsz, len], the input segment IDs.
+            # token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
             # input_mask: float32 Tensor in shape [bsz, len], the input mask.
             #     0 for real tokens and 1 for padding.
             # mems: a list of float32 Tensors in shape [bsz, mem_len, d_model], memory
@@ -138,11 +138,11 @@ class XLNetModelTest(unittest.TestCase):
             model = XLNetLMHeadModel(config)
             model.eval()
 
-            loss_1, mems_1a = model(input_ids_1, seg_id=segment_ids, target=lm_labels)
-            all_logits_1, mems_1b = model(input_ids_1, seg_id=segment_ids)
+            loss_1, mems_1a = model(input_ids_1, token_type_ids=segment_ids, target=lm_labels)
+            all_logits_1, mems_1b = model(input_ids_1, token_type_ids=segment_ids)
 
-            loss_2, mems_2a = model(input_ids_2, seg_id=segment_ids, target=lm_labels, mems=mems_1a)
-            all_logits_2, mems_2b = model(input_ids_2, seg_id=segment_ids, mems=mems_1b)
+            loss_2, mems_2a = model(input_ids_2, token_type_ids=segment_ids, target=lm_labels, mems=mems_1a)
+            all_logits_2, mems_2b = model(input_ids_2, token_type_ids=segment_ids, mems=mems_1b)
 
             logits, _ = model(input_ids_q,
                                     perm_mask=perm_mask,
