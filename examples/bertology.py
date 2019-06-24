@@ -14,7 +14,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from pytorch_pretrained_bert import BertForSequenceClassification, BertTokenizer
 
-from run_classifier_dataset_utils import processors, output_modes, convert_examples_to_features, compute_metrics
+from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
 
 
 logger = logging.getLogger(__name__)

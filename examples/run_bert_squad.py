@@ -38,7 +38,7 @@ from pytorch_pretrained_bert.modeling import BertForQuestionAnswering
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 
-from run_squad_dataset_utils import read_squad_examples, convert_examples_to_features, RawResult, write_predictions
+from utils_squad import read_squad_examples, convert_examples_to_features, RawResult, write_predictions
 
 if sys.version_info[0] == 2:
     import cPickle as pickle

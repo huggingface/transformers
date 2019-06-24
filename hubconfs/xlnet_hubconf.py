@@ -3,7 +3,7 @@ from pytorch_pretrained_bert.modeling_xlnet import (
     XLNetConfig,
     XLNetModel,
     XLNetLMHeadModel,
-    XLNetForSequenceClassification
+    # XLNetForSequenceClassification
 )
 
 # A lot of models share the same param doc. Use a decorator
@@ -135,35 +135,35 @@ def xlnetLMHeadModel(*args, **kwargs):
     return model
 
 
-@_append_from_pretrained_docstring(xlnet_docstring)
-def xlnetForSequenceClassification(*args, **kwargs):
-    """
-    xlnetModel is the basic XLNet Transformer model from
-        "XLNet: Generalized Autoregressive Pretraining for Language Understanding"
-        by Zhilin Yang, Zihang Dai1, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le
+# @_append_from_pretrained_docstring(xlnet_docstring)
+# def xlnetForSequenceClassification(*args, **kwargs):
+#     """
+#     xlnetModel is the basic XLNet Transformer model from
+#         "XLNet: Generalized Autoregressive Pretraining for Language Understanding"
+#         by Zhilin Yang, Zihang Dai1, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le
 
-    Example:
-        # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetTokenizer', 'xlnet-large-cased')
+#     Example:
+#         # Load the tokenizer
+#         >>> import torch
+#         >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetTokenizer', 'xlnet-large-cased')
 
-        #  Prepare tokenized input
-        >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
-        >>> tokenized_text1 = tokenizer.tokenize(text1)
-        >>> tokenized_text2 = tokenizer.tokenize(text2)
-        >>> indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
-        >>> indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
-        >>> tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
-        >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+#         #  Prepare tokenized input
+#         >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+#         >>> text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+#         >>> tokenized_text1 = tokenizer.tokenize(text1)
+#         >>> tokenized_text2 = tokenizer.tokenize(text2)
+#         >>> indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+#         >>> indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+#         >>> tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+#         >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
-        # Load xlnetForSequenceClassification
-        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetForSequenceClassification', 'xlnet-large-cased')
-        >>> model.eval()
+#         # Load xlnetForSequenceClassification
+#         >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetForSequenceClassification', 'xlnet-large-cased')
+#         >>> model.eval()
 
-        # Predict sequence classes logits
-        >>> with torch.no_grad():
-                lm_logits, mems = model(tokens_tensor)
-    """
-    model = XLNetForSequenceClassification.from_pretrained(*args, **kwargs)
-    return model
+#         # Predict sequence classes logits
+#         >>> with torch.no_grad():
+#                 lm_logits, mems = model(tokens_tensor)
+#     """
+#     model = XLNetForSequenceClassification.from_pretrained(*args, **kwargs)
+#     return model
