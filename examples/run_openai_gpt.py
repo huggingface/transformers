@@ -16,16 +16,22 @@
 """ OpenAI GPT model fine-tuning script.
     Adapted from https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/train.py
     It self adapted from https://github.com/openai/finetune-transformer-lm/blob/master/train.py
-
+    Get ROC_STORIES dataset from here: https://github.com/snigdhac/StoryComprehension_EMNLP/tree/master/Dataset/RoCStories
+    
     This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset:
         python run_openai_gpt.py \
           --model_name openai-gpt \
           --do_train \
           --do_eval \
           --train_dataset $ROC_STORIES_DIR/cloze_test_val__spring2016\ -\ cloze_test_ALL_val.csv \
-          --eval_dataset $ROC_STORIES_DIR/cloze_test_test__spring2016\ -\ cloze_test_ALL_test.csv \
+          --eval_dataset $ROC_STORIES_DIR/test_spring2016.tsv\
           --output_dir ../log \
           --train_batch_size 16 \
+          
+      Evaluation results should look something like the following:
+        eval_accuracy = 0.874933190807055
+        eval_loss = 0.38780492314925563
+        train_loss = 2.229213227573623
 """
 import argparse
 import os
@@ -56,7 +62,7 @@ def accuracy(out, labels):
 def load_rocstories_dataset(dataset_path):
     """ Output a list of tuples(story, 1st continuation, 2nd continuation, label) """
     with open(dataset_path, encoding='utf_8') as f:
-        f = csv.reader(f)
+        f = csv.reader(f, delimiter='\t')
         output = []
         next(f) # skip the first line
         for line in tqdm(f):
