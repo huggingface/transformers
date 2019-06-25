@@ -70,7 +70,7 @@ if __name__ == "__main__":
                         required = True,
                         help = "The config json file corresponding to the pre-trained XLNet model. \n"
                                "This specifies the model architecture.")
-    parser.add_argument("--pytorch_dump_folder_path",finetuning_task
+    parser.add_argument("--pytorch_dump_folder_path",
                         default = None,
                         type = str,
                         required = True,
@@ -81,6 +81,6 @@ if __name__ == "__main__":
                         help = "Name of a task on which the XLNet TensorFloaw model was fine-tuned")
     args = parser.parse_args()
     convert_xlnet_checkpoint_to_pytorch(args.tf_checkpoint_path,
-                                     args.xlnet_config_file,
-                                     args.pytorch_dump_folder_path,
-                                     args.finetuning_task)
+                                        args.xlnet_config_file,
+                                        args.pytorch_dump_folder_path,
+                                        args.finetuning_task)
