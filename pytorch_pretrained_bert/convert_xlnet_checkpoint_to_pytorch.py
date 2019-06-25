@@ -28,20 +28,31 @@ from pytorch_pretrained_bert.modeling_xlnet import (CONFIG_NAME, WEIGHTS_NAME,
                                                     XLNetForSequenceClassification,
                                                     load_tf_weights_in_xlnet)
 
-GLUE_TASKS = ["cola", "mnli", "mnli-mm", "mrpc", "sst-2", "sts-b", "qqp", "qnli", "rte", "wnli"]
+GLUE_TASKS = {
+    "cola": "classification",
+    "mnli": "classification",
+    "mrpc": "classification",
+    "sst-2": "classification",
+    "sts-b": "regression",
+    "qqp": "classification",
+    "qnli": "classification",
+    "rte": "classification",
+    "wnli": "classification",
+}
 
 
 def convert_xlnet_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_folder_path, finetuning_task=None):
     # Initialise PyTorch model
     config = XLNetConfig.from_json_file(bert_config_file)
-    if finetuning_task is not None and finetuning_task.lower() in GLUE_TASKS:
-        model_class = XLNetLMHeadModel
-    elif finetuning_task is not None and 'squad' in finetuning_task.lower():
-        model_class = XLNetForQuestionAnswering
+
+    finetuning_task = finetuning_task.lower() if finetuning_task is not None else ""
+    if finetuning_task in GLUE_TASKS:
+        print("Building PyTorch XLNetForSequenceClassification model from configuration: {}".format(str(config)))
+        model = XLNetForSequenceClassification(config, is_regression=bool(GLUE_TASKS[finetuning_task] == "regression"))
+    elif 'squad' in finetuning_task:
+        model = XLNetForQuestionAnswering(config)
     else:
-        model_class = XLNetLMHeadModel
-    print("Building PyTorch model {} from configuration: {}".format(str(model_class), str(config)))
-    model = model_class(config)
+        model = XLNetLMHeadModel(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_xlnet(model, config, tf_checkpoint_path, finetuning_task)
@@ -80,6 +91,8 @@ if __name__ == "__main__":
                         type = str,
                         help = "Name of a task on which the XLNet TensorFloaw model was fine-tuned")
     args = parser.parse_args()
+    print(args)
+
     convert_xlnet_checkpoint_to_pytorch(args.tf_checkpoint_path,
                                         args.xlnet_config_file,
                                         args.pytorch_dump_folder_path,

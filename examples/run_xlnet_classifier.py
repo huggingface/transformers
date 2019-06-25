@@ -70,6 +70,8 @@ def main():
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. "
                              "E.g., 0.1 = 10%% of training.")
+    parser.add_argument("--clip_gradients", default=1.0, type=float,
+                        help="Clip gradient norms.")
     parser.add_argument("--train_batch_size", default=32, type=int,
                         help="Total batch size for training.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
@@ -80,6 +82,8 @@ def main():
                         help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
+    parser.add_argument("--log_every", default=10, type=int,
+                        help="Log metrics every X training steps.")
     # evaluation
     parser.add_argument("--do_eval", action='store_true',
                         help="Whether to run eval on the dev set.")
@@ -234,12 +238,13 @@ def main():
 
         # Prepare optimizer
 
-        param_optimizer = list(model.named_parameters())
-        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-        optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-            ]
+        optimizer_grouped_parameters = model.parameters()
+        # param_optimizer = list(model.named_parameters())
+        # no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        # optimizer_grouped_parameters = [
+        #     {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        #     {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        #     ]
         if args.fp16:
             try:
                 from apex.optimizers import FP16_Optimizer
@@ -297,6 +302,9 @@ def main():
                 else:
                     loss.backward()
 
+                if args.clip_gradients > 0.0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_gradients)
+
                 tr_loss += loss.item()
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
@@ -310,7 +318,7 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
-                    if args.local_rank in [-1, 0]:
+                    if args.local_rank in [-1, 0] and (args.log_every <= 0 or (step + 1) % args.log_every == 0):
                         tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
                         tb_writer.add_scalar('loss', loss.item(), global_step)
 

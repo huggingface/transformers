@@ -30,7 +30,7 @@ from io import open
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path, WEIGHTS_NAME, CONFIG_NAME
 
@@ -58,11 +58,11 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None, finetuning_tas
         if hasattr(model, 'lm_loss'):
             # We will load also the output bias
             tf_to_pt_map['model/lm_loss/bias'] = model.lm_loss.bias
-        elif hasattr(model, 'sequence_summary') and 'model/sequnece_summary/summary/kernel' in tf_weights:
+        if hasattr(model, 'sequence_summary') and 'model/sequnece_summary/summary/kernel' in tf_weights:
             # We will load also the sequence summary
             tf_to_pt_map['model/sequnece_summary/summary/kernel'] = model.sequence_summary.summary.weight
             tf_to_pt_map['model/sequnece_summary/summary/bias'] = model.sequence_summary.summary.bias
-        elif hasattr(model, 'logits_proj') and finetuning_task is not None and any('model/regression' in name for name in tf_weights.keys()):
+        if hasattr(model, 'logits_proj') and finetuning_task is not None and 'model/regression_{}/logit/kernel'.format(finetuning_task) in tf_weights:
             tf_to_pt_map['model/regression_{}/logit/kernel'.format(finetuning_task)] = model.logits_proj.weight
             tf_to_pt_map['model/regression_{}/logit/bias'.format(finetuning_task)] = model.logits_proj.bias
 
@@ -133,6 +133,8 @@ def load_tf_weights_in_xlnet(model, config, tf_path, finetuning_task=None):
         array = tf.train.load_variable(tf_path, name)
         tf_weights[name] = array
 
+    input("Press Enter to continue...")
+
     # Build TF to PyTorch weights loading map
     tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights, finetuning_task)
 
@@ -144,7 +146,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path, finetuning_task=None):
         array = tf_weights[name]
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        if 'kernel' in name and 'ff' in name:
+        if 'kernel' in name and ('ff' in name or 'summary' in name or 'logit' in name):
             print("Transposing")
             array = np.transpose(array)
         if isinstance(pointer, list):

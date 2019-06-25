@@ -1394,7 +1394,7 @@ The data for SWAG can be downloaded by cloning the following [repository](https:
 ```shell
 export SWAG_DIR=/path/to/SWAG
 
-python run_swag.py \
+python run_bert_swag.py \
   --bert_model bert-base-uncased \
   --do_train \
   --do_lower_case \
@@ -1581,7 +1581,6 @@ python run_xlnet_classifier.py \
  --task_name STS-B \
  --do_train \
  --do_eval \
- --do_lower_case \
  --data_dir $GLUE_DIR/STS-B/ \
  --max_seq_length 128 \
  --train_batch_size 8 \
