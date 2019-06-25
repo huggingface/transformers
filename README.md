@@ -1690,7 +1690,7 @@ Here is an example of the conversion process for a pre-trained `BERT-Base Uncase
 ```shell
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
-pytorch_pretrained_bert convert_tf_checkpoint_to_pytorch \
+pytorch_pretrained_bert bert \
   $BERT_BASE_DIR/bert_model.ckpt \
   $BERT_BASE_DIR/bert_config.json \
   $BERT_BASE_DIR/pytorch_model.bin
@@ -1705,7 +1705,7 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT model,
 ```shell
 export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
 
-pytorch_pretrained_bert convert_openai_checkpoint \
+pytorch_pretrained_bert gpt \
   $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
   $PYTORCH_DUMP_OUTPUT \
   [OPENAI_GPT_CONFIG]
@@ -1718,7 +1718,7 @@ Here is an example of the conversion process for a pre-trained Transformer-XL mo
 ```shell
 export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
 
-pytorch_pretrained_bert convert_transfo_xl_checkpoint \
+pytorch_pretrained_bert transfo_xl \
   $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
   $PYTORCH_DUMP_OUTPUT \
   [TRANSFO_XL_CONFIG]
@@ -1731,11 +1731,27 @@ Here is an example of the conversion process for a pre-trained OpenAI's GPT-2 mo
 ```shell
 export GPT2_DIR=/path/to/gpt2/checkpoint
 
-pytorch_pretrained_bert convert_gpt2_checkpoint \
+pytorch_pretrained_bert gpt2 \
   $GPT2_DIR/model.ckpt \
   $PYTORCH_DUMP_OUTPUT \
   [GPT2_CONFIG]
 ```
+
+### XLNet
+
+Here is an example of the conversion process for a pre-trained XLNet model, fine-tuned on STS-B using the TensorFlow script:
+
+```shell
+export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
+export TRANSFO_XL_CONFIG_PATH=/path/to/xlnet/config
+
+pytorch_pretrained_bert xlnet \
+  $TRANSFO_XL_CHECKPOINT_PATH \
+  $TRANSFO_XL_CONFIG_PATH \
+  $PYTORCH_DUMP_OUTPUT \
+  STS-B \
+```
+
 
 ## TPU
 
