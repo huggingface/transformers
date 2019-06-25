@@ -191,22 +191,21 @@ class BertAdam(Optimizer):
             Can be `'warmup_linear'`, `'warmup_constant'`, `'warmup_cosine'`, `'none'`, `None` or a `_LRSchedule` object (see below).
             If `None` or `'none'`, learning rate is always kept constant.
             Default : `'warmup_linear'`
-        b1: Adams b1. Default: 0.9
-        b2: Adams b2. Default: 0.999
+        betas: Adams betas. Default: (0.9, 0.999)
         e: Adams epsilon. Default: 1e-6
         weight_decay: Weight decay. Default: 0.01
         max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
     """
     def __init__(self, params, lr=required, warmup=-1, t_total=-1, schedule='warmup_linear',
-                 b1=0.9, b2=0.999, e=1e-6, weight_decay=0.01, max_grad_norm=1.0, **kwargs):
+                 betas=(0.9, 0.999), e=1e-6, weight_decay=0.01, max_grad_norm=1.0, **kwargs):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
         if not isinstance(schedule, _LRSchedule) and schedule not in SCHEDULES:
             raise ValueError("Invalid schedule parameter: {}".format(schedule))
-        if not 0.0 <= b1 < 1.0:
-            raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
-        if not 0.0 <= b2 < 1.0:
-            raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {} - should be in [0.0, 1.0[".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {} - should be in [0.0, 1.0[".format(betas[1]))
         if not e >= 0.0:
             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
         # initialize schedule object
@@ -218,7 +217,7 @@ class BertAdam(Optimizer):
                 logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
                                "Please specify custom warmup and t_total in _LRSchedule object.")
         defaults = dict(lr=lr, schedule=schedule,
-                        b1=b1, b2=b2, e=e, weight_decay=weight_decay,
+                        betas=betas, e=e, weight_decay=weight_decay,
                         max_grad_norm=max_grad_norm)
         super(BertAdam, self).__init__(params, defaults)
 
@@ -264,7 +263,7 @@ class BertAdam(Optimizer):
                     state['next_v'] = torch.zeros_like(p.data)
 
                 next_m, next_v = state['next_m'], state['next_v']
-                beta1, beta2 = group['b1'], group['b2']
+                beta1, beta2 = group['betas']
 
                 # Add grad clipping
                 if group['max_grad_norm'] > 0:
