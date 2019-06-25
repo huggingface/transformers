@@ -24,16 +24,27 @@ import torch
 
 from pytorch_pretrained_bert.modeling_xlnet import (CONFIG_NAME, WEIGHTS_NAME,
                                                     XLNetConfig, XLNetRunConfig,
-                                                    XLNetLMHeadModel, load_tf_weights_in_xlnet)
+                                                    XLNetLMHeadModel, XLNetForQuestionAnswering,
+                                                    XLNetForSequenceClassification,
+                                                    load_tf_weights_in_xlnet)
 
-def convert_xlnet_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_folder_path):
+GLUE_TASKS = ["cola", "mnli", "mnli-mm", "mrpc", "sst-2", "sts-b", "qqp", "qnli", "rte", "wnli"]
+
+
+def convert_xlnet_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_folder_path, finetuning_task=None):
     # Initialise PyTorch model
     config = XLNetConfig.from_json_file(bert_config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = XLNetLMHeadModel(config)
+    if finetuning_task is not None and finetuning_task.lower() in GLUE_TASKS:
+        model_class = XLNetLMHeadModel
+    elif finetuning_task is not None and 'squad' in finetuning_task.lower():
+        model_class = XLNetForQuestionAnswering
+    else:
+        model_class = XLNetLMHeadModel
+    print("Building PyTorch model {} from configuration: {}".format(str(model_class), str(config)))
+    model = model_class(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_xlnet(model, config, tf_checkpoint_path)
+    load_tf_weights_in_xlnet(model, config, tf_checkpoint_path, finetuning_task)
 
     # Save pytorch-model
     pytorch_weights_dump_path = os.path.join(pytorch_dump_folder_path, WEIGHTS_NAME)
@@ -59,12 +70,17 @@ if __name__ == "__main__":
                         required = True,
                         help = "The config json file corresponding to the pre-trained XLNet model. \n"
                                "This specifies the model architecture.")
-    parser.add_argument("--pytorch_dump_folder_path",
+    parser.add_argument("--pytorch_dump_folder_path",finetuning_task
                         default = None,
                         type = str,
                         required = True,
                         help = "Path to the folder to store the PyTorch model or dataset/vocab.")
+    parser.add_argument("--finetuning_task",
+                        default = None,
+                        type = str,
+                        help = "Name of a task on which the XLNet TensorFloaw model was fine-tuned")
     args = parser.parse_args()
     convert_xlnet_checkpoint_to_pytorch(args.tf_checkpoint_path,
                                      args.xlnet_config_file,
-                                     args.pytorch_dump_folder_path)
+                                     args.pytorch_dump_folder_path,
+                                     args.finetuning_task)

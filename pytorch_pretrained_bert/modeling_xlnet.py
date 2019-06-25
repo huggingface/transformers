@@ -46,7 +46,7 @@ XLNET_CONFIG_NAME = 'xlnet_config.json'
 TF_WEIGHTS_NAME = 'model.ckpt'
 
 
-def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
+def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None, finetuning_task=None):
     """ A map of modules from TF to PyTorch.
         I use a map to keep the PyTorch model as
         identical to the original PyTorch model as possible.
@@ -62,14 +62,16 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
             # We will load also the sequence summary
             tf_to_pt_map['model/sequnece_summary/summary/kernel'] = model.sequence_summary.summary.weight
             tf_to_pt_map['model/sequnece_summary/summary/bias'] = model.sequence_summary.summary.bias
-        elif hasattr(model, 'proj_loss') and any('model/regression' in name for name in tf_weights.keys()):
-            raise NotImplementedError
+        elif hasattr(model, 'logits_proj') and finetuning_task is not None and any('model/regression' in name for name in tf_weights.keys()):
+            tf_to_pt_map['model/regression_{}/logit/kernel'.format(finetuning_task)] = model.logits_proj.weight
+            tf_to_pt_map['model/regression_{}/logit/bias'.format(finetuning_task)] = model.logits_proj.bias
+
         # Now load the rest of the transformer
         model = model.transformer
 
     # Embeddings and output
     tf_to_pt_map.update({'model/transformer/word_embedding/lookup_table': model.word_embedding.weight,
-                    'model/transformer/mask_emb/mask_emb': model.mask_emb})
+                         'model/transformer/mask_emb/mask_emb': model.mask_emb})
 
     # Transformer blocks
     for i, b in enumerate(model.layer):
@@ -113,7 +115,7 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
         'model/transformer/seg_embed': seg_embed_list})
     return tf_to_pt_map
 
-def load_tf_weights_in_xlnet(model, config, tf_path):
+def load_tf_weights_in_xlnet(model, config, tf_path, finetuning_task=None):
     """ Load tf checkpoints in a pytorch model
     """
     try:
@@ -132,7 +134,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
         tf_weights[name] = array
 
     # Build TF to PyTorch weights loading map
-    tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights)
+    tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights, finetuning_task)
 
     for name, pointer in tf_to_pt_map.items():
         print("Importing {}".format(name))
@@ -1338,7 +1340,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         self.sequence_summary = XLNetSequenceSummary(config, summary_type=summary_type,
                                                      use_proj=use_proj, output_attentions=output_attentions,
                                                      keep_multihead_output=keep_multihead_output)
-        self.loss_proj = nn.Linear(config.d_model, num_labels if not is_regression else 1)
+        self.logits_proj = nn.Linear(config.d_model, num_labels if not is_regression else 1)
         self.apply(self.init_weights)
 
     def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
@@ -1376,7 +1378,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                                             output_all_encoded_layers, head_mask)
 
         output = self.sequence_summary(output)
-        logits = self.loss_proj(output)
+        logits = self.logits_proj(output)
 
         if target is not None:
             if self.is_regression:
