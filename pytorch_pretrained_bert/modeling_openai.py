@@ -31,9 +31,9 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .file_utils import cached_path, CONFIG_NAME, WEIGHTS_NAME
+from .file_utils import cached_path
+from .model_utils import Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, prune_conv1d_layer
 from .modeling import BertLayerNorm as LayerNorm
-from .modeling_gpt2 import prune_conv1d_layer
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +122,10 @@ def swish(x):
 ACT_FNS = {"relu": nn.ReLU, "swish": swish, "gelu": gelu}
 
 
-class OpenAIGPTConfig(object):
+class OpenAIGPTConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `OpenAIGPTModel`.
     """
+    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
         self,
@@ -197,61 +198,6 @@ class OpenAIGPTConfig(object):
     def total_tokens_embeddings(self):
         return self.vocab_size + self.n_special
 
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `OpenAIGPTConfig` from a Python dictionary of parameters."""
-        config = OpenAIGPTConfig(vocab_size_or_config_json_file=-1)
-        for key, value in json_object.items():
-            config.__dict__[key] = value
-        return config
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `OpenAIGPTConfig` from a json file of parameters."""
-        with open(json_file, "r", encoding="utf-8") as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-    def to_json_file(self, json_file_path):
-        """ Save this instance to a json file."""
-        with open(json_file_path, "w", encoding='utf-8') as writer:
-            writer.write(self.to_json_string())
-
-
-class Conv1D(nn.Module):
-    def __init__(self, nf, rf, nx):
-        super(Conv1D, self).__init__()
-        self.rf = rf
-        self.nf = nf
-        if rf == 1:  # faster 1x1 conv
-            w = torch.empty(nx, nf)
-            nn.init.normal_(w, std=0.02)
-            self.weight = Parameter(w)
-            self.bias = Parameter(torch.zeros(nf))
-        else:  # was used to train LM
-            raise NotImplementedError
-
-    def forward(self, x):
-        if self.rf == 1:
-            size_out = x.size()[:-1] + (self.nf,)
-            x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
-            x = x.view(*size_out)
-        else:
-            raise NotImplementedError
-        return x
-
 
 class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False, output_attentions=False, keep_multihead_output=False):
@@ -268,8 +214,8 @@ class Attention(nn.Module):
         self.keep_multihead_output = keep_multihead_output
         self.multihead_output = None
 
-        self.c_attn = Conv1D(n_state * 3, 1, nx)
-        self.c_proj = Conv1D(n_state, 1, nx)
+        self.c_attn = Conv1D(n_state * 3, nx)
+        self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
@@ -348,8 +294,8 @@ class MLP(nn.Module):
     def __init__(self, n_state, config):  # in MLP: n_state=3072 (4 * n_embd)
         super(MLP, self).__init__()
         nx = config.n_embd
-        self.c_fc = Conv1D(n_state, 1, nx)
-        self.c_proj = Conv1D(nx, 1, n_state)
+        self.c_fc = Conv1D(n_state, nx)
+        self.c_proj = Conv1D(nx, n_state)
         self.act = ACT_FNS[config.afn]
         self.dropout = nn.Dropout(config.resid_pdrop)
 

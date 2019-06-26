@@ -18,7 +18,7 @@ from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHe
 from .modeling_gpt2 import (GPT2Config, GPT2Model,
                             GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2MultipleChoiceHead,
                             load_tf_weights_in_gpt2)
-from .modeling_xlnet import (XLNetBaseConfig, XLNetConfig, XLNetRunConfig,
+from .modeling_xlnet import (XLNetConfig,
                              XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
                              XLNetForSequenceClassification, XLNetForQuestionAnswering,
                              load_tf_weights_in_xlnet)
@@ -26,5 +26,6 @@ from .modeling_xlnet import (XLNetBaseConfig, XLNetConfig, XLNetRunConfig,
 from .optimization import BertAdam
 from .optimization_openai import OpenAIAdam
 
-from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path,
-                         WEIGHTS_NAME, CONFIG_NAME)
+from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
+
+from .model_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig)

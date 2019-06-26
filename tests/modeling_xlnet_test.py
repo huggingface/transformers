@@ -25,7 +25,7 @@ import pytest
 
 import torch
 
-from pytorch_pretrained_bert import (XLNetConfig, XLNetRunConfig, XLNetModel, XLNetLMHeadModel)
+from pytorch_pretrained_bert import (XLNetConfig, XLNetModel, XLNetLMHeadModel)
 from pytorch_pretrained_bert.modeling_xlnet import PRETRAINED_MODEL_ARCHIVE_MAP
 
 class XLNetModelTest(unittest.TestCase):
@@ -117,16 +117,12 @@ class XLNetModelTest(unittest.TestCase):
                 d_inner=self.d_inner,
                 n_layer=self.n_layer,
                 untie_r=self.untie_r,
-                max_position_embeddings=self.max_position_embeddings)
-
-            run_config = XLNetRunConfig(
+                max_position_embeddings=self.max_position_embeddings,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 same_length=self.same_length,
                 reuse_len=self.reuse_len,
                 bi_data=self.bi_data)
-
-            config.update(run_config)
 
             return (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels)
 
