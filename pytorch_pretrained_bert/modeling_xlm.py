@@ -430,8 +430,54 @@ class XLMModel(XLMPreTrainedModel):
                   'asm_cutoffs', 'asm_div_value']
 
     def __init__(self, params, output_attentions=False, keep_multihead_output=False):  #, dico, is_encoder, with_output):
-        """
-        Transformer model (encoder or decoder).
+        """XLM model ("Bidirectional Embedding Representations from a Transformer").
+
+        Params:
+            `config`: a BertConfig class instance with the configuration to build a new model
+            `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+            `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+                This can be used to compute head importance metrics. Default: False
+
+        Inputs:
+            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+                with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
+                `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
+            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+                types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
+                a `sentence B` token (see BERT paper for more details).
+            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+                selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
+                input sequence length in the current batch. It's the mask that we typically use for attention when
+                a batch has varying length sentences.
+            `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
+            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+                It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+
+
+        Outputs: Tuple of (encoded_layers, pooled_output)
+            `encoded_layers`: controled by `output_all_encoded_layers` argument:
+                - `output_all_encoded_layers=True`: outputs a list of the full sequences of encoded-hidden-states at the end
+                    of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each
+                    encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size],
+                - `output_all_encoded_layers=False`: outputs only the full sequence of hidden-states corresponding
+                    to the last attention block of shape [batch_size, sequence_length, hidden_size],
+            `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a
+                classifier pretrained on top of the hidden state associated to the first character of the
+                input (`CLS`) to train on the Next-Sentence task (see BERT's paper).
+
+        Example usage:
+        ```python
+        # Already been converted into WordPiece token ids
+        input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+        input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+        token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+        config = modeling.BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
+            num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
+
+        model = modeling.BertModel(config=config)
+        all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+        ```
         """
         super(XLMModel, self).__init__(params)
         self.output_attentions = output_attentions

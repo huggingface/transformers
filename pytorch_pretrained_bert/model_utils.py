@@ -255,7 +255,7 @@ class PreTrainedModel(nn.Module):
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
         if from_tf:
             # Directly load from a TensorFlow checkpoint
-            return load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
+            return cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
 
         # Load from a PyTorch state_dict
         missing_keys = []
@@ -275,10 +275,15 @@ class PreTrainedModel(nn.Module):
                 if child is not None:
                     load(child, prefix + name + '.')
 
+        # Be able to load base models as well as derived models (with heads)
         start_prefix = ''
+        model_to_load = model
         if not hasattr(model, cls.base_model_prefix) and any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
-            start_prefix = cls.base_model_prefix + '.'  # Used to be able to load base models as well as derived modesl (with heads)
-        load(model, prefix=start_prefix)
+            start_prefix = cls.base_model_prefix + '.'
+        if hasattr(model, cls.base_model_prefix) and not any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
+            model_to_load = getattr(model, cls.base_model_prefix)
+
+        load(model_to_load, prefix=start_prefix)
         if len(missing_keys) > 0:
             logger.info("Weights of {} not initialized from pretrained model: {}".format(
                 model.__class__.__name__, missing_keys))
@@ -289,7 +294,7 @@ class PreTrainedModel(nn.Module):
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                model.__class__.__name__, "\n\t".join(error_msgs)))
 
-        if hasattr(model, tie_weights):
+        if hasattr(model, 'tie_weights'):
             model.tie_weights()  # make sure word embedding weights are still tied
 
         return model
