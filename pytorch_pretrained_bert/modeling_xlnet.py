@@ -62,7 +62,8 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
             # We will load also the sequence summary
             tf_to_pt_map['model/sequnece_summary/summary/kernel'] = model.sequence_summary.summary.weight
             tf_to_pt_map['model/sequnece_summary/summary/bias'] = model.sequence_summary.summary.bias
-        if hasattr(model, 'logits_proj') and config.finetuning_task is not None and 'model/regression_{}/logit/kernel'.format(finetuning_task) in tf_weights:
+        if hasattr(model, 'logits_proj') and config.finetuning_task is not None \
+                and 'model/regression_{}/logit/kernel'.format(config.finetuning_task) in tf_weights:
             tf_to_pt_map['model/regression_{}/logit/kernel'.format(config.finetuning_task)] = model.logits_proj.weight
             tf_to_pt_map['model/regression_{}/logit/bias'.format(config.finetuning_task)] = model.logits_proj.bias
 
@@ -132,8 +133,6 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
         print("Loading TF weight {} with shape {}".format(name, shape))
         array = tf.train.load_variable(tf_path, name)
         tf_weights[name] = array
-
-    input("Press Enter to continue...")
 
     # Build TF to PyTorch weights loading map
     tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights)
