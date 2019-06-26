@@ -138,10 +138,10 @@ class XLNetModelTest(unittest.TestCase):
             model = XLNetLMHeadModel(config)
             model.eval()
 
-            loss_1, mems_1a = model(input_ids_1, token_type_ids=segment_ids, target=lm_labels)
+            loss_1, mems_1a = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
             all_logits_1, mems_1b = model(input_ids_1, token_type_ids=segment_ids)
 
-            loss_2, mems_2a = model(input_ids_2, token_type_ids=segment_ids, target=lm_labels, mems=mems_1a)
+            loss_2, mems_2a = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1a)
             all_logits_2, mems_2b = model(input_ids_2, token_type_ids=segment_ids, mems=mems_1b)
 
             logits, _ = model(input_ids_q,

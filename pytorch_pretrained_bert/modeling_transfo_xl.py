@@ -1025,14 +1025,14 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         `mems`: optional memomry of hidden states from previous forward passes
             as a list (num layers) of hidden states at the entry of each layer
             each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `target`
+            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
     Outputs:
         A tuple of (last_hidden_state, new_mems)
         `last_hidden_state`: the encoded-hidden-states at the top of the model
             as a torch.FloatTensor of size [batch_size, sequence_length, self.config.d_model]
         `new_mems`: list (num layers) of updated mem states at the entry of each layer
             each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `target`
+            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
 
     Example usage:
     ```python
@@ -1265,7 +1265,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 mems :: optional mems from previous forwar passes (or init_mems)
                     list (num layers) of mem states at the entry of each layer
                         shape :: [self.config.mem_len, bsz, self.config.d_model]
-                    Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `target`
+                    Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
             Returns:
                 tuple (last_hidden, new_mems) where:
                     new_mems: list (num layers) of mem states at the entry of each layer
@@ -1303,23 +1303,23 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
             with the token indices selected in the range [0, self.config.n_token[
-        `target`: an optional torch.LongTensor of shape [batch_size, sequence_length]
-            with the target token indices selected in the range [0, self.config.n_token[
+        `labels`: an optional torch.LongTensor of shape [batch_size, sequence_length]
+            with the labels token indices selected in the range [0, self.config.n_token[
         `mems`: an optional memory of hidden states from previous forward passes
             as a list (num layers) of hidden states at the entry of each layer
             each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `target`
+            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
 
     Outputs:
         A tuple of (last_hidden_state, new_mems)
         `softmax_output`: output of the (adaptive) softmax:
-            if target is None:
+            if labels is None:
                 Negative log likelihood of shape [batch_size, sequence_length] 
             else:
                 log probabilities of tokens, shape [batch_size, sequence_length, n_tokens]
         `new_mems`: list (num layers) of updated mem states at the entry of each layer
             each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `target`
+            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
 
     Example usage:
     ```python
@@ -1375,16 +1375,16 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def init_mems(self, data):
         return self.transformer.init_mems(data)
 
-    def forward(self, input_ids, target=None, mems=None):
+    def forward(self, input_ids, labels=None, mems=None):
         """ Params:
                 input_ids :: [bsz, len]
-                target :: [bsz, len]
+                labels :: [bsz, len]
             Returns:
                 tuple(softmax_output, new_mems) where:
                     new_mems: list (num layers) of hidden states at the entry of each layer
                         shape :: [mem_len, bsz, self.config.d_model] :: Warning: shapes are transposed here w. regards to input_ids
                     softmax_output: output of the (adaptive) softmax:
-                        if target is None:
+                        if labels is None:
                             Negative log likelihood of shape :: [bsz, len] 
                         else:
                             log probabilities of tokens, shape :: [bsz, len, n_tokens]
@@ -1397,11 +1397,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
         if self.sample_softmax > 0 and self.training:
             assert self.config.tie_weight
-            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, target, pred_hid, self.sampler)
+            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, labels, pred_hid, self.sampler)
             softmax_output = -F.log_softmax(logit, -1)[:, :, 0]
         else:
-            softmax_output = self.crit(pred_hid.view(-1, pred_hid.size(-1)), target)
-            if target is None:
+            softmax_output = self.crit(pred_hid.view(-1, pred_hid.size(-1)), labels)
+            if labels is None:
                 softmax_output = softmax_output.view(bsz, tgt_len, -1)
             else:
                 softmax_output = softmax_output.view(bsz, tgt_len)
