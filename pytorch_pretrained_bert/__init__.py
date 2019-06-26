@@ -28,4 +28,5 @@ from .optimization_openai import OpenAIAdam
 
 from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
 
-from .model_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig)
+from .model_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
+                          PretrainedConfig, PreTrainedModel, prune_layer, Conv1D)
