@@ -591,3 +591,15 @@ output_modes = {
     "rte": "classification",
     "wnli": "classification",
 }
+
+GLUE_TASKS_NUM_LABELS = {
+    "cola": 2,
+    "mnli": 3,
+    "mrpc": 2,
+    "sst-2": 2,
+    "sts-b": 1,
+    "qqp": 2,
+    "qnli": 2,
+    "rte": 2,
+    "wnli": 2,
+}

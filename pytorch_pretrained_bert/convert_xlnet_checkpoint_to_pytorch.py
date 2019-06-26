@@ -28,16 +28,16 @@ from pytorch_pretrained_bert.modeling_xlnet import (CONFIG_NAME, WEIGHTS_NAME,
                                                     XLNetForSequenceClassification,
                                                     load_tf_weights_in_xlnet)
 
-GLUE_TASKS = {
-    "cola": "classification",
-    "mnli": "classification",
-    "mrpc": "classification",
-    "sst-2": "classification",
-    "sts-b": "regression",
-    "qqp": "classification",
-    "qnli": "classification",
-    "rte": "classification",
-    "wnli": "classification",
+GLUE_TASKS_NUM_LABELS = {
+    "cola": 2,
+    "mnli": 3,
+    "mrpc": 2,
+    "sst-2": 2,
+    "sts-b": 1,
+    "qqp": 2,
+    "qnli": 2,
+    "rte": 2,
+    "wnli": 2,
 }
 
 
@@ -46,9 +46,9 @@ def convert_xlnet_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, py
     config = XLNetConfig.from_json_file(bert_config_file)
 
     finetuning_task = finetuning_task.lower() if finetuning_task is not None else ""
-    if finetuning_task in GLUE_TASKS:
+    if finetuning_task in GLUE_TASKS_NUM_LABELS:
         print("Building PyTorch XLNetForSequenceClassification model from configuration: {}".format(str(config)))
-        model = XLNetForSequenceClassification(config, is_regression=bool(GLUE_TASKS[finetuning_task] == "regression"))
+        model = XLNetForSequenceClassification(config, num_labels=GLUE_TASKS_NUM_LABELS[finetuning_task])
     elif 'squad' in finetuning_task:
         model = XLNetForQuestionAnswering(config)
     else:
