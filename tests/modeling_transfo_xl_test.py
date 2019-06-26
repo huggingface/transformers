@@ -129,10 +129,10 @@ class TransfoXLModelTest(unittest.TestCase):
             model = TransfoXLLMHeadModel(config)
             model.eval()
 
-            loss_1, mems_1a = model(input_ids_1, target=lm_labels)
+            loss_1, mems_1a = model(input_ids_1, labels=lm_labels)
             lm_logits_1, mems_1b = model(input_ids_1)
 
-            loss_2, mems_2a = model(input_ids_2, target=lm_labels, mems=mems_1a)
+            loss_2, mems_2a = model(input_ids_2, labels=lm_labels, mems=mems_1a)
             lm_logits_2, mems_2b = model(input_ids_2, mems=mems_1b)
 
             outputs = {
