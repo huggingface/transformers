@@ -430,10 +430,12 @@ class XLMModel(XLMPreTrainedModel):
                   'asm_cutoffs', 'asm_div_value']
 
     def __init__(self, params, output_attentions=False, keep_multihead_output=False):  #, dico, is_encoder, with_output):
-        """XLM model ("Bidirectional Embedding Representations from a Transformer").
+        """ XLM model from: "Cross-lingual Language Model Pretraining" by Guillaume Lample, Alexis Conneau
+            Paper: https://arxiv.org/abs/1901.07291
+            Original code: https://github.com/facebookresearch/XLM
 
         Params:
-            `config`: a BertConfig class instance with the configuration to build a new model
+            `config`: a XLMConfig class instance with the configuration to build a new model
             `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
             `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
                 This can be used to compute head importance metrics. Default: False
@@ -444,7 +446,7 @@ class XLMModel(XLMPreTrainedModel):
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
             `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
-                a `sentence B` token (see BERT paper for more details).
+                a `sentence B` token (see XLM paper for more details).
             `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
@@ -457,13 +459,13 @@ class XLMModel(XLMPreTrainedModel):
         Outputs: Tuple of (encoded_layers, pooled_output)
             `encoded_layers`: controled by `output_all_encoded_layers` argument:
                 - `output_all_encoded_layers=True`: outputs a list of the full sequences of encoded-hidden-states at the end
-                    of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each
+                    of each attention block (i.e. 12 full sequences for XLM-base, 24 for XLM-large), each
                     encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size],
                 - `output_all_encoded_layers=False`: outputs only the full sequence of hidden-states corresponding
                     to the last attention block of shape [batch_size, sequence_length, hidden_size],
             `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a
                 classifier pretrained on top of the hidden state associated to the first character of the
-                input (`CLS`) to train on the Next-Sentence task (see BERT's paper).
+                input (`CLS`) to train on the Next-Sentence task (see XLM's paper).
 
         Example usage:
         ```python
@@ -472,10 +474,10 @@ class XLMModel(XLMPreTrainedModel):
         input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
         token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
 
-        config = modeling.BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
+        config = modeling.XLMConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
             num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
 
-        model = modeling.BertModel(config=config)
+        model = modeling.XLMModel(config=config)
         all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
         ```
         """
@@ -1046,7 +1048,7 @@ class XLMModel(XLMPreTrainedModel):
                 0 for real tokens and 1 for padding.
             attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
                 but with 1 for real tokens and 0 for padding.
-                Added for easy compatibility with the BERT model (which uses this negative masking).
+                Added for easy compatibility with the XLM model (which uses this negative masking).
                 You can only uses one among `input_mask` and `attention_mask`
             mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
@@ -1106,7 +1108,7 @@ class XLMModel(XLMPreTrainedModel):
 
         # data mask: input mask & perm mask
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
-        "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+        "or attention_mask (uses 0 for padding, added for compatbility with XLM). Please choose one."
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - attention_mask
         if input_mask is not None and perm_mask is not None:
@@ -1262,12 +1264,8 @@ class XLMLMHeadModel(XLMPreTrainedModel):
     Inputs:
         inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
         token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-        input_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
+        attention_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
             0 for real tokens and 1 for padding.
-        attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
-            but with 1 for real tokens and 0 for padding.
-            Added for easy compatibility with the BERT model (which uses this negative masking).
-            You can only uses one among `input_mask` and `attention_mask`
         mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
             from previous batches. The length of the list equals n_layer.
             If None, no memory is used.
@@ -1340,10 +1338,6 @@ class XLMLMHeadModel(XLMPreTrainedModel):
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
             input_mask: float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
-            attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
-                but with 1 for real tokens and 0 for padding.
-                Added for easy compatibility with the BERT model (which uses this negative masking).
-                You can only uses one among `input_mask` and `attention_mask`
             mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
@@ -1440,7 +1434,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             0 for real tokens and 1 for padding.
         attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
             but with 1 for real tokens and 0 for padding.
-            Added for easy compatibility with the BERT model (which uses this negative masking).
+            Added for easy compatibility with the XLM model (which uses this negative masking).
             You can only uses one among `input_mask` and `attention_mask`
         mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
             from previous batches. The length of the list equals n_layer.
@@ -1515,7 +1509,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
                 0 for real tokens and 1 for padding.
             attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
                 but with 1 for real tokens and 0 for padding.
-                Added for easy compatibility with the BERT model (which uses this negative masking).
+                Added for easy compatibility with the XLM model (which uses this negative masking).
                 You can only uses one among `input_mask` and `attention_mask`
             mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
@@ -1582,7 +1576,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             a `sentence B` token (see XLM paper for more details).
         `attention_mask`: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
             but with 1 for real tokens and 0 for padding.
-            Added for easy compatibility with the BERT model (which uses this negative masking).
+            Added for easy compatibility with the XLM model (which uses this negative masking).
             You can only uses one among `input_mask` and `attention_mask`
         `input_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
