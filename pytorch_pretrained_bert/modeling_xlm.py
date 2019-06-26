@@ -36,7 +36,7 @@ from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path
-from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig
+from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
@@ -390,20 +390,18 @@ class BeamHypotheses(object):
             return self.worst_score >= best_sum_logprobs / self.max_len ** self.length_penalty
 
 
-class XLMPreTrainedModel(nn.Module):
+class XLMPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
-    def __init__(self, config, *inputs, **kwargs):
-        super(XLMPreTrainedModel, self).__init__()
-        if not isinstance(config, XLMBaseConfig):
-            raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `XLMBaseConfig`. "
-                "To create a model from a Google pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
-                    self.__class__.__name__, self.__class__.__name__
-                ))
-        self.config = config
+    config_class = XLMConfig
+    pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
+    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
+    load_tf_weights = None
+    base_model_prefix = "xlm"
+
+    def __init__(self, *inputs, **kwargs):
+        super(XLMPreTrainedModel, self).__init__(*inputs, **kwargs)
 
     def init_weights(self, module):
         """ Initialize the weights.
@@ -422,138 +420,6 @@ class XLMPreTrainedModel(nn.Module):
                 param.data.normal_(mean=0.0, std=self.config.initializer_range)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        """
-        Instantiate a XLMPreTrainedModel from a pre-trained model file or a pytorch state dict.
-        Download and cache the pre-trained model file if needed.
-
-        Params:
-            pretrained_model_name_or_path: either:
-                - a str with the name of a pre-trained model to load selected in the list of:
-                    . `xlnet-large-cased`
-                - a path or url to a pretrained model archive containing:
-                    . `config.json` a configuration file for the model
-                    . `pytorch_model.bin` a PyTorch dump of a XLMForPreTraining instance
-                - a path or url to a pretrained model archive containing:
-                    . `xlnet_config.json` a configuration file for the model
-                    . `model.chkpt` a TensorFlow checkpoint
-            cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-            state_dict: an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
-            *inputs, **kwargs: additional input for the specific XLM class
-                (ex: num_labels for XLMForSequenceClassification)
-        """
-        state_dict = kwargs.get('state_dict', None)
-        kwargs.pop('state_dict', None)
-        cache_dir = kwargs.get('cache_dir', None)
-        kwargs.pop('cache_dir', None)
-
-        if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
-            archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
-            config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-        else:
-            if from_tf:
-                # Directly load from a TensorFlow checkpoint
-                archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME)
-                config_file = os.path.join(pretrained_model_name_or_path, XLNET_CONFIG_NAME)
-            else:
-                archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
-                config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        # redirect to the cache, if necessary
-        try:
-            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained weights.".format(
-                        archive_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
-                        archive_file))
-            return None
-        try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_CONFIG_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                        config_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
-                        config_file))
-            return None
-        if resolved_archive_file == archive_file and resolved_config_file == config_file:
-            logger.info("loading weights file {}".format(archive_file))
-            logger.info("loading configuration file {}".format(config_file))
-        else:
-            logger.info("loading weights file {} from cache at {}".format(
-                archive_file, resolved_archive_file))
-            logger.info("loading configuration file {} from cache at {}".format(
-                config_file, resolved_config_file))
-
-        # Load config
-        config = XLMConfig.from_json_file(resolved_config_file)
-
-        # Update config with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
-        logger.info("Model config {}".format(config))
-
-        # Instantiate model.
-        model = cls(config, *inputs, **kwargs)
-        if state_dict is None and not from_tf:
-            state_dict = torch.load(resolved_archive_file, map_location='cpu')
-
-        # Load from a PyTorch state_dict
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
-        # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
-        state_dict = state_dict.copy()
-        if metadata is not None:
-            state_dict._metadata = metadata
-
-        def load(module, prefix=''):
-            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-            for name, child in module._modules.items():
-                if child is not None:
-                    load(child, prefix + name + '.')
-        start_prefix = ''
-        if not hasattr(model, 'transformer') and any(s.startswith('transformer') for s in state_dict.keys()):
-            start_prefix = 'transformer.'
-        load(model, prefix=start_prefix)
-        if len(missing_keys) > 0:
-            logger.info("Weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, missing_keys))
-        if len(unexpected_keys) > 0:
-            logger.info("Weights from pretrained model not used in {}: {}".format(
-                model.__class__.__name__, unexpected_keys))
-        if len(error_msgs) > 0:
-            raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                               model.__class__.__name__, "\n\t".join(error_msgs)))
-        if isinstance(model, XLMLMHeadModel):
-            model.tie_weights()  # make sure word embedding weights are still tied
-        return model
 
 
 class XLMModel(XLMPreTrainedModel):

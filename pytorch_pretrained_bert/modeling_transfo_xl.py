@@ -38,7 +38,7 @@ from torch.nn.parameter import Parameter
 from .modeling import BertLayerNorm as LayerNorm
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
 from .file_utils import cached_path
-from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig
+from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,6 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
 PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-config.json",
 }
-
-TF_WEIGHTS_NAME = 'model.ckpt'
 
 def build_tf_to_pytorch_map(model, config):
     """ A map of modules from TF to PyTorch.
@@ -787,28 +785,26 @@ class AdaptiveEmbedding(nn.Module):
         return embed
 
 
-class TransfoXLPreTrainedModel(nn.Module):
+class TransfoXLPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
-    def __init__(self, config, *inputs, **kwargs):
-        super(TransfoXLPreTrainedModel, self).__init__()
-        if not isinstance(config, TransfoXLConfig):
-            raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `TransfoXLConfig`. "
-                "To create a model from a pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
-                    self.__class__.__name__, self.__class__.__name__
-                ))
-        self.config = config
+    config_class = TransfoXLConfig
+    pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
+    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
+    load_tf_weights = load_tf_weights_in_transfo_xl
+    base_model_prefix = "transformer"
 
-    def init_weight(self, weight):
+    def __init__(self, *inputs, **kwargs):
+        super(TransfoXLPreTrainedModel, self).__init__(*inputs, **kwargs)
+
+    def _init_weight(self, weight):
         if self.config.init == 'uniform':
             nn.init.uniform_(weight, -self.config.init_range, self.config.init_range)
         elif self.config.init == 'normal':
             nn.init.normal_(weight, 0.0, self.config.init_std)
 
-    def init_bias(self, bias):
+    def _init_bias(self, bias):
         nn.init.constant_(bias, 0.0)
 
     def init_weights(self, m):
@@ -817,9 +813,9 @@ class TransfoXLPreTrainedModel(nn.Module):
         classname = m.__class__.__name__
         if classname.find('Linear') != -1:
             if hasattr(m, 'weight') and m.weight is not None:
-                self.init_weight(m.weight)
+                self._init_weight(m.weight)
             if hasattr(m, 'bias') and m.bias is not None:
-                self.init_bias(m.bias)
+                self._init_bias(m.bias)
         elif classname.find('AdaptiveEmbedding') != -1:
             if hasattr(m, 'emb_projs'):
                 for i in range(len(m.emb_projs)):
@@ -827,12 +823,12 @@ class TransfoXLPreTrainedModel(nn.Module):
                         nn.init.normal_(m.emb_projs[i], 0.0, self.config.proj_init_std)
         elif classname.find('Embedding') != -1:
             if hasattr(m, 'weight'):
-                self.init_weight(m.weight)
+                self._init_weight(m.weight)
         elif classname.find('ProjectedAdaptiveLogSoftmax') != -1:
             if hasattr(m, 'cluster_weight') and m.cluster_weight is not None:
-                self.init_weight(m.cluster_weight)
+                self._init_weight(m.cluster_weight)
             if hasattr(m, 'cluster_bias') and m.cluster_bias is not None:
-                self.init_bias(m.cluster_bias)
+                self._init_bias(m.cluster_bias)
             if hasattr(m, 'out_projs'):
                 for i in range(len(m.out_projs)):
                     if m.out_projs[i] is not None:
@@ -841,143 +837,19 @@ class TransfoXLPreTrainedModel(nn.Module):
             if hasattr(m, 'weight'):
                 nn.init.normal_(m.weight, 1.0, self.config.init_std)
             if hasattr(m, 'bias') and m.bias is not None:
-                self.init_bias(m.bias)
+                self._init_bias(m.bias)
         elif classname.find('TransformerLM') != -1:
             if hasattr(m, 'r_emb'):
-                self.init_weight(m.r_emb)
+                self._init_weight(m.r_emb)
             if hasattr(m, 'r_w_bias'):
-                self.init_weight(m.r_w_bias)
+                self._init_weight(m.r_w_bias)
             if hasattr(m, 'r_r_bias'):
-                self.init_weight(m.r_r_bias)
+                self._init_weight(m.r_r_bias)
             if hasattr(m, 'r_bias'):
-                self.init_bias(m.r_bias)
+                self._init_bias(m.r_bias)
 
     def set_num_special_tokens(self, num_special_tokens):
         pass
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        """
-        Instantiate a TransfoXLPreTrainedModel from a pre-trained model file or a pytorch state dict.
-        Download and cache the pre-trained model file if needed.
-
-        Params:
-            pretrained_model_name_or_path: either:
-                - a str with the name of a pre-trained model to load selected in the list of:
-                    . `transfo-xl-wt103`
-                - a path or url to a pretrained model archive containing:
-                    . `transfo_xl_config.json` a configuration file for the model
-                    . `pytorch_model.bin` a PyTorch dump of a TransfoXLModel instance
-                - a path or url to a pretrained model archive containing:
-                    . `transfo_xl_config.json` a configuration file for the model
-                    . `model.chkpt` a TensorFlow checkpoint
-            from_tf: should we load the weights from a locally saved TensorFlow checkpoint
-            cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-            state_dict: an optional state dictionnary (collections.OrderedDict object) to use instead of pre-trained models
-            *inputs, **kwargs: additional input for the specific TransformerXL class
-        """
-        state_dict = kwargs.get('state_dict', None)
-        kwargs.pop('state_dict', None)
-        cache_dir = kwargs.get('cache_dir', None)
-        kwargs.pop('cache_dir', None)
-        from_tf = kwargs.get('from_tf', False)
-        kwargs.pop('from_tf', None)
-
-        if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
-            archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
-            config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-        else:
-            archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
-            config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        # redirect to the cache, if necessary
-        try:
-            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained weights.".format(
-                        archive_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find file {} "
-                    "at this path or url.".format(
-                        pretrained_model_name_or_path, ", ".join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
-                        archive_file
-                    )
-                )
-            return None
-        try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_CONFIG_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                        config_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find file {} "
-                    "at this path or url.".format(
-                        pretrained_model_name_or_path, ", ".join(PRETRAINED_CONFIG_ARCHIVE_MAP.keys()), pretrained_model_name_or_path,
-                        config_file
-                    )
-                )
-            return None
-        if resolved_archive_file == archive_file and resolved_config_file == config_file:
-            logger.info("loading weights file {}".format(archive_file))
-            logger.info("loading configuration file {}".format(config_file))
-        else:
-            logger.info("loading weights file {} from cache at {}".format(
-                archive_file, resolved_archive_file))
-            logger.info("loading configuration file {} from cache at {}".format(
-                config_file, resolved_config_file))
-        # Load config
-        config = TransfoXLConfig.from_json_file(resolved_config_file)
-        logger.info("Model config {}".format(config))
-        # Instantiate model.
-        model = cls(config, *inputs, **kwargs)
-        if state_dict is None and not from_tf:
-            state_dict = torch.load(resolved_archive_file, map_location='cpu')
-        if from_tf:
-            # Directly load from a TensorFlow checkpoint
-            return load_tf_weights_in_transfo_xl(model, config, pretrained_model_name_or_path)
-
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
-        # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
-        state_dict = state_dict.copy()
-        if metadata is not None:
-            state_dict._metadata = metadata
-
-        def load(module, prefix=''):
-            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-            for name, child in module._modules.items():
-                if child is not None:
-                    load(child, prefix + name + '.')
-
-        start_prefix = ''
-        if not hasattr(model, 'transformer') and any(s.startswith('transformer.') for s in state_dict.keys()):
-            start_prefix = 'transformer.'
-        load(model, prefix=start_prefix)
-
-        if len(missing_keys) > 0:
-            logger.info("Weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, missing_keys))
-        if len(unexpected_keys) > 0:
-            logger.info("Weights from pretrained model not used in {}: {}".format(
-                model.__class__.__name__, unexpected_keys))
-        if len(error_msgs) > 0:
-            raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                               model.__class__.__name__, "\n\t".join(error_msgs)))
-        # Make sure we are still sharing the input and output embeddings
-        if hasattr(model, 'tie_weights'):
-            model.tie_weights()
-        return model
 
 
 class TransfoXLModel(TransfoXLPreTrainedModel):
