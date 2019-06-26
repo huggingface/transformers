@@ -313,7 +313,8 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
                     if args.local_rank in [-1, 0]:
-                        tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
+                        if not args.fp16:
+                            tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
                         tb_writer.add_scalar('loss', loss.item(), global_step)
 
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
