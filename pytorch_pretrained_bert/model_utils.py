@@ -21,6 +21,7 @@ import logging
 import os
 import json
 import copy
+from io import open
 
 import torch
 from torch import nn
