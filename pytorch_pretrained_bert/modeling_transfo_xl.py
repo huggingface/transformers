@@ -37,7 +37,8 @@ from torch.nn.parameter import Parameter
 
 from .modeling import BertLayerNorm as LayerNorm
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
-from .file_utils import cached_path, CONFIG_NAME, WEIGHTS_NAME
+from .file_utils import cached_path
+from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +179,11 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
     return model
 
 
-class TransfoXLConfig(object):
+class TransfoXLConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `TransfoXLModel`.
     """
+    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
+
     def __init__(self,
                  vocab_size_or_config_json_file=267735,
                  cutoffs=[20000, 40000, 200000],
@@ -284,38 +287,6 @@ class TransfoXLConfig(object):
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
-
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `TransfoXLConfig` from a Python dictionary of parameters."""
-        config = TransfoXLConfig(vocab_size_or_config_json_file=-1)
-        for key, value in json_object.items():
-            config.__dict__[key] = value
-        return config
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `TransfoXLConfig` from a json file of parameters."""
-        with open(json_file, "r", encoding='utf-8') as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-    def to_json_file(self, json_file_path):
-        """ Save this instance to a json file."""
-        with open(json_file_path, "w", encoding='utf-8') as writer:
-            writer.write(self.to_json_string())
 
 
 class PositionalEmbedding(nn.Module):

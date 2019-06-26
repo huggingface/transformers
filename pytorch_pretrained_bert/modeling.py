@@ -29,7 +29,8 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .file_utils import cached_path, WEIGHTS_NAME, CONFIG_NAME
+from .file_utils import cached_path
+from .model_utils import WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, prune_linear_layer
 
 logger = logging.getLogger(__name__)
 
@@ -65,30 +66,6 @@ PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 BERT_CONFIG_NAME = 'bert_config.json'
 TF_WEIGHTS_NAME = 'model.ckpt'
-
-def prune_linear_layer(layer, index, dim=0):
-    """ Prune a linear layer (a model parameters) to keep only entries in index.
-        Return the pruned layer as a new layer with requires_grad=True.
-        Used to remove heads.
-    """
-    index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
-    if layer.bias is not None:
-        if dim == 1:
-            b = layer.bias.clone().detach()
-        else:
-            b = layer.bias[index].clone().detach()
-    new_size = list(layer.weight.size())
-    new_size[dim] = len(index)
-    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
-    new_layer.weight.requires_grad = False
-    new_layer.weight.copy_(W.contiguous())
-    new_layer.weight.requires_grad = True
-    if layer.bias is not None:
-        new_layer.bias.requires_grad = False
-        new_layer.bias.copy_(b.contiguous())
-        new_layer.bias.requires_grad = True
-    return new_layer
 
 
 def load_tf_weights_in_bert(model, tf_checkpoint_path):
@@ -174,9 +151,11 @@ def swish(x):
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
 
-class BertConfig(object):
+class BertConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `BertModel`.
     """
+    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
+
     def __init__(self,
                  vocab_size_or_config_json_file,
                  hidden_size=768,
@@ -238,37 +217,6 @@ class BertConfig(object):
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
 
-    @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `BertConfig` from a Python dictionary of parameters."""
-        config = BertConfig(vocab_size_or_config_json_file=-1)
-        for key, value in json_object.items():
-            config.__dict__[key] = value
-        return config
-
-    @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `BertConfig` from a json file of parameters."""
-        with open(json_file, "r", encoding='utf-8') as reader:
-            text = reader.read()
-        return cls.from_dict(json.loads(text))
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-    def to_json_file(self, json_file_path):
-        """ Save this instance to a json file."""
-        with open(json_file_path, "w", encoding='utf-8') as writer:
-            writer.write(self.to_json_string())
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
