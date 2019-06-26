@@ -319,7 +319,8 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
                     if args.local_rank in [-1, 0] and (args.log_every <= 0 or (step + 1) % args.log_every == 0):
-                        tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
+                        if not args.fp16:
+                            tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
                         tb_writer.add_scalar('loss', loss.item(), global_step)
 
     ### Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
