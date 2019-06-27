@@ -17,7 +17,7 @@
     Adapted from https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/train.py
     It self adapted from https://github.com/openai/finetune-transformer-lm/blob/master/train.py
     Get ROC_STORIES dataset from here: https://github.com/snigdhac/StoryComprehension_EMNLP/tree/master/Dataset/RoCStories
-    
+
     This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset:
         python run_openai_gpt.py \
           --model_name openai-gpt \
@@ -27,7 +27,7 @@
           --eval_dataset $ROC_STORIES_DIR/test_spring2016.tsv\
           --output_dir ../log \
           --train_batch_size 16 \
-          
+
       Evaluation results should look something like the following:
         eval_accuracy = 0.874933190807055
         eval_loss = 0.38780492314925563
@@ -134,7 +134,7 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
-    
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print('{} is on use...'.format(device))
     n_gpu = torch.cuda.device_count()
@@ -153,7 +153,7 @@ def main():
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_name, special_tokens=special_tokens)
     special_tokens_ids = list(tokenizer.convert_tokens_to_ids(token) for token in special_tokens)
     # model = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_name, num_special_tokens=len(special_tokens))
-    model = GPT2DoubleHeadsModel.from_pretrained(args.model_name)
+    model = GPT2DoubleHeadsModel.from_pretrained(args.model_name, num_special_tokens=len(special_tokens))
 #     GPT2DoubleHeadsModel.set_num_special_tokens(model, len(special_tokens))
     model.to(device)
 
@@ -242,7 +242,7 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = GPT2DoubleHeadsModel.from_pretrained(args.output_dir)
-        tokenizer = OpenAIGPTTokenizer.from_pretrained(args.output_dir)
+        tokenizer = GPT2Tokenizer.from_pretrained(args.output_dir)
         model.to(device)
 
     if args.do_eval:
