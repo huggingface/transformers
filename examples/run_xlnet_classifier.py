@@ -67,6 +67,8 @@ def main():
                         help="The initial learning rate for Adam.")
     parser.add_argument("--num_train_epochs", default=3.0, type=float,
                         help="Total number of training epochs to perform.")
+    parser.add_argument("--max_steps", default=-1, type=int,
+                        help="If > 0 limit the number of training steps to perform, you should choose only one of num_train_epochs and max_steps.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. "
                              "E.g., 0.1 = 10%% of training.")
@@ -189,8 +191,7 @@ def main():
         model = torch.nn.DataParallel(model)
 
     global_step = 0
-    nb_tr_steps = 0
-    tr_loss = 0
+    curr_tr_loss, curr_steps = 0., 1
 
     if args.do_train:
         if args.local_rank in [-1, 0]:
@@ -229,12 +230,15 @@ def main():
 
         train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         if args.local_rank == -1:
-            train_sampler = RandomSampler(train_data)
+            train_sampler = SequentialSampler(train_data)  # RandomSampler(train_data)
         else:
             train_sampler = DistributedSampler(train_data)
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
-        num_train_optimization_steps = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+        if args.max_steps > 0:
+            num_train_optimization_steps = args.max_steps
+        else:
+            num_train_optimization_steps = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
         # Prepare optimizer
 
@@ -275,22 +279,16 @@ def main():
         logger.info("  Num steps = %d", num_train_optimization_steps)
 
         model.train()
-        for _ in trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]):
-            tr_loss = 0
-            nb_tr_examples, nb_tr_steps = 0, 0
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
+        for _ in trange(int(args.num_train_epochs) if args.max_steps <= 0 else int('Inf'),
+                        desc="Epoch", disable=args.local_rank not in [-1, 0]):
+            for step, batch in enumerate(tqdm(train_dataloader,
+                                              desc="Iteration",
+                                              disable=args.local_rank not in [-1, 0])):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, label_ids = batch
 
                 # define a new function to compute loss values for both output_modes
-                logits, _ = model(input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
-
-                if output_mode == "classification":
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
-                elif output_mode == "regression":
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1), label_ids.view(-1))
+                loss, _ = model(input_ids, token_type_ids=segment_ids, attention_mask=input_mask, labels=label_ids)
 
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
@@ -302,12 +300,10 @@ def main():
                 else:
                     loss.backward()
 
-                if args.clip_gradients > 0.0:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_gradients)
+                gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_gradients)
 
-                tr_loss += loss.item()
-                nb_tr_examples += input_ids.size(0)
-                nb_tr_steps += 1
+                curr_tr_loss += loss.item()
+                curr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     if args.fp16:
                         # modify learning rate with special warm up BERT uses
@@ -318,10 +314,19 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
-                    if args.local_rank in [-1, 0] and (args.log_every <= 0 or (step + 1) % args.log_every == 0):
-                        if not args.fp16:
-                            tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
-                        tb_writer.add_scalar('loss', loss.item(), global_step)
+                    if args.local_rank in [-1, 0] and (args.log_every <= 0 or (global_step + 1) % args.log_every == 0):
+                        learning_rate = optimizer.get_lr()[0] if not args.fp16 else lr_this_step
+                        logger.info("[{}] | gnorm {:.2f} lr {:8.6f} | loss {:.2f}".format(
+                            global_step, gnorm, learning_rate, curr_tr_loss / curr_steps))
+                        tb_writer.add_scalar('lr', learning_rate, global_step)
+                        tb_writer.add_scalar('loss', curr_tr_loss / curr_steps, global_step)
+                        curr_tr_loss, curr_steps = 0., 1
+
+                    if args.max_steps > 0 and global_step > args.max_steps:
+                        break
+
+            if args.max_steps > 0 and global_step > args.max_steps:
+                break
 
     ### Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     ### Example:
@@ -435,7 +440,7 @@ def main():
             preds = np.squeeze(preds)
         result = compute_metrics(task_name, preds, out_label_ids)
 
-        loss = tr_loss/global_step if args.do_train else None
+        loss = curr_tr_loss/curr_steps if args.do_train else None
 
         result['eval_loss'] = eval_loss
         result['global_step'] = global_step
@@ -508,7 +513,7 @@ def main():
             preds = np.argmax(preds, axis=1)
             result = compute_metrics(task_name, preds, out_label_ids)
 
-            loss = tr_loss/global_step if args.do_train else None
+            loss = curr_tr_loss/curr_steps if args.do_train else None
 
             result['eval_loss'] = eval_loss
             result['global_step'] = global_step
