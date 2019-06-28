@@ -919,9 +919,11 @@ class XLMModel(XLMPreTrainedModel):
 
 
 class XLMModel(XLMPreTrainedModel):
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False, output_hidden_states=False):
         super(XLMModel, self).__init__(config)
         self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
+
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
         self.d_model = config.d_model
@@ -1038,8 +1040,7 @@ class XLMModel(XLMPreTrainedModel):
         return pos_emb
 
     def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
-                mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                output_all_encoded_layers=True, head_mask=None):
+                mems=None, perm_mask=None, target_mapping=None, inp_q=None, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
@@ -1188,23 +1189,45 @@ class XLMModel(XLMPreTrainedModel):
             mems = [None] * len(self.layer)
 
         hidden_states = []
+        attentions = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
             new_mems.append(self.cache_mem(output_h, mems[i]))
+            # Save hidden_states
+            if output_g is None:
+                hidden_states.append(output_h)
+            else:
+                hidden_states.append((output_h, output_g))
 
             output_h, output_g = layer_module(output_h, output_g,
                                               attn_mask_h=non_tgt_mask, attn_mask_g=attn_mask,
                                               r=pos_emb, seg_mat=seg_mat,
                                               mems=mems[i], target_mapping=target_mapping,
                                               head_mask=head_mask)
+        # Save last hidden_state
+        if output_g is None:
             hidden_states.append(output_h)
+        else:
+            hidden_states.append((output_h, output_g))
+
+        # Select the right output and add dropout
         output = self.dropout(output_g if output_g is not None else output_h)
 
         # We transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = output.permute(1, 0, 2).contiguous()
-        hidden_states = [hs.permute(1, 0, 2).contiguous() for hs in hidden_states]
+        if output_g is None:
+            hidden_states = [hs.permute(1, 0, 2).contiguous() for hs in hidden_states]
+        else:
+            hidden_states = [h.permute(1, 0, 2).contiguous() for hs in hidden_states for h in hs]
 
-        return output, hidden_states, new_mems
+        # Build the list of outputs
+        outputs = [output, new_mems]
+        if self.output_attentions:
+            outputs.append(attentions)
+        if self.output_hidden_states:
+            outputs.append(hidden_states)
+
+        return outputs
 
 
 class XLMPredLayer(nn.Module):
@@ -1309,14 +1332,15 @@ class XLMLMHeadModel(XLMPreTrainedModel):
     all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False, output_hidden_states=False):
         super(XLMLMHeadModel, self).__init__(config)
         self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
+
         self.attn_type = config.attn_type
         self.same_length = config.same_length
 
-        self.transformer = XLMModel(config, output_attentions=output_attentions,
-                                              keep_multihead_output=keep_multihead_output)
+        self.transformer = XLMModel(config, output_attentions=output_attentions, output_hidden_states=output_hidden_states)
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
 
         # Tie weights
@@ -1331,7 +1355,7 @@ class XLMLMHeadModel(XLMPreTrainedModel):
 
     def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                labels=None, output_all_encoded_layers=True, head_mask=None):
+                labels=None, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
@@ -1358,33 +1382,28 @@ class XLMLMHeadModel(XLMPreTrainedModel):
             summary_type: str, "last", "first", "mean", or "attn". The method
                 to pool the input to get a vector representation.
         """
-        output, hidden_states, new_mems = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
-                                            mems, perm_mask, target_mapping, inp_q,
-                                            output_all_encoded_layers, head_mask)
+        transformer_outputs = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
+                                               mems, perm_mask, target_mapping, inp_q, head_mask)
 
+        output = transformer_outputs[0]
         logits = self.lm_loss(output)
+
+        outputs = transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         if labels is not None:
             # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(logits.view(-1, logits.size(-1)),
                             labels.view(-1))
-            return loss, new_mems
+            outputs = [loss] + outputs
 
-        # if self.output_attentions:
-        #     all_attentions, encoded_layers = encoded_layers
-        # sequence_output = encoded_layers[-1]
-        # pooled_output = self.pooler(sequence_output)
-        # if not output_all_encoded_layers:
-        #     encoded_layers = encoded_layers[-1]
-        # if self.output_attentions:
-        return logits, new_mems
-        #     return all_attentions, encoded_layers, pooled_output
+        outputs = [logits] + outputs
+
+        return outputs
 
 
 class XLMSequenceSummary(nn.Module):
-    def __init__(self, config, summary_type="last", use_proj=True,
-                 output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, summary_type="last", use_proj=True):
         super(XLMSequenceSummary, self).__init__()
         self.summary_type = summary_type
         if use_proj:
@@ -1481,26 +1500,23 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     ```
     """
     def __init__(self, config, summary_type="last", use_proj=True, num_labels=2,
-                 output_attentions=False, keep_multihead_output=False):
+                 output_attentions=False, output_hidden_states=False):
         super(XLMForSequenceClassification, self).__init__(config)
         self.output_attentions = output_attentions
-        self.attn_type = config.attn_type
-        self.same_length = config.same_length
+        self.output_hidden_states = output_hidden_states
+
         self.summary_type = summary_type
         self.num_labels = num_labels
 
-        self.transformer = XLMModel(config, output_attentions=output_attentions,
-                                              keep_multihead_output=keep_multihead_output)
+        self.transformer = XLMModel(config, output_attentions=output_attentions, output_hidden_states=output_hidden_states)
 
-        self.sequence_summary = XLMSequenceSummary(config, summary_type=summary_type,
-                                                     use_proj=use_proj, output_attentions=output_attentions,
-                                                     keep_multihead_output=keep_multihead_output)
+        self.sequence_summary = XLMSequenceSummary(config, summary_type=summary_type, use_proj=use_proj)
         self.logits_proj = nn.Linear(config.d_model, num_labels)
         self.apply(self.init_weights)
 
     def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                labels=None, output_all_encoded_layers=True, head_mask=None):
+                labels=None, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
@@ -1528,12 +1544,14 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
         """
-        output, _, new_mems = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
-                                               mems, perm_mask, target_mapping, inp_q,
-                                               output_all_encoded_layers, head_mask)
+        transformer_outputs = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
+                                               mems, perm_mask, target_mapping, inp_q, head_mask)
 
+        output = transformer_outputs[0]
         output = self.sequence_summary(output)
         logits = self.logits_proj(output)
+
+        outputs = transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         if labels is not None:
             if self.num_labels == 1:
@@ -1543,17 +1561,11 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            return loss, new_mems
+            outputs = [loss] + outputs
 
-        # if self.output_attentions:
-        #     all_attentions, encoded_layers = encoded_layers
-        # sequence_output = encoded_layers[-1]
-        # pooled_output = self.pooler(sequence_output)
-        # if not output_all_encoded_layers:
-        #     encoded_layers = encoded_layers[-1]
-        # if self.output_attentions:
-        return logits, new_mems
-        #     return all_attentions, encoded_layers, pooled_output
+        outputs = [logits] + outputs
+
+        return outputs
 
 
 class XLMForQuestionAnswering(XLMPreTrainedModel):
@@ -1612,26 +1624,29 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
     start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False, output_hidden_states=False):
         super(XLMForQuestionAnswering, self).__init__(config)
         self.output_attentions = output_attentions
-        self.transformer = XLMModel(config, output_attentions=output_attentions,
-                                      keep_multihead_output=keep_multihead_output)
+        self.output_hidden_states = output_hidden_states
+
+        self.transformer = XLMModel(config, output_attentions=output_attentions, output_hidden_states=output_hidden_states)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.apply(self.init_weights)
 
     def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                start_positions=None, end_positions=None,
-                output_all_encoded_layers=True, head_mask=None):
-        output, _, new_mems = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
-                                            mems, perm_mask, target_mapping, inp_q,
-                                            output_all_encoded_layers, head_mask)
+                start_positions=None, end_positions=None, head_mask=None):
 
+        transformer_outputs = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
+                                               mems, perm_mask, target_mapping, inp_q, head_mask)
+
+        output = transformer_outputs[0]
         logits = self.qa_outputs(output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
+
+        outputs = transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
@@ -1648,7 +1663,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-            return total_loss
-        elif self.output_attentions:
-            return all_attentions, start_logits, end_logits
-        return start_logits, end_logits
+            outputs = [total_loss] + outputs
+
+        outputs = [start_logits, end_logits] + outputs
+
+        return outputs

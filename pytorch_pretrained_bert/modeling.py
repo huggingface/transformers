@@ -270,15 +270,13 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False):
         super(BertSelfAttention, self).__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads))
         self.output_attentions = output_attentions
-        self.keep_multihead_output = keep_multihead_output
-        self.multihead_output = None
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -329,9 +327,9 @@ class BertSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        if self.output_attentions:
-            return attention_probs, context_layer
-        return context_layer
+
+        outputs = [context_layer, attention_probs] if self.output_attentions else [context_layer]
+        return outputs
 
 
 class BertSelfOutput(nn.Module):
@@ -349,11 +347,10 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False):
         super(BertAttention, self).__init__()
         self.output_attentions = output_attentions
-        self.self = BertSelfAttention(config, output_attentions=output_attentions,
-                                              keep_multihead_output=keep_multihead_output)
+        self.self = BertSelfAttention(config, output_attentions=output_attentions)
         self.output = BertSelfOutput(config)
 
     def prune_heads(self, heads):
@@ -374,13 +371,10 @@ class BertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
 
     def forward(self, input_tensor, attention_mask, head_mask=None):
-        self_output = self.self(input_tensor, attention_mask, head_mask)
-        if self.output_attentions:
-            attentions, self_output = self_output
-        attention_output = self.output(self_output, input_tensor)
-        if self.output_attentions:
-            return attentions, attention_output
-        return attention_output
+        self_outputs = self.self(input_tensor, attention_mask, head_mask)
+        attention_output = self.output(self_outputs[0], input_tensor)
+        outputs = [attention_output] + self_outputs[1:]  # add attentions if we output them
+        return outputs
 
 
 class BertIntermediate(nn.Module):
@@ -413,48 +407,52 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False):
         super(BertLayer, self).__init__()
         self.output_attentions = output_attentions
-        self.attention = BertAttention(config, output_attentions=output_attentions,
-                                               keep_multihead_output=keep_multihead_output)
+        self.attention = BertAttention(config, output_attentions=output_attentions)
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
-        attention_output = self.attention(hidden_states, attention_mask, head_mask)
-        if self.output_attentions:
-            attentions, attention_output = attention_output
-        intermediate_output = self.intermediate(attention_output)
+        attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
+        intermediate_output = self.intermediate(attention_outputs[0])
         layer_output = self.output(intermediate_output, attention_output)
-        if self.output_attentions:
-            return attentions, layer_output
-        return layer_output
+        outputs = [layer_output] + attention_outputs[1:]  # add attentions if we output them
+        return outputs
 
 
 class BertEncoder(nn.Module):
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False, output_hidden_states=False):
         super(BertEncoder, self).__init__()
         self.output_attentions = output_attentions
-        layer = BertLayer(config, output_attentions=output_attentions,
-                                  keep_multihead_output=keep_multihead_output)
+        self.output_hidden_states = output_hidden_states
+        layer = BertLayer(config, output_attentions=output_attentions)
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True, head_mask=None):
-        all_encoder_layers = []
+    def forward(self, hidden_states, attention_mask, head_mask=None):
+        all_hidden_states = []
         all_attentions = []
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask, head_mask[i])
+            if self.output_hidden_states:
+                all_hidden_states.append(hidden_states)
+
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i])
+            hidden_states = layer_outputs[0]
+
             if self.output_attentions:
-                attentions, hidden_states = hidden_states
-                all_attentions.append(attentions)
-            if output_all_encoded_layers:
-                all_encoder_layers.append(hidden_states)
-        if not output_all_encoded_layers:
-            all_encoder_layers.append(hidden_states)
+                all_attentions.append(layer_outputs[1])
+
+        # Add last layer
+        if self.output_hidden_states:
+            all_hidden_states.append(hidden_states)
+
+        outputs = [hidden_states]
+        if self.output_hidden_states:
+            outputs.append(all_hidden_states)
         if self.output_attentions:
-            return all_attentions, all_encoder_layers
-        return all_encoder_layers
+            outputs.append(all_attentions)
+        return outputs  # outputs, (hidden states), (attentions)
 
 
 class BertPooler(nn.Module):
@@ -617,12 +615,13 @@ class BertModel(BertPreTrainedModel):
     all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False, output_hidden_states=False):
         super(BertModel, self).__init__(config)
         self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config, output_attentions=output_attentions,
-                                           keep_multihead_output=keep_multihead_output)
+                                           output_hidden_states=output_hidden_states)
         self.pooler = BertPooler(config)
         self.apply(self.init_weights)
 
@@ -633,13 +632,7 @@ class BertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def get_multihead_outputs(self):
-        """ Gather all multi-head outputs.
-            Return: list (layers) of multihead module outputs with gradients
-        """
-        return [layer.attention.self.multihead_output for layer in self.encoder.layer]
-
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, output_all_encoded_layers=True, head_mask=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, head_mask=None):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
@@ -676,19 +669,14 @@ class BertModel(BertPreTrainedModel):
             head_mask = [None] * self.config.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids, token_type_ids)
-        encoded_layers = self.encoder(embedding_output,
-                                      extended_attention_mask,
-                                      output_all_encoded_layers=output_all_encoded_layers,
-                                      head_mask=head_mask)
-        if self.output_attentions:
-            all_attentions, encoded_layers = encoded_layers
-        sequence_output = encoded_layers[-1]
+        encoder_outputs = self.encoder(embedding_output,
+                                       extended_attention_mask,
+                                       head_mask=head_mask)
+        sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
-        if not output_all_encoded_layers:
-            encoded_layers = encoded_layers[-1]
-        if self.output_attentions:
-            return all_attentions, encoded_layers, pooled_output
-        return encoded_layers, pooled_output
+
+        outputs = [sequence_output, pooled_output] + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 
 class BertForPreTraining(BertPreTrainedModel):
@@ -746,32 +734,33 @@ class BertForPreTraining(BertPreTrainedModel):
     masked_lm_logits_scores, seq_relationship_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config, output_attentions=False, output_hidden_states=False):
         super(BertForPreTraining, self).__init__(config)
         self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
+
         self.bert = BertModel(config, output_attentions=output_attentions,
-                                      keep_multihead_output=keep_multihead_output)
+                                      output_hidden_states=output_hidden_states)
         self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
         self.apply(self.init_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, next_sentence_label=None, head_mask=None):
-        outputs = self.bert(input_ids, token_type_ids, attention_mask,
-                                                   output_all_encoded_layers=False, head_mask=head_mask)
-        if self.output_attentions:
-            all_attentions, sequence_output, pooled_output = outputs
-        else:
-            sequence_output, pooled_output = outputs
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None,
+                next_sentence_label=None, head_mask=None):
+        outputs = self.bert(input_ids, token_type_ids, attention_mask, head_mask=head_mask)
+
+        sequence_output, pooled_output = outputs[:2]
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
+
+        outputs = [prediction_scores, seq_relationship_score] + outputs[2:]  # add hidden states and attention if they are here
 
         if masked_lm_labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
-            return total_loss
-        elif self.output_attentions:
-            return all_attentions, prediction_scores, seq_relationship_score
-        return prediction_scores, seq_relationship_score
+            outputs = [total_loss] + outputs
+
+        return outputs  # (loss), prediction_scores, seq_relationship_score, (hidden_states), (attentions)
 
 
 class BertForMaskedLM(BertPreTrainedModel):
