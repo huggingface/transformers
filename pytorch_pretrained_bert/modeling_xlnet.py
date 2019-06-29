@@ -504,10 +504,10 @@ class XLNetRelativeAttention(nn.Module):
             output_h = self.post_attention(h, attn_vec)
             output_g = None
 
+        outputs = [output_h, output_g]
         if self.output_attentions:
-            return output_h, output_g, attn_prob
-
-        return output_h, output_g
+            outputs = outputs + [attn_prob]
+        return outputs
 
 class XLNetFeedForward(nn.Module):
     def __init__(self, config):
@@ -867,7 +867,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
             outputs = layer_module(output_h, output_g, attn_mask_h=non_tgt_mask, attn_mask_g=attn_mask,
                                    r=pos_emb, seg_mat=seg_mat, mems=mems[i], target_mapping=target_mapping,
-                                   head_mask=head_mask)
+                                   head_mask=head_mask[i])
             output_h, output_g = outputs[:2]
             if self.output_attentions:
                 attentions.append(outputs[2:])

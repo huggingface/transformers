@@ -134,26 +134,19 @@ class XLNetModelTest(unittest.TestCase):
             model = XLNetLMHeadModel(config)
             model.eval()
 
-            loss_1, mems_1a = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
-            all_logits_1, mems_1b = model(input_ids_1, token_type_ids=segment_ids)
+            loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
 
-            loss_2, mems_2a = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1a)
-            all_logits_2, mems_2b = model(input_ids_2, token_type_ids=segment_ids, mems=mems_1b)
+            loss_2, all_logits_2, mems_2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1)
 
-            logits, _ = model(input_ids_q,
-                                    perm_mask=perm_mask,
-                                    target_mapping=target_mapping,
-                                    inp_q=inp_q)
+            logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping, inp_q=inp_q)
 
             outputs = {
                 "loss_1": loss_1,
-                "mems_1a": mems_1a,
+                "mems_1": mems_1,
                 "all_logits_1": all_logits_1,
-                "mems_1b": mems_1b,
                 "loss_2": loss_2,
-                "mems_2a": mems_2a,
+                "mems_2": mems_2,
                 "all_logits_2": all_logits_2,
-                "mems_2b": mems_2b,
             }
             return outputs
 
@@ -165,14 +158,8 @@ class XLNetModelTest(unittest.TestCase):
                 list(result["all_logits_1"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_1a"]),
+                list(list(mem.size()) for mem in result["mems_1"]),
                 [[self.seq_length, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_1b"]),
-                [[self.seq_length, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_1a"]),
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_1b"]))
 
             self.parent.assertListEqual(
                 list(result["loss_2"].size()),
@@ -181,14 +168,8 @@ class XLNetModelTest(unittest.TestCase):
                 list(result["all_logits_2"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_2a"]),
+                list(list(mem.size()) for mem in result["mems_2"]),
                 [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_2b"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_2a"]),
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_2b"]))
 
     def test_default(self):
         self.run_tester(XLNetModelTest.XLNetModelTester(self))

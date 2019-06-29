@@ -320,9 +320,6 @@ class BertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
-        if self.keep_multihead_output:
-            self.multihead_output = context_layer
-            self.multihead_output.retain_grad()
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -416,7 +413,8 @@ class BertLayer(nn.Module):
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
         attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
-        intermediate_output = self.intermediate(attention_outputs[0])
+        attention_output = attention_outputs[0]
+        intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         outputs = [layer_output] + attention_outputs[1:]  # add attentions if we output them
         return outputs
@@ -571,8 +569,7 @@ class BertModel(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
@@ -688,8 +685,7 @@ class BertForPreTraining(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
@@ -770,8 +766,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
@@ -845,8 +840,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
@@ -919,8 +913,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
         `num_labels`: the number of classes for the classifier. Default = 2.
 
     Inputs:
@@ -1003,8 +996,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
         `num_choices`: the number of classes for the classifier. Default = 2.
 
     Inputs:
@@ -1085,8 +1077,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
         `num_labels`: the number of classes for the classifier. Default = 2.
 
     Inputs:
@@ -1170,8 +1161,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
-        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
-            This can be used to compute head importance metrics. Default: False
+        `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
