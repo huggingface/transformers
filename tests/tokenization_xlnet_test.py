@@ -15,10 +15,16 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import sys
 import unittest
 from io import open
 import shutil
 import pytest
+
+if sys.version_info[0] == 2:
+    import cPickle as pickle
+else:
+    import pickle
 
 from pytorch_pretrained_bert.tokenization_xlnet import (XLNetTokenizer,
                                                         PRETRAINED_VOCAB_ARCHIVE_MAP,
@@ -43,8 +49,6 @@ class XLNetTokenizationTest(unittest.TestCase):
         vocab_file, special_tokens_file = tokenizer.save_vocabulary(vocab_path)
         tokenizer = tokenizer.from_pretrained(vocab_path,
                                               keep_accents=True)
-        os.remove(vocab_file)
-        os.remove(special_tokens_file)
 
         tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
         self.assertListEqual(tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
@@ -64,6 +68,22 @@ class XLNetTokenizationTest(unittest.TestCase):
                                            SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
                                            SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's',
                                            u'<unk>', u'.'])
+
+        text = "Munich and Berlin are nice cities"
+        filename = u"/tmp/tokenizer.bin"
+
+        subwords = tokenizer.tokenize(text)
+
+        pickle.dump(tokenizer, open(filename, "wb"))
+
+        tokenizer_new = pickle.load(open(filename, "rb"))
+        subwords_loaded = tokenizer_new.tokenize(text)
+
+        self.assertListEqual(subwords, subwords_loaded)
+
+        os.remove(filename)
+        os.remove(vocab_file)
+        os.remove(special_tokens_file)
 
     @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
