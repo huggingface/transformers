@@ -487,9 +487,9 @@ class BertEncoder(nn.Module):
     def __init__(self, config, output_attentions=False, keep_multihead_output=False):
         super(BertEncoder, self).__init__()
         self.output_attentions = output_attentions
-        layer = BertLayer(config, output_attentions=output_attentions,
-                                  keep_multihead_output=keep_multihead_output)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BertLayer(config, output_attentions=output_attentions,
+                                              keep_multihead_output=keep_multihead_output) for _ in
+                                    range(config.num_hidden_layers)])
 
     def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True, head_mask=None):
         all_encoder_layers = []
