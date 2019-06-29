@@ -1094,8 +1094,7 @@ The optimizer accepts the following arguments:
     Can be `'warmup_linear'`, `'warmup_constant'`, `'warmup_cosine'`, `'none'`, `None` or a `_LRSchedule` object (see below).
     If `None` or `'none'`, learning rate is always kept constant.
     Default : `'warmup_linear'`
-- `b1` : Adams b1. Default : `0.9`
-- `b2` : Adams b2. Default : `0.999`
+- `betas` : Adams betas. Default : `0.9, 0.999`
 - `e` : Adams epsilon. Default : `1e-6`
 - `weight_decay:` Weight decay. Default : `0.01`
 - `max_grad_norm` : Maximum norm for the gradients (`-1` means no clipping). Default : `1.0`

@@ -30,16 +30,16 @@ class OpenAIAdam(Optimizer):
     """Implements Open AI version of Adam algorithm with weight decay fix.
     """
     def __init__(self, params, lr=required, schedule='warmup_linear', warmup=-1, t_total=-1,
-                 b1=0.9, b2=0.999, e=1e-8, weight_decay=0,
+                 betas=(0.9, 0.999), e=1e-8, weight_decay=0,
                  vector_l2=False, max_grad_norm=-1, **kwargs):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
         if not isinstance(schedule, _LRSchedule) and schedule not in SCHEDULES:
             raise ValueError("Invalid schedule parameter: {}".format(schedule))
-        if not 0.0 <= b1 < 1.0:
-            raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
-        if not 0.0 <= b2 < 1.0:
-            raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {} - should be in [0.0, 1.0[".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {} - should be in [0.0, 1.0[".format(betas[1]))
         if not e >= 0.0:
             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
         # initialize schedule object
@@ -51,7 +51,7 @@ class OpenAIAdam(Optimizer):
                 logger.warning("warmup and t_total on the optimizer are ineffective when _LRSchedule object is provided as schedule. "
                                "Please specify custom warmup and t_total in _LRSchedule object.")
         defaults = dict(lr=lr, schedule=schedule,
-                        b1=b1, b2=b2, e=e, weight_decay=weight_decay, vector_l2=vector_l2,
+                        betas=betas, e=e, weight_decay=weight_decay, vector_l2=vector_l2,
                         max_grad_norm=max_grad_norm)
         super(OpenAIAdam, self).__init__(params, defaults)
 
@@ -97,7 +97,7 @@ class OpenAIAdam(Optimizer):
                     state['exp_avg_sq'] = torch.zeros_like(p.data)
 
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                beta1, beta2 = group['b1'], group['b2']
+                beta1, beta2 = group['betas']
 
                 state['step'] += 1
 
