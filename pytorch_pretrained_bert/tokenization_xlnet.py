@@ -182,6 +182,21 @@ class XLNetTokenizer(object):
     def __len__(self):
         return len(self.encoder) + len(self.special_tokens)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                           "pip install sentencepiece")
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
+
     def set_special_tokens(self, special_tokens):
         """ Add a list of additional tokens to the encoder.
             The additional tokens are indexed starting from the last index of the
