@@ -143,6 +143,7 @@ def main():
                              "Positive power of 2: static loss scaling value.\n")
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument('--classes', type=int, default=2, help="specify total number of classes in the set")
     args = parser.parse_args()
 
     if args.server_ip and args.server_port:
@@ -198,7 +199,11 @@ def main():
     processor = processors[task_name]()
     output_mode = output_modes[task_name]
 
-    label_list = processor.get_labels()
+    label_list = []
+    if task_name == "multiclass":
+        label_list = processor.get_labels(args.classes)
+    else:
+        label_list = processor.get_labels()
     num_labels = len(label_list)
 
     if args.local_rank not in [-1, 0]:
