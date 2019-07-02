@@ -171,7 +171,7 @@ class MultiClassProcessor(DataProcessor):
         lbl = []
         for i in range(num):
             lbl.append(str(i))
-        return return lbl
+        return lbl
 
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
