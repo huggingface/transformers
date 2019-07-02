@@ -206,6 +206,18 @@ class OpenAIGPTConfig(PretrainedConfig):
     def total_tokens_embeddings(self):
         return self.vocab_size + self.n_special
 
+    @property
+    def hidden_size(self):
+        return self.n_embd
+
+    @property
+    def num_attention_heads(self):
+        return self.n_head
+
+    @property
+    def num_hidden_layers(self):
+        return self.n_layer
+
 
 class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
