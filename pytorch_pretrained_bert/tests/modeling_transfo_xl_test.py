@@ -28,6 +28,8 @@ import torch
 from pytorch_pretrained_bert import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
 from pytorch_pretrained_bert.modeling_transfo_xl import PRETRAINED_MODEL_ARCHIVE_MAP
 
+from .model_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
+
 class TransfoXLModelTest(unittest.TestCase):
     class TransfoXLModelTester(object):
 
@@ -41,54 +43,58 @@ class TransfoXLModelTest(unittest.TestCase):
                      use_labels=True,
                      vocab_size=99,
                      cutoffs=[10, 50, 80],
-                     d_model=32,
+                     hidden_size=32,
                      d_embed=32,
-                     n_head=4,
+                     num_attention_heads=4,
                      d_head=8,
                      d_inner=128,
                      div_val=2,
-                     n_layer=5,
+                     num_hidden_layers=5,
                      scope=None,
-                     seed=1):
+                     seed=1,
+                     all_model_classes=(TransfoXLModel, TransfoXLLMHeadModel),
+                     ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
             self.mem_len = mem_len
+            self.key_len = seq_length + mem_len
             self.clamp_len = clamp_len
             self.is_training = is_training
             self.use_labels = use_labels
             self.vocab_size = vocab_size
             self.cutoffs = cutoffs
-            self.d_model = d_model
+            self.hidden_size = hidden_size
             self.d_embed = d_embed
-            self.n_head = n_head
+            self.num_attention_heads = num_attention_heads
             self.d_head = d_head
             self.d_inner = d_inner
             self.div_val = div_val
-            self.n_layer = n_layer
+            self.num_hidden_layers = num_hidden_layers
             self.scope = scope
             self.seed = seed
+            self.all_model_classes = all_model_classes
 
         def prepare_config_and_inputs(self):
-            input_ids_1 = TransfoXLModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_ids_2 = TransfoXLModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids_2 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             lm_labels = None
             if self.use_labels:
-                lm_labels = TransfoXLModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+                lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = TransfoXLConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 cutoffs=self.cutoffs,
-                d_model=self.d_model,
+                d_model=self.hidden_size,
                 d_embed=self.d_embed,
-                n_head=self.n_head,
+                n_head=self.num_attention_heads,
                 d_head=self.d_head,
                 d_inner=self.d_inner,
                 div_val=self.div_val,
-                n_layer=self.n_layer)
+                n_layer=self.num_hidden_layers)
 
             return (config, input_ids_1, input_ids_2, lm_labels)
 
@@ -113,37 +119,34 @@ class TransfoXLModelTest(unittest.TestCase):
         def check_transfo_xl_model_output(self, result):
             self.parent.assertListEqual(
                 list(result["hidden_states_1"].size()),
-                [self.batch_size, self.seq_length, self.d_model])
+                [self.batch_size, self.seq_length, self.hidden_size])
             self.parent.assertListEqual(
                 list(result["hidden_states_2"].size()),
-                [self.batch_size, self.seq_length, self.d_model])
+                [self.batch_size, self.seq_length, self.hidden_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
 
         def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
             model = TransfoXLLMHeadModel(config)
             model.eval()
 
-            loss_1, mems_1a = model(input_ids_1, labels=lm_labels)
-            lm_logits_1, mems_1b = model(input_ids_1)
-
-            loss_2, mems_2a = model(input_ids_2, labels=lm_labels, mems=mems_1a)
-            lm_logits_2, mems_2b = model(input_ids_2, mems=mems_1b)
+            lm_logits_1, mems_1 = model(input_ids_1)
+            loss_1, _, mems_1 = model(input_ids_1, labels=lm_labels)
+            lm_logits_2, mems_2 = model(input_ids_2, mems=mems_1)
+            loss_2, _, mems_2 = model(input_ids_2, labels=lm_labels, mems=mems_1)
 
             outputs = {
                 "loss_1": loss_1,
-                "mems_1a": mems_1a,
+                "mems_1": mems_1,
                 "lm_logits_1": lm_logits_1,
-                "mems_1b": mems_1b,
                 "loss_2": loss_2,
-                "mems_2a": mems_2a,
+                "mems_2": mems_2,
                 "lm_logits_2": lm_logits_2,
-                "mems_2b": mems_2b,
             }
             return outputs
 
@@ -155,14 +158,8 @@ class TransfoXLModelTest(unittest.TestCase):
                 list(result["lm_logits_1"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_1a"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_1b"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_1a"]),
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_1b"]))
+                list(list(mem.size()) for mem in result["mems_1"]),
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
             self.parent.assertListEqual(
                 list(result["loss_2"].size()),
@@ -171,31 +168,19 @@ class TransfoXLModelTest(unittest.TestCase):
                 list(result["lm_logits_2"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_2a"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(list(mem.size()) for mem in result["mems_2b"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
-            self.parent.assertListEqual(
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_2a"]),
-                list(mem[~torch.isnan(mem)].sum() for mem in result["mems_2b"]))
+                list(list(mem.size()) for mem in result["mems_2"]),
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+
+        def create_and_check_transfo_xl_commons(self, config, input_ids_1, input_ids_2, lm_labels):
+            inputs_dict = {'input_ids': input_ids_1}
+            create_and_check_commons(self, config, inputs_dict)
 
     def test_default(self):
         self.run_tester(TransfoXLModelTest.TransfoXLModelTester(self))
 
-    def test_config_to_json_string(self):
-        config = TransfoXLConfig(vocab_size_or_config_json_file=96, d_embed=37)
-        obj = json.loads(config.to_json_string())
-        self.assertEqual(obj["n_token"], 96)
-        self.assertEqual(obj["d_embed"], 37)
-
-    def test_config_to_json_file(self):
-        config_first = TransfoXLConfig(vocab_size_or_config_json_file=96, d_embed=37)
-        json_file_path = "/tmp/config.json"
-        config_first.to_json_file(json_file_path)
-        config_second = TransfoXLConfig.from_json_file(json_file_path)
-        os.remove(json_file_path)
-        self.assertEqual(config_second.to_dict(), config_first.to_dict())
+    def test_config(self):
+        config_tester = ConfigTester(self, config_class=TransfoXLConfig, d_embed=37)
+        config_tester.run_common_tests()
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
@@ -209,28 +194,18 @@ class TransfoXLModelTest(unittest.TestCase):
         config_and_inputs = tester.prepare_config_and_inputs()
 
         tester.set_seed()
+        config_and_inputs = tester.prepare_config_and_inputs()
         output_result = tester.create_transfo_xl_model(*config_and_inputs)
         tester.check_transfo_xl_model_output(output_result)
 
         tester.set_seed()
+        config_and_inputs = tester.prepare_config_and_inputs()
         output_result = tester.create_transfo_xl_lm_head(*config_and_inputs)
         tester.check_transfo_xl_lm_head_output(output_result)
 
-    @classmethod
-    def ids_tensor(cls, shape, vocab_size, rng=None, name=None):
-        """Creates a random int32 tensor of the shape within the vocab size."""
-        if rng is None:
-            rng = random.Random()
-
-        total_dims = 1
-        for dim in shape:
-            total_dims *= dim
-
-        values = []
-        for _ in range(total_dims):
-            values.append(rng.randint(0, vocab_size - 1))
-
-        return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+        tester.set_seed()
+        config_and_inputs = tester.prepare_config_and_inputs()
+        tester.create_and_check_transfo_xl_commons(*config_and_inputs)
 
 
 if __name__ == "__main__":

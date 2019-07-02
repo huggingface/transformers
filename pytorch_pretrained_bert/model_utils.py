@@ -41,6 +41,12 @@ class PretrainedConfig(object):
     """
     pretrained_config_archive_map = {}
 
+    def __init__(self, **kwargs):
+        self.finetuning_task = kwargs.pop('finetuning_task', None)
+        self.num_labels = kwargs.pop('num_labels', 2)
+        self.output_attentions = kwargs.pop('output_attentions', False)
+        self.output_hidden_states = kwargs.pop('output_hidden_states', False)
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         """
@@ -114,6 +120,9 @@ class PretrainedConfig(object):
             text = reader.read()
         return cls.from_dict(json.loads(text))
 
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
     def __repr__(self):
         return str(self.to_json_string())
 
@@ -133,12 +142,11 @@ class PretrainedConfig(object):
 
 
 class PreTrainedModel(nn.Module):
-    """ An abstract class to handle weights initialization and
+    """ An abstract class to handle storing model config and
         a simple interface for dowloading and loading pretrained models.
     """
     config_class = PretrainedConfig
     pretrained_model_archive_map = {}
-    pretrained_config_archive_map = {}
     load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
 
@@ -151,7 +159,15 @@ class PreTrainedModel(nn.Module):
                 "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
                     self.__class__.__name__, self.__class__.__name__
                 ))
+        # Save config in model
         self.config = config
+
+    def prune_heads(self, heads_to_prune):
+        """ Prunes heads of the base model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """
+        model_to_prune = getattr(self, self.base_model_prefix, self)  # get the base model if needed
+        model_to_prune._prune_heads(heads_to_prune)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
@@ -175,24 +191,22 @@ class PreTrainedModel(nn.Module):
             *inputs, **kwargs: additional input for the specific XLNet class
                 (ex: num_labels for XLNetForSequenceClassification)
         """
-        state_dict = kwargs.get('state_dict', None)
-        kwargs.pop('state_dict', None)
-        cache_dir = kwargs.get('cache_dir', None)
-        kwargs.pop('cache_dir', None)
-        from_tf = kwargs.get('from_tf', False)
-        kwargs.pop('from_tf', None)
+        state_dict = kwargs.pop('state_dict', None)
+        cache_dir = kwargs.pop('cache_dir', None)
+        from_tf = kwargs.pop('from_tf', None)
 
+        # Load config
+        config = cls.config_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Load model
         if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
             archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            config_file = cls.pretrained_config_archive_map[pretrained_model_name_or_path]
         else:
             if from_tf:
                 # Directly load from a TensorFlow checkpoint
                 archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
-                config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
             else:
                 archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
-                config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         # redirect to the cache, if necessary
         try:
             resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
@@ -210,47 +224,15 @@ class PreTrainedModel(nn.Module):
                         ', '.join(cls.pretrained_model_archive_map.keys()),
                         archive_file))
             return None
-        try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                        config_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(cls.pretrained_config_archive_map.keys()),
-                        config_file))
-            return None
-        if resolved_archive_file == archive_file and resolved_config_file == config_file:
+        if resolved_archive_file == archive_file:
             logger.info("loading weights file {}".format(archive_file))
-            logger.info("loading configuration file {}".format(config_file))
         else:
             logger.info("loading weights file {} from cache at {}".format(
                 archive_file, resolved_archive_file))
-            logger.info("loading configuration file {} from cache at {}".format(
-                config_file, resolved_config_file))
-
-        # Load config
-        config = cls.config_class.from_json_file(resolved_config_file)
-
-        # Update config with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
-        logger.info("Model config {}".format(config))
 
         # Instantiate model.
-        model = cls(config, *inputs, **kwargs)
+        model = cls(config)
+
         if state_dict is None and not from_tf:
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
         if from_tf:
@@ -275,7 +257,7 @@ class PreTrainedModel(nn.Module):
                 if child is not None:
                     load(child, prefix + name + '.')
 
-        # Be able to load base models as well as derived models (with heads)
+        # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ''
         model_to_load = model
         if not hasattr(model, cls.base_model_prefix) and any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):

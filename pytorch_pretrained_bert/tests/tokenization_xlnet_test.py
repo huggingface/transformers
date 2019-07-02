@@ -30,9 +30,8 @@ from pytorch_pretrained_bert.tokenization_xlnet import (XLNetTokenizer,
                                                         PRETRAINED_VOCAB_ARCHIVE_MAP,
                                                         SPIECE_UNDERLINE)
 
-SAMPLE_VOCAB = os.path.join(os.path.dirname(
-                    os.path.dirname(os.path.abspath(__file__))),
-                    'samples/test_sentencepiece.model')
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                    'fixtures/test_sentencepiece.model')
 
 class XLNetTokenizationTest(unittest.TestCase):
 
