@@ -155,7 +155,7 @@ class BertConfig(PretrainedConfig):
     pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file,
+                 vocab_size_or_config_json_file=30522,
                  hidden_size=768,
                  num_hidden_layers=12,
                  num_attention_heads=12,
@@ -167,7 +167,7 @@ class BertConfig(PretrainedConfig):
                  type_vocab_size=2,
                  initializer_range=0.02,
                  layer_norm_eps=1e-12,
-                 finetuning_task=None):
+                 **kwargs):
         """Constructs BertConfig.
 
         Args:
@@ -192,8 +192,8 @@ class BertConfig(PretrainedConfig):
             initializer_range: The sttdev of the truncated_normal_initializer for
                 initializing all weight matrices.
             layer_norm_eps: The epsilon used by LayerNorm.
-            finetuning_task: name of the glue task on which the model was fine-tuned if any
         """
+        super(BertConfig, self).__init__(**kwargs)
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
                         and isinstance(vocab_size_or_config_json_file, unicode)):
             with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
@@ -213,7 +213,6 @@ class BertConfig(PretrainedConfig):
             self.type_vocab_size = type_vocab_size
             self.initializer_range = initializer_range
             self.layer_norm_eps = layer_norm_eps
-            self.finetuning_task = finetuning_task
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -270,13 +269,13 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
-    def __init__(self, config, output_attentions=False):
+    def __init__(self, config):
         super(BertSelfAttention, self).__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads))
-        self.output_attentions = output_attentions
+        self.output_attentions = config.output_attentions
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -344,10 +343,9 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    def __init__(self, config, output_attentions=False):
+    def __init__(self, config):
         super(BertAttention, self).__init__()
-        self.output_attentions = output_attentions
-        self.self = BertSelfAttention(config, output_attentions=output_attentions)
+        self.self = BertSelfAttention(config)
         self.output = BertSelfOutput(config)
 
     def prune_heads(self, heads):
@@ -404,10 +402,9 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
-    def __init__(self, config, output_attentions=False):
+    def __init__(self, config):
         super(BertLayer, self).__init__()
-        self.output_attentions = output_attentions
-        self.attention = BertAttention(config, output_attentions=output_attentions)
+        self.attention = BertAttention(config)
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
@@ -421,11 +418,11 @@ class BertLayer(nn.Module):
 
 
 class BertEncoder(nn.Module):
-    def __init__(self, config, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertEncoder, self).__init__()
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
-        layer = BertLayer(config, output_attentions=output_attentions)
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+        layer = BertLayer(config)
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
@@ -546,9 +543,6 @@ class BertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
 
-    def __init__(self, *inputs, **kwargs):
-        super(BertPreTrainedModel, self).__init__(*inputs, **kwargs)
-
     def init_weights(self, module):
         """ Initialize the weights.
         """
@@ -612,19 +606,19 @@ class BertModel(BertPreTrainedModel):
     all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertModel, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
+
         self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config, output_attentions=output_attentions,
-                                           output_hidden_states=output_hidden_states)
+        self.encoder = BertEncoder(config)
         self.pooler = BertPooler(config)
+
         self.apply(self.init_weights)
 
-    def prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
             heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+            See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -730,14 +724,12 @@ class BertForPreTraining(BertPreTrainedModel):
     masked_lm_logits_scores, seq_relationship_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForPreTraining, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
 
-        self.bert = BertModel(config, output_attentions=output_attentions,
-                                      output_hidden_states=output_hidden_states)
+        self.bert = BertModel(config)
         self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
+
         self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None,
@@ -809,13 +801,12 @@ class BertForMaskedLM(BertPreTrainedModel):
     masked_lm_logits_scores = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForMaskedLM, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
 
-        self.bert = BertModel(config, output_attentions=output_attentions )
+        self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config, self.bert.embeddings.word_embeddings.weight)
+
         self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, head_mask=None):
@@ -880,12 +871,10 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     seq_relationship_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForNextSentencePrediction, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
 
-        self.bert = BertModel(config, output_attentions=output_attentions)
+        self.bert = BertModel(config)
         self.cls = BertOnlyNSPHead(config)
 
         self.apply(self.init_weights)
@@ -954,15 +943,13 @@ class BertForSequenceClassification(BertPreTrainedModel):
     logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, num_labels=2, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForSequenceClassification, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
-        self.num_labels = num_labels
+        self.num_labels = config.num_labels
 
-        self.bert = BertModel(config, output_attentions=output_attentions)
+        self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, num_labels)
+        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
         self.apply(self.init_weights)
 
@@ -997,7 +984,6 @@ class BertForMultipleChoice(BertPreTrainedModel):
         `config`: a BertConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
         `output_hidden_states`: If True, also output hidden states computed by the model at each layer. Default: False
-        `num_choices`: the number of classes for the classifier. Default = 2.
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length]
@@ -1030,25 +1016,23 @@ class BertForMultipleChoice(BertPreTrainedModel):
     config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
         num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
 
-    num_choices = 2
-
-    model = BertForMultipleChoice(config, num_choices)
+    model = BertForMultipleChoice(config)
     logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, num_choices=2, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForMultipleChoice, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
-        self.num_choices = num_choices
 
-        self.bert = BertModel(config, output_attentions=output_attentions)
+        self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
+        """ Input shapes should be [bsz, num choices, seq length] """
+        num_choices = input_ids.shape[1]
+
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
@@ -1057,7 +1041,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, self.num_choices)
+        reshaped_logits = logits.view(-1, num_choices)
 
         outputs = [reshaped_logits] + outputs[2:]  # add hidden states and attention if they are here
 
@@ -1118,15 +1102,13 @@ class BertForTokenClassification(BertPreTrainedModel):
     logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, num_labels=2, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForTokenClassification, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
-        self.num_labels = num_labels
+        self.num_labels = config.num_labels
 
-        self.bert = BertModel(config, output_attentions=output_attentions)
+        self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.apply(self.init_weights)
 
@@ -1204,12 +1186,12 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, config, output_attentions=False, output_hidden_states=False):
+    def __init__(self, config):
         super(BertForQuestionAnswering, self).__init__(config)
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
-        self.bert = BertModel(config, output_attentions=output_attentions)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.apply(self.init_weights)
 

@@ -147,7 +147,8 @@ class OpenAIGPTConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        predict_special_tokens=True
+        predict_special_tokens=True,
+        **kwargs
     ):
         """Constructs OpenAIGPTConfig.
 
@@ -172,6 +173,8 @@ class OpenAIGPTConfig(PretrainedConfig):
                 initializing all weight matrices.
             predict_special_tokens: should we predict special tokens (when the model has a LM head)
         """
+        super(OpenAIGPTConfig, self).__init__(**kwargs)
+
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
                         and isinstance(vocab_size_or_config_json_file, unicode)):
             with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:
@@ -205,7 +208,7 @@ class OpenAIGPTConfig(PretrainedConfig):
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, nx, n_ctx, config, scale=False):
         super(Attention, self).__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -215,9 +218,7 @@ class Attention(nn.Module):
         self.split_size = n_state
         self.scale = scale
 
-        self.output_attentions = output_attentions
-        self.keep_multihead_output = keep_multihead_output
-        self.multihead_output = None
+        self.output_attentions = config.output_attentions
 
         self.c_attn = Conv1D(n_state * 3, nx)
         self.c_proj = Conv1D(n_state, nx)
@@ -256,9 +257,10 @@ class Attention(nn.Module):
         if head_mask is not None:
             w = w * head_mask
 
+        outputs = [torch.matmul(w, v)]
         if self.output_attentions:
-            return w, torch.matmul(w, v)
-        return torch.matmul(w, v)
+            outputs.append(w)
+        return outputs
 
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -280,19 +282,15 @@ class Attention(nn.Module):
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        a = self._attn(query, key, value, head_mask)
-        if self.keep_multihead_output:
-            self.multihead_output = a
-            self.multihead_output.retain_grad()
+        attn_outputs = self._attn(query, key, value, head_mask)
+        a = attn_outputs[0]
 
-        if self.output_attentions:
-            attentions, a = a
         a = self.merge_heads(a)
         a = self.c_proj(a)
         a = self.resid_dropout(a)
-        if self.output_attentions:
-            return attentions, a
-        return a
+
+        outputs = [a] + attn_outputs[1:]
+        return outputs  # a, (attentions)
 
 
 class MLP(nn.Module):
@@ -311,25 +309,24 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, scale=False, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, n_ctx, config, scale=False):
         super(Block, self).__init__()
         nx = config.n_embd
-        self.output_attentions = output_attentions
-        self.attn = Attention(nx, n_ctx, config, scale, output_attentions, keep_multihead_output)
+        self.attn = Attention(nx, n_ctx, config, scale)
         self.ln_1 = LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = LayerNorm(nx, eps=config.layer_norm_epsilon)
 
     def forward(self, x, head_mask=None):
-        a = self.attn(x, head_mask=head_mask)
-        if self.output_attentions:
-            attentions, a = a
+        attn_outputs = self.attn(x, head_mask=head_mask)
+        a = attn_outputs[0]
+
         n = self.ln_1(x + a)
         m = self.mlp(n)
         h = self.ln_2(n + m)
-        if self.output_attentions:
-            return attentions, h
-        return h
+
+        outputs = [h] + attn_outputs[1:]
+        return outputs
 
 
 class OpenAIGPTLMHead(nn.Module):
@@ -368,11 +365,16 @@ class OpenAIGPTMultipleChoiceHead(nn.Module):
         nn.init.normal_(self.linear.weight, std=0.02)
         nn.init.normal_(self.linear.bias, 0)
 
-    def forward(self, hidden_states, mc_token_ids):
-        # Classification logits
-        # hidden_state (bsz, num_choices, seq_length, hidden_size)
-        # mc_token_ids (bsz, num_choices)
-        mc_token_ids = mc_token_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, hidden_states.size(-1))
+    def forward(self, hidden_states, mc_token_ids=None):
+        """ Extract classification token hidden state and project it using self.linear
+            hidden_state: hidden state of shape (bsz, num_choices, seq_length, hidden_size)
+            mc_token_ids: [optional] index of the classification token, shape (bsz, num_choices)
+            if mc_token_ids=None we take the last token of the sequence as classification token
+        """
+        if mc_token_ids is None:
+            mc_token_ids = torch.full_like(hidden_states[:, :, :1, :], hidden_states.shape[2] - 1, dtype=torch.long)
+        else:
+            mc_token_ids = mc_token_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, hidden_states.size(-1))
         # (bsz, num_choices, 1, hidden_size)
         multiple_choice_h = hidden_states.gather(2, mc_token_ids).squeeze(2)
         # (bsz, num_choices, hidden_size)
@@ -388,12 +390,8 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     """
     config_class = OpenAIGPTConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
-    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
-
-    def __init__(self, *inputs, **kwargs):
-        super(OpenAIGPTPreTrainedModel, self).__init__(*inputs, **kwargs)
 
     def init_weights(self, module):
         """ Initialize the weights.
@@ -495,14 +493,15 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     ```
     """
 
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config):
         super(OpenAIGPTModel, self).__init__(config)
-        self.output_attentions = output_attentions
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+
         self.tokens_embed = nn.Embedding(config.total_tokens_embeddings, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
-        block = Block(config.n_ctx, config, scale=True, output_attentions=output_attentions,
-                                                        keep_multihead_output=keep_multihead_output)
+        block = Block(config.n_ctx, config, scale=True)
         self.h = nn.ModuleList([copy.deepcopy(block) for _ in range(config.n_layer)])
 
         self.apply(self.init_weights)
@@ -521,18 +520,12 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         # Copy word embeddings from the previous weights
         self.tokens_embed.weight.data[:self.config.vocab_size, :] = old_embed.weight.data[:self.config.vocab_size, :]
 
-    def prune_heads(self, heads_to_prune):
+    def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
             heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
-
-    def get_multihead_outputs(self):
-        """ Gather all multi-head outputs.
-            Return: list (layers) of multihead module outputs with gradients
-        """
-        return [h.attn.multihead_output for h in self.h]
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, head_mask=None):
         if position_ids is None:
@@ -574,19 +567,26 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         output_shape = input_shape + (hidden_states.size(-1),)
 
         all_attentions = []
-        all_hidden_states = [hidden_states.view(*output_shape)]
+        all_hidden_states = []
         for i, block in enumerate(self.h):
+            if self.output_hidden_states:
+                all_hidden_states.append(hidden_states.view(*output_shape))
+
             outputs = block(hidden_states, head_mask[i])
+            hidden_states = outputs[0]
             if self.output_attentions:
-                attentions, hidden_states = outputs
-                all_attentions.append(attentions)
-            else:
-                hidden_states = outputs
+                all_attentions.append(outputs[1])
+
+        # Add last layer
+        if self.output_hidden_states:
             all_hidden_states.append(hidden_states.view(*output_shape))
 
+        outputs = [hidden_states.view(*output_shape)]
+        if self.output_hidden_states:
+            outputs.append(all_hidden_states)
         if self.output_attentions:
-            return all_attentions, all_hidden_states
-        return all_hidden_states
+            outputs.append(all_attentions)
+        return outputs  # last hidden state, (all hidden states), (all attentions)
 
 
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
@@ -650,10 +650,9 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     ```
     """
 
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config):
         super(OpenAIGPTLMHeadModel, self).__init__(config)
-        self.transformer = OpenAIGPTModel(config, output_attentions=output_attentions,
-                                             keep_multihead_output=keep_multihead_output)
+        self.transformer = OpenAIGPTModel(config)
         self.lm_head = OpenAIGPTLMHead(self.transformer.tokens_embed.weight, config)
         self.apply(self.init_weights)
 
@@ -666,12 +665,11 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         self.lm_head.set_embeddings_weights(self.transformer.tokens_embed.weight, predict_special_tokens=predict_special_tokens)
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, head_mask=None):
-        hidden_states = self.transformer(input_ids, position_ids, token_type_ids, head_mask)
-        if self.transformer.output_attentions:
-            all_attentions, hidden_states = hidden_states
-        hidden_states = hidden_states[-1]
-
+        transformer_outputs = self.transformer(input_ids, position_ids, token_type_ids, head_mask)
+        hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
+
+        outputs = [lm_logits] + transformer_outputs[1:]
         if lm_labels is not None:
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
@@ -680,10 +678,9 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
-            return loss
-        if self.transformer.output_attentions:
-            return all_attentions, lm_logits
-        return lm_logits
+            outputs = [loss] + outputs
+
+        return outputs  # (loss), lm_logits, (all hidden states), (all attentions)
 
 
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
@@ -752,10 +749,9 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     ```
     """
 
-    def __init__(self, config, output_attentions=False, keep_multihead_output=False):
+    def __init__(self, config):
         super(OpenAIGPTDoubleHeadsModel, self).__init__(config)
-        self.transformer = OpenAIGPTModel(config, output_attentions=output_attentions,
-                                             keep_multihead_output=keep_multihead_output)
+        self.transformer = OpenAIGPTModel(config)
         self.lm_head = OpenAIGPTLMHead(self.transformer.tokens_embed.weight, config)
         self.multiple_choice_head = OpenAIGPTMultipleChoiceHead(config)
         self.apply(self.init_weights)
@@ -768,26 +764,26 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         self.transformer.set_num_special_tokens(num_special_tokens)
         self.lm_head.set_embeddings_weights(self.transformer.tokens_embed.weight, predict_special_tokens=predict_special_tokens)
 
-    def forward(self, input_ids, mc_token_ids, lm_labels=None, mc_labels=None, token_type_ids=None,
+    def forward(self, input_ids, mc_token_ids=None, lm_labels=None, mc_labels=None, token_type_ids=None,
                 position_ids=None, head_mask=None):
-        hidden_states = self.transformer(input_ids, position_ids, token_type_ids, head_mask)
-        if self.transformer.output_attentions:
-            all_attentions, hidden_states = hidden_states
-        hidden_states = hidden_states[-1]
+        transformer_outputs = self.transformer(input_ids, position_ids, token_type_ids, head_mask)
+        hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
-        losses = []
+
+        outputs = [lm_logits, mc_logits] + transformer_outputs[1:]
+        if mc_labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)),
+                            mc_labels.view(-1))
+            outputs = [loss] + outputs
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            losses.append(loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)))
-        if mc_labels is not None:
-            loss_fct = CrossEntropyLoss()
-            losses.append(loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1)))
-        if losses:
-            return losses
-        if self.transformer.output_attentions:
-            return all_attentions, lm_logits, mc_logits
-        return lm_logits, mc_logits
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
+                            shift_labels.view(-1))
+            outputs = [loss] + outputs
+
+        return outputs  # (lm loss), (mc loss), lm logits, mc logits, (all hidden_states), (attentions)

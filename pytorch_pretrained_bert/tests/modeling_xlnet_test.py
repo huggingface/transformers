@@ -25,8 +25,10 @@ import pytest
 
 import torch
 
-from pytorch_pretrained_bert import (XLNetConfig, XLNetModel, XLNetLMHeadModel)
+from pytorch_pretrained_bert import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering)
 from pytorch_pretrained_bert.modeling_xlnet import PRETRAINED_MODEL_ARCHIVE_MAP
+
+from .model_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
 
 class XLNetModelTest(unittest.TestCase):
     class XLNetModelTester(object):
@@ -42,43 +44,48 @@ class XLNetModelTest(unittest.TestCase):
                      use_labels=True,
                      vocab_size=99,
                      cutoffs=[10, 50, 80],
-                     d_model=32,
-                     n_head=4,
+                     hidden_size=32,
+                     num_attention_heads=4,
                      d_inner=128,
-                     n_layer=5,
+                     num_hidden_layers=5,
                      max_position_embeddings=10,
                      untie_r=True,
                      bi_data=False,
                      same_length=False,
                      seed=1,
-                     type_vocab_size=2):
+                     type_vocab_size=2,
+                     all_model_classes=(XLNetModel, XLNetLMHeadModel,
+                                        XLNetForSequenceClassification, XLNetForQuestionAnswering),
+            ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
             self.mem_len = mem_len
+            # self.key_len = seq_length + mem_len
             self.clamp_len = clamp_len
             self.reuse_len = reuse_len
             self.is_training = is_training
             self.use_labels = use_labels
             self.vocab_size = vocab_size
             self.cutoffs = cutoffs
-            self.d_model = d_model
-            self.n_head = n_head
+            self.hidden_size = hidden_size
+            self.num_attention_heads = num_attention_heads
             self.d_inner = d_inner
-            self.n_layer = n_layer
+            self.num_hidden_layers = num_hidden_layers
             self.max_position_embeddings = max_position_embeddings
             self.bi_data = bi_data
             self.untie_r = untie_r
             self.same_length = same_length
             self.seed = seed
             self.type_vocab_size = type_vocab_size
+            self.all_model_classes = all_model_classes
 
         def prepare_config_and_inputs(self):
-            input_ids_1 = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_ids_2 = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            segment_ids = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids_2 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            segment_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
-            input_ids_q = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
+            input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
             perm_mask = torch.zeros(self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float)
             perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
             target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float)
@@ -89,8 +96,8 @@ class XLNetModelTest(unittest.TestCase):
             # token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
             # input_mask: float32 Tensor in shape [bsz, len], the input mask.
             #     0 for real tokens and 1 for padding.
-            # mems: a list of float32 Tensors in shape [bsz, mem_len, d_model], memory
-            #     from previous batches. The length of the list equals n_layer.
+            # mems: a list of float32 Tensors in shape [bsz, mem_len, hidden_size], memory
+            #     from previous batches. The length of the list equals num_hidden_layers.
             #     If None, no memory is used.
             # perm_mask: float32 Tensor in shape [bsz, len, len].
             #     If perm_mask[k, i, j] = 0, i attend to j in batch k;
@@ -108,14 +115,14 @@ class XLNetModelTest(unittest.TestCase):
 
             lm_labels = None
             if self.use_labels:
-                lm_labels = XLNetModelTest.ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+                lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = XLNetConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
-                d_model=self.d_model,
-                n_head=self.n_head,
+                d_model=self.hidden_size,
+                n_head=self.num_attention_heads,
                 d_inner=self.d_inner,
-                n_layer=self.n_layer,
+                n_layer=self.num_hidden_layers,
                 untie_r=self.untie_r,
                 max_position_embeddings=self.max_position_embeddings,
                 mem_len=self.mem_len,
@@ -159,7 +166,7 @@ class XLNetModelTest(unittest.TestCase):
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.d_model]] * self.n_layer)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
             self.parent.assertListEqual(
                 list(result["loss_2"].size()),
@@ -169,24 +176,18 @@ class XLNetModelTest(unittest.TestCase):
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.d_model]] * self.n_layer)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+
+        def create_and_check_xlnet_commons(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels):
+            inputs_dict = {'input_ids': input_ids_1}
+            create_and_check_commons(self, config, inputs_dict)
 
     def test_default(self):
         self.run_tester(XLNetModelTest.XLNetModelTester(self))
 
-    def test_config_to_json_string(self):
-        config = XLNetConfig(vocab_size_or_config_json_file=96, d_model=16*4)
-        obj = json.loads(config.to_json_string())
-        self.assertEqual(obj["n_token"], 96)
-        self.assertEqual(obj["d_model"], 16*4)
-
-    def test_config_to_json_file(self):
-        config_first = XLNetConfig(vocab_size_or_config_json_file=96, d_model=16*4)
-        json_file_path = "/tmp/config.json"
-        config_first.to_json_file(json_file_path)
-        config_second = XLNetConfig.from_json_file(json_file_path)
-        os.remove(json_file_path)
-        self.assertEqual(config_second.to_dict(), config_first.to_dict())
+    def test_config(self):
+        config_tester = ConfigTester(self, config_class=XLNetConfig, d_inner=37)
+        config_tester.run_common_tests()
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
@@ -197,27 +198,14 @@ class XLNetModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
 
     def run_tester(self, tester):
-        config_and_inputs = tester.prepare_config_and_inputs()
-
         tester.set_seed()
+        config_and_inputs = tester.prepare_config_and_inputs()
         output_result = tester.create_transfo_xl_lm_head(*config_and_inputs)
         tester.check_transfo_xl_lm_head_output(output_result)
 
-    @classmethod
-    def ids_tensor(cls, shape, vocab_size, rng=None, name=None):
-        """Creates a random int32 tensor of the shape within the vocab size."""
-        if rng is None:
-            rng = random.Random()
-
-        total_dims = 1
-        for dim in shape:
-            total_dims *= dim
-
-        values = []
-        for _ in range(total_dims):
-            values.append(rng.randint(0, vocab_size - 1))
-
-        return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+        tester.set_seed()
+        config_and_inputs = tester.prepare_config_and_inputs()
+        tester.create_and_check_xlnet_commons(*config_and_inputs)
 
     @classmethod
     def mask_tensor(cls, shape, vocab_size, rng=None, name=None):
