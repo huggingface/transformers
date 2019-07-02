@@ -52,6 +52,7 @@ class XLNetModelTest(unittest.TestCase):
                      untie_r=True,
                      bi_data=False,
                      same_length=False,
+                     initializer_range=0.05,
                      seed=1,
                      type_vocab_size=2,
                      all_model_classes=(XLNetModel, XLNetLMHeadModel,
@@ -76,6 +77,7 @@ class XLNetModelTest(unittest.TestCase):
             self.bi_data = bi_data
             self.untie_r = untie_r
             self.same_length = same_length
+            self.initializer_range = initializer_range
             self.seed = seed
             self.type_vocab_size = type_vocab_size
             self.all_model_classes = all_model_classes
@@ -129,7 +131,8 @@ class XLNetModelTest(unittest.TestCase):
                 clamp_len=self.clamp_len,
                 same_length=self.same_length,
                 reuse_len=self.reuse_len,
-                bi_data=self.bi_data)
+                bi_data=self.bi_data,
+                initializer_range=self.initializer_range)
 
             return (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels)
 
@@ -180,7 +183,7 @@ class XLNetModelTest(unittest.TestCase):
 
         def create_and_check_xlnet_commons(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels):
             inputs_dict = {'input_ids': input_ids_1}
-            create_and_check_commons(self, config, inputs_dict)
+            create_and_check_commons(self, config, inputs_dict, test_pruning=False)
 
     def test_default(self):
         self.run_tester(XLNetModelTest.XLNetModelTester(self))

@@ -28,9 +28,7 @@ import torch
 from pytorch_pretrained_bert import (OpenAIGPTConfig, OpenAIGPTModel,
                                      OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
 
-from .model_tests_commons import (create_and_check_for_attentions, create_and_check_for_head_pruning,
-                                  create_and_check_for_headmasking, create_and_check_for_hidden_states,
-                                  ConfigTester, GPTModelTester)
+from .model_tests_commons import (create_and_check_commons, ConfigTester, GPTModelTester)
 
 class OpenAIModelTest(unittest.TestCase):
 

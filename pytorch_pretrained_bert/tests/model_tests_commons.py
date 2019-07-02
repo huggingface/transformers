@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import copy
 import os
 import shutil
 import json
@@ -23,87 +24,84 @@ import random
 
 import torch
 
-def create_and_check_for_headmasking(tester, model_classes, config, inputs_dict):
-    for model_class in model_classes:
-        config.output_hidden_states = True
-        model = model_class(config=config)
-        model.eval()
-        head_mask = torch.zeros(tester.num_hidden_layers, tester.num_attention_heads)
-        # Set that after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior) 
-        head_mask.requires_grad_(requires_grad=True)
-        outputs = model(**inputs_dict, head_mask=head_mask)
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if '_range' in key or '_std' in key:
+            setattr(configs_no_init, key, 0.0)
+    return configs_no_init
 
-        # Compute some gradients
+def _create_and_check_initialization(tester, model_classes, config, inputs_dict):
+    configs_no_init = _config_zero_init(config)
+    for model_class in model_classes:
+        model = model_class(config=configs_no_init)
+        for name, param in model.named_parameters():
+            tester.parent.assertIn(param.data.mean().item(), [0.0, 1.0], msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
+
+def _create_and_check_for_headmasking(tester, model_classes, config, inputs_dict):
+    configs_no_init = _config_zero_init(config)
+    for model_class in model_classes:
+        config.output_attentions = True
+        config.output_hidden_states = True
+        model = model_class(config=configs_no_init)
+        model.eval()
+
+        # Prepare head_mask
+        # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior) 
+        head_mask = torch.ones(tester.num_hidden_layers, tester.num_attention_heads)
+        head_mask[0, 0] = 0
+        head_mask[-1, :-1] = 0
+        head_mask.requires_grad_(requires_grad=True)
+        inputs = inputs_dict.copy()
+        inputs['head_mask'] = head_mask
+
+        outputs = model(**inputs)
+
+        # Test that we can get a gradient back for importance score computation
         output = sum(t.sum() for t in outputs[0])
         output = output.sum()
         output.backward()
         multihead_outputs = head_mask.grad
 
+        attentions = outputs[-1]
+        hidden_states = outputs[-2]
+
+        tester.parent.assertIsNotNone(multihead_outputs)
         tester.parent.assertEqual(len(multihead_outputs), tester.num_hidden_layers)
-        # self.parent.assertListEqual(
-        #     list(multihead_outputs[0].size()),
-        #     [self.batch_size, self.num_attention_heads,
-        #      self.seq_length, self.hidden_size // self.num_attention_heads])
-        # self.parent.assertEqual(
-        #     len(multihead_outputs[0][:, 1:(self.num_attention_heads-1), :, :].nonzero()),
-        #     0)
-        # self.parent.assertEqual(
-        #     len(multihead_outputs[0][:, 0, :, :].nonzero()),
-        #     self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
-        # self.parent.assertEqual(
-        #     len(multihead_outputs[0][:, self.num_attention_heads-1, :, :].nonzero()),
-        #     self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
-
-        # self.parent.assertListEqual(
-        #     list(multihead_outputs[1].size()),
-        #     [self.batch_size, self.num_attention_heads,
-        #      self.seq_length, self.hidden_size // self.num_attention_heads])
-        # self.parent.assertEqual(
-        #     len(multihead_outputs[1].nonzero()),
-        #     multihead_outputs[1].numel())
-
-        # self.parent.assertListEqual(
-        #     list(multihead_outputs[-1].size()),
-        #     [self.batch_size, self.num_attention_heads,
-        #      self.seq_length, self.hidden_size // self.num_attention_heads])
-        # self.parent.assertEqual(
-        #     len(multihead_outputs[-1][:, 1:, :, :].nonzero()),
-        #     0)
-        # self.parent.assertEqual(
-        #     len(multihead_outputs[-1][:, 0, :, :].nonzero()),
-        #     self.batch_size * self.seq_length * self.hidden_size // self.num_attention_heads)
+        tester.parent.assertAlmostEqual(
+            attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
+        tester.parent.assertNotEqual(
+            attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
+        tester.parent.assertNotEqual(
+            attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+        tester.parent.assertAlmostEqual(
+            attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
+        tester.parent.assertNotEqual(
+            attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
 
 
-def create_and_check_for_head_pruning(tester, model_classes, config, inputs_dict):
+def _create_and_check_for_head_pruning(tester, model_classes, config, inputs_dict):
     for model_class in model_classes:
+        config.output_attentions = True
+        config.output_hidden_states = False
         model = model_class(config=config)
         model.eval()
         heads_to_prune = {0: list(range(1, tester.num_attention_heads)),
-                            -1: [0]}
+                          -1: [0]}
         model.prune_heads(heads_to_prune)
         outputs = model(**inputs_dict)
 
-        # output = sum(t.sum() for t in outputs[0])
-        # output = output.sum()
-        # output.backward()
-        # multihead_outputs = bert_model.get_multihead_outputs()
+        attentions = outputs[-1]
 
-        # self.parent.assertEqual(len(multihead_outputs), self.num_hidden_layers)
-        # self.parent.assertListEqual(
-        #     list(multihead_outputs[0].size()),
-        #     [self.batch_size, 1,
-        #      self.seq_length, self.hidden_size // self.num_attention_heads])
-        # self.parent.assertListEqual(
-        #     list(multihead_outputs[1].size()),
-        #     [self.batch_size, self.num_attention_heads,
-        #      self.seq_length, self.hidden_size // self.num_attention_heads])
-        # self.parent.assertListEqual(
-        #     list(multihead_outputs[-1].size()),
-        #     [self.batch_size, self.num_attention_heads-1,
-        #      self.seq_length, self.hidden_size // self.num_attention_heads])
+        tester.parent.assertEqual(
+            attentions[0].shape[-3], 1)
+        tester.parent.assertEqual(
+            attentions[1].shape[-3], tester.num_attention_heads)
+        tester.parent.assertEqual(
+            attentions[-1].shape[-3], tester.num_attention_heads - 1)
 
 
-def create_and_check_for_attentions(tester, model_classes, config, inputs_dict):
+def _create_and_check_for_attentions(tester, model_classes, config, inputs_dict):
     for model_class in model_classes:
         config.output_attentions = True
         config.output_hidden_states = False
@@ -139,7 +137,7 @@ def create_and_check_for_attentions(tester, model_classes, config, inputs_dict):
              tester.seq_length,
              tester.key_len if hasattr(tester, 'key_len') else tester.seq_length])
 
-def create_and_check_for_hidden_states(tester, model_classes, config, inputs_dict):
+def _create_and_check_for_hidden_states(tester, model_classes, config, inputs_dict):
     for model_class in model_classes:
         config.output_hidden_states = True
         config.output_attentions = False
@@ -155,11 +153,13 @@ def create_and_check_for_hidden_states(tester, model_classes, config, inputs_dic
             [tester.seq_length, tester.hidden_size])
 
 
-def create_and_check_commons(tester, config, inputs_dict):
-    create_and_check_for_attentions(tester, tester.all_model_classes, config, inputs_dict)
-    create_and_check_for_headmasking(tester, tester.all_model_classes, config, inputs_dict)
-    create_and_check_for_head_pruning(tester, tester.all_model_classes, config, inputs_dict)
-    create_and_check_for_hidden_states(tester, tester.all_model_classes, config, inputs_dict)
+def create_and_check_commons(tester, config, inputs_dict, test_pruning=True):
+    _create_and_check_initialization(tester, tester.all_model_classes, config, inputs_dict)
+    _create_and_check_for_attentions(tester, tester.all_model_classes, config, inputs_dict)
+    _create_and_check_for_headmasking(tester, tester.all_model_classes, config, inputs_dict)
+    _create_and_check_for_hidden_states(tester, tester.all_model_classes, config, inputs_dict)
+    if test_pruning:
+        _create_and_check_for_head_pruning(tester, tester.all_model_classes, config, inputs_dict)
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):

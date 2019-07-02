@@ -28,9 +28,7 @@ import torch
 from pytorch_pretrained_bert import (GPT2Config, GPT2Model,
                                      GPT2LMHeadModel, GPT2DoubleHeadsModel)
 
-from .model_tests_commons import (create_and_check_for_attentions, create_and_check_for_head_pruning,
-                                  create_and_check_for_headmasking, create_and_check_for_hidden_states,
-                                  ConfigTester, GPTModelTester)
+from .model_tests_commons import (create_and_check_commons, ConfigTester, GPTModelTester)
 
 class GPT2ModelTest(unittest.TestCase):
 
@@ -40,15 +38,15 @@ class GPT2ModelTest(unittest.TestCase):
 
     def test_model(self):
         model_tester = GPTModelTester(self, config_class=GPT2Config, base_model_class=GPT2Model,
-                                           lm_head_model_class=GPT2LMHeadModel,
-                                           double_head_model_class=GPT2DoubleHeadsModel)
+                                            lm_head_model_class=GPT2LMHeadModel,
+                                            double_head_model_class=GPT2DoubleHeadsModel)
         model_tester.run_common_tests(test_presents=True)
 
     @pytest.mark.slow
     def test_pretrained(self):
         model_tester = GPTModelTester(self, config_class=GPT2Config, base_model_class=GPT2Model,
-                                           lm_head_model_class=GPT2LMHeadModel,
-                                           double_head_model_class=GPT2DoubleHeadsModel)
+                                            lm_head_model_class=GPT2LMHeadModel,
+                                            double_head_model_class=GPT2DoubleHeadsModel)
         model_tester.run_slow_tests()
 
 if __name__ == "__main__":
