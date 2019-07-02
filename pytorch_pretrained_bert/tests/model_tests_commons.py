@@ -184,6 +184,12 @@ class ConfigTester(object):
         self.config_class = config_class
         self.inputs_dict = kwargs
 
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, 'hidden_size'))
+        self.parent.assertTrue(hasattr(config, 'num_attention_heads'))
+        self.parent.assertTrue(hasattr(config, 'num_hidden_layers'))
+
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)
         obj = json.loads(config.to_json_string())
@@ -199,6 +205,7 @@ class ConfigTester(object):
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
     def run_common_tests(self):
+        self.create_and_test_config_common_properties()
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
 

@@ -10,7 +10,7 @@ jobs:
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install spacy ftfy==4.4.3
             - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/ --cov
+            - run: python -m pytest -sv ./pytorch_pretrained_bert/tests/ --cov
             - run: codecov
     build_py2:
         working_directory: ~/pytorch-pretrained-BERT
@@ -22,7 +22,7 @@ jobs:
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install spacy ftfy==4.4.3
             - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/ --cov
+            - run: python -m pytest -sv ./pytorch_pretrained_bert/tests/ --cov
             - run: codecov
 workflows:
   version: 2

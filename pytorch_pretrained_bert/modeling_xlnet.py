@@ -313,6 +313,18 @@ class XLNetConfig(PretrainedConfig):
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
 
+    @property
+    def hidden_size(self):
+        return self.d_model
+
+    @property
+    def num_attention_heads(self):
+        return self.n_head
+
+    @property
+    def num_hidden_layers(self):
+        return self.n_layer
+
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as XLNetLayerNorm
