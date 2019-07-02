@@ -19,7 +19,6 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import copy
 import json
 import logging
 import math
@@ -598,6 +597,8 @@ class XLNetPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, XLNetLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -606,8 +607,8 @@ class XLNetPreTrainedModel(PreTrainedModel):
                           module.r_r_bias, module.r_s_bias, module.r_w_bias,
                           module.seg_embed]:
                 param.data.normal_(mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        elif isinstance(module, XLNetModel):
+                module.mask_emb.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class XLNetModel(XLNetPreTrainedModel):
@@ -627,9 +628,10 @@ class XLNetModel(XLNetPreTrainedModel):
 
         self.word_embedding = nn.Embedding(config.n_token, config.d_model)
         self.mask_emb = nn.Parameter(torch.Tensor(1, 1, config.d_model))
-        layer = XLNetLayer(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layer)])
+        self.layer = nn.ModuleList([XLNetLayer(config) for _ in range(config.n_layer)])
         self.dropout = nn.Dropout(config.dropout)
+
+        self.apply(self.init_weights)
 
     def _prune_heads(self, heads_to_prune):
         logger.info("Head pruning is not implemented for XLNet")

@@ -17,7 +17,6 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import copy
 import json
 import logging
 import math
@@ -422,8 +421,7 @@ class BertEncoder(nn.Module):
         super(BertEncoder, self).__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        layer = BertLayer(config)
-        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
         all_hidden_states = []
@@ -539,9 +537,11 @@ class BertPreTrainedModel(PreTrainedModel):
     """
     config_class = BertConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
-    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
+
+    def __init__(self, *inputs, **kwargs):
+        super(BertPreTrainedModel, self).__init__(*inputs, **kwargs)
 
     def init_weights(self, module):
         """ Initialize the weights.

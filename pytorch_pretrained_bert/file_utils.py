@@ -191,6 +191,8 @@ def get_from_cache(url, cache_dir=None):
         cache_dir = PYTORCH_PRETRAINED_BERT_CACHE
     if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
+    if sys.version_info[0] == 2 and not isinstance(cache_dir, str):
+        cache_dir = str(cache_dir)
 
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)

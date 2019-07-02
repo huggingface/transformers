@@ -21,7 +21,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import copy
 import json
 import math
 import logging
@@ -843,6 +842,9 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 
+    def __init__(self, *inputs, **kwargs):
+        super(TransfoXLPreTrainedModel, self).__init__(*inputs, **kwargs)
+
     def _init_weight(self, weight):
         if self.config.init == 'uniform':
             nn.init.uniform_(weight, -self.config.init_range, self.config.init_range)
@@ -883,7 +885,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
                 nn.init.normal_(m.weight, 1.0, self.config.init_std)
             if hasattr(m, 'bias') and m.bias is not None:
                 self._init_bias(m.bias)
-        elif classname.find('TransformerLM') != -1:
+        else:
             if hasattr(m, 'r_emb'):
                 self._init_weight(m.r_emb)
             if hasattr(m, 'r_w_bias'):

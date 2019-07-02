@@ -60,8 +60,7 @@ class PretrainedConfig(object):
                     . `config.json` a configuration file for the model
             cache_dir: an optional path to a folder in which the pre-trained model configuration will be cached.
         """
-        cache_dir = kwargs.get('cache_dir', None)
-        kwargs.pop('cache_dir', None)
+        cache_dir = kwargs.pop('cache_dir', None)
 
         if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
             config_file = cls.pretrained_config_archive_map[pretrained_model_name_or_path]
