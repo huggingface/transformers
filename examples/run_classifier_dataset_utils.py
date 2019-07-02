@@ -70,7 +70,7 @@ class DataProcessor(object):
         """Gets a collection of `InputExample`s for the dev set."""
         raise NotImplementedError()
 
-    def get_labels(self):
+    def get_labels(self, *args):
         """Gets the list of labels for this data set."""
         raise NotImplementedError()
 
@@ -150,6 +150,40 @@ class MnliProcessor(DataProcessor):
             label = line[-1]
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+class MultiClassProcessor(DataProcessor):
+    """Processor for the Multiclass classification. automatically calculated number of labels"""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "dev.tsv")),
+            "dev")
+
+    def get_labels(self, num):
+        """See base class."""
+        lbl = []
+        for i in range(num):
+            lbl.append(str(i))
+        return return lbl
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, i)
+            text_a = line[0]
+            label = line[1]
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 
 
@@ -556,6 +590,7 @@ processors = {
     "qnli": QnliProcessor,
     "rte": RteProcessor,
     "wnli": WnliProcessor,
+    "multiclass": MultiClassProcessor,
 }
 
 output_modes = {
@@ -568,4 +603,5 @@ output_modes = {
     "qnli": "classification",
     "rte": "classification",
     "wnli": "classification",
+    "multiclass": "classification",
 }
