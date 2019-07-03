@@ -322,6 +322,7 @@ class GPT2LMHead(nn.Module):
         self.n_embd = config.n_embd
         self.vocab_size = config.vocab_size
         self.predict_special_tokens = config.predict_special_tokens
+        self.torchscript = config.torchscript
         embed_shape = model_embeddings_weights.shape
         self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.set_embeddings_weights(model_embeddings_weights)
@@ -329,7 +330,10 @@ class GPT2LMHead(nn.Module):
     def set_embeddings_weights(self, model_embeddings_weights, predict_special_tokens=True):
         self.predict_special_tokens = predict_special_tokens
         # Export to TorchScript can't handle parameter sharing so we are cloning them.
-        self.decoder.weight = nn.Parameter(model_embeddings_weights.clone())  # Tied weights
+        if self.torchscript:
+            self.decoder.weight = nn.Parameter(model_embeddings_weights.clone())
+        else:
+            self.decoder.weight = model_embeddings_weights  # Tied weights
 
     def forward(self, hidden_state):
         lm_logits = self.decoder(hidden_state)
@@ -563,11 +567,11 @@ class GPT2Model(GPT2PreTrainedModel):
         all_hidden_states = ()
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
             if self.output_hidden_states:
-                all_hidden_states += (hidden_states.view(*output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(hidden_states, layer_past, head_mask[i])
             hidden_states, present = outputs[:2]
-            presents += (present,)
+            presents = presents + (present,)
 
             if self.output_attentions:
                 all_attentions.append(outputs[2])
@@ -577,16 +581,16 @@ class GPT2Model(GPT2PreTrainedModel):
         hidden_states = hidden_states.view(*output_shape)
         # Add last hidden state
         if self.output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states, presents)
         if self.output_hidden_states:
-            outputs += (all_hidden_states,)
+            outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
             all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions)
-            outputs += (all_attentions,)
+            outputs = outputs + (all_attentions,)
         return outputs  # last hidden state, presents, (all hidden_states), (attentions)
 
 

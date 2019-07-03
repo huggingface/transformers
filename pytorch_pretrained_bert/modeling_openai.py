@@ -348,14 +348,18 @@ class OpenAIGPTLMHead(nn.Module):
         self.n_embd = config.n_embd
         self.vocab_size = config.vocab_size
         self.predict_special_tokens = config.predict_special_tokens
+        self.torchscript = config.torchscript
         embed_shape = model_embeddings_weights.shape
         self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
         self.set_embeddings_weights(model_embeddings_weights)
 
     def set_embeddings_weights(self, model_embeddings_weights, predict_special_tokens=True):
         self.predict_special_tokens = predict_special_tokens
-        embed_shape = model_embeddings_weights.shape
-        self.decoder.weight = nn.Parameter(model_embeddings_weights.clone())  # Tied weights
+
+        if self.torchscript:
+            self.decoder.weight = nn.Parameter(model_embeddings_weights.clone())
+        else:
+            self.decoder.weight = model_embeddings_weights  # Tied weights
 
     def forward(self, hidden_state):
         lm_logits = self.decoder(hidden_state)
@@ -583,22 +587,22 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         all_hidden_states = ()
         for i, block in enumerate(self.h):
             if self.output_hidden_states:
-                all_hidden_states += (hidden_states.view(*output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(hidden_states, head_mask[i])
             hidden_states = outputs[0]
             if self.output_attentions:
-                all_attentions += (outputs[1],)
+                all_attentions = all_attentions + (outputs[1],)
 
         # Add last layer
         if self.output_hidden_states:
-            all_hidden_states += (hidden_states.view(*output_shape),)
+            all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
         outputs = (hidden_states.view(*output_shape),)
         if self.output_hidden_states:
-            outputs += (all_hidden_states,)
+            outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
-            outputs += (all_attentions,)
+            outputs = outputs + (all_attentions,)
         return outputs  # last hidden state, (all hidden states), (all attentions)
 
 

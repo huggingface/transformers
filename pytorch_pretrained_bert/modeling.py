@@ -428,23 +428,23 @@ class BertEncoder(nn.Module):
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
             if self.output_hidden_states:
-                all_hidden_states += (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i])
             hidden_states = layer_outputs[0]
 
             if self.output_attentions:
-                all_attentions += (layer_outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         # Add last layer
         if self.output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if self.output_hidden_states:
-            outputs += (all_hidden_states,)
+            outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
-            outputs += (all_attentions,)
+            outputs = outputs + (all_attentions,)
         return outputs  # outputs, (hidden states), (attentions)
 
 
@@ -484,13 +484,19 @@ class BertLMPredictionHead(nn.Module):
     def __init__(self, config, bert_model_embedding_weights):
         super(BertLMPredictionHead, self).__init__()
         self.transform = BertPredictionHeadTransform(config)
+        self.torchscript = config.torchscript
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder = nn.Linear(bert_model_embedding_weights.size(1),
                                  bert_model_embedding_weights.size(0),
                                  bias=False)
-        self.decoder.weight = nn.Parameter(bert_model_embedding_weights.clone())
+
+        if self.torchscript:
+            self.decoder.weight = nn.Parameter(bert_model_embedding_weights.clone())
+        else:
+            self.decoder.weight = bert_model_embedding_weights
+
         self.bias = nn.Parameter(torch.zeros(bert_model_embedding_weights.size(0)))
 
     def forward(self, hidden_states):
