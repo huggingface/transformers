@@ -46,6 +46,7 @@ class PretrainedConfig(object):
         self.num_labels = kwargs.pop('num_labels', 2)
         self.output_attentions = kwargs.pop('output_attentions', False)
         self.output_hidden_states = kwargs.pop('output_hidden_states', False)
+        self.torchscript = kwargs.pop('torchscript', False)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):

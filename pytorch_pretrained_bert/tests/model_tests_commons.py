@@ -41,6 +41,7 @@ def _create_and_check_torchscript_output_hidden_state(tester, model_classes, con
 
 def _create_and_check_torchscript(tester, model_classes, config, inputs_dict):
     configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+    configs_no_init.torchscript = True
     for model_class in model_classes:
         model = model_class(config=configs_no_init)
         model.eval()

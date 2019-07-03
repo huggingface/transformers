@@ -530,7 +530,7 @@ class XLNetRelativeAttention(nn.Module):
 
         outputs = (output_h, output_g)
         if self.output_attentions:
-            outputs += (attn_prob,)
+            outputs = outputs + (attn_prob,)
         return outputs
 
 class XLNetFeedForward(nn.Module):
@@ -878,7 +878,7 @@ class XLNetModel(XLNetPreTrainedModel):
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            new_mems += (self.cache_mem(output_h, mems[i]),)
+            new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
@@ -902,10 +902,10 @@ class XLNetModel(XLNetPreTrainedModel):
                 hidden_states = tuple(h.permute(1, 0, 2).contiguous() for hs in hidden_states for h in hs)
             else:
                 hidden_states = tuple(hs.permute(1, 0, 2).contiguous() for hs in hidden_states)
-            outputs += (hidden_states,)
+            outputs = outputs + (hidden_states,)
         if self.output_attentions:
             attentions = tuple(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
-            outputs += (attentions,)
+            outputs = outputs + (attentions,)
 
         return outputs  # outputs, new_mems, (hidden_states), (attentions)
 
@@ -975,6 +975,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         super(XLNetLMHeadModel, self).__init__(config)
         self.attn_type = config.attn_type
         self.same_length = config.same_length
+        self.torchscript = config.torchscript
 
         self.transformer = XLNetModel(config)
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
@@ -987,7 +988,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def tie_weights(self):
         """ Make sure we are sharing the embeddings
         """
-        self.lm_loss.weight = nn.Parameter(self.transformer.word_embedding.weight.clone())
+        if self.torchscript:
+            self.lm_loss.weight = nn.Parameter(self.transformer.word_embedding.weight.clone())
+        else:
+            self.lm_loss.weight = self.transformer.word_embedding.weight
 
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
