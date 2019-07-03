@@ -16,20 +16,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import unittest
-import json
-import random
 import shutil
 import pytest
-
-import torch
 
 from pytorch_pretrained_bert import (BertConfig, BertModel, BertForMaskedLM,
                                      BertForNextSentencePrediction, BertForPreTraining,
                                      BertForQuestionAnswering, BertForSequenceClassification,
                                      BertForTokenClassification, BertForMultipleChoice)
-from pytorch_pretrained_bert.modeling import PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_pretrained_bert.modeling_bert import PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .model_tests_commons import (create_and_check_commons, ConfigTester, ids_tensor)
 

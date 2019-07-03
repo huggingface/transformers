@@ -20,7 +20,7 @@ from io import open
 import shutil
 import pytest
 
-from pytorch_pretrained_bert.tokenization import (BasicTokenizer,
+from pytorch_pretrained_bert.tokenization_bert import (BasicTokenizer,
                                                   BertTokenizer,
                                                   WordpieceTokenizer,
                                                   _is_control, _is_punctuation,

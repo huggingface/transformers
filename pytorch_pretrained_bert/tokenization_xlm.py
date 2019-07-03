@@ -26,7 +26,7 @@ from io import open
 from tqdm import tqdm
 
 from .file_utils import cached_path
-from .tokenization import BasicTokenizer
+from .tokenization_bert import BasicTokenizer
 
 logger = logging.getLogger(__name__)
 
