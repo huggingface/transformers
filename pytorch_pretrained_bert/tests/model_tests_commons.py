@@ -36,7 +36,9 @@ def _create_and_check_initialization(tester, model_classes, config, inputs_dict)
     for model_class in model_classes:
         model = model_class(config=configs_no_init)
         for name, param in model.named_parameters():
-            tester.parent.assertIn(param.data.mean().item(), [0.0, 1.0], msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
+            if param.requires_grad:
+                tester.parent.assertIn(param.data.mean().item(), [0.0, 1.0],
+                                       msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
 
 def _create_and_check_for_headmasking(tester, model_classes, config, inputs_dict):
     configs_no_init = _config_zero_init(config)

@@ -26,7 +26,7 @@ import pytest
 import torch
 
 from pytorch_pretrained_bert import PretrainedConfig, PreTrainedModel
-from pytorch_pretrained_bert.modeling import BertModel, BertConfig, PRETRAINED_MODEL_ARCHIVE_MAP, PRETRAINED_CONFIG_ARCHIVE_MAP
+from pytorch_pretrained_bert.modeling_bert import BertModel, BertConfig, PRETRAINED_MODEL_ARCHIVE_MAP, PRETRAINED_CONFIG_ARCHIVE_MAP
 
 
 class ModelUtilsTest(unittest.TestCase):

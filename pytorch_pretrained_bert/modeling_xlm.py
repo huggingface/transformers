@@ -71,7 +71,7 @@ class XLMConfig(PretrainedConfig):
     pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file,
+                 vocab_size_or_config_json_file=30145,
                  n_special=0,
                  emb_dim=2048,
                  n_layers=12,
@@ -80,13 +80,20 @@ class XLMConfig(PretrainedConfig):
                  attention_dropout=0.1,
                  gelu_activation=True,
                  sinusoidal_embeddings=False,
+                 causal=False,
                  asm=False,
-                 id2lang={ 0: "en" },
-                 lang2id={ "en": 0 },
                  n_langs=1,
-                 n_words=30145,
                  max_position_embeddings=512,
-                 initializer_range=0.02,
+                 embed_init_std=2048 ** -0.5,
+                 init_std=0.02,
+                 summary_type="last",
+                 use_proj=True,
+                 bos_index=0,
+                 eos_index=1,
+                 pad_index=2,
+                 unk_index=3,
+                 mask_index=5,
+                 is_encoder=True,
                  **kwargs):
         """Constructs XLMConfig.
 
@@ -148,12 +155,20 @@ class XLMConfig(PretrainedConfig):
             self.attention_dropout = attention_dropout
             self.gelu_activation = gelu_activation
             self.sinusoidal_embeddings = sinusoidal_embeddings
+            self.causal = causal
             self.asm = asm
-            self.id2lang = id2lang
-            self.lang2id = lang2id
             self.n_langs = n_langs
+            self.summary_type = summary_type
+            self.use_proj = use_proj
+            self.bos_index = bos_index
+            self.eos_index = eos_index
+            self.pad_index = pad_index
+            self.unk_index = unk_index
+            self.mask_index = mask_index
+            self.is_encoder = is_encoder
             self.max_position_embeddings = max_position_embeddings
-            self.initializer_range = initializer_range
+            self.embed_init_std = embed_init_std
+            self.init_std = init_std
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -175,37 +190,21 @@ class XLMConfig(PretrainedConfig):
         return self.n_layers
 
 
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as XLMLayerNorm
-except ImportError:
-    logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    class XLMLayerNorm(nn.Module):
-        def __init__(self, d_model, eps=1e-12):
-            """Construct a layernorm module in the TF style (epsilon inside the square root).
-            """
-            super(XLMLayerNorm, self).__init__()
-            self.weight = nn.Parameter(torch.ones(d_model))
-            self.bias = nn.Parameter(torch.zeros(d_model))
-            self.variance_epsilon = eps
-
-        def forward(self, x):
-            u = x.mean(-1, keepdim=True)
-            s = (x - u).pow(2).mean(-1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.variance_epsilon)
-            return self.weight * x + self.bias
-
-
-def Embedding(num_embeddings, embedding_dim, padding_idx=None):
+def Embedding(num_embeddings, embedding_dim, padding_idx=None, config=None):
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
-    nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
+    if config is not None and config.embed_init_std is not None:
+        nn.init.normal_(m.weight, mean=0, std=config.embed_init_std)
     if padding_idx is not None:
         nn.init.constant_(m.weight[padding_idx], 0)
     return m
 
 
-def Linear(in_features, out_features, bias=True):
+def Linear(in_features, out_features, bias=True, config=None):
     m = nn.Linear(in_features, out_features, bias)
-    # nn.init.normal_(m.weight, mean=0, std=1)
+    if config is not None and config.init_std is not None:
+        nn.init.normal_(m.weight, mean=0, std=config.init_std)
+        if bias:
+            nn.init.constant_(m.bias, 0.)
     # nn.init.xavier_uniform_(m.weight)
     # nn.init.constant_(m.bias, 0.)
     return m
@@ -233,14 +232,17 @@ def gelu(x):
     return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
-def get_masks(slen, lengths, causal):
+def get_masks(slen, lengths, causal, padding_mask=None):
     """
     Generate hidden states mask, and optionally an attention mask.
     """
-    assert lengths.max().item() <= slen
     bs = lengths.size(0)
-    alen = torch.arange(slen, dtype=torch.long, device=lengths.device)
-    mask = alen < lengths[:, None]
+    if padding_mask is not None:
+        mask = padding_mask
+    else:
+        assert lengths.max().item() <= slen
+        alen = torch.arange(slen, dtype=torch.long, device=lengths.device)
+        mask = alen < lengths[:, None]
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
@@ -259,21 +261,21 @@ class MultiHeadAttention(nn.Module):
 
     NEW_ID = itertools.count()
 
-    def __init__(self, n_heads, dim, dropout, output_attentions=False):
+    def __init__(self, n_heads, dim, config):
         super().__init__()
         self.layer_id = next(MultiHeadAttention.NEW_ID)
-        self.output_attentions = output_attentions
+        self.output_attentions = config.output_attentions
         self.dim = dim
         self.n_heads = n_heads
-        self.dropout = dropout
+        self.dropout = config.attention_dropout
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = Linear(dim, dim)
-        self.k_lin = Linear(dim, dim)
-        self.v_lin = Linear(dim, dim)
-        self.out_lin = Linear(dim, dim)
+        self.q_lin = Linear(dim, dim, config=config)
+        self.k_lin = Linear(dim, dim, config=config)
+        self.v_lin = Linear(dim, dim, config=config)
+        self.out_lin = Linear(dim, dim, config=config)
 
-    def forward(self, input, mask, kv=None, cache=None):
+    def forward(self, input, mask, kv=None, cache=None, head_mask=None):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
@@ -323,6 +325,11 @@ class MultiHeadAttention(nn.Module):
 
         weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
         weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            weights = weights * head_mask
+
         context = torch.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
         context = unshape(context)                                            # (bs, qlen, dim)
 
@@ -334,12 +341,12 @@ class MultiHeadAttention(nn.Module):
 
 class TransformerFFN(nn.Module):
 
-    def __init__(self, in_dim, dim_hidden, out_dim, dropout, gelu_activation):
+    def __init__(self, in_dim, dim_hidden, out_dim, config):
         super().__init__()
-        self.dropout = dropout
-        self.lin1 = Linear(in_dim, dim_hidden)
-        self.lin2 = Linear(dim_hidden, out_dim)
-        self.act = gelu if gelu_activation else F.relu
+        self.dropout = config.dropout
+        self.lin1 = Linear(in_dim, dim_hidden, config=config)
+        self.lin2 = Linear(dim_hidden, out_dim, config=config)
+        self.act = gelu if config.gelu_activation else F.relu
 
     def forward(self, input):
         x = self.lin1(input)
@@ -365,12 +372,9 @@ class XLMPreTrainedModel(PreTrainedModel):
         """ Initialize the weights.
         """
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, XLMLayerNorm):
+            # Weights are initialized in module instantiation (see above)
+            pass
+        if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -439,8 +443,10 @@ class XLMModel(XLMPreTrainedModel):
         self.output_hidden_states = config.output_hidden_states
 
         # encoder / decoder, output layer
-        # self.is_encoder = is_encoder
-        # self.is_decoder = not is_encoder
+        self.is_encoder = config.is_encoder
+        self.is_decoder = not config.is_encoder
+        if self.is_decoder:
+            raise NotImplementedError("Currently XLM can only be used as an encoder")
         # self.with_output = with_output
         self.causal = config.causal
 
@@ -450,10 +456,10 @@ class XLMModel(XLMPreTrainedModel):
         self.eos_index = config.eos_index
         self.pad_index = config.pad_index
         # self.dico = dico
-        self.id2lang = config.id2lang
-        self.lang2id = config.lang2id
+        # self.id2lang = config.id2lang
+        # self.lang2id = config.lang2id
         # assert len(self.dico) == self.n_words
-        assert len(self.id2lang) == len(self.lang2id) == self.n_langs
+        # assert len(self.id2lang) == len(self.lang2id) == self.n_langs
 
         # model parameters
         self.dim = config.emb_dim       # 512 by default
@@ -465,12 +471,12 @@ class XLMModel(XLMPreTrainedModel):
         assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
 
         # embeddings
-        self.position_embeddings = Embedding(config.max_position_embeddings, self.dim)
+        self.position_embeddings = Embedding(config.max_position_embeddings, self.dim, config=config)
         if config.sinusoidal_embeddings:
             create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
         if config.n_langs > 1:
-            self.lang_embeddings = Embedding(self.n_langs, self.dim)
-        self.embeddings = Embedding(self.n_words, self.dim, padding_idx=self.pad_index)
+            self.lang_embeddings = Embedding(self.n_langs, self.dim, config=config)
+        self.embeddings = Embedding(self.n_words, self.dim, padding_idx=self.pad_index, config=config)
         self.layer_norm_emb = nn.LayerNorm(self.dim, eps=1e-12)
 
         # transformer layers
@@ -478,29 +484,31 @@ class XLMModel(XLMPreTrainedModel):
         self.layer_norm1 = nn.ModuleList()
         self.ffns = nn.ModuleList()
         self.layer_norm2 = nn.ModuleList()
-        if self.is_decoder:
-            self.layer_norm15 = nn.ModuleList()
-            self.encoder_attn = nn.ModuleList()
+        # if self.is_decoder:
+        #     self.layer_norm15 = nn.ModuleList()
+        #     self.encoder_attn = nn.ModuleList()
 
         for _ in range(self.n_layers):
-            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
+            self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config))
             self.layer_norm1.append(nn.LayerNorm(self.dim, eps=1e-12))
-            if self.is_decoder:
-                self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
-                self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
-            self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, dropout=self.dropout, gelu_activation=config.gelu_activation))
+            # if self.is_decoder:
+            #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
+            #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
+            self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=1e-12))
 
-    def forward(self, input_ids, lengths, positions=None, langs=None, cache=None, head_mask=None):  # src_enc=None, src_len=None, 
+    def forward(self, input_ids, lengths=None, positions=None, langs=None,
+                token_type_ids=None, attention_mask=None, cache=None, head_mask=None):  # src_enc=None, src_len=None, 
         """
         Inputs:
             `input_ids` LongTensor(bs, slen), containing word indices
             `lengths` LongTensor(bs), containing the length of each sentence
-            `causal` Boolean, if True, the attention is only done over previous hidden states
             `positions` LongTensor(bs, slen), containing word positions
             `langs` LongTensor(bs, slen), containing language IDs
+            `token_type_ids` LongTensor (bs, slen) same as `langs` used for compatibility
         """
-        # lengths = (input_ids != self.pad_index).float().sum(dim=1)
+        if lengths is None:
+            lengths = (input_ids != self.pad_index).float().sum(dim=1)
         # mask = input_ids != self.pad_index
 
         # check inputs
@@ -514,7 +522,7 @@ class XLMModel(XLMPreTrainedModel):
         #     assert src_enc.size(0) == bs
 
         # generate masks
-        mask, attn_mask = get_masks(slen, lengths, self.causal)
+        mask, attn_mask = get_masks(slen, lengths, self.causal, padding_mask=attention_mask)
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
 
@@ -527,9 +535,27 @@ class XLMModel(XLMPreTrainedModel):
             # positions = positions.transpose(0, 1)
 
         # langs
+        assert langs is None or token_type_ids is None, "You can only use one among langs and token_type_ids"
+        if token_type_ids is not None:
+            langs = token_type_ids
         if langs is not None:
             assert langs.size() == (bs, slen)  # (slen, bs)
             # langs = langs.transpose(0, 1)
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x qlen x klen]
+        if head_mask is not None:
+            if head_mask.dim() == 1:
+                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.expand(self.n_layers, -1, -1, -1, -1)
+            elif head_mask.dim() == 2:
+                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
+            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+        else:
+            head_mask = [None] * self.n_layers
 
         # do not recompute cached elements
         if cache is not None:
@@ -696,9 +722,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     ```
     """
     def __init__(self, config):
-        super(XLMLMHeadModel, self).__init__(config)
-        self.attn_type = config.attn_type
-        self.same_length = config.same_length
+        super(XLMWithLMHeadModel, self).__init__(config)
 
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
@@ -711,8 +735,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         """
         self.pred_layer.proj.weight = self.transformer.embeddings.weight
 
-    def forward(self, input_ids, lengths, positions=None, langs=None, cache=None,
-                labels=None, head_mask=None):
+    def forward(self, input_ids, lengths=None, positions=None, langs=None, token_type_ids=None,
+                attention_mask=None, cache=None, labels=None, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
@@ -739,7 +763,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             summary_type: str, "last", "first", "mean", or "attn". The method
                 to pool the input to get a vector representation.
         """
-        transformer_outputs = self.transformer(input_ids, lengths, positions=positions, langs=langs, cache=cache, head_mask=head_mask)
+        transformer_outputs = self.transformer(input_ids, lengths=lengths, positions=positions, token_type_ids=token_type_ids,
+                                               langs=langs, attention_mask=attention_mask, cache=cache, head_mask=head_mask)
 
         output = transformer_outputs[0]
         logits = self.pred_layer(output, labels)
@@ -759,14 +784,14 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
 
 class XLMSequenceSummary(nn.Module):
-    def __init__(self, config, summary_type="last", use_proj=True):
+    def __init__(self, config):
         super(XLMSequenceSummary, self).__init__()
-        self.summary_type = summary_type
-        if use_proj:
+        self.summary_type = config.summary_type
+        if config.use_proj:
             self.summary = nn.Linear(config.d_model, config.d_model)
         else:
             self.summary = None
-        if summary_type == 'attn':
+        if config.summary_type == 'attn':
             # We should use a standard multi-head attention module with absolute positional embedding for that.
             # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
             # We can probably just use the multi-head attention module of PyTorch >=1.1.0
@@ -859,14 +884,13 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         super(XLMForSequenceClassification, self).__init__(config)
 
         self.transformer = XLMModel(config)
-
         self.sequence_summary = XLMSequenceSummary(config)
-        self.logits_proj = nn.Linear(config.d_model, num_labels)
+        self.logits_proj = nn.Linear(config.d_model, config.num_labels)
+
         self.apply(self.init_weights)
 
-    def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
-                mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                labels=None, head_mask=None):
+    def forward(self, input_ids, lengths=None, positions=None, langs=None, attention_mask=None,
+                cache=None, labels=None, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
@@ -894,8 +918,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
         """
-        transformer_outputs = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
-                                               mems, perm_mask, target_mapping, inp_q, head_mask)
+        transformer_outputs = self.transformer(input_ids, lengths=lengths, positions=positions, token_type_ids=token_type_ids,
+                                               langs=langs, attention_mask=attention_mask, cache=cache, head_mask=head_mask)
 
         output = transformer_outputs[0]
         output = self.sequence_summary(output)
@@ -974,7 +998,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
     start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
     ```
     """
-    def __init__(self, CONFIG_NAME):
+    def __init__(self, config):
         super(XLMForQuestionAnswering, self).__init__(config)
 
         self.transformer = XLMModel(config)
@@ -982,12 +1006,11 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         self.apply(self.init_weights)
 
-    def forward(self, inp_k, token_type_ids=None, input_mask=None, attention_mask=None,
-                mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                start_positions=None, end_positions=None, head_mask=None):
+    def forward(self, input_ids, lengths=None, positions=None, langs=None, attention_mask=None, cache=None,
+                labels=None, head_mask=None):
 
-        transformer_outputs = self.transformer(inp_k, token_type_ids, input_mask, attention_mask,
-                                               mems, perm_mask, target_mapping, inp_q, head_mask)
+        transformer_outputs = self.transformer(input_ids, lengths=lengths, positions=positions, token_type_ids=token_type_ids,
+                                               langs=langs, attention_mask=attention_mask, cache=cache, head_mask=head_mask)
 
         output = transformer_outputs[0]
         logits = self.qa_outputs(output)

@@ -1,5 +1,5 @@
-from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.modeling import (
+from pytorch_pretrained_bert.tokenization_bert import BertTokenizer
+from pytorch_pretrained_bert.modeling_bert import (
         BertModel,
         BertForNextSentencePrediction,
         BertForMaskedLM,
