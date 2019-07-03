@@ -32,7 +32,8 @@ from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path
-from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel
+from .model_utils import (CONFIG_NAME, WEIGHTS_NAME,
+                          PretrainedConfig, PreTrainedModel, SequenceSummary)
 
 
 logger = logging.getLogger(__name__)
@@ -223,8 +224,10 @@ class XLNetConfig(PretrainedConfig):
                  
                  finetuning_task=None,
                  num_labels=2,
-                 summary_type="last",
-                 use_proj=True,
+                 summary_type='last',
+                 summary_use_proj=True,
+                 summary_activation='tanh',
+                 summary_dropout=0.1,
                  **kwargs):
         """Constructs XLNetConfig.
 
@@ -307,7 +310,9 @@ class XLNetConfig(PretrainedConfig):
             self.finetuning_task = finetuning_task
             self.num_labels = num_labels
             self.summary_type = summary_type
-            self.use_proj = use_proj
+            self.summary_use_proj = summary_use_proj
+            self.summary_activation = summary_activation
+            self.summary_dropout = summary_dropout
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -1042,38 +1047,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
-class XLNetSequenceSummary(nn.Module):
-    def __init__(self, config):
-        super(XLNetSequenceSummary, self).__init__()
-        self.summary_type = config.summary_type
-        if config.use_proj:
-            self.summary = nn.Linear(config.d_model, config.d_model)
-        else:
-            self.summary = None
-        if config.summary_type == 'attn':
-            # We should use a standard multi-head attention module with absolute positional embedding for that.
-            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
-            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
-            raise NotImplementedError
-        self.dropout = nn.Dropout(config.dropout)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        """ hidden_states: float Tensor in shape [bsz, seq_len, d_model], the hidden-states of the last layer."""
-        if self.summary_type == 'last':
-            output = hidden_states[:, -1]
-        elif self.summary_type == 'first':
-            output = hidden_states[:, 0]
-        elif self.summary_type == 'mean':
-            output = hidden_states.mean(dim=1)
-        elif self.summary_type == 'attn':
-            raise NotImplementedError
-
-        output = self.summary(output)
-        output = self.activation(output)
-        output = self.dropout(output)
-        return output
-
 
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
     """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
@@ -1143,7 +1116,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         super(XLNetForSequenceClassification, self).__init__(config)
 
         self.transformer = XLNetModel(config)
-        self.sequence_summary = XLNetSequenceSummary(config)
+        self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, config.num_labels)
 
         self.apply(self.init_weights)

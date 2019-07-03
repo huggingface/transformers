@@ -282,6 +282,95 @@ class PreTrainedModel(nn.Module):
         return model
 
 
+class Conv1D(nn.Module):
+    def __init__(self, nf, nx):
+        """ Conv1D layer as defined by Alec for GPT (and also used in GPT-2)
+            Basically works like a Linear layer but the weights are transposed
+        """
+        super(Conv1D, self).__init__()
+        self.nf = nf
+        w = torch.empty(nx, nf)
+        nn.init.normal_(w, std=0.02)
+        self.weight = nn.Parameter(w)
+        self.bias = nn.Parameter(torch.zeros(nf))
+
+    def forward(self, x):
+        size_out = x.size()[:-1] + (self.nf,)
+        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
+        x = x.view(*size_out)
+        return x
+
+
+class SequenceSummary(nn.Module):
+    def __init__(self, config):
+        """ Compute a single vector summary of a sequence hidden states according to various possibilities:
+            Args of the config class:
+                summary_type:
+                    - 'last' => [default] take the last token hidden state (like XLNet)
+                    - 'first' => take the first token hidden state (like Bert)
+                    - 'mean' => take the mean of all tokens hidden states
+                    - 'token_ids' => supply a Tensor of classification token indices (GPT/GPT-2)
+                    - 'attn' => Not implemented now, use multi-head attention
+                summary_use_proj: Add a projection after the vector extraction
+                summary_num_classes: If > 0: the projection outputs to n classes (otherwise to hidden_size)
+                summary_activation:
+                    'tanh' => add a tanh activation to the output
+                     None => no activation
+        """
+        super(SequenceSummary, self).__init__()
+
+        self.summary_type = config.summary_type if hasattr(config, 'summary_use_proj') else 'last'
+        if config.summary_type == 'attn':
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = nn.Identity()
+        if hasattr(config, 'summary_use_proj') and config.summary_use_proj:
+            if hasattr(config, 'summary_num_classes') and config.summary_num_classes > 0:
+                num_classes = config.summary_num_classes
+            else:
+                num_classes = config.hidden_size
+            self.summary = nn.Linear(config.hidden_size, num_classes)
+
+        self.activation = nn.Identity()
+        if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':
+            self.activation = nn.Tanh()
+
+        self.dropout = nn.Dropout(config.summary_dropout)
+
+    def forward(self, hidden_states, token_ids=None):
+        """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
+            token_ids: [optional] index of the classification token if summary_type == 'token_ids',
+                shape (bsz,) or more generally (bsz, ...) where ... are optional leading dimensions of hidden_states.
+                if summary_type == 'token_ids' and token_ids is None:
+                    we take the last token of the sequence as classification token
+        """
+        if self.summary_type == 'last':
+            output = hidden_states[:, -1]
+        elif self.summary_type == 'first':
+            output = hidden_states[:, 0]
+        elif self.summary_type == 'mean':
+            output = hidden_states.mean(dim=1)
+        elif self.summary_type == 'token_ids':
+            if token_ids is None:
+                token_ids = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2]-1, dtype=torch.long)
+            else:
+                token_ids = token_ids.unsqueeze(-1).unsqueeze(-1)
+                token_ids = token_ids.expand((-1,) * (token_ids.dim()-1) + (hidden_states.size(-1),))
+            # shape of token_ids: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, token_ids).squeeze(-2) # shape (bsz, XX, hidden_size)
+        elif self.summary_type == 'attn':
+            raise NotImplementedError
+
+        output = self.summary(output)
+        output = self.activation(output)
+        output = self.dropout(output)
+
+        return output
+
+
 def prune_linear_layer(layer, index, dim=0):
     """ Prune a linear layer (a model parameters) to keep only entries in index.
         Return the pruned layer as a new layer with requires_grad=True.
@@ -305,25 +394,6 @@ def prune_linear_layer(layer, index, dim=0):
         new_layer.bias.copy_(b.contiguous())
         new_layer.bias.requires_grad = True
     return new_layer
-
-
-class Conv1D(nn.Module):
-    """ Conv1D layer as defined by Alec Radford for GPT (and also used in GPT-2)
-        Basically works like a Linear layer but the weights are transposed
-    """
-    def __init__(self, nf, nx):
-        super(Conv1D, self).__init__()
-        self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
-        self.bias = nn.Parameter(torch.zeros(nf))
-
-    def forward(self, x):
-        size_out = x.size()[:-1] + (self.nf,)
-        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
-        x = x.view(*size_out)
-        return x
 
 
 def prune_conv1d_layer(layer, index, dim=1):

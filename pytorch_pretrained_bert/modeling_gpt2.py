@@ -31,7 +31,8 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
 from .file_utils import cached_path
-from .model_utils import Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel, prune_conv1d_layer
+from .model_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
+                          PreTrainedModel, prune_conv1d_layer, SequenceSummary)
 from .modeling_bert import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,11 @@ class GPT2Config(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         predict_special_tokens=True,
+        summary_type='token_ids',
+        summary_use_proj=True,
+        summary_num_classes=1,
+        summary_activation=None,
+        summary_dropout=0.1,
         **kwargs
     ):
         """Constructs GPT2Config.
@@ -164,6 +170,11 @@ class GPT2Config(PretrainedConfig):
             self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
             self.predict_special_tokens = predict_special_tokens
+            self.summary_type = summary_type
+            self.summary_use_proj = summary_use_proj
+            self.summary_num_classes = summary_num_classes
+            self.summary_activation = summary_activation
+            self.summary_dropout = summary_dropout
         else:
             raise ValueError(
                 "First argument must be either a vocabulary size (int)"
@@ -340,37 +351,6 @@ class GPT2LMHead(nn.Module):
         if not self.predict_special_tokens:
             lm_logits = lm_logits[..., :self.vocab_size]
         return lm_logits
-
-
-class GPT2MultipleChoiceHead(nn.Module):
-    """ Classifier Head for the transformer """
-
-    def __init__(self, config):
-        super(GPT2MultipleChoiceHead, self).__init__()
-        self.n_embd = config.n_embd
-        self.dropout = nn.Dropout2d(config.resid_pdrop)  # To reproduce the noise_shape parameter of TF implementation
-        self.linear = nn.Linear(config.n_embd, 1)
-
-        nn.init.normal_(self.linear.weight, std=0.02)
-        nn.init.normal_(self.linear.bias, 0)
-
-    def forward(self, hidden_states, mc_token_ids=None):
-        """ Extract classification token hidden state and project it using self.linear
-            hidden_state: shape (bsz, num_choices, seq_length, hidden_size)
-            mc_token_ids: [optional] index of the classification token, shape (bsz, num_choices)
-            if mc_token_ids=None we take the last token of the sequence as classification token
-        """
-        if mc_token_ids is None:
-            mc_token_ids = torch.full_like(hidden_states[:, :, :1, :], hidden_states.shape[2] - 1, dtype=torch.long)
-        else:
-            mc_token_ids = mc_token_ids.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, hidden_states.size(-1))
-        # mc_token_ids has shape (bsz, num_choices, 1, hidden_size)
-        multiple_choice_h = hidden_states.gather(2, mc_token_ids).squeeze(2)
-        # (bsz, num_choices, hidden_size)
-        multiple_choice_h = self.dropout(multiple_choice_h.transpose(1, 2)).transpose(1, 2)
-        multiple_choice_logits = self.linear(multiple_choice_h).squeeze(-1)
-        # (bsz, num_choices)
-        return multiple_choice_logits
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -735,7 +715,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         super(GPT2DoubleHeadsModel, self).__init__(config)
         self.transformer = GPT2Model(config)
         self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
-        self.multiple_choice_head = GPT2MultipleChoiceHead(config)
+        self.multiple_choice_head = SequenceSummary(config)
 
         self.apply(self.init_weights)
 
@@ -753,7 +733,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
 
         outputs = (lm_logits, mc_logits) + transformer_outputs[1:]
         if mc_labels is not None:
