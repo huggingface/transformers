@@ -198,14 +198,17 @@ def _create_and_check_for_hidden_states(tester, model_classes, config, inputs_di
             [tester.seq_length, tester.hidden_size])
 
 
-def create_and_check_commons(tester, config, inputs_dict, test_pruning=True):
+def create_and_check_commons(tester, config, inputs_dict, test_pruning=True, test_torchscript=True):
     _create_and_check_initialization(tester, tester.all_model_classes, config, inputs_dict)
-    _create_and_check_torchscript(tester, tester.all_model_classes, config, inputs_dict)
-    _create_and_check_torchscript_output_attentions(tester, tester.all_model_classes, config, inputs_dict)
-    _create_and_check_torchscript_output_hidden_state(tester, tester.all_model_classes, config, inputs_dict)
     _create_and_check_for_attentions(tester, tester.all_model_classes, config, inputs_dict)
     _create_and_check_for_headmasking(tester, tester.all_model_classes, config, inputs_dict)
     _create_and_check_for_hidden_states(tester, tester.all_model_classes, config, inputs_dict)
+
+    if test_torchscript:
+        _create_and_check_torchscript(tester, tester.all_model_classes, config, inputs_dict)
+        _create_and_check_torchscript_output_attentions(tester, tester.all_model_classes, config, inputs_dict)
+        _create_and_check_torchscript_output_hidden_state(tester, tester.all_model_classes, config, inputs_dict)
+
     if test_pruning:
         _create_and_check_for_head_pruning(tester, tester.all_model_classes, config, inputs_dict)
 
