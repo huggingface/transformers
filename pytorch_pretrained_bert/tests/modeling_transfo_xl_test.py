@@ -173,7 +173,7 @@ class TransfoXLModelTest(unittest.TestCase):
 
         def create_and_check_transfo_xl_commons(self, config, input_ids_1, input_ids_2, lm_labels):
             inputs_dict = {'input_ids': input_ids_1}
-            create_and_check_commons(self, config, inputs_dict, test_pruning=False)
+            create_and_check_commons(self, config, inputs_dict, test_pruning=False, test_torchscript=False)
 
     def test_default(self):
         self.run_tester(TransfoXLModelTest.TransfoXLModelTester(self))
