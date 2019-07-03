@@ -35,7 +35,7 @@ from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path
-from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel
+from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel, prune_linear_layer
 
 logger = logging.getLogger(__name__)
 
@@ -46,24 +46,6 @@ PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'xlm-mlm-en-2048': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-config.json",
 }
 
-DECODER_ONLY_PARAMS = [
-    'layer_norm15.%i.weight', 'layer_norm15.%i.bias',
-    'encoder_attn.%i.q_lin.weight', 'encoder_attn.%i.q_lin.bias',
-    'encoder_attn.%i.k_lin.weight', 'encoder_attn.%i.k_lin.bias',
-    'encoder_attn.%i.v_lin.weight', 'encoder_attn.%i.v_lin.bias',
-    'encoder_attn.%i.out_lin.weight', 'encoder_attn.%i.out_lin.bias'
-]
-
-TRANSFORMER_LAYER_PARAMS = [
-    'attentions.%i.q_lin.weight', 'attentions.%i.q_lin.bias',
-    'attentions.%i.k_lin.weight', 'attentions.%i.k_lin.bias',
-    'attentions.%i.v_lin.weight', 'attentions.%i.v_lin.bias',
-    'attentions.%i.out_lin.weight', 'attentions.%i.out_lin.bias',
-    'layer_norm1.%i.weight', 'layer_norm1.%i.bias',
-    'ffns.%i.lin1.weight', 'ffns.%i.lin1.bias',
-    'ffns.%i.lin2.weight', 'ffns.%i.lin2.bias',
-    'layer_norm2.%i.weight', 'layer_norm2.%i.bias'
-]
 
 class XLMConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `XLMModel`.
@@ -275,6 +257,24 @@ class MultiHeadAttention(nn.Module):
         self.v_lin = Linear(dim, dim, config=config)
         self.out_lin = Linear(dim, dim, config=config)
 
+    def prune_heads(self, heads):
+        attention_head_size = self.dim // self.n_heads
+        if len(heads) == 0:
+            return
+        mask = torch.ones(self.n_heads, attention_head_size)
+        for head in heads:
+            mask[head] = 0
+        mask = mask.view(-1).contiguous().eq(1)
+        index = torch.arange(len(mask))[mask].long()
+        # Prune linear layers
+        self.q_lin = prune_linear_layer(self.q_lin, index)
+        self.k_lin = prune_linear_layer(self.k_lin, index)
+        self.v_lin = prune_linear_layer(self.v_lin, index)
+        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
+        # Update hyper params
+        self.n_heads = self.n_heads - len(heads)
+        self.dim = attention_head_size * self.n_heads
+
     def forward(self, input, mask, kv=None, cache=None, head_mask=None):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -286,9 +286,9 @@ class MultiHeadAttention(nn.Module):
             klen = qlen if cache is None else cache['slen'] + qlen
         else:
             klen = kv.size(1)
-        assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
         n_heads = self.n_heads
-        dim_per_head = dim // n_heads
+        dim_per_head = self.dim // n_heads
         mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)
 
         def shape(x):
@@ -335,7 +335,7 @@ class MultiHeadAttention(nn.Module):
 
         outputs = (self.out_lin(context),)
         if self.output_attentions:
-            outputs = outputs + (weights)
+            outputs = outputs + (weights,)
         return outputs
 
 
@@ -497,6 +497,14 @@ class XLMModel(XLMPreTrainedModel):
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=1e-12))
 
+    def _prune_heads(self, heads_to_prune):
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+            See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.attentions[layer].prune_heads(heads)
+
     def forward(self, input_ids, lengths=None, positions=None, langs=None,
                 token_type_ids=None, attention_mask=None, cache=None, head_mask=None):  # src_enc=None, src_len=None, 
         """
@@ -508,7 +516,7 @@ class XLMModel(XLMPreTrainedModel):
             `token_type_ids` LongTensor (bs, slen) same as `langs` used for compatibility
         """
         if lengths is None:
-            lengths = (input_ids != self.pad_index).float().sum(dim=1)
+            lengths = (input_ids != self.pad_index).sum(dim=1).long()
         # mask = input_ids != self.pad_index
 
         # check inputs

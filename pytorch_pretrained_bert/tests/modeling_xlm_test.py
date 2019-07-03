@@ -96,7 +96,7 @@ class XLMModelTest(unittest.TestCase):
 
             input_lengths = None
             if self.use_input_lengths:
-                input_lengths = ids_tensor([self.batch_size], vocab_size=self.seq_length-1)
+                input_lengths = ids_tensor([self.batch_size], vocab_size=2) + self.seq_length - 2  # small variation of seq_length
 
             token_type_ids = None
             if self.use_token_type_ids:
@@ -139,6 +139,8 @@ class XLMModelTest(unittest.TestCase):
             model = XLMModel(config=config)
             model.eval()
             outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
+            outputs = model(input_ids, langs=token_type_ids)
+            outputs = model(input_ids)
             sequence_output = outputs[0]
             result = {
                 "sequence_output": sequence_output,
@@ -232,7 +234,7 @@ class XLMModelTest(unittest.TestCase):
 
 
         def create_and_check_xlm_commons(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_lengths}
+            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'lengths': input_lengths}
             create_and_check_commons(self, config, inputs_dict)
 
     def test_default(self):

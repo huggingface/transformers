@@ -68,6 +68,8 @@ def _create_and_check_for_headmasking(tester, model_classes, config, inputs_dict
         attentions = outputs[-1]
         hidden_states = outputs[-2]
 
+        # Remove Nan
+
         tester.parent.assertIsNotNone(multihead_outputs)
         tester.parent.assertEqual(len(multihead_outputs), tester.num_hidden_layers)
         tester.parent.assertAlmostEqual(
@@ -298,7 +300,11 @@ class GPTModelTester(object):
                             mc_labels, lm_labels, mc_token_ids):
         model = self.base_model_class(config)
         model.eval()
+
         outputs = model(input_ids, position_ids, token_type_ids)
+        outputs = model(input_ids, position_ids)
+        outputs = model(input_ids)
+
         hidden_state = outputs[0]
         self.parent.assertListEqual(
             list(hidden_state.size()),

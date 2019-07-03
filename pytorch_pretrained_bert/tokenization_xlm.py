@@ -304,7 +304,6 @@ class XLMTokenizer(object):
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write(u'#version: 0.2\n')
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning("Saving vocabulary to {}: BPE merge indices are not consecutive."

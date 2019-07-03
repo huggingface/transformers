@@ -126,6 +126,8 @@ class BertModelTest(unittest.TestCase):
             model = BertModel(config=config)
             model.eval()
             sequence_output, pooled_output = model(input_ids, token_type_ids, input_mask)
+            sequence_output, pooled_output = model(input_ids, token_type_ids)
+            sequence_output, pooled_output = model(input_ids)
 
             result = {
                 "sequence_output": sequence_output,

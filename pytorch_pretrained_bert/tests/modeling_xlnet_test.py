@@ -140,7 +140,26 @@ class XLNetModelTest(unittest.TestCase):
             random.seed(self.seed)
             torch.manual_seed(self.seed)
 
-        def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels):
+        def create_and_check_xlnet_base_model(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels):
+            model = XLNetModel(config)
+            model.eval()
+
+            _, _ = model(input_ids_1, token_type_ids=segment_ids)
+            outputs, mems_1 = model(input_ids_1)
+
+            result = {
+                "mems_1": mems_1,
+                "outputs": outputs,
+            }
+
+            self.parent.assertListEqual(
+                list(result["outputs"].size()),
+                [self.batch_size, self.seq_length, self.hidden_size])
+            self.parent.assertListEqual(
+                list(list(mem.size()) for mem in result["mems_1"]),
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+
+        def create_and_check_xlnet_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, target_mapping, inp_q, segment_ids, lm_labels):
             model = XLNetLMHeadModel(config)
             model.eval()
 
@@ -150,7 +169,7 @@ class XLNetModelTest(unittest.TestCase):
 
             logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping, inp_q=inp_q)
 
-            outputs = {
+            result = {
                 "loss_1": loss_1,
                 "mems_1": mems_1,
                 "all_logits_1": all_logits_1,
@@ -158,9 +177,7 @@ class XLNetModelTest(unittest.TestCase):
                 "mems_2": mems_2,
                 "all_logits_2": all_logits_2,
             }
-            return outputs
 
-        def check_transfo_xl_lm_head_output(self, result):
             self.parent.assertListEqual(
                 list(result["loss_1"].size()),
                 [])
@@ -203,8 +220,11 @@ class XLNetModelTest(unittest.TestCase):
     def run_tester(self, tester):
         tester.set_seed()
         config_and_inputs = tester.prepare_config_and_inputs()
-        output_result = tester.create_transfo_xl_lm_head(*config_and_inputs)
-        tester.check_transfo_xl_lm_head_output(output_result)
+        tester.create_and_check_xlnet_base_model(*config_and_inputs)
+
+        tester.set_seed()
+        config_and_inputs = tester.prepare_config_and_inputs()
+        tester.create_and_check_xlnet_lm_head(*config_and_inputs)
 
         tester.set_seed()
         config_and_inputs = tester.prepare_config_and_inputs()
