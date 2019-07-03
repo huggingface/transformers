@@ -77,6 +77,46 @@ def _create_and_check_torchscript(tester, model_classes, config, inputs_dict):
 
         tester.parent.assertTrue(models_equal)
 
+def _create_and_check_torchscript_trace(tester, model_classes, config, inputs_dict):
+    inputs = inputs_dict["input_ids"]
+    inputs_reduced = inputs[:int(inputs.shape[0]/2), ..., :int(inputs.shape[-1]/2)]
+    configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+    configs_no_init.torchscript = True
+    for model_class in model_classes:
+        model = model_class(config=configs_no_init)
+        model.eval()
+
+        try:
+            traced_model = torch.jit.trace(model, inputs)
+            traced_model_reduced = torch.jit.trace(model, inputs_reduced)
+
+            torch.jit.save(traced_model, "traced_model.pt")
+            torch.jit.save(traced_model_reduced, "traced_model_reduced.pt")
+        except RuntimeError:
+            tester.parent.fail("Couldn't save model trace.")
+
+        try:
+            loaded_model = torch.jit.load("traced_model.pt")
+            loaded_model_reduced = torch.jit.load("traced_model_reduced.pt")
+            os.remove("traced_model.pt")
+            os.remove("traced_model_reduced.pt")
+        except ValueError:
+            tester.parent.fail("Couldn't load module.")
+
+        loaded_model.eval()
+        loaded_model_reduced.eval()
+
+        loaded_model_params = model.parameters()
+        loaded_model_reduced_params = loaded_model.parameters()
+
+        models_equal = True
+        for p1, p2 in zip(loaded_model_reduced_params, loaded_model_params):
+            if p1.data.ne(p2.data).sum() > 0:
+                models_equal = False
+
+        tester.parent.assertTrue(models_equal)
+
+
 def _create_and_check_initialization(tester, model_classes, config, inputs_dict):
     configs_no_init = _config_zero_init(config)
     for model_class in model_classes:
@@ -209,6 +249,7 @@ def create_and_check_commons(tester, config, inputs_dict, test_pruning=True, tes
         _create_and_check_torchscript(tester, tester.all_model_classes, config, inputs_dict)
         _create_and_check_torchscript_output_attentions(tester, tester.all_model_classes, config, inputs_dict)
         _create_and_check_torchscript_output_hidden_state(tester, tester.all_model_classes, config, inputs_dict)
+        _create_and_check_torchscript_trace(tester, tester.all_model_classes, config, inputs_dict)
 
     if test_pruning:
         _create_and_check_for_head_pruning(tester, tester.all_model_classes, config, inputs_dict)
