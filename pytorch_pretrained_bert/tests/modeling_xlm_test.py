@@ -20,7 +20,7 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_pretrained_bert import (XLMConfig, XLMModel, XLMForQuestionAnswering, XLMForSequenceClassification)
+from pytorch_pretrained_bert import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering, XLMForSequenceClassification)
 from pytorch_pretrained_bert.modeling_xlm import PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .model_tests_commons import (create_and_check_commons, ConfigTester, ids_tensor)
@@ -58,7 +58,8 @@ class XLMModelTest(unittest.TestCase):
                      summary_type="last",
                      use_proj=True,
                      scope=None,
-                     all_model_classes = (XLMModel,),  # , XLMForSequenceClassification, XLMForTokenClassification),
+                     all_model_classes = (XLMModel, XLMWithLMHeadModel,
+                                          XLMForQuestionAnswering, XLMForSequenceClassification),  # , XLMForSequenceClassification, XLMForTokenClassification),
                     ):
             self.parent = parent
             self.batch_size = batch_size
@@ -93,6 +94,7 @@ class XLMModelTest(unittest.TestCase):
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
 
             input_lengths = None
             if self.use_input_lengths:
@@ -104,11 +106,11 @@ class XLMModelTest(unittest.TestCase):
 
             sequence_labels = None
             token_labels = None
-            choice_labels = None
+            is_impossible_labels = None
             if self.use_labels:
                 sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                choice_labels = ids_tensor([self.batch_size], self.num_choices)
+                is_impossible_labels = ids_tensor([self.batch_size], 2).float()
 
             config = XLMConfig(
                  vocab_size_or_config_json_file=self.vocab_size,
@@ -128,14 +130,14 @@ class XLMModelTest(unittest.TestCase):
                  summary_type=self.summary_type,
                  use_proj=self.use_proj)
 
-            return config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels
+            return config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(
                 list(result["loss"].size()),
                 [])
 
-        def create_and_check_xlm_model(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xlm_model(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
             model = XLMModel(config=config)
             model.eval()
             outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
@@ -150,90 +152,92 @@ class XLMModelTest(unittest.TestCase):
                 [self.batch_size, self.seq_length, self.hidden_size])
 
 
-        # def create_and_check_xlm_for_masked_lm(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
-        #     model = XLMForMaskedLM(config=config)
-        #     model.eval()
-        #     loss, prediction_scores = model(input_ids, token_type_ids, input_lengths, token_labels)
-        #     result = {
-        #         "loss": loss,
-        #         "prediction_scores": prediction_scores,
-        #     }
-        #     self.parent.assertListEqual(
-        #         list(result["prediction_scores"].size()),
-        #         [self.batch_size, self.seq_length, self.vocab_size])
-        #     self.check_loss_output(result)
+        def create_and_check_xlm_lm_head(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+            model = XLMWithLMHeadModel(config)
+            model.eval()
+
+            loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
+
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+
+            self.parent.assertListEqual(
+                list(result["loss"].size()),
+                [])
+            self.parent.assertListEqual(
+                list(result["logits"].size()),
+                [self.batch_size, self.seq_length, self.vocab_size])
 
 
-        # def create_and_check_xlm_for_question_answering(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
-        #     model = XLMForQuestionAnswering(config=config)
-        #     model.eval()
-        #     loss, start_logits, end_logits = model(input_ids, token_type_ids, input_lengths, sequence_labels, sequence_labels)
-        #     result = {
-        #         "loss": loss,
-        #         "start_logits": start_logits,
-        #         "end_logits": end_logits,
-        #     }
-        #     self.parent.assertListEqual(
-        #         list(result["start_logits"].size()),
-        #         [self.batch_size, self.seq_length])
-        #     self.parent.assertListEqual(
-        #         list(result["end_logits"].size()),
-        #         [self.batch_size, self.seq_length])
-        #     self.check_loss_output(result)
+        def create_and_check_xlm_qa(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+            model = XLMForQuestionAnswering(config)
+            model.eval()
+
+            outputs = model(input_ids)
+            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
+
+            outputs = model(input_ids, start_positions=sequence_labels,
+                                         end_positions=sequence_labels,
+                                         cls_index=sequence_labels,
+                                         is_impossible=is_impossible_labels,
+                                         p_mask=input_mask)
+
+            outputs = model(input_ids, start_positions=sequence_labels,
+                                         end_positions=sequence_labels,
+                                         cls_index=sequence_labels,
+                                         is_impossible=is_impossible_labels)
+
+            total_loss, start_logits, end_logits, cls_logits = outputs
+
+            outputs = model(input_ids, start_positions=sequence_labels,
+                                         end_positions=sequence_labels)
+
+            total_loss, start_logits, end_logits = outputs
+
+            result = {
+                "loss": total_loss,
+                "start_logits": start_logits,
+                "end_logits": end_logits,
+                "cls_logits": cls_logits,
+            }
+
+            self.parent.assertListEqual(
+                list(result["loss"].size()),
+                [])
+            self.parent.assertListEqual(
+                list(result["start_logits"].size()),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(result["end_logits"].size()),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(result["cls_logits"].size()),
+                [self.batch_size])
 
 
-        # def create_and_check_xlm_for_sequence_classification(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
-        #     config.num_labels = self.num_labels
-        #     model = XLMForSequenceClassification(config)
-        #     model.eval()
-        #     loss, logits = model(input_ids, token_type_ids, input_lengths, sequence_labels)
-        #     result = {
-        #         "loss": loss,
-        #         "logits": logits,
-        #     }
-        #     self.parent.assertListEqual(
-        #         list(result["logits"].size()),
-        #         [self.batch_size, self.num_labels])
-        #     self.check_loss_output(result)
+        def create_and_check_xlm_sequence_classif(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+            model = XLMForSequenceClassification(config)
+            model.eval()
+
+            (logits,) = model(input_ids)
+            loss, logits = model(input_ids, labels=sequence_labels)
+
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+
+            self.parent.assertListEqual(
+                list(result["loss"].size()),
+                [])
+            self.parent.assertListEqual(
+                list(result["logits"].size()),
+                [self.batch_size, self.type_sequence_label_size])
 
 
-        # def create_and_check_xlm_for_token_classification(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
-        #     config.num_labels = self.num_labels
-        #     model = XLMForTokenClassification(config=config)
-        #     model.eval()
-        #     loss, logits = model(input_ids, token_type_ids, input_lengths, token_labels)
-        #     result = {
-        #         "loss": loss,
-        #         "logits": logits,
-        #     }
-        #     self.parent.assertListEqual(
-        #         list(result["logits"].size()),
-        #         [self.batch_size, self.seq_length, self.num_labels])
-        #     self.check_loss_output(result)
-
-
-        # def create_and_check_xlm_for_multiple_choice(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
-        #     config.num_choices = self.num_choices
-        #     model = XLMForMultipleChoice(config=config)
-        #     model.eval()
-        #     multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        #     multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        #     multiple_choice_input_lengths = input_lengths.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        #     loss, logits = model(multiple_choice_inputs_ids,
-        #                  multiple_choice_token_type_ids,
-        #                  multiple_choice_input_lengths,
-        #                  choice_labels)
-        #     result = {
-        #         "loss": loss,
-        #         "logits": logits,
-        #     }
-        #     self.parent.assertListEqual(
-        #         list(result["logits"].size()),
-        #         [self.batch_size, self.num_choices])
-        #     self.check_loss_output(result)
-
-
-        def create_and_check_xlm_commons(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xlm_commons(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
             inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'lengths': input_lengths}
             create_and_check_commons(self, config, inputs_dict)
 

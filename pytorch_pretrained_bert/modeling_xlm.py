@@ -35,7 +35,8 @@ from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path
-from .model_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel, prune_linear_layer
+from .model_utils import (CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel,
+                          prune_linear_layer, SequenceSummary, SQuADHead)
 
 logger = logging.getLogger(__name__)
 
@@ -67,15 +68,23 @@ class XLMConfig(PretrainedConfig):
                  n_langs=1,
                  max_position_embeddings=512,
                  embed_init_std=2048 ** -0.5,
+                 layer_norm_eps=1e-12,
                  init_std=0.02,
-                 summary_type="last",
-                 use_proj=True,
                  bos_index=0,
                  eos_index=1,
                  pad_index=2,
                  unk_index=3,
                  mask_index=5,
                  is_encoder=True,
+
+                 finetuning_task=None,
+                 num_labels=2,
+                 summary_type='last',
+                 summary_use_proj=True,
+                 summary_activation='tanh',
+                 summary_dropout=0.1,
+                 start_n_top=5,
+                 end_n_top=5,
                  **kwargs):
         """Constructs XLMConfig.
 
@@ -140,8 +149,7 @@ class XLMConfig(PretrainedConfig):
             self.causal = causal
             self.asm = asm
             self.n_langs = n_langs
-            self.summary_type = summary_type
-            self.use_proj = use_proj
+            self.layer_norm_eps = layer_norm_eps
             self.bos_index = bos_index
             self.eos_index = eos_index
             self.pad_index = pad_index
@@ -151,6 +159,14 @@ class XLMConfig(PretrainedConfig):
             self.max_position_embeddings = max_position_embeddings
             self.embed_init_std = embed_init_std
             self.init_std = init_std
+            self.finetuning_task = finetuning_task
+            self.num_labels = num_labels
+            self.summary_type = summary_type
+            self.summary_use_proj = summary_use_proj
+            self.summary_activation = summary_activation
+            self.summary_dropout = summary_dropout
+            self.start_n_top = start_n_top
+            self.end_n_top = end_n_top
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -170,26 +186,6 @@ class XLMConfig(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.n_layers
-
-
-def Embedding(num_embeddings, embedding_dim, padding_idx=None, config=None):
-    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
-    if config is not None and config.embed_init_std is not None:
-        nn.init.normal_(m.weight, mean=0, std=config.embed_init_std)
-    if padding_idx is not None:
-        nn.init.constant_(m.weight[padding_idx], 0)
-    return m
-
-
-def Linear(in_features, out_features, bias=True, config=None):
-    m = nn.Linear(in_features, out_features, bias)
-    if config is not None and config.init_std is not None:
-        nn.init.normal_(m.weight, mean=0, std=config.init_std)
-        if bias:
-            nn.init.constant_(m.bias, 0.)
-    # nn.init.xavier_uniform_(m.weight)
-    # nn.init.constant_(m.bias, 0.)
-    return m
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -244,7 +240,7 @@ class MultiHeadAttention(nn.Module):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config):
-        super().__init__()
+        super(MultiHeadAttention, self).__init__()
         self.layer_id = next(MultiHeadAttention.NEW_ID)
         self.output_attentions = config.output_attentions
         self.dim = dim
@@ -252,10 +248,10 @@ class MultiHeadAttention(nn.Module):
         self.dropout = config.attention_dropout
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = Linear(dim, dim, config=config)
-        self.k_lin = Linear(dim, dim, config=config)
-        self.v_lin = Linear(dim, dim, config=config)
-        self.out_lin = Linear(dim, dim, config=config)
+        self.q_lin = nn.Linear(dim, dim)
+        self.k_lin = nn.Linear(dim, dim)
+        self.v_lin = nn.Linear(dim, dim)
+        self.out_lin = nn.Linear(dim, dim)
 
     def prune_heads(self, heads):
         attention_head_size = self.dim // self.n_heads
@@ -342,10 +338,10 @@ class MultiHeadAttention(nn.Module):
 class TransformerFFN(nn.Module):
 
     def __init__(self, in_dim, dim_hidden, out_dim, config):
-        super().__init__()
+        super(TransformerFFN, self).__init__()
         self.dropout = config.dropout
-        self.lin1 = Linear(in_dim, dim_hidden, config=config)
-        self.lin2 = Linear(dim_hidden, out_dim, config=config)
+        self.lin1 = nn.Linear(in_dim, dim_hidden)
+        self.lin2 = nn.Linear(dim_hidden, out_dim)
         self.act = gelu if config.gelu_activation else F.relu
 
     def forward(self, input):
@@ -363,17 +359,21 @@ class XLMPreTrainedModel(PreTrainedModel):
     config_class = XLMConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = None
-    base_model_prefix = "xlm"
+    base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):
         super(XLMPreTrainedModel, self).__init__(*inputs, **kwargs)
 
     def init_weights(self, module):
-        """ Initialize the weights.
-        """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Weights are initialized in module instantiation (see above)
-            pass
+        """ Initialize the weights. """
+        if isinstance(module, nn.Embedding):
+            if self.config is not None and self.config.embed_init_std is not None:
+                nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
+        if isinstance(module, nn.Linear):
+            if self.config is not None and self.config.init_std is not None:
+                nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
+                if hasattr(module, 'bias') and module.bias is not None:
+                    nn.init.constant_(module.bias, 0.)
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -471,13 +471,13 @@ class XLMModel(XLMPreTrainedModel):
         assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
 
         # embeddings
-        self.position_embeddings = Embedding(config.max_position_embeddings, self.dim, config=config)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, self.dim)
         if config.sinusoidal_embeddings:
             create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
         if config.n_langs > 1:
-            self.lang_embeddings = Embedding(self.n_langs, self.dim, config=config)
-        self.embeddings = Embedding(self.n_words, self.dim, padding_idx=self.pad_index, config=config)
-        self.layer_norm_emb = nn.LayerNorm(self.dim, eps=1e-12)
+            self.lang_embeddings = nn.Embedding(self.n_langs, self.dim)
+        self.embeddings = nn.Embedding(self.n_words, self.dim, padding_idx=self.pad_index)
+        self.layer_norm_emb = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
 
         # transformer layers
         self.attentions = nn.ModuleList()
@@ -490,12 +490,14 @@ class XLMModel(XLMPreTrainedModel):
 
         for _ in range(self.n_layers):
             self.attentions.append(MultiHeadAttention(self.n_heads, self.dim, config=config))
-            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=1e-12))
+            self.layer_norm1.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             # if self.is_decoder:
-            #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=1e-12))
+            #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
-            self.layer_norm2.append(nn.LayerNorm(self.dim, eps=1e-12))
+            self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
+
+        self.apply(self.init_weights)
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -636,14 +638,14 @@ class XLMPredLayer(nn.Module):
     Prediction layer (cross_entropy or adaptive_softmax).
     """
     def __init__(self, config):
-        super().__init__()
+        super(XLMPredLayer, self).__init__()
         self.asm = config.asm
         self.n_words = config.n_words
         self.pad_index = config.pad_index
         dim = config.emb_dim
 
         if config.asm is False:
-            self.proj = Linear(dim, config.n_words, bias=True)
+            self.proj = nn.Linear(dim, config.n_words, bias=True)
         else:
             self.proj = nn.AdaptiveLogSoftmaxWithLoss(
                 in_features=dim,
@@ -653,28 +655,24 @@ class XLMPredLayer(nn.Module):
                 head_bias=True,  # default is False
             )
 
-    def forward(self, x, y, get_scores=False):
+    def forward(self, x, y=None):
+        """ Compute the loss, and optionally the scores.
         """
-        Compute the loss, and optionally the scores.
-        """
-        assert (y == self.pad_index).sum().item() == 0
-
+        outputs = ()
         if self.asm is False:
             scores = self.proj(x).view(-1, self.n_words)
-            loss = F.cross_entropy(scores, y, reduction='elementwise_mean')
+            outputs = (scores,) + outputs
+            if y is not None:
+                loss = F.cross_entropy(scores, y, reduction='elementwise_mean')
+                outputs = (loss,) + outputs
         else:
-            _, loss = self.proj(x, y)
-            scores = self.proj.log_prob(x) if get_scores else None
+            scores = self.proj.log_prob(x)
+            outputs = (scores,) + outputs
+            if y is not None:
+                _, loss = self.proj(x, y)
+                outputs = (loss,) + outputs
 
-        return scores, loss
-
-    def get_scores(self, x):
-        """
-        Compute scores.
-        """
-        assert x.dim() == 2
-        return self.proj.log_prob(x) if self.asm else self.proj(x)
-
+        return outputs
 
 
 class XLMWithLMHeadModel(XLMPreTrainedModel):
@@ -731,6 +729,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     """
     def __init__(self, config):
         super(XLMWithLMHeadModel, self).__init__(config)
+        self.torchscript = config.torchscript
 
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
@@ -741,7 +740,10 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     def tie_weights(self):
         """ Make sure we are sharing the embeddings
         """
-        self.pred_layer.proj.weight = self.transformer.embeddings.weight
+        if self.torchscript:
+            self.pred_layer.proj.weight = nn.Parameter(self.transformer.embeddings.weight.clone())
+        else:
+            self.pred_layer.proj.weight = self.transformer.embeddings.weight
 
     def forward(self, input_ids, lengths=None, positions=None, langs=None, token_type_ids=None,
                 attention_mask=None, cache=None, labels=None, head_mask=None):
@@ -775,53 +777,10 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
                                                langs=langs, attention_mask=attention_mask, cache=cache, head_mask=head_mask)
 
         output = transformer_outputs[0]
-        logits = self.pred_layer(output, labels)
-
-        outputs = transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
-
-        if labels is not None:
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
-            loss = loss_fct(logits.view(-1, logits.size(-1)),
-                            labels.view(-1))
-            outputs = [loss] + outputs
-
-        outputs = [logits] + outputs
+        outputs = self.pred_layer(output, labels)
+        outputs = outputs + transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         return outputs
-
-
-class XLMSequenceSummary(nn.Module):
-    def __init__(self, config):
-        super(XLMSequenceSummary, self).__init__()
-        self.summary_type = config.summary_type
-        if config.use_proj:
-            self.summary = nn.Linear(config.d_model, config.d_model)
-        else:
-            self.summary = None
-        if config.summary_type == 'attn':
-            # We should use a standard multi-head attention module with absolute positional embedding for that.
-            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
-            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
-            raise NotImplementedError
-        self.dropout = nn.Dropout(config.dropout)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        """ hidden_states: float Tensor in shape [bsz, seq_len, d_model], the hidden-states of the last layer."""
-        if self.summary_type == 'last':
-            output = hidden_states[:, -1]
-        elif self.summary_type == 'first':
-            output = hidden_states[:, 0]
-        elif self.summary_type == 'mean':
-            output = hidden_states.mean(dim=1)
-        elif summary_type == 'attn':
-            raise NotImplementedError
-
-        output = self.summary(output)
-        output = self.activation(output)
-        output = self.dropout(output)
-        return output
 
 
 class XLMForSequenceClassification(XLMPreTrainedModel):
@@ -890,15 +849,15 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     """
     def __init__(self, config):
         super(XLMForSequenceClassification, self).__init__(config)
+        self.num_labels = config.num_labels
 
         self.transformer = XLMModel(config)
-        self.sequence_summary = XLMSequenceSummary(config)
-        self.logits_proj = nn.Linear(config.d_model, config.num_labels)
+        self.sequence_summary = SequenceSummary(config)
 
         self.apply(self.init_weights)
 
-    def forward(self, input_ids, lengths=None, positions=None, langs=None, attention_mask=None,
-                cache=None, labels=None, head_mask=None):
+    def forward(self, input_ids, lengths=None, positions=None, langs=None, token_type_ids=None,
+                attention_mask=None, cache=None, labels=None, head_mask=None):
         """
         Args:
             inp_k: int32 Tensor in shape [bsz, len], the input token IDs.
@@ -930,10 +889,9 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
                                                langs=langs, attention_mask=attention_mask, cache=cache, head_mask=head_mask)
 
         output = transformer_outputs[0]
-        output = self.sequence_summary(output)
-        logits = self.logits_proj(output)
+        logits = self.sequence_summary(output)
 
-        outputs = transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
+        outputs = (logits,) + transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         if labels is not None:
             if self.num_labels == 1:
@@ -943,9 +901,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = [loss] + outputs
-
-        outputs = [logits] + outputs
+            outputs = (loss,) + outputs
 
         return outputs
 
@@ -1010,41 +966,22 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         super(XLMForQuestionAnswering, self).__init__(config)
 
         self.transformer = XLMModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+        self.qa_outputs = SQuADHead(config)
 
         self.apply(self.init_weights)
 
-    def forward(self, input_ids, lengths=None, positions=None, langs=None, attention_mask=None, cache=None,
-                labels=None, head_mask=None):
+    def forward(self, input_ids, lengths=None, positions=None, langs=None, token_type_ids=None,
+                attention_mask=None, cache=None, start_positions=None, end_positions=None,
+                cls_index=None, is_impossible=None, p_mask=None, head_mask=None):
 
         transformer_outputs = self.transformer(input_ids, lengths=lengths, positions=positions, token_type_ids=token_type_ids,
                                                langs=langs, attention_mask=attention_mask, cache=cache, head_mask=head_mask)
 
         output = transformer_outputs[0]
-        logits = self.qa_outputs(output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
 
-        outputs = transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
+        outputs = self.qa_outputs(output, start_positions=start_positions, end_positions=end_positions,
+                                  cls_index=cls_index, is_impossible=is_impossible, p_mask=p_mask)
 
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-            outputs = [total_loss] + outputs
-
-        outputs = [start_logits, end_logits] + outputs
+        outputs = outputs + transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         return outputs

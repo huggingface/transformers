@@ -25,7 +25,7 @@ from io import open
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss, MSELoss, functional as F
 
 from .file_utils import cached_path
 
@@ -301,22 +301,189 @@ class Conv1D(nn.Module):
         return x
 
 
-class SequenceSummary(nn.Module):
+class PoolerStartLogits(nn.Module):
+    """ Compute SQuAD start_logits from sequence hidden states. """
     def __init__(self, config):
-        """ Compute a single vector summary of a sequence hidden states according to various possibilities:
-            Args of the config class:
-                summary_type:
-                    - 'last' => [default] take the last token hidden state (like XLNet)
-                    - 'first' => take the first token hidden state (like Bert)
-                    - 'mean' => take the mean of all tokens hidden states
-                    - 'token_ids' => supply a Tensor of classification token indices (GPT/GPT-2)
-                    - 'attn' => Not implemented now, use multi-head attention
-                summary_use_proj: Add a projection after the vector extraction
-                summary_num_classes: If > 0: the projection outputs to n classes (otherwise to hidden_size)
-                summary_activation:
-                    'tanh' => add a tanh activation to the output
-                     None => no activation
+        super(PoolerStartLogits, self).__init__()
+        self.dense = nn.Linear(config.hidden_size, 1)
+
+    def forward(self, hidden_states, p_mask=None):
+        """ Args:
+            `p_mask`: [optional] invalid position mask such as query and special symbols (PAD, SEP, CLS)
+                shape [batch_size, seq_len]. 1.0 means token should be masked.
         """
+        x = self.dense(hidden_states).squeeze(-1)
+
+        if p_mask is not None:
+            x = x * (1 - p_mask) - 1e30 * p_mask
+
+        return x
+
+
+class PoolerEndLogits(nn.Module):
+    """ Compute SQuAD end_logits from sequence hidden states and start token hidden state.
+    """
+    def __init__(self, config):
+        super(PoolerEndLogits, self).__init__()
+        self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.activation = nn.Tanh()
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense_1 = nn.Linear(config.hidden_size, 1)
+
+    def forward(self, hidden_states, start_states=None, start_positions=None, p_mask=None):
+        """ Args:
+            One of start_states, start_positions should be not None. If both are set, start_positions overrides start_states.
+            `start_states`: hidden states of the first tokens for the labeled span: torch.LongTensor of shape identical to hidden_states.
+            `start_positions`: position of the first token for the labeled span: torch.LongTensor of shape [batch_size].
+            `p_mask`: [optional] invalid position mask such as query and special symbols (PAD, SEP, CLS)
+                shape [batch_size, seq_len]. 1.0 means token should be masked.
+        """
+        slen, hsz = hidden_states.shape[-2:]
+        assert start_states is not None or start_positions is not None, "One of start_states, start_positions should be not None"
+        if start_positions is not None:
+            start_positions = start_positions[:, None, None].expand(-1, -1, hsz) # shape (bsz, 1, hsz)
+            start_states = hidden_states.gather(-2, start_positions) # shape (bsz, 1, hsz)
+            start_states = start_states.expand(-1, slen, -1) # shape (bsz, slen, hsz)
+
+        x = self.dense_0(torch.cat([hidden_states, start_states], dim=-1))
+        x = self.activation(x)
+        x = self.LayerNorm(x)
+        x = self.dense_1(x).squeeze(-1)
+
+        if p_mask is not None:
+            x = x * (1 - p_mask) - 1e30 * p_mask
+
+        return x
+
+
+class PoolerAnswerClass(nn.Module):
+    """ Compute SQuAD 2.0 answer class from classification and start tokens hidden states. """
+    def __init__(self, config):
+        super(PoolerAnswerClass, self).__init__()
+        self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.activation = nn.Tanh()
+        self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
+
+    def forward(self, hidden_states, start_states=None, start_positions=None, cls_index=None):
+        """ Args:
+            One of start_states, start_positions should be not None. If both are set, start_positions overrides start_states.
+            `start_states`: hidden states of the first tokens for the labeled span: torch.LongTensor of shape identical to hidden_states.
+            `start_positions`: position of the first token for the labeled span: torch.LongTensor of shape [batch_size].
+            `cls_index`: position of the CLS token: torch.LongTensor of shape [batch_size]. If None, take the last token.
+
+            # note(zhiliny): no dependency on end_feature so that we can obtain one single `cls_logits` for each sample
+        """
+        slen, hsz = hidden_states.shape[-2:]
+        assert start_states is not None or start_positions is not None, "One of start_states, start_positions should be not None"
+        if start_positions is not None:
+            start_positions = start_positions[:, None, None].expand(-1, -1, hsz) # shape (bsz, 1, hsz)
+            start_states = hidden_states.gather(-2, start_positions).squeeze(-2) # shape (bsz, hsz)
+
+        if cls_index is not None:
+            cls_index = cls_index[:, None, None].expand(-1, -1, hsz) # shape (bsz, 1, hsz)
+            cls_token_state = hidden_states.gather(-2, cls_index).squeeze(-2) # shape (bsz, hsz)
+        else:
+            cls_token_state = hidden_states[:, -1, :] # shape (bsz, hsz)
+
+        x = self.dense_0(torch.cat([start_states, cls_token_state], dim=-1))
+        x = self.activation(x)
+        x = self.dense_1(x).squeeze(-1)
+
+        return x
+
+
+class SQuADHead(nn.Module):
+    """ A SQuAD head inspired by XLNet.
+        Compute
+    """
+    def __init__(self, config):
+        super(SQuADHead, self).__init__()
+        self.start_n_top = config.start_n_top
+        self.end_n_top = config.end_n_top
+
+        self.start_logits = PoolerStartLogits(config)
+        self.end_logits = PoolerEndLogits(config)
+        self.answer_class = PoolerAnswerClass(config)
+
+    def forward(self, hidden_states, start_positions=None, end_positions=None,
+                cls_index=None, is_impossible=None, p_mask=None):
+        """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
+        """
+        outputs = ()
+
+        start_logits = self.start_logits(hidden_states, p_mask)
+
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, let's remove the dimension added by batch splitting
+            for x in (start_positions, end_positions, cls_index, is_impossible):
+                if x is not None and x.dim() > 1:
+                    x.squeeze_(-1)
+
+            # during training, compute the end logits based on the ground truth of the start position
+            end_logits = self.end_logits(hidden_states, start_positions=start_positions, p_mask=p_mask)
+
+            loss_fct = CrossEntropyLoss()
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            total_loss = (start_loss + end_loss) / 2
+
+            if cls_index is not None and is_impossible is not None:
+                # Predict answerability from the representation of CLS and START
+                cls_logits = self.answer_class(hidden_states, start_positions=start_positions, cls_index=cls_index)
+                loss_fct_cls = nn.BCEWithLogitsLoss()
+                cls_loss = loss_fct_cls(cls_logits, is_impossible)
+
+                # note(zhiliny): by default multiply the loss by 0.5 so that the scale is comparable to start_loss and end_loss
+                total_loss += cls_loss * 0.5
+                outputs = (total_loss, start_logits, end_logits, cls_logits) + outputs
+            else:
+                outputs = (total_loss, start_logits, end_logits) + outputs
+
+        else:
+            # during inference, compute the end logits based on beam search
+            bsz, slen, hsz = hidden_states.size()
+            start_log_probs = F.softmax(start_logits, dim=-1) # shape (bsz, slen)
+
+            start_top_log_probs, start_top_index = torch.topk(start_log_probs, self.start_n_top, dim=-1) # shape (bsz, start_n_top)
+            start_top_index = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
+            start_states = torch.gather(hidden_states, -2, start_top_index) # shape (bsz, start_n_top, hsz)
+            start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1) # shape (bsz, slen, start_n_top, hsz)
+
+            hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(start_states) # shape (bsz, slen, start_n_top, hsz)
+            p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
+            end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
+            end_log_probs = F.softmax(end_logits, dim=1) # shape (bsz, slen, start_n_top)
+
+            end_top_log_probs, end_top_index = torch.topk(end_log_probs, self.end_n_top, dim=1) # shape (bsz, end_n_top, start_n_top)
+            end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)
+            end_top_index = end_top_index.view(-1, self.start_n_top * self.end_n_top)
+
+            start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)
+            cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
+
+            outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits) + outputs
+
+        # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits
+        # or (if labels are provided) total_loss, start_logits, end_logits, (cls_logits)
+        return outputs
+
+
+class SequenceSummary(nn.Module):
+    """ Compute a single vector summary of a sequence hidden states according to various possibilities:
+        Args of the config class:
+            summary_type:
+                - 'last' => [default] take the last token hidden state (like XLNet)
+                - 'first' => take the first token hidden state (like Bert)
+                - 'mean' => take the mean of all tokens hidden states
+                - 'token_ids' => supply a Tensor of classification token indices (GPT/GPT-2)
+                - 'attn' => Not implemented now, use multi-head attention
+            summary_use_proj: Add a projection after the vector extraction
+            summary_num_classes: If > 0: the projection outputs to n classes (otherwise to hidden_size)
+            summary_activation:
+                'tanh' => add a tanh activation to the output
+                    None => no activation
+    """
+    def __init__(self, config):
         super(SequenceSummary, self).__init__()
 
         self.summary_type = config.summary_type if hasattr(config, 'summary_use_proj') else 'last'

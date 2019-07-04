@@ -32,8 +32,8 @@ from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path
-from .model_utils import (CONFIG_NAME, WEIGHTS_NAME,
-                          PretrainedConfig, PreTrainedModel, SequenceSummary)
+from .model_utils import (CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel,
+                          SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits)
 
 
 logger = logging.getLogger(__name__)
@@ -221,13 +221,15 @@ class XLNetConfig(PretrainedConfig):
                  bi_data=False,
                  clamp_len=-1,
                  same_length=False,
-                 
+
                  finetuning_task=None,
                  num_labels=2,
                  summary_type='last',
                  summary_use_proj=True,
                  summary_activation='tanh',
                  summary_dropout=0.1,
+                 start_n_top=5,
+                 end_n_top=5,
                  **kwargs):
         """Constructs XLNetConfig.
 
@@ -313,6 +315,8 @@ class XLNetConfig(PretrainedConfig):
             self.summary_use_proj = summary_use_proj
             self.summary_activation = summary_activation
             self.summary_dropout = summary_dropout
+            self.start_n_top = start_n_top
+            self.end_n_top = end_n_top
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -1114,6 +1118,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     """
     def __init__(self, config):
         super(XLNetForSequenceClassification, self).__init__(config)
+        self.num_labels = config.num_labels
 
         self.transformer = XLNetModel(config)
         self.sequence_summary = SequenceSummary(config)
@@ -1174,7 +1179,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
 
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
-    """XLNet model for Question Answering (span extraction).
+    """ XLNet model for Question Answering (span extraction).
     This module is composed of the XLNet model with a linear layer on top of
     the sequence output that computes start_logits and end_logits
 
@@ -1231,41 +1236,78 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
     """
     def __init__(self, config):
         super(XLNetForQuestionAnswering, self).__init__(config)
+        self.start_n_top = config.start_n_top
+        self.end_n_top = config.end_n_top
 
         self.transformer = XLNetModel(config)
-        self.qa_outputs = nn.Linear(config.d_model, config.num_labels)
+        self.start_logits = PoolerStartLogits(config)
+        self.end_logits = PoolerEndLogits(config)
+        self.answer_class = PoolerAnswerClass(config)
 
         self.apply(self.init_weights)
 
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
-                start_positions=None, end_positions=None, head_mask=None):
+                start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None,
+                head_mask=None):
         transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
-                                            mems, perm_mask, target_mapping, inp_q, head_mask)
+                                               mems, perm_mask, target_mapping, inp_q, head_mask)
+        hidden_states = transformer_outputs[0]
+        start_logits = self.start_logits(hidden_states, p_mask)
 
-        logits = self.qa_outputs(transformer_outputs[0])
-
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        outputs = (start_logits, end_logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+        outputs = transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
 
         if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
+            # If we are on multi-GPU, let's remove the dimension added by batch splitting
+            for x in (start_positions, end_positions, cls_index, is_impossible):
+                if x is not None and x.dim() > 1:
+                    x.squeeze_(-1)
 
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            # during training, compute the end logits based on the ground truth of the start position
+            end_logits = self.end_logits(hidden_states, start_positions=start_positions, p_mask=p_mask)
+
+            loss_fct = CrossEntropyLoss()
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-            outputs = (total_loss,) + outputs
 
-        return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
+            if cls_index is not None and is_impossible is not None:
+                # Predict answerability from the representation of CLS and START
+                cls_logits = self.answer_class(hidden_states, start_positions=start_positions, cls_index=cls_index)
+                loss_fct_cls = nn.BCEWithLogitsLoss()
+                cls_loss = loss_fct_cls(cls_logits, is_impossible)
+
+                # note(zhiliny): by default multiply the loss by 0.5 so that the scale is
+                # comparable to start_loss and end_loss
+                total_loss += cls_loss * 0.5
+                outputs = (total_loss, start_logits, end_logits, cls_logits) + outputs
+            else:
+                outputs = (total_loss, start_logits, end_logits) + outputs
+
+        else:
+            # during inference, compute the end logits based on beam search
+            bsz, slen, hsz = hidden_states.size()
+            start_log_probs = F.softmax(start_logits, dim=-1) # shape (bsz, slen)
+
+            start_top_log_probs, start_top_index = torch.topk(start_log_probs, self.start_n_top, dim=-1) # shape (bsz, start_n_top)
+            start_top_index = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
+            start_states = torch.gather(hidden_states, -2, start_top_index) # shape (bsz, start_n_top, hsz)
+            start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1) # shape (bsz, slen, start_n_top, hsz)
+
+            hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(start_states) # shape (bsz, slen, start_n_top, hsz)
+            p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
+            end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
+            end_log_probs = F.softmax(end_logits, dim=1) # shape (bsz, slen, start_n_top)
+
+            end_top_log_probs, end_top_index = torch.topk(end_log_probs, self.end_n_top, dim=1) # shape (bsz, end_n_top, start_n_top)
+            end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)
+            end_top_index = end_top_index.view(-1, self.start_n_top * self.end_n_top)
+
+            start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)
+            cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
+
+            outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits) + outputs
+
+        # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems, (hidden states), (attentions)
+        # or (if labels are provided) total_loss, start_logits, end_logits, (cls_logits), mems, (hidden states), (attentions)
+        return outputs
