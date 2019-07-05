@@ -31,7 +31,7 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
 from .file_utils import cached_path
-from .model_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
+from .modeling_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
                           PreTrainedModel, prune_conv1d_layer, SequenceSummary)
 from .modeling_bert import BertLayerNorm as LayerNorm
 

@@ -23,11 +23,15 @@ import unicodedata
 from io import open
 
 from .file_utils import cached_path
-from .model_utils import clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_VOCAB_ARCHIVE_MAP = {
+VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    'vocab_file':
+    {
     'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
     'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
     'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt",
@@ -41,8 +45,9 @@ PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-vocab.txt",
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
-}
-PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
+}}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'bert-base-uncased': 512,
     'bert-large-uncased': 512,
     'bert-base-cased': 512,
@@ -57,7 +62,6 @@ PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
     'bert-large-cased-whole-word-masking-finetuned-squad': 512,
     'bert-base-cased-finetuned-mrpc': 512,
 }
-VOCAB_NAME = 'vocab.txt'
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -83,8 +87,11 @@ def whitespace_tokenize(text):
     return tokens
 
 
-class BertTokenizer(object):
+class BertTokenizer(PreTrainedTokenizer):
     """Runs end-to-end tokenization: punctuation splitting + wordpiece"""
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
                  never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
@@ -203,7 +210,7 @@ class BertTokenizer(object):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
         if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_NAME)
+            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
@@ -215,13 +222,10 @@ class BertTokenizer(object):
         return (vocab_file,)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+        """ Instantiate a BertTokenizer from pre-trained vocabulary files.
         """
-        Instantiate a PreTrainedBertModel from a pre-trained model file.
-        Download and cache the pre-trained model file if needed.
-        """
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-            vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
+        if pretrained_model_name_or_path in PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES:
             if '-cased' in pretrained_model_name_or_path and kwargs.get('do_lower_case', True):
                 logger.warning("The pre-trained model you are loading is a cased model but you have not set "
                                "`do_lower_case` to False. We are setting `do_lower_case=False` for you but "
@@ -232,40 +236,8 @@ class BertTokenizer(object):
                                "`do_lower_case` to False. We are setting `do_lower_case=True` for you "
                                "but you may want to check this behavior.")
                 kwargs['do_lower_case'] = True
-        else:
-            vocab_file = pretrained_model_name_or_path
-        if os.path.isdir(vocab_file):
-            vocab_file = os.path.join(vocab_file, VOCAB_NAME)
-        # redirect to the cache, if necessary
-        try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download vocabulary.".format(
-                        vocab_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                        vocab_file))
-            return None
-        if resolved_vocab_file == vocab_file:
-            logger.info("loading vocabulary file {}".format(vocab_file))
-        else:
-            logger.info("loading vocabulary file {} from cache at {}".format(
-                vocab_file, resolved_vocab_file))
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP:
-            # if we're using a pretrained model, ensure the tokenizer wont index sequences longer
-            # than the number of positional embeddings
-            max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name_or_path]
-            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
-        # Instantiate tokenizer.
-        tokenizer = cls(resolved_vocab_file, *inputs, **kwargs)
-        return tokenizer
+
+        return super(BertTokenizer, cls)._from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
 
 class BasicTokenizer(object):

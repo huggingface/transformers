@@ -26,23 +26,35 @@ from io import open
 from tqdm import tqdm
 
 from .file_utils import cached_path
-from .model_utils import clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
 from .tokenization_bert import BasicTokenizer
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_VOCAB_ARCHIVE_MAP = {
-    'openai-gpt': "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-vocab.json",
+VOCAB_FILES_NAMES = {
+    'vocab_file': 'vocab.json',
+    'merges_file': 'merges.txt',
+    'special_tokens_file': 'special_tokens.txt'
 }
-PRETRAINED_MERGES_ARCHIVE_MAP = {
-    'openai-gpt': "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-merges.txt",
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    'vocab_file':
+    {
+        'openai-gpt': "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-vocab.json",
+    },
+    'merges_file':
+    {
+        'openai-gpt': "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-merges.txt",
+    },
+    'special_tokens_file':
+    {
+        'openai-gpt': None,
+    }
 }
-PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'openai-gpt': 512,
 }
-VOCAB_NAME = 'vocab.json'
-MERGES_NAME = 'merges.txt'
-SPECIAL_TOKENS_NAME = 'special_tokens.txt'
 
 def get_pairs(word):
     """
@@ -71,7 +83,7 @@ def text_standardize(text):
     text = re.sub(r'[^\S\n]+', ' ', text)
     return text.strip()
 
-class OpenAIGPTTokenizer(object):
+class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
     BPE tokenizer. Peculiarities:
         - lower case all inputs
@@ -79,65 +91,11 @@ class OpenAIGPTTokenizer(object):
         - argument special_tokens and function set_special_tokens:
             can be used to add additional symbols (ex: "__classify__") to a vocabulary.
     """
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
-        """
-        Instantiate a PreTrainedBertModel from a pre-trained model file.
-        Download and cache the pre-trained model file if needed.
-        """
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-            vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
-            merges_file = PRETRAINED_MERGES_ARCHIVE_MAP[pretrained_model_name_or_path]
-            special_tokens_file = None
-        else:
-            vocab_file = os.path.join(pretrained_model_name_or_path, VOCAB_NAME)
-            merges_file = os.path.join(pretrained_model_name_or_path, MERGES_NAME)
-            special_tokens_file = os.path.join(pretrained_model_name_or_path, SPECIAL_TOKENS_NAME)
-            if not os.path.exists(special_tokens_file):
-                special_tokens_file = None
-            else:
-                logger.info("loading special tokens file {}".format(special_tokens_file))
-        # redirect to the cache, if necessary
-        try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-            resolved_merges_file = cached_path(merges_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download vocabulary.".format(
-                        vocab_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                    "at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                        pretrained_model_name_or_path,
-                        vocab_file, merges_file))
-            return None
-        if resolved_vocab_file == vocab_file and resolved_merges_file == merges_file:
-            logger.info("loading vocabulary file {}".format(vocab_file))
-            logger.info("loading merges file {}".format(merges_file))
-        else:
-            logger.info("loading vocabulary file {} from cache at {}".format(
-                vocab_file, resolved_vocab_file))
-            logger.info("loading merges file {} from cache at {}".format(
-                merges_file, resolved_merges_file))
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP:
-            # if we're using a pretrained model, ensure the tokenizer wont index sequences longer
-            # than the number of positional embeddings
-            max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name_or_path]
-            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
-        # Instantiate tokenizer.
-        if special_tokens_file and 'special_tokens' not in kwargs:
-            special_tokens = open(special_tokens_file, encoding='utf-8').read().split('\n')[:-1]
-        else:
-            special_tokens = kwargs.pop('special_tokens', [])
-        tokenizer = cls(resolved_vocab_file, resolved_merges_file, special_tokens=special_tokens, *inputs, **kwargs)
-        return tokenizer
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, special_tokens=None, max_len=None):
+    def __init__(self, vocab_file, merges_file, special_tokens_file=None, special_tokens=None, max_len=None):
         try:
             import ftfy
             import spacy
@@ -156,9 +114,17 @@ class OpenAIGPTTokenizer(object):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        all_special_tokens = []
+        if special_tokens_file is not None:
+            special_tokens_to_add = open(special_tokens_file, encoding='utf-8').read().split('\n')[:-1]
+            all_special_tokens.extend(special_tokens_to_add)
+        if special_tokens is not None and special_tokens:
+            all_special_tokens.extend(special_tokens)
+
         self.special_tokens = {}
         self.special_tokens_decoder = {}
-        self.set_special_tokens(special_tokens)
+        self.set_special_tokens(all_special_tokens)
 
     def __len__(self):
         return len(self.encoder) + len(self.special_tokens)
@@ -286,9 +252,9 @@ class OpenAIGPTTokenizer(object):
         if not os.path.isdir(vocab_path):
             logger.error("Vocabulary path ({}) should be a directory".format(vocab_path))
             return
-        vocab_file = os.path.join(vocab_path, VOCAB_NAME)
-        merge_file = os.path.join(vocab_path, MERGES_NAME)
-        special_tokens_file = os.path.join(vocab_path, SPECIAL_TOKENS_NAME)
+        vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
+        merge_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['merges_file'])
+        special_tokens_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['special_tokens_file'])
 
         with open(vocab_file, 'w', encoding='utf-8') as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

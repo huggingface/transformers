@@ -598,9 +598,3 @@ def prune_layer(layer, index, dim=None):
         return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
     else:
         raise ValueError("Can't prune layer of class {}".format(layer.__class__))
-
-def clean_up_tokenization(out_string):
-    out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
-                    ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
-                    ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
-    return out_string

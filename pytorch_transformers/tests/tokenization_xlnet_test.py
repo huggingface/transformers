@@ -19,9 +19,7 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer,
-                                                        PRETRAINED_VOCAB_ARCHIVE_MAP,
-                                                        SPIECE_UNDERLINE)
+from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE)
 
 from.tokenization_tests_commons import create_and_check_tokenizer_commons
 
@@ -59,14 +57,6 @@ class XLNetTokenizationTest(unittest.TestCase):
                                            SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
                                            SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's',
                                            u'<unk>', u'.'])
-
-    @pytest.mark.slow
-    def test_tokenizer_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
-            tokenizer = XLNetTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
-            self.assertIsNotNone(tokenizer)
 
     def test_tokenizer_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=True)

@@ -23,8 +23,6 @@ import os
 import regex as re
 from io import open
 
-from .model_utils import clean_up_tokenization
-
 try:
     from functools import lru_cache
 except ImportError:
@@ -33,24 +31,38 @@ except ImportError:
     def lru_cache():
         return lambda func: func
 
-from .file_utils import cached_path
+from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_VOCAB_ARCHIVE_MAP = {
-    'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
-    'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
+VOCAB_FILES_NAMES = {
+    'vocab_file': 'vocab.json',
+    'merges_file': 'merges.txt',
+    'special_tokens_file': 'special_tokens.txt'
 }
-PRETRAINED_MERGES_ARCHIVE_MAP = {
-    'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
-    'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    'vocab_file':
+    {
+        'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
+        'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
+    },
+    'merges_file':
+    {
+        'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
+        'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
+    },
+    'special_tokens_file':
+    {
+        'gpt2': None,
+        'gpt2-medium': None,
+    }
 }
-PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'gpt2': 1024,
+    'gpt2-medium': 1024,
 }
-VOCAB_NAME = 'vocab.json'
-MERGES_NAME = 'merges.txt'
-SPECIAL_TOKENS_NAME = 'special_tokens.txt'
 
 @lru_cache()
 def bytes_to_unicode():
@@ -87,70 +99,16 @@ def get_pairs(word):
         prev_char = char
     return pairs
 
-class GPT2Tokenizer(object):
+class GPT2Tokenizer(PreTrainedTokenizer):
     """
     GPT-2 BPE tokenizer. Peculiarities:
         - Byte-level BPE
     """
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
-        """
-        Instantiate a GPT2Tokenizer from a pre-trained model file.
-        Download and cache the pre-trained model file if needed.
-        """
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-            vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
-            merges_file = PRETRAINED_MERGES_ARCHIVE_MAP[pretrained_model_name_or_path]
-            special_tokens_file = None
-        else:
-            vocab_file = os.path.join(pretrained_model_name_or_path, VOCAB_NAME)
-            merges_file = os.path.join(pretrained_model_name_or_path, MERGES_NAME)
-            special_tokens_file = os.path.join(pretrained_model_name_or_path, SPECIAL_TOKENS_NAME)
-            if not os.path.exists(special_tokens_file):
-                special_tokens_file = None
-            else:
-                logger.info("loading special tokens file {}".format(special_tokens_file))
-        # redirect to the cache, if necessary
-        try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-            resolved_merges_file = cached_path(merges_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download vocabulary.".format(
-                        vocab_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find files {} and {} "
-                    "at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                        pretrained_model_name_or_path,
-                        vocab_file, merges_file))
-            return None
-        if resolved_vocab_file == vocab_file and resolved_merges_file == merges_file:
-            logger.info("loading vocabulary file {}".format(vocab_file))
-            logger.info("loading merges file {}".format(merges_file))
-        else:
-            logger.info("loading vocabulary file {} from cache at {}".format(
-                vocab_file, resolved_vocab_file))
-            logger.info("loading merges file {} from cache at {}".format(
-                merges_file, resolved_merges_file))
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP:
-            # if we're using a pretrained model, ensure the tokenizer wont index sequences longer
-            # than the number of positional embeddings
-            max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name_or_path]
-            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
-        # Instantiate tokenizer.
-        if special_tokens_file and 'special_tokens' not in kwargs:
-            special_tokens = open(special_tokens_file, encoding='utf-8').read().split('\n')[:-1]
-        else:
-            special_tokens = kwargs.pop('special_tokens', [])
-        tokenizer = cls(resolved_vocab_file, resolved_merges_file, special_tokens=special_tokens, *inputs, **kwargs)
-        return tokenizer
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, errors='replace', special_tokens=None, max_len=None):
+    def __init__(self, vocab_file, merges_file, special_tokens_file=None, special_tokens=None, errors='replace', max_len=None):
         self.max_len = max_len if max_len is not None else int(1e12)
         self.encoder = json.load(open(vocab_file))
         self.decoder = {v:k for k,v in self.encoder.items()}
@@ -165,9 +123,16 @@ class GPT2Tokenizer(object):
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+        all_special_tokens = []
+        if special_tokens_file is not None:
+            special_tokens_to_add = open(special_tokens_file, encoding='utf-8').read().split('\n')[:-1]
+            all_special_tokens.extend(special_tokens_to_add)
+        if special_tokens is not None and special_tokens:
+            all_special_tokens.extend(special_tokens)
+
         self.special_tokens = {}
         self.special_tokens_decoder = {}
-        self.set_special_tokens(special_tokens)
+        self.set_special_tokens(all_special_tokens)
 
     def __len__(self):
         return len(self.encoder) + len(self.special_tokens)
@@ -285,9 +250,9 @@ class GPT2Tokenizer(object):
         if not os.path.isdir(vocab_path):
             logger.error("Vocabulary path ({}) should be a directory".format(vocab_path))
             return
-        vocab_file = os.path.join(vocab_path, VOCAB_NAME)
-        merge_file = os.path.join(vocab_path, MERGES_NAME)
-        special_tokens_file = os.path.join(vocab_path, SPECIAL_TOKENS_NAME)
+        vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
+        merge_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['merges_file'])
+        special_tokens_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['special_tokens_file'])
 
         with open(vocab_file, 'w', encoding='utf-8') as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))
