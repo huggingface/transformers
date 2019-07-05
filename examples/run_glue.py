@@ -213,11 +213,12 @@ def load_and_cache_examples(args, task, tokenizer, eval=False):
         str(task)))
 
     if os.path.exists(cached_features_file):
+        logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode)
         if args.local_rank == -1 or torch.distributed.get_rank() == 0:
-            logger.info("  Saving eval features into cached file %s", cached_features_file)
+            logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
     return features
