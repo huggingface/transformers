@@ -22,6 +22,7 @@ import pytest
 
 from pytorch_pretrained_bert.tokenization_transfo_xl import TransfoXLTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
 
+from.tokenization_tests_commons import create_and_check_tokenizer_commons
 
 class TransfoXLTokenizationTest(unittest.TestCase):
 
@@ -33,8 +34,9 @@ class TransfoXLTokenizationTest(unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
             vocab_file = vocab_writer.name
 
+        create_and_check_tokenizer_commons(self, TransfoXLTokenizer, vocab_file=vocab_file, lower_case=True)
+
         tokenizer = TransfoXLTokenizer(vocab_file=vocab_file, lower_case=True)
-        tokenizer.build_vocab()
         os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
@@ -42,17 +44,6 @@ class TransfoXLTokenizationTest(unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
-
-        vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
-        tokenizer = tokenizer.from_pretrained(vocab_file)
-        os.remove(vocab_file)
-
-        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
-        self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
-
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
-
 
     def test_full_tokenizer_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=True)
