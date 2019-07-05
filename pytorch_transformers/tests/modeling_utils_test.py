@@ -16,17 +16,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import unittest
-import json
-import random
-import shutil
-import pytest
-
-import torch
 
 from pytorch_transformers import PretrainedConfig, PreTrainedModel
-from pytorch_transformers.modeling_bert import BertModel, BertConfig, PRETRAINED_MODEL_ARCHIVE_MAP, PRETRAINED_CONFIG_ARCHIVE_MAP
+from pytorch_transformers.modeling_bert import BertModel, BertConfig, PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 class ModelUtilsTest(unittest.TestCase):

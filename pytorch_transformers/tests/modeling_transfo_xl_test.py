@@ -28,7 +28,7 @@ import torch
 from pytorch_transformers import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
 from pytorch_transformers.modeling_transfo_xl import PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .model_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
+from .modeling_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
 
 class TransfoXLModelTest(unittest.TestCase):
     class TransfoXLModelTester(object):

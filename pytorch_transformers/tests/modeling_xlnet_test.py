@@ -28,7 +28,7 @@ import torch
 from pytorch_transformers import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering)
 from pytorch_transformers.modeling_xlnet import PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .model_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
+from .modeling_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
 
 class XLNetModelTest(unittest.TestCase):
     class XLNetModelTester(object):

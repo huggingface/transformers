@@ -35,7 +35,7 @@ from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import cached_path
-from .model_utils import (CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel,
+from .modeling_utils import (CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel,
                           prune_linear_layer, SequenceSummary, SQuADHead)
 
 logger = logging.getLogger(__name__)

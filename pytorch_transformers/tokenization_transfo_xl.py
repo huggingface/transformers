@@ -31,7 +31,7 @@ import torch
 import numpy as np
 
 from .file_utils import cached_path
-from .model_utils import clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -41,66 +41,35 @@ else:
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_VOCAB_ARCHIVE_MAP = {
-    'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.bin",
+VOCAB_FILES_NAMES = {'pretrained_vocab_file': 'vocab.bin'}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    'pretrained_vocab_file':
+    {
+        'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.bin",
+    }
 }
-VOCAB_NAME = 'vocab.bin'
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    'transfo-xl-wt103': 512,
+}
 
 PRETRAINED_CORPUS_ARCHIVE_MAP = {
     'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-corpus.bin",
 }
 CORPUS_NAME = 'corpus.bin'
 
-class TransfoXLTokenizer(object):
+class TransfoXLTokenizer(PreTrainedTokenizer):
     """
     Transformer-XL tokenizer adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
     """
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
-        """
-        Instantiate a TransfoXLTokenizer.
-        The TransfoXLTokenizer.
-        """
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-            vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
-        else:
-            if os.path.isdir(pretrained_model_name_or_path):
-                vocab_file = os.path.join(pretrained_model_name_or_path, VOCAB_NAME)
-            else:
-                vocab_file = pretrained_model_name_or_path
-        # redirect to the cache, if necessary
-        try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download vocabulary.".format(
-                        vocab_file))
-            else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find files {} "
-                    "at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                        pretrained_model_name_or_path,
-                        vocab_file))
-            return None
-        if resolved_vocab_file == vocab_file:
-            logger.info("loading vocabulary file {}".format(vocab_file))
-        else:
-            logger.info("loading vocabulary file {} from cache at {}".format(
-                vocab_file, resolved_vocab_file))
-
-        # Instantiate tokenizer.
-        tokenizer = cls(*inputs, **kwargs)
-        vocab_dict = torch.load(resolved_vocab_file)
-        for key, value in vocab_dict.items():
-            tokenizer.__dict__[key] = value
-        return tokenizer
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, special=[], min_freq=0, max_size=None, lower_case=False,
-                 delimiter=None, vocab_file=None, never_split=("<unk>", "<eos>", "<formula>")):
+                 delimiter=None, vocab_file=None, pretrained_vocab_file=None,
+                 never_split=("<unk>", "<eos>", "<formula>")):
         self.counter = Counter()
         self.special = special
         self.min_freq = min_freq
@@ -109,6 +78,13 @@ class TransfoXLTokenizer(object):
         self.delimiter = delimiter
         self.vocab_file = vocab_file
         self.never_split = never_split
+
+        if pretrained_vocab_file is not None:
+            # Hack because, honestly this tokenizer was not made to be used
+            # in a library like ours, at all.
+            vocab_dict = torch.load(pretrained_vocab_file)
+            for key, value in vocab_dict.items():
+                self.__dict__[key] = value
 
         if vocab_file is not None:
             self.build_vocab()
@@ -157,7 +133,7 @@ class TransfoXLTokenizer(object):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
         if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_NAME)
+            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['pretrained_vocab_file'])
         torch.save(self.__dict__, vocab_file)
         return (vocab_file,)
 
@@ -484,7 +460,7 @@ class TransfoXLCorpus(object):
                 "We assumed '{}' was a path or url but couldn't find files {} "
                 "at this path or url.".format(
                     pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
+                    ', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys()),
                     pretrained_model_name_or_path,
                     corpus_file))
             return None

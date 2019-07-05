@@ -24,7 +24,7 @@ from pytorch_transformers.tokenization_bert import (BasicTokenizer,
                                                   BertTokenizer,
                                                   WordpieceTokenizer,
                                                   _is_control, _is_punctuation,
-                                                  _is_whitespace, PRETRAINED_VOCAB_ARCHIVE_MAP)
+                                                  _is_whitespace)
 
 from .tokenization_tests_commons import create_and_check_tokenizer_commons
 
@@ -48,14 +48,6 @@ class TokenizationTest(unittest.TestCase):
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
         os.remove(vocab_file)
-
-    @pytest.mark.slow
-    def test_tokenizer_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
-            tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
-            self.assertIsNotNone(tokenizer)
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()
