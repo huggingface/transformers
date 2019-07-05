@@ -2,34 +2,38 @@
 
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-bert.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-bert)
 
-This repository contains op-for-op PyTorch reimplementations, pre-trained models and fine-tuning examples for:
+This repository contains op-for-op PyTorch implementations, pre-trained models and fine-tuning examples for:
 
 - [Google's BERT model](https://github.com/google-research/bert),
 - [OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm),
-- [Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl), and
 - [OpenAI's GPT-2 model](https://blog.openai.com/better-language-models/).
+- [Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl), and
+- [Google/CMU's XLNet model](https://github.com/zihangdai/xlnet/).
+- [Facebook's XLM model](https://github.com/facebookresearch/XLM/).
 
 These implementations have been tested on several datasets (see the examples) and should match the performances of the associated TensorFlow implementations (e.g. ~91 F1 on SQuAD for BERT, ~88 F1 on RocStories for OpenAI GPT and ~18.3 perplexity on WikiText 103 for the Transformer-XL). You can find more details in the [Examples](#examples) section below.
 
 Here are some information on these models:
 
-**BERT** was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
-This PyTorch implementation of BERT is provided with [Google's pre-trained models](https://github.com/google-research/bert), examples, notebooks and a command-line interface to load any pre-trained TensorFlow checkpoint for BERT is also provided.
+**BERT** was released together with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. This PyTorch implementation of BERT is provided with [Google's pre-trained models](https://github.com/google-research/bert), examples, notebooks and a command-line interface to load any pre-trained TensorFlow checkpoint for BERT is also provided.
 
-**OpenAI GPT** was released together with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
-This PyTorch implementation of OpenAI GPT is an adaptation of the [PyTorch implementation by HuggingFace](https://github.com/huggingface/pytorch-openai-transformer-lm) and is provided with [OpenAI's pre-trained model](https://github.com/openai/finetune-transformer-lm) and a command-line interface that was used to convert the pre-trained NumPy checkpoint in PyTorch.
+**OpenAI GPT** was released together with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever. This PyTorch implementation of OpenAI GPT is an adaptation of the [PyTorch implementation by HuggingFace](https://github.com/huggingface/pytorch-openai-transformer-lm) and is provided with [OpenAI's pre-trained model](https://github.com/openai/finetune-transformer-lm) and a command-line interface that was used to convert the pre-trained NumPy checkpoint in PyTorch.
 
-**Google/CMU's Transformer-XL** was released together with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](http://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-This PyTorch implementation of Transformer-XL is an adaptation of the original [PyTorch implementation](https://github.com/kimiyoung/transformer-xl) which has been slightly modified to match the performances of the TensorFlow implementation and allow to re-use the pretrained weights. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
+**OpenAI GPT-2** was released together with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**. This PyTorch implementation of OpenAI GPT-2 is an adaptation of the [OpenAI's implementation](https://github.com/openai/gpt-2) and is provided with [OpenAI's pre-trained model](https://github.com/openai/gpt-2) and a command-line interface that was used to convert the TensorFlow checkpoint in PyTorch.
 
-**OpenAI GPT-2** was released together with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
-This PyTorch implementation of OpenAI GPT-2 is an adaptation of the [OpenAI's implementation](https://github.com/openai/gpt-2) and is provided with [OpenAI's pre-trained model](https://github.com/openai/gpt-2) and a command-line interface that was used to convert the TensorFlow checkpoint in PyTorch.
+**Google/CMU's Transformer-XL** was released together with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+This PyTorch implementation of XLNet is an adaptation of the original [PyTorch implementation](https://github.com/kimiyoung/transformer-xl) which has been slightly modified to match the performances of the TensorFlow implementation and allow to re-use the pretrained weights. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
 
+**Google/CMU's XLNet** was released together with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](http://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
+This PyTorch implementation of XLNet is provided with [Google/CMU's pre-trained models](https://github.com/zihangdai/xlnet) and examples. A command-line interface is provided to convert TensorFlow checkpoints in PyTorch models.
+
+**Facebook's XLM** was released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
+This PyTorch implementation of XLM is an adaptation of the original [PyTorch implementation](https://github.com/facebookresearch/XLM). A command-line interface is provided to convert original PyTorch checkpoints in PyTorch models according to the present repository.
 
 ## Content
 
 | Section | Description |
-|-|-|
+| - | - |
 | [Installation](#installation) | How to install the package |
 | [Overview](#overview) | Overview of the package |
 | [Usage](#usage) | Quickstart examples |
@@ -46,11 +50,13 @@ This repo was tested on Python 2.7 and 3.5+ (examples are tested only on python 
 ### With pip
 
 PyTorch pretrained bert can be installed by pip as follows:
+
 ```bash
 pip install pytorch-transformers
 ```
 
 If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install `ftfy` (limit to version 4.4.3 if you are using Python 2) and `SpaCy` :
+
 ```bash
 pip install spacy ftfy==4.4.3
 python -m spacy download en
@@ -61,11 +67,13 @@ If you don't install `ftfy` and `SpaCy`, the `OpenAI GPT` tokenizer will default
 ### From source
 
 Clone the repository and run:
+
 ```bash
 pip install [--editable] .
 ```
 
 Here also, if you want to reproduce the original tokenization process of the `OpenAI GPT` model, you will need to install `ftfy` (limit to version 4.4.3 if you are using Python 2) and `SpaCy` :
+
 ```bash
 pip install spacy ftfy==4.4.3
 python -m spacy download en
@@ -76,6 +84,7 @@ Again, if you don't install `ftfy` and `SpaCy`, the `OpenAI GPT` tokenizer will 
 A series of tests is included in the [tests folder](https://github.com/huggingface/pytorch-transformers/tree/master/tests) and can be run using `pytest` (install pytest if needed: `pip install pytest`).
 
 You can run the tests with the command:
+
 ```bash
 python -m pytest -sv tests/
 ```
@@ -500,7 +509,6 @@ with torch.no_grad():
     lm_logits, multiple_choice_logits, past = model(tokens_tensor, mc_token_ids)
 ```
 
-
 ## Doc
 
 Here is a detailed documentation of the classes in the package and how to use them:
@@ -559,12 +567,12 @@ where
 - `state_dict`: an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
 - `*inputs`, `**kwargs`: additional input for the specific Bert class (ex: num_labels for BertForSequenceClassification)
 
-
 `Uncased` means that the text has been lowercased before WordPiece tokenization, e.g., `John Smith` becomes `john smith`. The Uncased model also strips out any accent markers. `Cased` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the [Multilingual README](https://github.com/google-research/bert/blob/master/multilingual.md) or the original TensorFlow repository.
 
 **When using an `uncased model`, make sure to pass `--do_lower_case` to the example training scripts (or pass `do_lower_case=True` to FullTokenizer if you're using your own script and loading the tokenizer your-self.).**
 
 Examples:
+
 ```python
 # BERT
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, do_basic_tokenize=True)
@@ -720,6 +728,7 @@ The inputs and output are **identical to the TensorFlow model inputs and outputs
 
 We detail them here. This model takes as *inputs*:
 [`modeling.py`](./pytorch_transformers/modeling.py)
+
 - `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the vocabulary (see the tokens preprocessing logic in the scripts [`run_bert_extract_features.py`](./examples/run_bert_extract_features.py), [`run_bert_classifier.py`](./examples/run_bert_classifier.py) and [`run_bert_squad.py`](./examples/run_bert_squad.py)), and
 - `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
 - `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [0, 1]. It's a mask to be used if some input sequence lengths are smaller than the max input sequence length of the current batch. It's the mask that we typically use for attention when a batch has varying length sentences.
@@ -758,7 +767,6 @@ An example on how to use this class is given in the [`run_bert_extract_features.
   - the next sentence classification logits.
 
 An example on how to use this class is given in the [`run_lm_finetuning.py`](./examples/run_lm_finetuning.py) script which can be used to fine-tune the BERT language model on your specific different text corpus. This should improve model performance, if the language style is different from the original BERT training corpus (Wiki + BookCorpus).
-
 
 #### 3. `BertForMaskedLM`
 
@@ -853,6 +861,7 @@ The inputs and output are **identical to the TensorFlow model inputs and outputs
 
 We detail them here. This model takes as *inputs*:
 [`modeling_openai.py`](./pytorch_transformers/modeling_openai.py)
+
 - `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length] were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, total_tokens_embeddings[
 - `position_ids`: an optional torch.LongTensor with the same shape as input_ids
     with the position indices (selected in the range [0, config.n_positions - 1[.
@@ -862,6 +871,7 @@ We detail them here. This model takes as *inputs*:
 - `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 0.0 => head is fully masked, 1.0 => head is not masked.
 
 This model *outputs*:
+
 - `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
 
 #### 10. `OpenAIGPTLMHeadModel`
@@ -869,9 +879,11 @@ This model *outputs*:
 `OpenAIGPTLMHeadModel` includes the `OpenAIGPTModel` Transformer followed by a language modeling head with weights tied to the input embeddings (no additional parameters).
 
 *Inputs* are the same as the inputs of the [`OpenAIGPTModel`](#-9.-`OpenAIGPTModel`) class plus optional labels:
+
 - `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size].
 
 *Outputs*:
+
 - if `lm_labels` is not `None`:
   Outputs the language modeling loss.
 - else:
@@ -880,15 +892,18 @@ This model *outputs*:
 #### 11. `OpenAIGPTDoubleHeadsModel`
 
 `OpenAIGPTDoubleHeadsModel` includes the `OpenAIGPTModel` Transformer followed by two heads:
+
 - a language modeling head with weights tied to the input embeddings (no additional parameters) and:
 - a multiple choice classifier (linear layer that take as input a hidden state in a sequence to compute a score, see details in paper).
 
 *Inputs* are the same as the inputs of the [`OpenAIGPTModel`](#-9.-`OpenAIGPTModel`) class plus a classification mask and two optional labels:
+
 - `multiple_choice_token_ids`: a torch.LongTensor of shape [batch_size, num_choices] with the index of the token whose hidden state should be used as input for the multiple choice classifier (usually the [CLS] token for each choice).
 - `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size].
 - `multiple_choice_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size] with indices selected in [0, ..., num_choices].
 
 *Outputs*:
+
 - if `lm_labels` and `multiple_choice_labels` are not `None`:
   Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
 - else Outputs a tuple with:
@@ -906,14 +921,17 @@ Transformer XL use a relative positioning with sinusiodal patterns and adaptive 
 
 This model takes as *inputs*:
 [`modeling_transfo_xl.py`](./pytorch_transformers/modeling_transfo_xl.py)
+
 - `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] with the token indices selected in the range [0, self.config.n_token[
 - `mems`: an optional memory of hidden states from previous forward passes as a list (num layers) of hidden states at the entry of each layer. Each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]. Note that the first two dimensions are transposed in `mems` with regards to `input_ids`.
 
 This model *outputs* a tuple of (last_hidden_state, new_mems)
+
 - `last_hidden_state`: the encoded-hidden-states at the top of the model as a torch.FloatTensor of size [batch_size, sequence_length, self.config.d_model]
 - `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]. Note that the first two dimensions are transposed in `mems` with regards to `input_ids`.
 
-##### Extracting a list of the hidden states at each layer of the Transformer-XL from `last_hidden_state` and `new_mems`:
+##### Extracting a list of the hidden states at each layer of the Transformer-XL from `last_hidden_state` and `new_mems`
+
 The `new_mems` contain all the hidden states PLUS the output of the embeddings (`new_mems[0]`). `new_mems[-1]` is the output of the hidden state of the layer below the last layer and `last_hidden_state` is the output of the last layer (i.E. the input of the softmax when we have a language modeling head on top).
 
 There are two differences between the shapes of `new_mems` and `last_hidden_state`: `new_mems` have transposed first dimensions and are longer (of size `self.config.mem_len`). Here is how to extract the full list of hidden states from the model output:
@@ -930,11 +948,13 @@ all_hidden_states = lower_hidden_states + [hidden_states]
 `TransfoXLLMHeadModel` includes the `TransfoXLModel` Transformer followed by an (adaptive) softmax head with weights tied to the input embeddings.
 
 *Inputs* are the same as the inputs of the [`TransfoXLModel`](#-12.-`TransfoXLModel`) class plus optional labels:
+
 - `labels`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the labels token indices selected in the range [0, self.config.n_token[
 
 *Outputs* a tuple of (last_hidden_state, new_mems)
+
 - `softmax_output`: output of the (adaptive) softmax:
-  - if labels is None: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens] 
+  - if labels is None: log probabilities of tokens, shape [batch_size, sequence_length, n_tokens]
   - else: Negative log likelihood of labels tokens with shape [batch_size, sequence_length]
 - `new_mems`: list (num layers) of updated mem states at the entry of each layer each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]. Note that the first two dimensions are transposed in `mems` with regards to `input_ids`.
 
@@ -953,6 +973,7 @@ The inputs and output are **identical to the TensorFlow model inputs and outputs
 
 We detail them here. This model takes as *inputs*:
 [`modeling_gpt2.py`](./pytorch_transformers/modeling_gpt2.py)
+
 - `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length] (or more generally [d_1, ..., d_n, sequence_length] were d_1 ... d_n are arbitrary dimensions) with the word BPE token indices selected in the range [0, vocab_size[
 - `position_ids`: an optional torch.LongTensor with the same shape as input_ids
     with the position indices (selected in the range [0, config.n_positions - 1[.
@@ -963,6 +984,7 @@ We detail them here. This model takes as *inputs*:
 - `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1. It's a mask to be used to nullify some heads of the transformer. 0.0 => head is fully masked, 1.0 => head is not masked.
 
 This model *outputs*:
+
 - `hidden_states`: a list of all the encoded-hidden-states in the model (length of the list: number of layers + 1 for the output of the embeddings) as torch.FloatTensor of size [batch_size, sequence_length, hidden_size] (or more generally [d_1, ..., d_n, hidden_size] were d_1 ... d_n are the dimension of input_ids)
 - `presents`: a list of pre-computed hidden-states (key and values in each attention blocks) as a torch.FloatTensors. They can be reused to speed up sequential decoding (see the `run_gpt2.py` example).
 
@@ -971,9 +993,11 @@ This model *outputs*:
 `GPT2LMHeadModel` includes the `GPT2Model` Transformer followed by a language modeling head with weights tied to the input embeddings (no additional parameters).
 
 *Inputs* are the same as the inputs of the [`GPT2Model`](#-14.-`GPT2Model`) class plus optional labels:
+
 - `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size].
 
 *Outputs*:
+
 - if `lm_labels` is not `None`:
   Outputs the language modeling loss.
 - else: a tuple of
@@ -983,15 +1007,18 @@ This model *outputs*:
 #### 16. `GPT2DoubleHeadsModel`
 
 `GPT2DoubleHeadsModel` includes the `GPT2Model` Transformer followed by two heads:
+
 - a language modeling head with weights tied to the input embeddings (no additional parameters) and:
 - a multiple choice classifier (linear layer that take as input a hidden state in a sequence to compute a score, see details in paper).
 
 *Inputs* are the same as the inputs of the [`GPT2Model`](#-14.-`GPT2Model`) class plus a classification mask and two optional labels:
+
 - `multiple_choice_token_ids`: a torch.LongTensor of shape [batch_size, num_choices] with the index of the token whose hidden state should be used as input for the multiple choice classifier (usually the [CLS] token for each choice).
 - `lm_labels`: optional language modeling labels: torch.LongTensor of shape [batch_size, sequence_length] with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss is only computed for the labels set in [0, ..., vocab_size].
 - `multiple_choice_labels`: optional multiple choice labels: torch.LongTensor of shape [batch_size] with indices selected in [0, ..., num_choices].
 
 *Outputs*:
+
 - if `lm_labels` and `multiple_choice_labels` are not `None`:
   Outputs a tuple of losses with the language modeling loss and the multiple choice loss.
 - else Outputs a tuple with:
@@ -1108,30 +1135,32 @@ The differences with `BertAdam` is that `OpenAIAdam` compensate for bias as in t
 `OpenAIAdam` accepts the same arguments as `BertAdam`.
 
 #### Learning Rate Schedules
+
 The `.optimization` module also provides additional schedules in the form of schedule objects that inherit from `_LRSchedule`.
 All `_LRSchedule` subclasses accept `warmup` and `t_total` arguments at construction.
-When an `_LRSchedule` object is passed into `BertAdam` or `OpenAIAdam`, 
-the `warmup` and `t_total` arguments on the optimizer are ignored and the ones in the `_LRSchedule` object are used. 
+When an `_LRSchedule` object is passed into `BertAdam` or `OpenAIAdam`,
+the `warmup` and `t_total` arguments on the optimizer are ignored and the ones in the `_LRSchedule` object are used.
 An overview of the implemented schedules:
+
 - `ConstantLR`: always returns learning rate 1.
 - `WarmupConstantSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     Keeps learning rate equal to 1. after warmup.
-    ![](docs/imgs/warmup_constant_schedule.png)
+    ![warmup constant schedule](docs/imgs/warmup_constant_schedule.png)
 - `WarmupLinearSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     Linearly decreases learning rate from 1. to 0. over remaining `1 - warmup` steps.
-    ![](docs/imgs/warmup_linear_schedule.png)
--  `WarmupCosineSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
+    ![warmup linear schedule](docs/imgs/warmup_linear_schedule.png)
+- `WarmupCosineSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     Decreases learning rate from 1. to 0. over remaining `1 - warmup` steps following a cosine curve.
     If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
-    ![](docs/imgs/warmup_cosine_schedule.png)
+    ![warmup cosine schedule](docs/imgs/warmup_cosine_schedule.png)
 - `WarmupCosineWithHardRestartsSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     If `cycles` (default=1.) is different from default, learning rate follows `cycles` times a cosine decaying learning rate (with hard restarts).
-    ![](docs/imgs/warmup_cosine_hard_restarts_schedule.png)
+    ![warmup cosine hard restarts schedule](docs/imgs/warmup_cosine_hard_restarts_schedule.png)
 - `WarmupCosineWithWarmupRestartsSchedule`: All training progress is divided in `cycles` (default=1.) parts of equal length.
     Every part follows a schedule with the first `warmup` fraction of the training steps linearly increasing from 0. to 1.,
     followed by a learning rate decreasing from 1. to 0. following a cosine curve.
     Note that the total number of all warmup steps over all cycles together is equal to `warmup` * `cycles`
-    ![](docs/imgs/warmup_cosine_warm_restarts_schedule.png)
+    ![warmup cosine warm restarts schedule](docs/imgs/warmup_cosine_warm_restarts_schedule.png)
 
 ## Examples
 
@@ -1158,9 +1187,11 @@ Here is how to use these techniques in our scripts:
 To use 16-bits training and distributed training, you need to install NVIDIA's apex extension [as detailed here](https://github.com/nvidia/apex). You will find more information regarding the internals of `apex` and how to use `apex` in [the doc and the associated repository](https://github.com/nvidia/apex). The results of the tests performed on pytorch-BERT by the NVIDIA team (and my trials at reproducing them) can be consulted in [the relevant PR of the present repository](https://github.com/huggingface/pytorch-transformers/pull/116).
 
 Note: To use *Distributed Training*, you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see [the above mentioned blog post]((https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255)) for more details):
+
 ```bash
 python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_bert_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
 ```
+
 Where `$THIS_MACHINE_INDEX` is an sequential index assigned to each of your machine (0, 1, 2...) and the machine with rank 0 has an IP address `192.168.1.1` and an open port `1234`.
 
 ### Fine-tuning with BERT: running the examples
@@ -1174,7 +1205,7 @@ We showcase several fine-tuning examples based on (and extended from) [the origi
 
 #### GLUE results on dev set
 
-We get the following results on the dev set of GLUE benchmark with an uncased BERT base 
+We get the following results on the dev set of GLUE benchmark with an uncased BERT base
 model. All experiments were run on a P100 GPU with a batch size of 32.
 
 | Task | Metric | Result |
@@ -1253,6 +1284,7 @@ Our test ran on a few seeds with [the original implementation hyper-parameters](
 **Fast run with apex and 16 bit precision: fine-tuning on MRPC in 27 seconds!**
 First install apex as indicated [here](https://github.com/NVIDIA/apex).
 Then run
+
 ```shell
 export GLUE_DIR=/path/to/glue
 
@@ -1279,6 +1311,7 @@ python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   -
 ```
 
 Training with these hyper-parameters gave us the following results:
+
 ```bash
   acc = 0.8823529411764706
   acc_and_f1 = 0.901702786377709
@@ -1310,16 +1343,15 @@ python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   -
 
 This is the example of the `bert-large-uncased-whole-word-masking-finetuned-mnli` model
 
-
 #### SQuAD
 
 This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) on a single tesla V100 16GB.
 
 The data for SQuAD can be downloaded with the following links and should be saved in a `$SQUAD_DIR` directory.
 
-*   [train-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json)
-*   [dev-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json)
-*   [evaluate-v1.1.py](https://github.com/allenai/bi-att-flow/blob/master/squad/evaluate-v1.1.py)
+- [train-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json)
+- [dev-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json)
+- [evaluate-v1.1.py](https://github.com/allenai/bi-att-flow/blob/master/squad/evaluate-v1.1.py)
 
 ```shell
 export SQUAD_DIR=/path/to/SQUAD
@@ -1340,12 +1372,13 @@ python run_bert_squad.py \
 ```
 
 Training with the previous hyper-parameters gave us the following results:
+
 ```bash
 python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json /tmp/debug_squad/predictions.json
 {"f1": 88.52381567990474, "exact_match": 81.22043519394512}
 ```
 
-**distributed training**
+##### distributed training
 
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
@@ -1368,6 +1401,7 @@ python -m torch.distributed.launch --nproc_per_node=8 \
 ```
 
 Training with these hyper-parameters gave us the following results:
+
 ```bash
 python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncased_finetuned_squad/predictions.json
 {"exact_match": 86.91579943235573, "f1": 93.1532499015869}
@@ -1382,6 +1416,7 @@ python -m torch.distributed.launch --nproc_per_node=8  run_bert_squad.py  --bert
 ```
 
 Training with these hyper-parameters gave us the following results:
+
 ```bash
 python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncased_finetuned_squad/predictions.json
 {"exact_match": 84.18164616840113, "f1": 91.58645594850135}
@@ -1409,7 +1444,8 @@ python run_bert_swag.py \
 ```
 
 Training with the previous hyper-parameters on a single GPU gave us the following results:
-```
+
+```bash
 eval_accuracy = 0.8062081375587323
 eval_loss = 0.5966546792367169
 global_step = 13788
@@ -1421,7 +1457,6 @@ loss = 0.06423990014260186
 The data should be a text file in the same format as [sample_text.txt](./samples/sample_text.txt)  (one sentence per line, docs separated by empty line).
 You can download an [exemplary training corpus](https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt) generated from wikipedia articles and splitted into ~500k sentences with spaCy.
 Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with `train_batch_size=200` and `max_seq_length=128`:
-
 
 Thank to the work of @Rocketknight1 and @tholor there are now **several scripts** that can be used to fine-tune BERT using the pretraining objective (combination of masked-language modeling and next sentence prediction loss). These scripts are detailed in the [`README`](./examples/lm_finetuning/README.md) of the [`examples/lm_finetuning/`](./examples/lm_finetuning/) folder.
 
@@ -1471,11 +1506,13 @@ This command runs in about 1 min on a V100 and gives an evaluation perplexity of
 This example code is identical to the original unconditional and conditional generation codes.
 
 Conditional generation:
+
 ```shell
 python run_gpt2.py
 ```
 
 Unconditional generation:
+
 ```shell
 python run_gpt2.py --unconditional
 ```
@@ -1487,15 +1524,19 @@ The same option as in the original scripts are provided, please refere to the co
 The options we list above allow to fine-tune BERT-large rather easily on GPU(s) instead of the TPU used by the original implementation.
 
 For example, fine-tuning BERT-large on SQuAD can be done on a server with 4 k-80 (these are pretty old now) in 18 hours. Our results are similar to the TensorFlow implementation results (actually slightly higher):
+
 ```bash
 {"exact_match": 84.56953642384106, "f1": 91.04028647786927}
 ```
+
 To get these results we used a combination of:
+
 - multi-GPU training (automatically activated on a multi-GPU server),
 - 2 steps of gradient accumulation and
 - perform the optimization step on CPU to store Adam's averages in RAM.
 
 Here is the full list of hyper-parameters for this run:
+
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
 
@@ -1518,6 +1559,7 @@ python ./run_bert_squad.py \
 If you have a recent GPU (starting from NVIDIA Volta series), you should try **16-bit fine-tuning** (FP16).
 
 Here is an example of hyper-parameters for a FP16 run we tried:
+
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
 
@@ -1539,6 +1581,7 @@ python ./run_bert_squad.py \
 ```
 
 The results were similar to the above FP32 results (actually slightly higher):
+
 ```bash
 {"exact_match": 84.65468306527909, "f1": 91.238669287002}
 ```
@@ -1565,7 +1608,7 @@ python -m torch.distributed.launch --nproc_per_node=8 \
 
 ## Fine-tuning XLNet
 
-#### STS-B
+### STS-B
 
 This example code fine-tunes XLNet on the STS-B corpus.
 
@@ -1592,7 +1635,8 @@ python run_xlnet_classifier.py \
 
 Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/zihangdai/xlnet#1-sts-b-sentence-pair-relevance-regression-with-gpus) gave evaluation results between 84% and 88%.
 
-**Distributed training**
+### Distributed training
+
 Here is an example using distributed training on 8 V100 GPUs to reach XXXX:
 
 ```bash
@@ -1611,6 +1655,7 @@ python -m torch.distributed.launch --nproc_per_node 8 \
 ```
 
 Training with these hyper-parameters gave us the following results:
+
 ```bash
   acc = 0.8823529411764706
   acc_and_f1 = 0.901702786377709
@@ -1646,15 +1691,15 @@ This is the example of the `bert-large-uncased-whole-word-masking-finetuned-mnli
 
 There is a growing field of study concerned with investigating the inner working of large-scale transformers like BERT (that some call "BERTology"). Some good examples of this field are:
 
-- BERT Rediscovers the Classical NLP Pipeline by Ian Tenney, Dipanjan Das, Ellie Pavlick: https://arxiv.org/abs/1905.05950
-- Are Sixteen Heads Really Better than One? by Paul Michel, Omer Levy, Graham Neubig: https://arxiv.org/abs/1905.10650
-- What Does BERT Look At? An Analysis of BERT's Attention by Kevin Clark, Urvashi Khandelwal, Omer Levy, Christopher D. Manning: https://arxiv.org/abs/1906.04341
+- [BERT Rediscovers the Classical NLP Pipeline](https://arxiv.org/abs/1905.05950) by Ian Tenney, Dipanjan Das, Ellie Pavlick
+- [Are Sixteen Heads Really Better than One?](https://arxiv.org/abs/1905.10650) by Paul Michel, Omer Levy, Graham Neubig
+- [What Does BERT Look At? An Analysis of BERT's Attention](https://arxiv.org/abs/1906.04341) by Kevin Clark, Urvashi Khandelwal, Omer Levy, Christopher D. Manning
 
-In order to help this new field develop, we have included a few additional features in the BERT/GPT/GPT-2 models to help people access the inner representations, mainly adapted  from the great work of Paul Michel (https://arxiv.org/abs/1905.10650):
+In order to help this new field develop, we have included a few additional features in the BERT/GPT/GPT-2 models to help people access the inner representations, mainly adapted  from the great work of [Michel et al.](https://arxiv.org/abs/1905.10650):
 
 - accessing all the hidden-states of BERT/GPT/GPT-2,
 - accessing all the attention weights for each head of BERT/GPT/GPT-2,
-- retrieving heads output values and gradients to be able to compute head importance score and prune head as explained in https://arxiv.org/abs/1905.10650.
+- retrieving heads output values and gradients to be able to compute head importance score and prune head as explained in [Michel et al.](https://arxiv.org/abs/1905.10650).
 
 To help you understand and use these features, we have added a specific example script: [`bertology.py`](./examples/bertology.py) while extract information and prune a model pre-trained on MRPC.
 
@@ -1674,7 +1719,7 @@ Please follow the instructions given in the notebooks to run and modify them.
 
 A command-line interface is provided to convert a TensorFlow checkpoint in a PyTorch dump of the `BertForPreTraining` class  (for BERT) or NumPy checkpoint in a PyTorch dump of the `OpenAIGPTModel` class  (for OpenAI GPT).
 
-### BERT
+### BERT CLI
 
 You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the [`convert_tf_checkpoint_to_pytorch.py`](./pytorch_transformers/convert_tf_checkpoint_to_pytorch.py ) script.
 
@@ -1697,7 +1742,7 @@ pytorch_transformers bert \
 
 You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
 
-### OpenAI GPT
+### OpenAI GPT CLI
 
 Here is an example of the conversion process for a pre-trained OpenAI GPT model, assuming that your NumPy checkpoint save as the same format than OpenAI pretrained model (see [here](https://github.com/openai/finetune-transformer-lm))
 
@@ -1710,7 +1755,7 @@ pytorch_transformers gpt \
   [OPENAI_GPT_CONFIG]
 ```
 
-### Transformer-XL
+### Transformer-XL CLI
 
 Here is an example of the conversion process for a pre-trained Transformer-XL model (see [here](https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models))
 
@@ -1750,7 +1795,6 @@ pytorch_transformers xlnet \
   $PYTORCH_DUMP_OUTPUT \
   STS-B \
 ```
-
 
 ## TPU
 
