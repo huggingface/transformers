@@ -23,8 +23,8 @@ from io import open
 import torch
 import numpy
 
-from pytorch_pretrained_bert.modeling_xlm import (CONFIG_NAME, WEIGHTS_NAME, XLMConfig, XLMModel)
-from pytorch_pretrained_bert.tokenization_xlm import MERGES_NAME, VOCAB_NAME
+from pytorch_transformers.modeling_xlm import (CONFIG_NAME, WEIGHTS_NAME, XLMConfig, XLMModel)
+from pytorch_transformers.tokenization_xlm import MERGES_NAME, VOCAB_NAME
 
 
 def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_path):

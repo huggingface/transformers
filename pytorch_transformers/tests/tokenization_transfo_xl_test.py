@@ -20,7 +20,7 @@ from io import open
 import shutil
 import pytest
 
-from pytorch_pretrained_bert.tokenization_transfo_xl import TransfoXLTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
+from pytorch_transformers.tokenization_transfo_xl import TransfoXLTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
 
 from.tokenization_tests_commons import create_and_check_tokenizer_commons
 
@@ -61,7 +61,7 @@ class TransfoXLTokenizationTest(unittest.TestCase):
 
     @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
             tokenizer = TransfoXLTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)

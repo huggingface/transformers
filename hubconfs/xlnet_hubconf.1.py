@@ -1,5 +1,5 @@
-from pytorch_pretrained_bert.tokenization_xlnet import XLNetTokenizer
-from pytorch_pretrained_bert.modeling_xlnet import (
+from pytorch_transformers.tokenization_xlnet import XLNetTokenizer
+from pytorch_transformers.modeling_xlnet import (
     XLNetConfig,
     XLNetModel,
     XLNetLMHeadModel,
@@ -54,7 +54,7 @@ def xlnetTokenizer(*args, **kwargs):
 
     Example:
         >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetTokenizer', 'xlnet-large-cased')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'xlnetTokenizer', 'xlnet-large-cased')
 
         >>> text = "Who was Jim Henson ?"
         >>> indexed_tokens = tokenizer.encode(tokenized_text)
@@ -73,7 +73,7 @@ def xlnetModel(*args, **kwargs):
     Example:
         # Load the tokenizer
         >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetTokenizer', 'xlnet-large-cased')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'xlnetTokenizer', 'xlnet-large-cased')
 
         #  Prepare tokenized input
         >>> text_1 = "Who was Jim Henson ?"
@@ -84,7 +84,7 @@ def xlnetModel(*args, **kwargs):
         >>> tokens_tensor_2 = torch.tensor([indexed_tokens_2])
 
         # Load xlnetModel
-        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetModel', 'xlnet-large-cased')
+        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'xlnetModel', 'xlnet-large-cased')
         >>> model.eval()
 
         # Predict hidden states features for each layer
@@ -107,7 +107,7 @@ def xlnetLMHeadModel(*args, **kwargs):
     Example:
         # Load the tokenizer
         >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetTokenizer', 'xlnet-large-cased')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'xlnetTokenizer', 'xlnet-large-cased')
 
         #  Prepare tokenized input
         >>> text_1 = "Who was Jim Henson ?"
@@ -118,7 +118,7 @@ def xlnetLMHeadModel(*args, **kwargs):
         >>> tokens_tensor_2 = torch.tensor([indexed_tokens_2])
 
         # Load xlnetLMHeadModel
-        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetLMHeadModel', 'xlnet-large-cased')
+        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'xlnetLMHeadModel', 'xlnet-large-cased')
         >>> model.eval()
 
         # Predict hidden states features for each layer
@@ -145,7 +145,7 @@ def xlnetLMHeadModel(*args, **kwargs):
 #     Example:
 #         # Load the tokenizer
 #         >>> import torch
-#         >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetTokenizer', 'xlnet-large-cased')
+#         >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'xlnetTokenizer', 'xlnet-large-cased')
 
 #         #  Prepare tokenized input
 #         >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
@@ -158,7 +158,7 @@ def xlnetLMHeadModel(*args, **kwargs):
 #         >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
 #         # Load xlnetForSequenceClassification
-#         >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'xlnetForSequenceClassification', 'xlnet-large-cased')
+#         >>> model = torch.hub.load('huggingface/pytorch-transformers', 'xlnetForSequenceClassification', 'xlnet-large-cased')
 #         >>> model.eval()
 
 #         # Predict sequence classes logits

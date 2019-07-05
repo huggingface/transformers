@@ -412,7 +412,7 @@ class GPTModelTester(object):
             [[], []])
 
     def create_and_check_model_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(self.base_model_class.PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = self.base_model_class.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)

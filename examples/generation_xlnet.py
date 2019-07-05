@@ -1,6 +1,6 @@
 import torch
 from torch.nn import functional as F
-from pytorch_pretrained_bert import XLNetModel, XLNetLMHeadModel, XLNetTokenizer
+from pytorch_transformers import XLNetModel, XLNetLMHeadModel, XLNetTokenizer
 
 import logging
 logging.basicConfig(level=logging.INFO)

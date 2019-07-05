@@ -20,11 +20,12 @@ import json
 import shutil
 import pytest
 
-from pytorch_pretrained_bert.tokenization_xlm import XLMTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
+from pytorch_transformers.tokenization_openai import OpenAIGPTTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
 
 from.tokenization_tests_commons import create_and_check_tokenizer_commons
 
-class XLMTokenizationTest(unittest.TestCase):
+
+class OpenAIGPTTokenizationTest(unittest.TestCase):
 
     def test_full_tokenizer(self):
         """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
@@ -33,7 +34,7 @@ class XLMTokenizationTest(unittest.TestCase):
                  "lo", "low", "er</w>",
                  "low</w>", "lowest</w>", "newer</w>", "wider</w>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
+        merges = ["#version: 0.2", "l o", "lo w", "e r</w>", ""]
         with open("/tmp/openai_tokenizer_vocab_test.json", "w") as fp:
             fp.write(json.dumps(vocab_tokens))
             vocab_file = fp.name
@@ -41,9 +42,9 @@ class XLMTokenizationTest(unittest.TestCase):
             fp.write("\n".join(merges))
             merges_file = fp.name
 
-        create_and_check_tokenizer_commons(self, XLMTokenizer, vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
+        create_and_check_tokenizer_commons(self, OpenAIGPTTokenizer, vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
 
-        tokenizer = XLMTokenizer(vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
+        tokenizer = OpenAIGPTTokenizer(vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
         os.remove(vocab_file)
         os.remove(merges_file)
 
@@ -59,9 +60,9 @@ class XLMTokenizationTest(unittest.TestCase):
 
     @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
-            tokenizer = XLMTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+            tokenizer = OpenAIGPTTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(tokenizer)
 

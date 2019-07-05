@@ -1,5 +1,5 @@
 [run]
-source=pytorch_pretrained_bert
+source=pytorch_transformers
 [report]
 exclude_lines =
     pragma: no cover
