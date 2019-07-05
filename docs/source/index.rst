@@ -4,14 +4,27 @@ Pytorch-Transformers: The Big & Extending Repository of pretrained Transformers
 
 .. toctree::
     :maxdepth: 2
+    :caption: Notes
 
     installation
     usage
-    doc
     examples
     notebooks
     tpu
     cli
+
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Package Reference
+
+    model_doc/overview
+    model_doc/bert
+    model_doc/gpt
+    model_doc/transformerxl
+    model_doc/gpt2
+    model_doc/xlm
+    model_doc/xlnet
 
 
 .. image:: https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg
