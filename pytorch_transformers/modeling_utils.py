@@ -193,7 +193,8 @@ class PreTrainedModel(nn.Module):
         """
         state_dict = kwargs.pop('state_dict', None)
         cache_dir = kwargs.pop('cache_dir', None)
-        from_tf = kwargs.pop('from_tf', None)
+        from_tf = kwargs.pop('from_tf', False)
+        output_loading_info = kwargs.pop('output_loading_info', False)
 
         # Load config
         config = cls.config_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -239,6 +240,21 @@ class PreTrainedModel(nn.Module):
             # Directly load from a TensorFlow checkpoint
             return cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
 
+        # Convert old format to new format if needed from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in state_dict.keys():
+            new_key = None
+            if 'gamma' in key:
+                new_key = key.replace('gamma', 'weight')
+            if 'beta' in key:
+                new_key = key.replace('beta', 'bias')
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            state_dict[new_key] = state_dict.pop(old_key)
+
         # Load from a PyTorch state_dict
         missing_keys = []
         unexpected_keys = []
@@ -278,6 +294,10 @@ class PreTrainedModel(nn.Module):
 
         if hasattr(model, 'tie_weights'):
             model.tie_weights()  # make sure word embedding weights are still tied
+
+        if output_loading_info:
+            loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys, "error_msgs": error_msgs}
+            return model, loading_info
 
         return model
 
