@@ -23,6 +23,7 @@ import unicodedata
 from io import open
 
 from .file_utils import cached_path
+from .model_utils import clean_up_tokenization
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,19 @@ class BertTokenizer(object):
             tokens.append(self.ids_to_tokens[i])
         return tokens
 
+    def encode(self, text):
+        return self.convert_tokens_to_ids(self.tokenize(text))
+
+    def decode(self, token_ids, clean_up_tokenization_spaces=True):
+        """Converts a sequence of ids in a string."""
+        tokens = self.convert_ids_to_tokens(token_ids)
+        out_string = ''.join(tokens).replace(' ##', '').strip()
+        if clean_up_tokenization_spaces:
+            for special_tok in (self.UNK_TOKEN, self.SEP_TOKEN, self.PAD_TOKEN, self.CLS_TOKEN, self.MASK_TOKEN):
+                out_string = out_string.replace(special_tok, '')
+            out_string = clean_up_tokenization(out_string)
+        return out_string
+
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
@@ -198,7 +212,7 @@ class BertTokenizer(object):
                     index = token_index
                 writer.write(token + u'\n')
                 index += 1
-        return vocab_file
+        return (vocab_file,)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):

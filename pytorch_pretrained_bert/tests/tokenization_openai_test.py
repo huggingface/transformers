@@ -22,6 +22,8 @@ import pytest
 
 from pytorch_pretrained_bert.tokenization_openai import OpenAIGPTTokenizer, PRETRAINED_VOCAB_ARCHIVE_MAP
 
+from.tokenization_tests_commons import create_and_check_tokenizer_commons
+
 
 class OpenAIGPTTokenizationTest(unittest.TestCase):
 
@@ -40,6 +42,8 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
             fp.write("\n".join(merges))
             merges_file = fp.name
 
+        create_and_check_tokenizer_commons(self, OpenAIGPTTokenizer, vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
+
         tokenizer = OpenAIGPTTokenizer(vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
         os.remove(vocab_file)
         os.remove(merges_file)
@@ -53,18 +57,6 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
         input_bpe_tokens = [14, 15, 20]
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-        vocab_file, merges_file, special_tokens_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
-        tokenizer_2 = OpenAIGPTTokenizer.from_pretrained("/tmp/")
-        os.remove(vocab_file)
-        os.remove(merges_file)
-        os.remove(special_tokens_file)
-
-        self.assertListEqual(
-            [tokenizer.encoder, tokenizer.decoder, tokenizer.bpe_ranks,
-             tokenizer.special_tokens, tokenizer.special_tokens_decoder],
-            [tokenizer_2.encoder, tokenizer_2.decoder, tokenizer_2.bpe_ranks,
-             tokenizer_2.special_tokens, tokenizer_2.special_tokens_decoder])
 
     @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
