@@ -31,6 +31,7 @@ import torch
 import numpy as np
 
 from .file_utils import cached_path
+from .model_utils import clean_up_tokenization
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -109,6 +110,9 @@ class TransfoXLTokenizer(object):
         self.vocab_file = vocab_file
         self.never_split = never_split
 
+        if vocab_file is not None:
+            self.build_vocab()
+
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose: print('counting file {} ...'.format(path))
         assert os.path.exists(path)
@@ -155,7 +159,7 @@ class TransfoXLTokenizer(object):
         if os.path.isdir(vocab_path):
             vocab_file = os.path.join(vocab_path, VOCAB_NAME)
         torch.save(self.__dict__, vocab_file)
-        return vocab_file
+        return (vocab_file,)
 
     def build_vocab(self):
         if self.vocab_file:
@@ -251,12 +255,20 @@ class TransfoXLTokenizer(object):
     def convert_to_tensor(self, symbols):
         return torch.LongTensor(self.convert_tokens_to_ids(symbols))
 
-    def decode(self, indices, exclude=None):
+    def encode(self, text):
+        return self.convert_tokens_to_ids(self.tokenize(text))
+
+    def decode(self, indices, exclude=None, clean_up_tokenization_spaces=True):
         """Converts a sequence of indices in a string."""
         if exclude is None:
-            return ' '.join([self.get_sym(idx) for idx in indices])
+            out_string = ' '.join([self.get_sym(idx) for idx in indices])
         else:
-            return ' '.join([self.get_sym(idx) for idx in indices if idx not in exclude])
+            out_string = ' '.join([self.get_sym(idx) for idx in indices if idx not in exclude])
+
+        if clean_up_tokenization_spaces:
+            out_string = clean_up_tokenization(out_string)
+
+        return out_string
 
     def __len__(self):
         return len(self.idx2sym)

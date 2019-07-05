@@ -26,6 +26,7 @@ from io import open
 from tqdm import tqdm
 
 from .file_utils import cached_path
+from .model_utils import clean_up_tokenization
 from .tokenization_bert import BasicTokenizer
 
 logger = logging.getLogger(__name__)
@@ -285,9 +286,7 @@ class XLMTokenizer(object):
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
         if clean_up_tokenization_spaces:
             out_string = out_string.replace('<unk>', '')
-            out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
-                    ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
-                    ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
+            out_string = clean_up_tokenization(out_string)
         return out_string
 
     def save_vocabulary(self, vocab_path):

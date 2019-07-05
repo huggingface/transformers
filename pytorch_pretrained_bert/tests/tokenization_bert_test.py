@@ -26,6 +26,7 @@ from pytorch_pretrained_bert.tokenization_bert import (BasicTokenizer,
                                                   _is_control, _is_punctuation,
                                                   _is_whitespace, PRETRAINED_VOCAB_ARCHIVE_MAP)
 
+from .tokenization_tests_commons import create_and_check_tokenizer_commons
 
 class TokenizationTest(unittest.TestCase):
 
@@ -36,27 +37,17 @@ class TokenizationTest(unittest.TestCase):
         ]
         with open("/tmp/bert_tokenizer_test.txt", "w", encoding='utf-8') as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-
             vocab_file = vocab_writer.name
 
+        create_and_check_tokenizer_commons(self, BertTokenizer, vocab_file)
+
         tokenizer = BertTokenizer(vocab_file)
-        os.remove(vocab_file)
 
         tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
-
-        vocab_file = tokenizer.save_vocabulary(vocab_path="/tmp/")
-        tokenizer = tokenizer.from_pretrained(vocab_file)
         os.remove(vocab_file)
-
-        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
-        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
