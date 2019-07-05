@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import sys
@@ -47,7 +45,7 @@ def create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, *
 def create_and_check_pickle_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
     tokenizer = tokenizer_class(*inputs, **kwargs)
 
-    text = "Munich and Berlin are nice cities"
+    text = u"Munich and Berlin are nice cities"
     filename = u"/tmp/tokenizer.bin"
 
     subwords = tokenizer.tokenize(text)
