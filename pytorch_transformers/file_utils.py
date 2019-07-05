@@ -29,7 +29,7 @@ except ImportError:
     torch_cache_home = os.path.expanduser(
         os.getenv('TORCH_HOME', os.path.join(
             os.getenv('XDG_CACHE_HOME', '~/.cache'), 'torch')))
-default_cache_path = os.path.join(torch_cache_home, 'pytorch_pretrained_bert')
+default_cache_path = os.path.join(torch_cache_home, 'pytorch_transformers')
 
 try:
     from urllib.parse import urlparse

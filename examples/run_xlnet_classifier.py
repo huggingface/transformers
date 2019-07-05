@@ -34,10 +34,10 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from tensorboardX import SummaryWriter
 
-from pytorch_pretrained_bert import WEIGHTS_NAME, CONFIG_NAME
-from pytorch_pretrained_bert.modeling_xlnet import XLNetForSequenceClassification
-from pytorch_pretrained_bert.tokenization_xlnet import XLNetTokenizer
-from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
+from pytorch_transformers import WEIGHTS_NAME, CONFIG_NAME
+from pytorch_transformers.modeling_xlnet import XLNetForSequenceClassification
+from pytorch_transformers.tokenization_xlnet import XLNetTokenizer
+from pytorch_transformers.optimization import BertAdam, WarmupLinearSchedule
 
 from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
 

@@ -21,22 +21,22 @@ from io import open
 
 import torch
 
-from pytorch_pretrained_bert.modeling_gpt2 import (CONFIG_NAME, WEIGHTS_NAME,
-                                                     GPT2Config,
-                                                     GPT2Model,
-                                                     load_tf_weights_in_gpt2)
+from pytorch_transformers.modeling_openai import (CONFIG_NAME, WEIGHTS_NAME,
+                                                     OpenAIGPTConfig,
+                                                     OpenAIGPTModel,
+                                                     load_tf_weights_in_openai_gpt)
 
 
-def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path):
+def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_config_file, pytorch_dump_folder_path):
     # Construct model
-    if gpt2_config_file == "":
-        config = GPT2Config()
+    if openai_config_file == "":
+        config = OpenAIGPTConfig()
     else:
-        config = GPT2Config(gpt2_config_file)
-    model = GPT2Model(config)
+        config = OpenAIGPTConfig(openai_config_file)
+    model = OpenAIGPTModel(config)
 
     # Load weights from numpy
-    load_tf_weights_in_gpt2(model, gpt2_checkpoint_path)
+    load_tf_weights_in_openai_gpt(model, openai_checkpoint_folder_path)
 
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + '/' + WEIGHTS_NAME
@@ -51,7 +51,7 @@ def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, p
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     ## Required parameters
-    parser.add_argument("--gpt2_checkpoint_path",
+    parser.add_argument("--openai_checkpoint_folder_path",
                         default = None,
                         type = str,
                         required = True,
@@ -61,12 +61,12 @@ if __name__ == "__main__":
                         type = str,
                         required = True,
                         help = "Path to the output PyTorch model.")
-    parser.add_argument("--gpt2_config_file",
+    parser.add_argument("--openai_config_file",
                         default = "",
                         type = str,
                         help = "An optional config json file corresponding to the pre-trained OpenAI model. \n"
                             "This specifies the model architecture.")
     args = parser.parse_args()
-    convert_gpt2_checkpoint_to_pytorch(args.gpt2_checkpoint_path,
-                                         args.gpt2_config_file,
+    convert_openai_checkpoint_to_pytorch(args.openai_checkpoint_folder_path,
+                                         args.openai_config_file,
                                          args.pytorch_dump_folder_path)

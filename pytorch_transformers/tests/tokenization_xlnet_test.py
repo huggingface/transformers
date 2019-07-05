@@ -19,7 +19,7 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_pretrained_bert.tokenization_xlnet import (XLNetTokenizer,
+from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer,
                                                         PRETRAINED_VOCAB_ARCHIVE_MAP,
                                                         SPIECE_UNDERLINE)
 
@@ -62,7 +62,7 @@ class XLNetTokenizationTest(unittest.TestCase):
 
     @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(PRETRAINED_VOCAB_ARCHIVE_MAP.keys())[:1]:
             tokenizer = XLNetTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)

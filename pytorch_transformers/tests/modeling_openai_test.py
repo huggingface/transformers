@@ -21,7 +21,7 @@ import pytest
 
 import torch
 
-from pytorch_pretrained_bert import (OpenAIGPTConfig, OpenAIGPTModel,
+from pytorch_transformers import (OpenAIGPTConfig, OpenAIGPTModel,
                                      OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
 
 from .model_tests_commons import (create_and_check_commons, ConfigTester, GPTModelTester)

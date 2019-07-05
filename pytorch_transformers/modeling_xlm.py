@@ -204,7 +204,7 @@ def gelu(x):
     GELU activation
     https://arxiv.org/abs/1606.08415
     https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/model_pytorch.py#L14
-    https://github.com/huggingface/pytorch-pretrained-BERT/blob/master/modeling.py
+    https://github.com/huggingface/pytorch-transformers/blob/master/modeling.py
     """
     # return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
     return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))

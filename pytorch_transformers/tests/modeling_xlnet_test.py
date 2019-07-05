@@ -25,8 +25,8 @@ import pytest
 
 import torch
 
-from pytorch_pretrained_bert import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering)
-from pytorch_pretrained_bert.modeling_xlnet import PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering)
+from pytorch_transformers.modeling_xlnet import PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .model_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
 
@@ -278,7 +278,7 @@ class XLNetModelTest(unittest.TestCase):
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_pretrained_bert_test/"
+        cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = XLNetModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)

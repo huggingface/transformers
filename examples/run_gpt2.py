@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer
+from pytorch_transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',

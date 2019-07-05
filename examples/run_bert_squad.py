@@ -33,10 +33,10 @@ from tqdm import tqdm, trange
 
 from tensorboardX import SummaryWriter
 
-from pytorch_pretrained_bert import WEIGHTS_NAME, CONFIG_NAME
-from pytorch_pretrained_bert.modeling_bert import BertForQuestionAnswering
-from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
-from pytorch_pretrained_bert.tokenization_bert import BertTokenizer
+from pytorch_transformers import WEIGHTS_NAME, CONFIG_NAME
+from pytorch_transformers.modeling_bert import BertForQuestionAnswering
+from pytorch_transformers.optimization import BertAdam, WarmupLinearSchedule
+from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from utils_squad import read_squad_examples, convert_examples_to_features, RawResult, write_predictions
 
