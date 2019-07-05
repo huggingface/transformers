@@ -1,6 +1,5 @@
-Docs
+Overview
 ================================================
-
 
 
 Here is a detailed documentation of the classes in the package and how to use them:
@@ -22,6 +21,31 @@ Here is a detailed documentation of the classes in the package and how to use th
      - API of the tokenizers class for BERT, GPT, GPT-2 and Transformer-XL
    * - `Optimizers <#optimizers>`_
      - API of the optimizers
+
+
+Configurations
+^^^^^^^^^^^^^^
+
+Models (BERT, GPT, GPT-2 and Transformer-XL) are defined and build from configuration classes which contains the
+parameters of the models (number of layers, dimensionalities...) and a few utilities to read and write from JSON
+configuration files. The respective configuration classes are:
+
+
+* ``BertConfig`` for ``BertModel`` and BERT classes instances.
+* ``OpenAIGPTConfig`` for ``OpenAIGPTModel`` and OpenAI GPT classes instances.
+* ``GPT2Config`` for ``GPT2Model`` and OpenAI GPT-2 classes instances.
+* ``TransfoXLConfig`` for ``TransfoXLModel`` and Transformer-XL classes instances.
+
+These configuration classes contains a few utilities to load and save configurations:
+
+
+* ``from_dict(cls, json_object)``\ : A class method to construct a configuration from a Python dictionary of parameters.
+ Returns an instance of the configuration class.
+* ``from_json_file(cls, json_file)``\ : A class method to construct a configuration from a json file of parameters.
+Returns an instance of the configuration class.
+* ``to_dict()``\ : Serializes an instance to a Python dictionary. Returns a dictionary.
+* ``to_json_string()``\ : Serializes an instance to a JSON string. Returns a string.
+* ``to_json_file(json_file_path)``\ : Save an instance to a json file.
 
 
 Loading Google AI or OpenAI pre-trained weights or PyTorch dump
@@ -124,7 +148,7 @@ Usually, if you don't set any specific environment variable, ``pytorch_pretraine
 You can alsways safely delete ``pytorch_pretrained_bert`` cache but the pretrained model weights and vocabulary files wil have to be re-downloaded from our S3.
 
 Serialization best-practices
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This section explain how you can save and re-load a fine-tuned model (BERT, GPT, GPT-2 and Transformer-XL).
 There are three types of files you need to save to be able to reload a fine-tuned model:
@@ -212,267 +236,8 @@ Here is another way you can save and reload the model if you want to use specifi
    model.load_state_dict(state_dict)
    tokenizer = OpenAIGPTTokenizer(output_vocab_file)
 
-Configurations
-^^^^^^^^^^^^^^
-
-Models (BERT, GPT, GPT-2 and Transformer-XL) are defined and build from configuration classes which containes the parameters of the models (number of layers, dimensionalities...) and a few utilities to read and write from JSON configuration files. The respective configuration classes are:
-
-
-* ``BertConfig`` for ``BertModel`` and BERT classes instances.
-* ``OpenAIGPTConfig`` for ``OpenAIGPTModel`` and OpenAI GPT classes instances.
-* ``GPT2Config`` for ``GPT2Model`` and OpenAI GPT-2 classes instances.
-* ``TransfoXLConfig`` for ``TransfoXLModel`` and Transformer-XL classes instances.
-
-These configuration classes contains a few utilities to load and save configurations:
-
-
-* ``from_dict(cls, json_object)``\ : A class method to construct a configuration from a Python dictionary of parameters. Returns an instance of the configuration class.
-* ``from_json_file(cls, json_file)``\ : A class method to construct a configuration from a json file of parameters. Returns an instance of the configuration class.
-* ``to_dict()``\ : Serializes an instance to a Python dictionary. Returns a dictionary.
-* ``to_json_string()``\ : Serializes an instance to a JSON string. Returns a string.
-* ``to_json_file(json_file_path)``\ : Save an instance to a json file.
-
-Models
-^^^^^^
-
-1. ``BertModel``
-~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertModel
-    :members:
-
-
-2. ``BertForPreTraining``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForPreTraining
-    :members:
-
-
-3. ``BertForMaskedLM``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForMaskedLM
-    :members:
-
-
-4. ``BertForNextSentencePrediction``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForNextSentencePrediction
-    :members:
-
-
-5. ``BertForSequenceClassification``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForSequenceClassification
-    :members:
-
-
-6. ``BertForMultipleChoice``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForMultipleChoice
-    :members:
-
-
-7. ``BertForTokenClassification``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForTokenClassification
-    :members:
-
-
-8. ``BertForQuestionAnswering``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.BertForQuestionAnswering
-    :members:
-
-
-9. ``OpenAIGPTModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.OpenAIGPTModel
-    :members:
-
-
-10. ``OpenAIGPTLMHeadModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.OpenAIGPTLMHeadModel
-    :members:
-
-
-11. ``OpenAIGPTDoubleHeadsModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.OpenAIGPTDoubleHeadsModel
-    :members:
-
-
-12. ``TransfoXLModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.TransfoXLModel
-    :members:
-
-
-13. ``TransfoXLLMHeadModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.TransfoXLLMHeadModel
-    :members:
-
-
-14. ``GPT2Model``
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.GPT2Model
-    :members:
-
-
-15. ``GPT2LMHeadModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.GPT2LMHeadModel
-    :members:
-
-
-16. ``GPT2DoubleHeadsModel``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_pretrained_bert.GPT2DoubleHeadsModel
-    :members:
-
-
-Tokenizers
-^^^^^^^^^^
-
-``BertTokenizer``
-~~~~~~~~~~~~~~~~~~~~~
-
-``BertTokenizer`` perform end-to-end tokenization, i.e. basic tokenization followed by WordPiece tokenization.
-
-This class has five arguments:
-
-
-* ``vocab_file``\ : path to a vocabulary file.
-* ``do_lower_case``\ : convert text to lower-case while tokenizing. **Default = True**.
-* ``max_len``\ : max length to filter the input of the Transformer. Default to pre-trained value for the model if ``None``. **Default = None**
-* ``do_basic_tokenize``\ : Do basic tokenization before wordpice tokenization. Set to false if text is pre-tokenized. **Default = True**.
-* ``never_split``\ : a list of tokens that should not be splitted during tokenization. **Default = ``["[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"]``\ **
-
-and three methods:
-
-
-* ``tokenize(text)``\ : convert a ``str`` in a list of ``str`` tokens by (1) performing basic tokenization and (2) WordPiece tokenization.
-* ``convert_tokens_to_ids(tokens)``\ : convert a list of ``str`` tokens in a list of ``int`` indices in the vocabulary.
-* ``convert_ids_to_tokens(tokens)``\ : convert a list of ``int`` indices in a list of ``str`` tokens in the vocabulary.
-* `save_vocabulary(directory_path)`: save the vocabulary file to `directory_path`. Return the path to the saved vocabulary file: ``vocab_file_path``. The vocabulary can be reloaded with ``BertTokenizer.from_pretrained('vocab_file_path')`` or ``BertTokenizer.from_pretrained('directory_path')``.
-
-Please refer to the doc strings and code in `\ ``tokenization.py`` <./pytorch_pretrained_bert/tokenization.py>`_ for the details of the ``BasicTokenizer`` and ``WordpieceTokenizer`` classes. In general it is recommended to use ``BertTokenizer`` unless you know what you are doing.
-
-``OpenAIGPTTokenizer``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``OpenAIGPTTokenizer`` perform Byte-Pair-Encoding (BPE) tokenization.
-
-This class has four arguments:
-
-
-* ``vocab_file``\ : path to a vocabulary file.
-* ``merges_file``\ : path to a file containing the BPE merges.
-* ``max_len``\ : max length to filter the input of the Transformer. Default to pre-trained value for the model if ``None``. **Default = None**
-* ``special_tokens``\ : a list of tokens to add to the vocabulary for fine-tuning. If SpaCy is not installed and BERT's ``BasicTokenizer`` is used as the pre-BPE tokenizer, these tokens are not split. **Default= None**
-
-and five methods:
-
-
-* ``tokenize(text)``\ : convert a ``str`` in a list of ``str`` tokens by performing BPE tokenization.
-* ``convert_tokens_to_ids(tokens)``\ : convert a list of ``str`` tokens in a list of ``int`` indices in the vocabulary.
-* ``convert_ids_to_tokens(tokens)``\ : convert a list of ``int`` indices in a list of ``str`` tokens in the vocabulary.
-* ``set_special_tokens(self, special_tokens)``\ : update the list of special tokens (see above arguments)
-* ``encode(text)``\ : convert a ``str`` in a list of ``int`` tokens by performing BPE encoding.
-* `decode(ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)`: decode a list of `int` indices in a string and do some post-processing if needed: (i) remove special tokens from the output and (ii) clean up tokenization spaces.
-* `save_vocabulary(directory_path)`: save the vocabulary, merge and special tokens files to `directory_path`. Return the path to the three files: ``vocab_file_path``\ , ``merge_file_path``\ , ``special_tokens_file_path``. The vocabulary can be reloaded with ``OpenAIGPTTokenizer.from_pretrained('directory_path')``.
-
-Please refer to the doc strings and code in `\ ``tokenization_openai.py`` <./pytorch_pretrained_bert/tokenization_openai.py>`_ for the details of the ``OpenAIGPTTokenizer``.
-
-``TransfoXLTokenizer``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``TransfoXLTokenizer`` perform word tokenization. This tokenizer can be used for adaptive softmax and has utilities for counting tokens in a corpus to create a vocabulary ordered by toekn frequency (for adaptive softmax). See the adaptive softmax paper (\ `Efficient softmax approximation for GPUs <http://arxiv.org/abs/1609.04309>`_\ ) for more details.
-
-The API is similar to the API of ``BertTokenizer`` (see above).
-
-Please refer to the doc strings and code in `\ ``tokenization_transfo_xl.py`` <./pytorch_pretrained_bert/tokenization_transfo_xl.py>`_ for the details of these additional methods in ``TransfoXLTokenizer``.
-
-``GPT2Tokenizer``
-~~~~~~~~~~~~~~~~~~~~~
-
-``GPT2Tokenizer`` perform byte-level Byte-Pair-Encoding (BPE) tokenization.
-
-This class has three arguments:
-
-
-* ``vocab_file``\ : path to a vocabulary file.
-* ``merges_file``\ : path to a file containing the BPE merges.
-* ``errors``\ : How to handle unicode decoding errors. **Default = ``replace``\ **
-
-and two methods:
-
-
-* ``tokenize(text)``\ : convert a ``str`` in a list of ``str`` tokens by performing byte-level BPE.
-* ``convert_tokens_to_ids(tokens)``\ : convert a list of ``str`` tokens in a list of ``int`` indices in the vocabulary.
-* ``convert_ids_to_tokens(tokens)``\ : convert a list of ``int`` indices in a list of ``str`` tokens in the vocabulary.
-* ``set_special_tokens(self, special_tokens)``\ : update the list of special tokens (see above arguments)
-* ``encode(text)``\ : convert a ``str`` in a list of ``int`` tokens by performing byte-level BPE.
-* ``decode(tokens)``\ : convert back a list of ``int`` tokens in a ``str``.
-* `save_vocabulary(directory_path)`: save the vocabulary, merge and special tokens files to `directory_path`. Return the path to the three files: ``vocab_file_path``\ , ``merge_file_path``\ , ``special_tokens_file_path``. The vocabulary can be reloaded with ``OpenAIGPTTokenizer.from_pretrained('directory_path')``.
-
-Please refer to `\ ``tokenization_gpt2.py`` <./pytorch_pretrained_bert/tokenization_gpt2.py>`_ for more details on the ``GPT2Tokenizer``.
-
-Optimizers
-^^^^^^^^^^
-
-``BertAdam``
-~~~~~~~~~~~~~~~~
-
-``BertAdam`` is a ``torch.optimizer`` adapted to be closer to the optimizer used in the TensorFlow implementation of Bert. The differences with PyTorch Adam optimizer are the following:
-
-
-* BertAdam implements weight decay fix,
-* BertAdam doesn't compensate for bias as in the regular Adam optimizer.
-
-The optimizer accepts the following arguments:
-
-
-* ``lr`` : learning rate
-* ``warmup`` : portion of ``t_total`` for the warmup, ``-1``  means no warmup. Default : ``-1``
-* ``t_total`` : total number of training steps for the learning
-    rate schedule, ``-1``  means constant learning rate. Default : ``-1``
-* ``schedule`` : schedule to use for the warmup (see above).
-    Can be ``'warmup_linear'``\ , ``'warmup_constant'``\ , ``'warmup_cosine'``\ , ``'none'``\ , ``None`` or a ``_LRSchedule`` object (see below).
-    If ``None`` or ``'none'``\ , learning rate is always kept constant.
-    Default : ``'warmup_linear'``
-* ``b1`` : Adams b1. Default : ``0.9``
-* ``b2`` : Adams b2. Default : ``0.999``
-* ``e`` : Adams epsilon. Default : ``1e-6``
-* ``weight_decay:`` Weight decay. Default : ``0.01``
-* ``max_grad_norm`` : Maximum norm for the gradients (\ ``-1`` means no clipping). Default : ``1.0``
-
-``OpenAIAdam``
-~~~~~~~~~~~~~~~~~~
-
-``OpenAIAdam`` is similar to ``BertAdam``.
-The differences with ``BertAdam`` is that ``OpenAIAdam`` compensate for bias as in the regular Adam optimizer.
-
-``OpenAIAdam`` accepts the same arguments as ``BertAdam``.
-
 Learning Rate Schedules
-~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ``.optimization`` module also provides additional schedules in the form of schedule objects that inherit from ``_LRSchedule``.
 All ``_LRSchedule`` subclasses accept ``warmup`` and ``t_total`` arguments at construction.
