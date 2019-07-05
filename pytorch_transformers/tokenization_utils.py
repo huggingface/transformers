@@ -101,8 +101,12 @@ class PreTrainedTokenizer(object):
             max_len = cls.max_model_input_sizes[pretrained_model_name_or_path]
             kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
 
+        # Merge resolved_vocab_files arguments in kwargs.
+        for args_name, file_path in resolved_vocab_files.items():
+            kwargs[args_name] = file_path
+
         # Instantiate tokenizer.
-        tokenizer = cls(*inputs, **resolved_vocab_files, **kwargs)
+        tokenizer = cls(*inputs, **kwargs)
 
         return tokenizer
 
