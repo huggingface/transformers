@@ -110,6 +110,24 @@ class PreTrainedTokenizer(object):
 
         return tokenizer
 
+    def tokenize(self, text):
+        raise NotImplementedError
+
+    def convert_tokens_to_ids(self, tokens):
+        raise NotImplementedError
+
+    def convert_ids_to_tokens(self, ids):
+        raise NotImplementedError
+
+    def encode(self, text):
+        raise NotImplementedError
+
+    def decode(self, token_ids, *input, **kwargs):
+        raise NotImplementedError
+
+    def save_vocabulary(self, vocab_path):
+        raise NotImplementedError
+
 
 def clean_up_tokenization(out_string):
     out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','

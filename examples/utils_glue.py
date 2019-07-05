@@ -583,6 +583,7 @@ processors = {
 output_modes = {
     "cola": "classification",
     "mnli": "classification",
+    "mnli-mm": "classification",
     "mrpc": "classification",
     "sst-2": "classification",
     "sts-b": "regression",
