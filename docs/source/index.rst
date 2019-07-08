@@ -12,6 +12,7 @@ Pytorch-Transformers
     notebooks
     tpu
     cli
+    torchscript
 
 
 .. toctree::
