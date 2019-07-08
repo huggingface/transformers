@@ -1116,22 +1116,22 @@ An overview of the implemented schedules:
 - `ConstantLR`: always returns learning rate 1.
 - `WarmupConstantSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     Keeps learning rate equal to 1. after warmup.
-    ![](docs/imgs/warmup_constant_schedule.png)
+    ![](docs/source/imgs/warmup_constant_schedule.png)
 - `WarmupLinearSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     Linearly decreases learning rate from 1. to 0. over remaining `1 - warmup` steps.
-    ![](docs/imgs/warmup_linear_schedule.png)
+    ![](docs/source/imgs/warmup_linear_schedule.png)
 -  `WarmupCosineSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     Decreases learning rate from 1. to 0. over remaining `1 - warmup` steps following a cosine curve.
     If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
-    ![](docs/imgs/warmup_cosine_schedule.png)
+    ![](docs/source/imgs/warmup_cosine_schedule.png)
 - `WarmupCosineWithHardRestartsSchedule`: Linearly increases learning rate from 0 to 1 over `warmup` fraction of training steps.
     If `cycles` (default=1.) is different from default, learning rate follows `cycles` times a cosine decaying learning rate (with hard restarts).
-    ![](docs/imgs/warmup_cosine_hard_restarts_schedule.png)
+    ![](docs/source/imgs/warmup_cosine_hard_restarts_schedule.png)
 - `WarmupCosineWithWarmupRestartsSchedule`: All training progress is divided in `cycles` (default=1.) parts of equal length.
     Every part follows a schedule with the first `warmup` fraction of the training steps linearly increasing from 0. to 1.,
     followed by a learning rate decreasing from 1. to 0. following a cosine curve.
     Note that the total number of all warmup steps over all cycles together is equal to `warmup` * `cycles`
-    ![](docs/imgs/warmup_cosine_warm_restarts_schedule.png)
+    ![](docs/source/imgs/warmup_cosine_warm_restarts_schedule.png)
 
 ## Examples
 

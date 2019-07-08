@@ -176,5 +176,9 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
 
+def setup(app):
+    app.add_stylesheet('css/huggingface.css')
+    app.add_stylesheet('css/code-snippets.css')
+    app.add_js_file('js/custom.js')
 
 # -- Extension configuration -------------------------------------------------

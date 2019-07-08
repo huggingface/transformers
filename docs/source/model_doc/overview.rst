@@ -39,10 +39,8 @@ configuration files. The respective configuration classes are:
 These configuration classes contains a few utilities to load and save configurations:
 
 
-* ``from_dict(cls, json_object)``\ : A class method to construct a configuration from a Python dictionary of parameters.
- Returns an instance of the configuration class.
-* ``from_json_file(cls, json_file)``\ : A class method to construct a configuration from a json file of parameters.
-Returns an instance of the configuration class.
+* ``from_dict(cls, json_object)``\ : A class method to construct a configuration from a Python dictionary of parameters. Returns an instance of the configuration class.
+* ``from_json_file(cls, json_file)``\ : A class method to construct a configuration from a json file of parameters. Returns an instance of the configuration class.
 * ``to_dict()``\ : Serializes an instance to a Python dictionary. Returns a dictionary.
 * ``to_json_string()``\ : Serializes an instance to a JSON string. Returns a string.
 * ``to_json_file(json_file_path)``\ : Save an instance to a json file.
@@ -247,40 +245,44 @@ An overview of the implemented schedules:
 
 
 * ``ConstantLR``\ : always returns learning rate 1.
-* ``WarmupConstantSchedule``\ : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
+* ``WarmupConstantSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
     Keeps learning rate equal to 1. after warmup.
 
-  .. image:: docs/imgs/warmup_constant_schedule.png
-     :target: docs/imgs/warmup_constant_schedule.png
+  .. image:: /imgs/warmup_constant_schedule.png
+     :target: /imgs/warmup_constant_schedule.png
      :alt:
 
-* ``WarmupLinearSchedule``\ : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
+
+* ``WarmupLinearSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
     Linearly decreases learning rate from 1. to 0. over remaining ``1 - warmup`` steps.
 
-  .. image:: docs/imgs/warmup_linear_schedule.png
-     :target: docs/imgs/warmup_linear_schedule.png
+  .. image:: /imgs/warmup_linear_schedule.png
+     :target: /imgs/warmup_linear_schedule.png
      :alt:
 
-* ``WarmupCosineSchedule``\ : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
+
+* ``WarmupCosineSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
    Decreases learning rate from 1. to 0. over remaining ``1 - warmup`` steps following a cosine curve.
    If ``cycles`` (default=0.5) is different from default, learning rate follows cosine function after warmup.
 
-  .. image:: docs/imgs/warmup_cosine_schedule.png
-     :target: docs/imgs/warmup_cosine_schedule.png
+  .. image:: /imgs/warmup_cosine_schedule.png
+     :target: /imgs/warmup_cosine_schedule.png
      :alt:
 
-* ``WarmupCosineWithHardRestartsSchedule``\ : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
+
+* ``WarmupCosineWithHardRestartsSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
     If ``cycles`` (default=1.) is different from default, learning rate follows ``cycles`` times a cosine decaying learning rate (with hard restarts).
 
-  .. image:: docs/imgs/warmup_cosine_hard_restarts_schedule.png
-     :target: docs/imgs/warmup_cosine_hard_restarts_schedule.png
+  .. image:: /imgs/warmup_cosine_hard_restarts_schedule.png
+     :target: /imgs/warmup_cosine_hard_restarts_schedule.png
      :alt:
 
-* ``WarmupCosineWithWarmupRestartsSchedule``\ : All training progress is divided in ``cycles`` (default=1.) parts of equal length.
+
+* ``WarmupCosineWithWarmupRestartsSchedule`` : All training progress is divided in ``cycles`` (default=1.) parts of equal length.
     Every part follows a schedule with the first ``warmup`` fraction of the training steps linearly increasing from 0. to 1.,
     followed by a learning rate decreasing from 1. to 0. following a cosine curve.
     Note that the total number of all warmup steps over all cycles together is equal to ``warmup`` * ``cycles``
 
-  .. image:: docs/imgs/warmup_cosine_warm_restarts_schedule.png
-     :target: docs/imgs/warmup_cosine_warm_restarts_schedule.png
+  .. image:: /imgs/warmup_cosine_warm_restarts_schedule.png
+     :target: /imgs/warmup_cosine_warm_restarts_schedule.png
      :alt:
