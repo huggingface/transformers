@@ -182,7 +182,8 @@ SCHEDULES = {
 
 class BertAdam(Optimizer):
     """Implements BERT version of Adam algorithm with weight decay fix.
-    Params:
+
+    Parameters:
         lr: learning rate
         warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
         t_total: total number of training steps for the learning
