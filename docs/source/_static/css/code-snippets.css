@@ -1,0 +1,12 @@
+
+.highlight .c1{
+    color: #999
+}
+
+.highlight .nn, .highlight .k, .highlight .s1, .highlight .nb, .highlight .bp {
+    color: #FB8D68;
+}
+
+.highlight .kn, .highlight .nv, .highlight .s2 {
+    color: #6670FF;
+}

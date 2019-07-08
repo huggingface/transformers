@@ -1,4 +1,4 @@
-Pytorch-Transformers: The Big & Extending Repository of pretrained Transformers
+Pytorch-Transformers
 ================================================================================================================================================
 
 
