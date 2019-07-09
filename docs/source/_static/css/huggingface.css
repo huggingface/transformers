@@ -1,0 +1,144 @@
+/* The literal code blocks */
+.rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
+    color: #6670FF;
+}
+
+/* To keep the logo centered */
+.wy-side-scroll {
+    width: auto;
+}
+
+/* The div that holds the Hugging Face logo */
+.HuggingFaceDiv {
+    width: 100%
+}
+
+/* The research field on top of the toc tree */
+.wy-side-nav-search{
+    background-color: #6670FF;
+}
+
+/* The toc tree */
+.wy-nav-side{
+    background-color: #6670FF;
+}
+
+/* The selected items in the toc tree */
+.wy-menu-vertical li.current{
+    background-color: #A6B0FF;
+}
+
+/* When a list item that does belong to the selected block from the toc tree is hovered */
+.wy-menu-vertical li.current a:hover{
+    background-color: #FB8D68;
+}
+
+/* When a list item that does NOT belong to the selected block from the toc tree is hovered. */
+.wy-menu-vertical li a:hover{
+    background-color: #FB8D68;
+}
+
+/* The text items on the toc tree */
+.wy-menu-vertical a {
+    color: #FFFFDD;
+    font-family: Calibre-Light;
+}
+.wy-menu-vertical header, .wy-menu-vertical p.caption{
+    color: white;
+    font-family: Calibre-Light;
+}
+
+/* The color inside the selected toc tree block */
+.wy-menu-vertical li.toctree-l2 a, .wy-menu-vertical li.toctree-l3 a, .wy-menu-vertical li.toctree-l4 a {
+    color: black;
+}
+
+/* Inside the depth-2 selected toc tree block */
+.wy-menu-vertical li.toctree-l2.current>a {
+    background-color: #B6C0FF
+}
+.wy-menu-vertical li.toctree-l2.current li.toctree-l3>a {
+    background-color: #C6D0FF
+}
+
+/* Inside the depth-3 selected toc tree block */
+.wy-menu-vertical li.toctree-l3.current li.toctree-l4>a{
+    background-color: #D6E0FF
+}
+
+/* Inside code snippets */
+.rst-content dl:not(.docutils) dt{
+    font-size: 15px;
+}
+
+/* Links */
+a {
+    color: #6670FF;
+}
+
+/* Content bars */
+.rst-content dl:not(.docutils) dt {
+    background-color: rgba(251, 141, 104, 0.1);
+    border-right: solid 2px #FB8D68;
+    border-left: solid 2px #FB8D68;
+    color: #FB8D68;
+    font-family: Calibre-Light;
+    border-top: none;
+    font-style: normal !important;
+}
+
+/* Expand button */
+.wy-menu-vertical li.toctree-l2 span.toctree-expand,
+.wy-menu-vertical li.on a span.toctree-expand, .wy-menu-vertical li.current>a span.toctree-expand,
+.wy-menu-vertical li.toctree-l3 span.toctree-expand{
+    color: black;
+}
+
+/* Max window size */
+.wy-nav-content{
+    max-width: 1200px;
+}
+
+/* Mobile header */
+.wy-nav-top{
+    background-color: #6670FF;
+}
+
+/* FONTS */
+body{
+    font-family: Calibre;
+    font-size: 20px;
+}
+
+h1 {
+    font-family: Calibre-Thin;
+    font-size: 70px;
+}
+
+h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
+    font-family: Calibre-Medium;
+}
+
+@font-face {
+    font-family: Calibre-Medium;
+    src: url(./Calibre-Medium.otf);
+    font-weight:400;
+}
+
+@font-face {
+    font-family: Calibre;
+    src: url(./Calibre-Regular.otf);
+    font-weight:400;
+}
+
+@font-face {
+    font-family: Calibre-Light;
+    src: url(./Calibre-Light.ttf);
+    font-weight:400;
+}
+
+@font-face {
+    font-family: Calibre-Thin;
+    src: url(./Calibre-Thin.otf);
+    font-weight:400;
+}
