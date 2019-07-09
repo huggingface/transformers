@@ -84,24 +84,22 @@ def whitespace_tokenize(text):
 
 
 class BertTokenizer(object):
-    """Runs end-to-end tokenization: punctuation splitting + wordpiece"""
+    r"""
+    Constructs a BertTokenizer.
+    :class:`~pytorch_pretrained_bert.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
+
+    Args:
+        vocab_file: Path to a one-wordpiece-per-line vocabulary file
+        do_lower_case: Whether to lower case the input. Only has an effect when do_wordpiece_only=False
+        do_basic_tokenize: Whether to do basic tokenization before wordpiece.
+        max_len: An artificial maximum length to truncate tokenized sequences to; Effective maximum length is always the
+            minimum of this value (if specified) and the underlying BERT model's sequence length.
+        never_split: List of tokens which will never be split during tokenization. Only has an effect when
+            do_wordpiece_only=False
+    """
 
     def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
                  never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
-        """Constructs a BertTokenizer.
-
-        Args:
-          vocab_file: Path to a one-wordpiece-per-line vocabulary file
-          do_lower_case: Whether to lower case the input
-                         Only has an effect when do_wordpiece_only=False
-          do_basic_tokenize: Whether to do basic tokenization before wordpiece.
-          max_len: An artificial maximum length to truncate tokenized sequences to;
-                         Effective maximum length is always the minimum of this
-                         value (if specified) and the underlying BERT model's
-                         sequence length.
-          never_split: List of tokens which will never be split during tokenization.
-                         Only has an effect when do_wordpiece_only=False
-        """
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
