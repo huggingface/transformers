@@ -123,8 +123,3 @@ Using the traced model for inference is as simple as using its ``__call__`` dund
 .. code-block:: python
 
     traced_model(tokens_tensor, segments_tensors)
-
-(Optional) Using TorchScript in C++
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Below are examples of using a model exported using Python in C++.

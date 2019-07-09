@@ -1,6 +1,18 @@
 # Generating the documentation
 
-To generate the documentation, you first have to build it. Building it requires the package `sphinx` that you can 
+To generate the documentation, you first have to build it. Several packages are necessary to build the doc,
+you can install them using:
+
+```bash
+pip install -r requirements.txt
+```
+ 
+## Packages installed
+
+Here's an overview of all the packages installed. If you ran the previous command installing all packages from 
+`requirements.txt`, you do not need to run the following commands.
+
+Building it requires the package `sphinx` that you can 
 install using:
 
 ```bash
@@ -14,10 +26,35 @@ You would also need the custom installed [theme](https://github.com/readthedocs/
 pip install sphinx_rtd_theme
 ```
 
+The third necessary package is the `recommonmark` package to accept Markdown as well as Restructured text:
+
+```bash
+pip install recommonmark
+```
+
+## Building the documentation
+
 Once you have setup `sphinx`, you can build the documentation by running the following command in the `/docs` folder:
 
 ```bash
 make html
 ```
 
+---
+**NOTE**
+
+If you are adding/removing elements from the toc-tree or from any strutural item, it is recommended to clean the build
+directory before rebuilding. Run the following command to clean and build:
+
+```bash
+make clean && make html
+```
+
+---
+
 It should build the static app that will be available under `/docs/_build/html`
+
+## Adding a new element to the tree (toc-tree)
+
+Acceptes files are reStructuredText (.rst) and Markdown (.md). Create a file with its extension and put it
+in the source directory. You can then link it to the toc-tree by putting the filename without the extension.
