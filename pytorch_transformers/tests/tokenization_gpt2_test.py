@@ -17,11 +17,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
-import tempfile
 
 from pytorch_transformers.tokenization_gpt2 import GPT2Tokenizer, VOCAB_FILES_NAMES
 
-from .tokenization_tests_commons import create_and_check_tokenizer_commons
+from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
 
 class GPT2TokenizationTest(unittest.TestCase):
 
@@ -34,7 +33,7 @@ class GPT2TokenizationTest(unittest.TestCase):
         merges = ["#version: 0.2", "l o", "lo w", "e r", ""]
         special_tokens_map = {"unk_token": "<unk>"}
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        with TemporaryDirectory() as tmpdirname:
             vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
             merges_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['merges_file'])
             with open(vocab_file, "w") as fp:

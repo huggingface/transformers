@@ -16,11 +16,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import tempfile
 
-from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE, VOCAB_FILES_NAMES)
+from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE)
 
-from.tokenization_tests_commons import create_and_check_tokenizer_commons
+from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     'fixtures/test_sentencepiece.model')
@@ -30,7 +29,7 @@ class XLNetTokenizationTest(unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        with TemporaryDirectory() as tmpdirname:
             tokenizer.save_pretrained(tmpdirname)
 
             create_and_check_tokenizer_commons(self, XLNetTokenizer, tmpdirname)

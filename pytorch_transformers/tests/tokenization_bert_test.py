@@ -24,7 +24,7 @@ from pytorch_transformers.tokenization_bert import (BasicTokenizer,
                                                     _is_control, _is_punctuation,
                                                     _is_whitespace, VOCAB_FILES_NAMES)
 
-from .tokenization_tests_commons import create_and_check_tokenizer_commons
+from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
 
 class TokenizationTest(unittest.TestCase):
 
@@ -33,21 +33,18 @@ class TokenizationTest(unittest.TestCase):
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
             "##ing", ",", "low", "lowest",
         ]
-        vocab_directory = "/tmp/"
-        vocab_file = os.path.join(vocab_directory, VOCAB_FILES_NAMES['vocab_file'])
-        with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-            vocab_file = vocab_writer.name
+        with TemporaryDirectory() as tmpdirname:
+            vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
+            with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        create_and_check_tokenizer_commons(self, BertTokenizer, pretrained_model_name_or_path=vocab_directory)
+            create_and_check_tokenizer_commons(self, BertTokenizer, tmpdirname)
 
-        tokenizer = BertTokenizer(vocab_file)
+            tokenizer = BertTokenizer(vocab_file)
 
-        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
-        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
-
-        os.remove(vocab_file)
+            tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
+            self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+            self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()

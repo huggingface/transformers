@@ -14,18 +14,25 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
 import sys
 from io import open
 import tempfile
-
-if sys.version_info[0] == 3:
-    unicode = str
+import shutil
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
+
+    class TemporaryDirectory(object):
+        """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
+        def __enter__(self):
+            self.name = tempfile.mkdtemp()
+            return self.name
+        def __exit__(self, exc_type, exc_value, traceback):
+            shutil.rmtree(self.name)
 else:
     import pickle
+    TemporaryDirectory = tempfile.TemporaryDirectory
+    unicode = str
 
 
 def create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
@@ -33,7 +40,7 @@ def create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, *
 
     before_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
 
-    with tempfile.TemporaryDirectory() as tmpdirname:
+    with TemporaryDirectory() as tmpdirname:
         tokenizer.save_pretrained(tmpdirname)
         tokenizer = tokenizer.from_pretrained(tmpdirname)
 
