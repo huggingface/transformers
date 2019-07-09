@@ -7,11 +7,14 @@ Pytorch-Transformers
     :caption: Notes
 
     installation
+    philosophy
     usage
     examples
     notebooks
     tpu
     cli
+    migration
+    bertology
     torchscript
 
 
