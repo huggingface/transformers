@@ -29,9 +29,9 @@ Here is how to use these techniques in our scripts:
 * **Gradient Accumulation**\ : Gradient accumulation can be used by supplying a integer greater than 1 to the ``--gradient_accumulation_steps`` argument. The batch at each step will be divided by this integer and gradient will be accumulated over ``gradient_accumulation_steps`` steps.
 * **Multi-GPU**\ : Multi-GPU is automatically activated when several GPUs are detected and the batches are splitted over the GPUs.
 * **Distributed training**\ : Distributed training can be activated by supplying an integer greater or equal to 0 to the ``--local_rank`` argument (see below).
-* **16-bits training**\ : 16-bits training, also called mixed-precision training, can reduce the memory requirement of your model on the GPU by using half-precision training, basically allowing to double the batch size. If you have a recent GPU (starting from NVIDIA Volta architecture) you should see no decrease in speed. A good introduction to Mixed precision training can be found `here <https://devblogs.nvidia.com/mixed-precision-training-deep-neural-networks/>`_ and a full documentation is `here <https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html>`_. In our scripts, this option can be activated by setting the ``--fp16`` flag and you can play with loss scaling using the ``--loss_scale`` flag (see the previously linked documentation for details on loss scaling). The loss scale can be zero in which case the scale is dynamically adjusted or a positive power of two in which case the scaling is static.
+* **16-bits training**\ : 16-bits training, also called mixed-precision training, can reduce the memory requirement of your model on the GPU by using half-precision training, basically allowing to double the batch size. If you have a recent GPU (starting from NVIDIA Volta architecture) you should see no decrease in speed. A good introduction to Mixed precision training can be found `here <https://devblogs.nvidia.com/mixed-precision-training-deep-neural-networks/>`__ and a full documentation is `here <https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html>`__. In our scripts, this option can be activated by setting the ``--fp16`` flag and you can play with loss scaling using the ``--loss_scale`` flag (see the previously linked documentation for details on loss scaling). The loss scale can be zero in which case the scale is dynamically adjusted or a positive power of two in which case the scaling is static.
 
-To use 16-bits training and distributed training, you need to install NVIDIA's apex extension `as detailed here <https://github.com/nvidia/apex>`_. You will find more information regarding the internals of ``apex`` and how to use ``apex`` in `the doc and the associated repository <https://github.com/nvidia/apex>`_. The results of the tests performed on pytorch-BERT by the NVIDIA team (and my trials at reproducing them) can be consulted in `the relevant PR of the present repository <https://github.com/huggingface/pytorch-pretrained-BERT/pull/116>`_.
+To use 16-bits training and distributed training, you need to install NVIDIA's apex extension `as detailed here <https://github.com/nvidia/apex>`__. You will find more information regarding the internals of ``apex`` and how to use ``apex`` in `the doc and the associated repository <https://github.com/nvidia/apex>`_. The results of the tests performed on pytorch-BERT by the NVIDIA team (and my trials at reproducing them) can be consulted in `the relevant PR of the present repository <https://github.com/huggingface/pytorch-pretrained-BERT/pull/116>`_.
 
 Note: To use *Distributed Training*\ , you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see `the above mentioned blog post <(https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255>`_\ ) for more details):
 
@@ -153,10 +153,10 @@ and unpack it to some directory ``$GLUE_DIR``.
      --num_train_epochs 3.0 \
      --output_dir /tmp/mrpc_output/
 
-Our test ran on a few seeds with `the original implementation hyper-parameters <https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks>`_ gave evaluation results between 84% and 88%.
+Our test ran on a few seeds with `the original implementation hyper-parameters <https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks>`__ gave evaluation results between 84% and 88%.
 
 **Fast run with apex and 16 bit precision: fine-tuning on MRPC in 27 seconds!**
-First install apex as indicated `here <https://github.com/NVIDIA/apex>`_.
+First install apex as indicated `here <https://github.com/NVIDIA/apex>`__.
 Then run
 
 .. code-block:: shell
@@ -520,7 +520,7 @@ and unpack it to some directory ``$GLUE_DIR``.
     --num_train_epochs 3.0 \
     --output_dir /tmp/mrpc_output/
 
-Our test ran on a few seeds with `the original implementation hyper-parameters <https://github.com/zihangdai/xlnet#1-sts-b-sentence-pair-relevance-regression-with-gpus>`_ gave evaluation results between 84% and 88%.
+Our test ran on a few seeds with `the original implementation hyper-parameters <https://github.com/zihangdai/xlnet#1-sts-b-sentence-pair-relevance-regression-with-gpus>`__ gave evaluation results between 84% and 88%.
 
 **Distributed training**
 Here is an example using distributed training on 8 V100 GPUs to reach XXXX:
