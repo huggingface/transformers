@@ -17,11 +17,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
-import tempfile
 
 from pytorch_transformers.tokenization_openai import OpenAIGPTTokenizer, VOCAB_FILES_NAMES
 
-from.tokenization_tests_commons import create_and_check_tokenizer_commons
+from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
 
 
 class OpenAIGPTTokenizationTest(unittest.TestCase):
@@ -35,7 +34,7 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w", "e r</w>", ""]
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        with TemporaryDirectory() as tmpdirname:
             vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
             merges_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['merges_file'])
             with open(vocab_file, "w") as fp:

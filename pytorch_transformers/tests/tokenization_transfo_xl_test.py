@@ -17,11 +17,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 from io import open
-import tempfile
 
 from pytorch_transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
 
-from.tokenization_tests_commons import create_and_check_tokenizer_commons
+from.tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
 
 class TransfoXLTokenizationTest(unittest.TestCase):
 
@@ -30,7 +29,7 @@ class TransfoXLTokenizationTest(unittest.TestCase):
             "<unk>", "[CLS]", "[SEP]", "want", "unwanted", "wa", "un",
             "running", ",", "low", "l",
         ]
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        with TemporaryDirectory() as tmpdirname:
             vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
             with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
                 vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))

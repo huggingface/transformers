@@ -231,8 +231,7 @@ class PreTrainedTokenizer(object):
 
         # Add supplementary tokens.
         if added_tokens_file is not None:
-            added_tokens = json.load(open(added_tokens_file, encoding="utf-8"))
-            added_tok_encoder = dict((tok, len(tokenizer) + i) for i, tok in enumerate(added_tokens))
+            added_tok_encoder = json.load(open(added_tokens_file, encoding="utf-8"))
             added_tok_decoder = {v:k for k, v in added_tok_encoder.items()}
             tokenizer.added_tokens_encoder.update(added_tok_encoder)
             tokenizer.added_tokens_decoder.update(added_tok_decoder)
@@ -256,7 +255,11 @@ class PreTrainedTokenizer(object):
             f.write(json.dumps(self.special_tokens_map, ensure_ascii=False))
 
         with open(added_tokens_file, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(self.added_tokens_decoder, ensure_ascii=False))
+            if self.added_tokens_encoder:
+                out_str = json.dumps(self.added_tokens_decoder, ensure_ascii=False)
+            else:
+                out_str = u"{}"
+            f.write(out_str)
 
         vocab_files = self.save_vocabulary(save_directory)
 
