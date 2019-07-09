@@ -104,6 +104,18 @@ a {
     background-color: #6670FF;
 }
 
+
+/* Source spans */
+.rst-content .viewcode-link, .rst-content .viewcode-back{
+    color: #6670FF;
+    font-size: 110%;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+
+
+
 /* FONTS */
 body{
     font-family: Calibre;
