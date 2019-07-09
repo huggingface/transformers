@@ -48,7 +48,7 @@ class ExamplesTests(unittest.TestCase):
         testargs = ["run_glue.py", "--data_dir=./examples/tests_samples/MRPC/",
                     "--task_name=mrpc", "--do_train", "--do_eval", "--output_dir=./examples/tests_samples/temp_dir",
                     "--train_batch_size=4", "--eval_batch_size=2", "--num_train_epochs=2.0", "--overwrite_output_dir"]
-        model_name = "--model_name=xlnet-large-cased"
+        model_name = "--model_name=bert-base-uncased"
         with patch.object(sys, 'argv', testargs + [model_name]):
             result = run_glue.main()
             for value in result.values():
