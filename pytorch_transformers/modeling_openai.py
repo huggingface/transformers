@@ -147,9 +147,12 @@ class OpenAIGPTConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         predict_special_tokens=True,
+
+        num_labels=1,
         summary_type='token_ids',
         summary_use_proj=True,
         summary_activation=None,
+        summary_proj_to_labels=True,
         summary_first_dropout=0.1,
         **kwargs
     ):
@@ -199,10 +202,13 @@ class OpenAIGPTConfig(PretrainedConfig):
             self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
             self.predict_special_tokens = predict_special_tokens
+
+            self.num_labels = num_labels
             self.summary_type = summary_type
             self.summary_use_proj = summary_use_proj
             self.summary_activation = summary_activation
             self.summary_first_dropout = summary_first_dropout
+            self.summary_proj_to_labels = summary_proj_to_labels
         else:
             raise ValueError(
                 "First argument must be either a vocabulary size (int)"
