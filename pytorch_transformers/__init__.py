@@ -11,22 +11,28 @@ from .modeling_bert import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
                        BertForSequenceClassification, BertForMultipleChoice,
                        BertForTokenClassification, BertForQuestionAnswering,
-                       load_tf_weights_in_bert)
+                       load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+                       BERT_PRETRAINED_CONFIG_ARCHIVE_MAP)
 from .modeling_openai import (OpenAIGPTConfig, OpenAIGPTModel,
                               OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
-                              load_tf_weights_in_openai_gpt)
+                              load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                              OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel,
-                                  load_tf_weights_in_transfo_xl)
+                                  load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                                  TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_gpt2 import (GPT2Config, GPT2Model,
                             GPT2LMHeadModel, GPT2DoubleHeadsModel,
-                            load_tf_weights_in_gpt2)
+                            load_tf_weights_in_gpt2, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                            GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_xlnet import (XLNetConfig,
                              XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
                              XLNetForSequenceClassification, XLNetForQuestionAnswering,
-                             load_tf_weights_in_xlnet)
+                             load_tf_weights_in_xlnet, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                             XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_xlm import (XLMConfig, XLMModel,
                            XLMWithLMHeadModel, XLMForSequenceClassification,
-                           XLMForQuestionAnswering)
+                           XLMForQuestionAnswering, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                           XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
                           PretrainedConfig, PreTrainedModel, prune_layer, Conv1D)
 

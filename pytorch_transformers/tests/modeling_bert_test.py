@@ -24,7 +24,7 @@ from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
                                      BertForNextSentencePrediction, BertForPreTraining,
                                      BertForQuestionAnswering, BertForSequenceClassification,
                                      BertForTokenClassification, BertForMultipleChoice)
-from pytorch_transformers.modeling_bert import PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .modeling_tests_commons import (create_and_check_commons, ConfigTester, ids_tensor)
 
@@ -267,7 +267,7 @@ class BertModelTest(unittest.TestCase):
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)

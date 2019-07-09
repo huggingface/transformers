@@ -24,7 +24,7 @@ import torch
 import numpy
 
 from pytorch_transformers.modeling_xlm import (CONFIG_NAME, WEIGHTS_NAME, XLMConfig, XLMModel)
-from pytorch_transformers.tokenization_xlm import MERGES_NAME, VOCAB_NAME
+from pytorch_transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
 
 def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_path):
@@ -42,7 +42,7 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + '/' + WEIGHTS_NAME
     pytorch_config_dump_path = pytorch_dump_folder_path + '/' + CONFIG_NAME
-    pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' + VOCAB_NAME
+    pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' +  VOCAB_FILES_NAMES['vocab_file']
 
     print("Save PyTorch model to {}".format(pytorch_weights_dump_path))
     torch.save(model, pytorch_weights_dump_path)

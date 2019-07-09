@@ -41,7 +41,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'pretrained_vocab_file': 'vocab.bin'}
+VOCAB_FILES_NAMES = {'pretrained_vocab_file': 'vocab.bin', 'vocab_file': 'vocab.txt'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'pretrained_vocab_file':
@@ -67,9 +67,17 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, special=[], min_freq=0, max_size=None, lower_case=False,
+    def __init__(self, special=None, min_freq=0, max_size=None, lower_case=False,
                  delimiter=None, vocab_file=None, pretrained_vocab_file=None,
-                 never_split=("<unk>", "<eos>", "<formula>")):
+                 never_split=None, unk_token="<unk>", eos_token="<eos>",
+                 additional_special_tokens=["<formula>"], **kwargs):
+        super(TransfoXLTokenizer, self).__init__(unk_token=unk_token, eos_token=eos_token,
+                                                 additional_special_tokens=additional_special_tokens,
+                                                 **kwargs)
+        if never_split is None:
+            never_split = self.all_special_tokens
+        if special is None:
+            special = []
         self.counter = Counter()
         self.special = special
         self.min_freq = min_freq
@@ -200,11 +208,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
 
-    def get_sym(self, idx):
+    def _convert_id_to_token(self, idx):
+        """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), 'Index {} out of vocabulary range'.format(idx)
         return self.idx2sym[idx]
 
-    def get_idx(self, sym):
+    def _convert_token_to_id(self, sym):
+        """ Converts a token (str/unicode) in an id using the vocab. """
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
@@ -220,36 +230,19 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             else:
                 raise ValueError('Token not in vocabulary and no <unk> token in vocabulary for replacement')
 
-    def convert_ids_to_tokens(self, indices):
-        """Converts a sequence of indices in symbols using the vocab."""
-        return [self.get_sym(idx) for idx in indices]
-
-    def convert_tokens_to_ids(self, symbols):
-        """Converts a sequence of symbols into ids using the vocab."""
-        return [self.get_idx(sym) for sym in symbols]
+    def _convert_ids_to_string(self, tokens_ids):
+        """Converts a sequence of ids in a string."""
+        out_string = ' '.join(tokens_ids).strip()
+        return out_string
 
     def convert_to_tensor(self, symbols):
         return torch.LongTensor(self.convert_tokens_to_ids(symbols))
 
-    def encode(self, text):
-        return self.convert_tokens_to_ids(self.tokenize(text))
-
-    def decode(self, indices, exclude=None, clean_up_tokenization_spaces=True):
-        """Converts a sequence of indices in a string."""
-        if exclude is None:
-            out_string = ' '.join([self.get_sym(idx) for idx in indices])
-        else:
-            out_string = ' '.join([self.get_sym(idx) for idx in indices if idx not in exclude])
-
-        if clean_up_tokenization_spaces:
-            out_string = clean_up_tokenization(out_string)
-
-        return out_string
-
-    def __len__(self):
+    @property
+    def vocab_size(self):
         return len(self.idx2sym)
 
-    def tokenize(self, line, add_eos=False, add_double_eos=False):
+    def _tokenize(self, line, add_eos=False, add_double_eos=False):
         line = line.strip()
         # convert to lower case
         if self.lower_case:

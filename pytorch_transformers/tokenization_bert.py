@@ -22,7 +22,6 @@ import os
 import unicodedata
 from io import open
 
-from .file_utils import cached_path
 from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
 
 logger = logging.getLogger(__name__)
@@ -32,20 +31,21 @@ VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
-    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
-    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt",
-    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-vocab.txt",
-    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-vocab.txt",
-    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
-    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-vocab.txt",
-    'bert-base-german-cased': "https://int-deepset-models-bert.s3.eu-central-1.amazonaws.com/pytorch/bert-base-german-cased-vocab.txt",
-    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-vocab.txt",
-    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-vocab.txt",
-    'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-vocab.txt",
-    'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
-    'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
-}}
+        'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt",
+        'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-vocab.txt",
+        'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-vocab.txt",
+        'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
+        'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-vocab.txt",
+        'bert-base-german-cased': "https://int-deepset-models-bert.s3.eu-central-1.amazonaws.com/pytorch/bert-base-german-cased-vocab.txt",
+        'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-vocab.txt",
+        'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-vocab.txt",
+        'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-vocab.txt",
+        'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
+        'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
+    }
+}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'bert-base-uncased': 512,
@@ -93,8 +93,9 @@ class BertTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
-                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+    def __init__(self, vocab_file, do_lower_case=True, do_basic_tokenize=True, never_split=None,
+                 unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
+                 mask_token="[MASK]", **kwargs):
         """Constructs a BertTokenizer.
 
         Args:
@@ -102,17 +103,18 @@ class BertTokenizer(PreTrainedTokenizer):
           do_lower_case: Whether to lower case the input
                          Only has an effect when do_wordpiece_only=False
           do_basic_tokenize: Whether to do basic tokenization before wordpiece.
-          max_len: An artificial maximum length to truncate tokenized sequences to;
-                         Effective maximum length is always the minimum of this
-                         value (if specified) and the underlying BERT model's
-                         sequence length.
           never_split: List of tokens which will never be split during tokenization.
                          Only has an effect when do_wordpiece_only=False
         """
+        super(BertTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
+                                            pad_token=pad_token, cls_token=cls_token,
+                                            mask_token=mask_token, **kwargs)
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
                 "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
+        if never_split is None:
+            never_split = self.all_special_tokens
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict(
             [(ids, tok) for tok, ids in self.vocab.items()])
@@ -120,90 +122,34 @@ class BertTokenizer(PreTrainedTokenizer):
         if do_basic_tokenize:
           self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
                                                 never_split=never_split)
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
-        self.max_len = max_len if max_len is not None else int(1e12)
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
     @property
-    def UNK_TOKEN(self):
-        return "[UNK]"
+    def vocab_size(self):
+        return len(self.vocab)
 
-    @property
-    def SEP_TOKEN(self):
-        return "[SEP]"
-
-    @property
-    def PAD_TOKEN(self):
-        return "[PAD]"
-
-    @property
-    def CLS_TOKEN(self):
-        return "[CLS]"
-
-    @property
-    def MASK_TOKEN(self):
-        return "[MASK]"
-
-    @property
-    def UNK_ID(self):
-        return self.vocab["[UNK]"]
-
-    @property
-    def SEP_ID(self):
-        return self.vocab["[SEP]"]
-
-    @property
-    def PAD_ID(self):
-        return self.vocab["[PAD]"]
-
-    @property
-    def CLS_ID(self):
-        return self.vocab["[CLS]"]
-
-    @property
-    def MASK_ID(self):
-        return self.vocab["[MASK]"]
-
-    def tokenize(self, text):
+    def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text):
+            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
                 for sub_token in self.wordpiece_tokenizer.tokenize(token):
                     split_tokens.append(sub_token)
         else:
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
 
-    def convert_tokens_to_ids(self, tokens):
-        """Converts a sequence of tokens into ids using the vocab."""
-        ids = []
-        for token in tokens:
-            ids.append(self.vocab[token])
-        if len(ids) > self.max_len:
-            logger.warning(
-                "Token indices sequence length is longer than the specified maximum "
-                " sequence length for this BERT model ({} > {}). Running this"
-                " sequence through BERT will result in indexing errors".format(len(ids), self.max_len)
-            )
-        return ids
+    def _convert_token_to_id(self, token):
+        """ Converts a token (str/unicode) in an id using the vocab. """
+        return self.vocab.get(token, self.vocab.get(self.unk_token))
 
-    def convert_ids_to_tokens(self, ids):
-        """Converts a sequence of ids in wordpiece tokens using the vocab."""
-        tokens = []
-        for i in ids:
-            tokens.append(self.ids_to_tokens[i])
-        return tokens
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        return self.ids_to_tokens.get(index, self.unk_token)
 
-    def encode(self, text):
-        return self.convert_tokens_to_ids(self.tokenize(text))
-
-    def decode(self, token_ids, clean_up_tokenization_spaces=True):
+    def _convert_ids_to_string(self, tokens_ids):
         """Converts a sequence of ids in a string."""
-        tokens = self.convert_ids_to_tokens(token_ids)
+        tokens = self.convert_ids_to_tokens(tokens_ids)
         out_string = ''.join(tokens).replace(' ##', '').strip()
-        if clean_up_tokenization_spaces:
-            for special_tok in (self.UNK_TOKEN, self.SEP_TOKEN, self.PAD_TOKEN, self.CLS_TOKEN, self.MASK_TOKEN):
-                out_string = out_string.replace(special_tok, '')
-            out_string = clean_up_tokenization(out_string)
         return out_string
 
     def save_vocabulary(self, vocab_path):
@@ -245,17 +191,20 @@ class BasicTokenizer(object):
 
     def __init__(self,
                  do_lower_case=True,
-                 never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
+                 never_split=None):
         """Constructs a BasicTokenizer.
 
         Args:
           do_lower_case: Whether to lower case the input.
         """
+        if never_split is None:
+            never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = never_split
 
-    def tokenize(self, text):
+    def tokenize(self, text, never_split=None):
         """Tokenizes a piece of text."""
+        never_split = self.never_split + (never_split if never_split is not None else [])
         text = self._clean_text(text)
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
@@ -267,7 +216,7 @@ class BasicTokenizer(object):
         orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
-            if self.do_lower_case and token not in self.never_split:
+            if self.do_lower_case and token not in never_split:
                 token = token.lower()
                 token = self._run_strip_accents(token)
             split_tokens.extend(self._run_split_on_punc(token))
@@ -286,9 +235,9 @@ class BasicTokenizer(object):
             output.append(char)
         return "".join(output)
 
-    def _run_split_on_punc(self, text):
+    def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if text in self.never_split:
+        if never_split is not None and text in never_split:
             return [text]
         chars = list(text)
         i = 0
@@ -360,7 +309,7 @@ class BasicTokenizer(object):
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
-    def __init__(self, vocab, unk_token="[UNK]", max_input_chars_per_word=100):
+    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
         self.vocab = vocab
         self.unk_token = unk_token
         self.max_input_chars_per_word = max_input_chars_per_word
