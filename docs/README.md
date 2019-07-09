@@ -56,5 +56,5 @@ It should build the static app that will be available under `/docs/_build/html`
 
 ## Adding a new element to the tree (toc-tree)
 
-Acceptes files are reStructuredText (.rst) and Markdown (.md). Create a file with its extension and put it
+Accepted files are reStructuredText (.rst) and Markdown (.md). Create a file with its extension and put it
 in the source directory. You can then link it to the toc-tree by putting the filename without the extension.
