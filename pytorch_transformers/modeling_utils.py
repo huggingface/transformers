@@ -25,7 +25,7 @@ from io import open
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, functional as F
+from torch.nn import CrossEntropyLoss, functional as F
 
 from .file_utils import cached_path
 
@@ -514,10 +514,10 @@ class SequenceSummary(nn.Module):
                 - 'token_ids' => supply a Tensor of classification token indices (GPT/GPT-2)
                 - 'attn' => Not implemented now, use multi-head attention
             summary_use_proj: Add a projection after the vector extraction
-            summary_num_classes: If > 0: the projection outputs to n classes (otherwise to hidden_size)
-            summary_activation:
-                'tanh' => add a tanh activation to the output
-                    None => no activation
+            summary_proj_to_labels: If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
+            summary_activation: 'tanh' => add a tanh activation to the output, Other => no activation. Default 
+            summary_first_dropout: Add a dropout before the projection and activation
+            summary_last_dropout: Add a dropout after the projection and activation
     """
     def __init__(self, config):
         super(SequenceSummary, self).__init__()
@@ -531,8 +531,8 @@ class SequenceSummary(nn.Module):
 
         self.summary = nn.Identity()
         if hasattr(config, 'summary_use_proj') and config.summary_use_proj:
-            if hasattr(config, 'summary_num_classes') and config.summary_num_classes > 0:
-                num_classes = config.summary_num_classes
+            if hasattr(config, 'summary_proj_to_labels') and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
             else:
                 num_classes = config.hidden_size
             self.summary = nn.Linear(config.hidden_size, num_classes)
@@ -541,7 +541,13 @@ class SequenceSummary(nn.Module):
         if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':
             self.activation = nn.Tanh()
 
-        self.dropout = nn.Dropout(config.summary_dropout)
+        self.first_dropout = nn.Identity()
+        if hasattr(config, 'summary_first_dropout') and config.summary_first_dropout > 0:
+            self.first_dropout = nn.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = nn.Identity()
+        if hasattr(config, 'summary_last_dropout') and config.summary_last_dropout > 0:
+            self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
     def forward(self, hidden_states, token_ids=None):
         """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
@@ -567,9 +573,10 @@ class SequenceSummary(nn.Module):
         elif self.summary_type == 'attn':
             raise NotImplementedError
 
+        output = self.first_dropout(output)
         output = self.summary(output)
         output = self.activation(output)
-        output = self.dropout(output)
+        output = self.last_dropout(output)
 
         return output
 

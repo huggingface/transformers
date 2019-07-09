@@ -19,6 +19,7 @@ from __future__ import print_function
 import sys
 import unittest
 import argparse
+import logging
 
 try:
     # python 3.4+ can use builtin unittest.mock instead of mock package
@@ -26,7 +27,11 @@ try:
 except ImportError:
     from mock import patch
 
-import run_bert_squad as rbs
+import run_glue
+
+logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger()
 
 def get_setup_file():
     parser = argparse.ArgumentParser()
@@ -36,12 +41,18 @@ def get_setup_file():
 
 class ExamplesTests(unittest.TestCase):
 
-    def test_run_squad(self):
-        testargs = ["prog", "-f", "/home/test/setup.py"]
-        with patch.object(sys, 'argv', testargs):
-            setup = get_setup_file()
-            assert setup == "/home/test/setup.py"
-            # rbs.main()
+    def test_run_glue(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        testargs = ["run_glue.py", "--data_dir=./examples/tests_samples/MRPC/",
+                    "--task_name=mrpc", "--do_train", "--do_eval", "--output_dir=./examples/tests_samples/temp_dir",
+                    "--train_batch_size=4", "--eval_batch_size=2", "--num_train_epochs=2.0", "--overwrite_output_dir"]
+        model_name = "--model_name=xlnet-large-cased"
+        with patch.object(sys, 'argv', testargs + [model_name]):
+            result = run_glue.main()
+            for value in result.values():
+                self.assertGreaterEqual(value, 0.75)
 
 
 if __name__ == "__main__":

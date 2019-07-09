@@ -1,5 +1,8 @@
 [run]
 source=pytorch_transformers
+omit =
+    # skip convertion scripts from testing for now
+    */convert_*
 [report]
 exclude_lines =
     pragma: no cover

@@ -60,25 +60,14 @@ TOKENIZER_CLASSES = {
     'xlm': XLMTokenizer,
 }
 
-def train(args, train_features, model):
+def train(args, train_dataset, model):
     """ Train the model """
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
-    # Convert in tensors and build dataloader
-    all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-    if args.output_mode == "classification":
-        all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
-    elif args.output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.float)
-
     args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
-
-    train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-    train_sampler = RandomSampler(train_data) if args.local_rank == -1 else DistributedSampler(train_data)
-    train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     num_train_optimization_steps = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
@@ -109,19 +98,24 @@ def train(args, train_features, model):
 
     # Train!
     logger.info("***** Running training *****")
-    logger.info("  Num examples = %d", len(train_features))
+    logger.info("  Num examples = %d", len(train_dataset))
+    logger.info("  Num Epochs = %d", args.num_train_epochs)
     logger.info("  Batch size = %d", args.train_batch_size)
-    logger.info("  Num steps = %d", num_train_optimization_steps)
+    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+    logger.info("  Total optimization steps = %d", num_train_optimization_steps)
 
     global_step = 0
     tr_loss = 0
     model.train()
+    optimizer.zero_grad()
     for _ in trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]):
         for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
             batch = tuple(t.to(args.device) for t in batch)
-            input_ids, input_mask, segment_ids, label_ids = batch
-
-            ouputs = model(input_ids, token_type_ids=segment_ids, attention_mask=input_mask, labels=label_ids)
+            inputs = {'input_ids':      batch[0],
+                      'attention_mask': batch[1],
+                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
+                      'labels':         batch[3]}
+            ouputs = model(**inputs)
             loss = ouputs[0]
 
             if args.n_gpu > 1:
@@ -150,30 +144,20 @@ def train(args, train_features, model):
     return global_step, tr_loss / global_step
 
 
-def evalutate(args, eval_task, eval_output_dir, eval_features, model):
+def evalutate(args, eval_task, eval_output_dir, dataset, model):
     """ Evaluate the model """
     if os.path.exists(eval_output_dir) and os.listdir(eval_output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(eval_output_dir))
     if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(eval_output_dir)
 
-    # Convert in tensors and build dataloader
-    all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-    if args.output_mode == "classification":
-        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
-    elif args.output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.float)
-
-    eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(eval_data) if args.local_rank == -1 else DistributedSampler(eval_data)
-    eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
+    eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # Eval!
     logger.info("***** Running evaluation *****")
-    logger.info("  Num examples = %d", len(eval_features))
+    logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
     model.eval()
     eval_loss = 0
@@ -214,36 +198,47 @@ def evalutate(args, eval_task, eval_output_dir, eval_features, model):
             logger.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
 
+    return result
 
-def load_and_cache_examples(args, task, tokenizer, eval=False):
+
+def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     processor = processors[task]()
     output_mode = output_modes[task]
-    label_list = processor.get_labels()
-
-    # Load and cache data
-    processor = processors[task]()
-    examples = processor.get_dev_examples(args.data_dir)
-    cached_features_file = os.path.join(args.data_dir, '{}_{}_{}_{}'.format(
-        'dev' if eval else 'train',
+    # Load data features from cache or dataset file
+    cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}'.format(
+        'dev' if evaluate else 'train',
         list(filter(None, args.model_name.split('/'))).pop(),
         str(args.max_seq_length),
         str(task)))
-
     if os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode)
+        logger.info("Creating features from dataset file at %s", args.data_dir)
+        label_list = processor.get_labels()
+        examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
-            cls_token_at_end=bool(args.model_type not in ['bert', 'xlm']),
+            cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
             cls_token=tokenizer.cls_token,
-            sep_token=tokenizer.sep_token, cls_token_segment_id=2,
-            pad_on_left=True, pad_token_segment_id=4)
-        if args.local_rank == -1 or torch.distributed.get_rank() == 0:
+            sep_token=tokenizer.sep_token,
+            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 1,
+            pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
+            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0)
+        if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    return features
+    # Convert to Tensors and build dataset
+    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+    if output_mode == "classification":
+        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
+    elif output_mode == "regression":
+        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
+
+    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    return dataset
 
 
 def main():
@@ -350,10 +345,10 @@ def main():
         torch.distributed.barrier()
 
     args.model_type = args.model_name.lower().split('-')[0]
-    args.tokenizer_class = TOKENIZER_CLASSES[args.model_type]
-    args.model_class = MODEL_CLASSES[args.model_type]
-    tokenizer = args.tokenizer_class.from_pretrained(args.model_name, do_lower_case=args.do_lower_case)
-    model = args.model_class.from_pretrained(args.model_name, num_labels=num_labels)
+    tokenizer_class = TOKENIZER_CLASSES[args.model_type]
+    model_class = MODEL_CLASSES[args.model_type]
+    tokenizer = tokenizer_class.from_pretrained(args.model_name, do_lower_case=args.do_lower_case)
+    model = model_class.from_pretrained(args.model_name, num_labels=num_labels)
 
     if args.local_rank == 0:
         torch.distributed.barrier()
@@ -372,23 +367,30 @@ def main():
 
     # Training
     if args.do_train:
-        train_features = load_and_cache_examples(args, args.task_name, tokenizer, eval=False)
-        global_step, tr_loss = train(args, train_features, model)
+        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        global_step, tr_loss = train(args, train_dataset, model)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        # Save a trained model, configuration and tokenizer
+        # Create output directory if needed
+        if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
+            raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
+        if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+            os.makedirs(args.output_dir)
+
+        # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+        # They can then be reloaded using `from_pretrained()`
         model.save_pretrained(args.output_dir)
-        tokenizer.save_vocabulary(args.output_dir)
+        tokenizer.save_pretrained(args.output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = args.model_class.from_pretrained(args.output_dir)
-        tokenizer = args.tokenizer_class.from_pretrained(args.output_dir)
+        model = model_class.from_pretrained(args.output_dir)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
         model.to(args.device)
 
     # Evaluation
@@ -398,9 +400,11 @@ def main():
         eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
 
         for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-            eval_features = load_and_cache_examples(args, eval_task, tokenizer, eval=True)
+            eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
-            evalutate(args, eval_task, eval_output_dir, eval_features, model)
+            result = evalutate(args, eval_task, eval_output_dir, eval_dataset, model)
+
+        return result
 
 
 if __name__ == "__main__":
