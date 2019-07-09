@@ -9,17 +9,17 @@ Here is a detailed documentation of the classes in the package and how to use th
 
    * - Sub-section
      - Description
-   * - `Loading pre-trained weights <#loading-google-ai-or-openai-pre-trained-weights-or-pytorch-dump>`_
+   * - `Loading pre-trained weights <#loading-google-ai-or-openai-pre-trained-weights-or-pytorch-dump>`__
      - How to load Google AI/OpenAI's pre-trained weight or a PyTorch saved instance
-   * - `Serialization best-practices <#serialization-best-practices>`_
+   * - `Serialization best-practices <#serialization-best-practices>`__
      - How to save and reload a fine-tuned model
-   * - `Configurations <#configurations>`_
+   * - `Configurations <#configurations>`__
      - API of the configuration classes for BERT, GPT, GPT-2 and Transformer-XL
-   * - `Models <#models>`_
+   * - `Models <#models>`__
      - API of the PyTorch model classes for BERT, GPT, GPT-2 and Transformer-XL
-   * - `Tokenizers <#tokenizers>`_
+   * - `Tokenizers <#tokenizers>`__
      - API of the tokenizers class for BERT, GPT, GPT-2 and Transformer-XL
-   * - `Optimizers <#optimizers>`_
+   * - `Optimizers <#optimizers>`__
      - API of the optimizers
 
 
@@ -77,7 +77,7 @@ where
     * ``bert-base-multilingual-uncased``: (Orig, not recommended) 102 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
     * ``bert-base-multilingual-cased``: **(New, recommended)** 104 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
     * ``bert-base-chinese``: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
-    * ``bert-base-german-cased``: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://deepset.ai/german-bert>`_
+    * ``bert-base-german-cased``: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://deepset.ai/german-bert>`__
     * ``bert-large-uncased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     * ``bert-large-cased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     * ``bert-large-uncased-whole-word-masking-finetuned-squad``: The ``bert-large-uncased-whole-word-masking`` model finetuned on SQuAD (using the ``run_bert_squad.py`` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
@@ -93,7 +93,7 @@ where
     * ``bert_config.json`` or ``openai_gpt_config.json`` a configuration file for the model, and
     * ``pytorch_model.bin`` a PyTorch dump of a pre-trained instance of ``BertForPreTraining``\ , ``OpenAIGPTModel``\ , ``TransfoXLModel``\ , ``GPT2LMHeadModel`` (saved with the usual ``torch.save()``\ )
 
-  If ``PRE_TRAINED_MODEL_NAME_OR_PATH`` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links `here <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/pytorch_pretrained_bert/modeling.py>`_\ ) and stored in a cache folder to avoid future download (the cache folder can be found at ``~/.pytorch_pretrained_bert/``\ ).
+  If ``PRE_TRAINED_MODEL_NAME_OR_PATH`` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links `here <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/pytorch_pretrained_bert/modeling.py>`__\ ) and stored in a cache folder to avoid future download (the cache folder can be found at ``~/.pytorch_pretrained_bert/``\ ).
 
 *
   ``cache_dir`` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example ``cache_dir='./pretrained_model_{}'.format(args.local_rank)`` (see the section on distributed training for more information).
@@ -102,7 +102,7 @@ where
 * ``state_dict``\ : an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
 * ``*inputs``\ , `**kwargs`: additional input for the specific Bert class (ex: num_labels for BertForSequenceClassification)
 
-``Uncased`` means that the text has been lowercased before WordPiece tokenization, e.g., ``John Smith`` becomes ``john smith``. The Uncased model also strips out any accent markers. ``Cased`` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the `Multilingual README <https://github.com/google-research/bert/blob/master/multilingual.md>`_ or the original TensorFlow repository.
+``Uncased`` means that the text has been lowercased before WordPiece tokenization, e.g., ``John Smith`` becomes ``john smith``. The Uncased model also strips out any accent markers. ``Cased`` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the `Multilingual README <https://github.com/google-research/bert/blob/master/multilingual.md>`__ or the original TensorFlow repository.
 
 When using an ``uncased model``\ , make sure to pass ``--do_lower_case`` to the example training scripts (or pass ``do_lower_case=True`` to FullTokenizer if you're using your own script and loading the tokenizer your-self.).
 
@@ -152,7 +152,7 @@ This section explain how you can save and re-load a fine-tuned model (BERT, GPT,
 There are three types of files you need to save to be able to reload a fine-tuned model:
 
 
-* the model it-self which should be saved following PyTorch serialization `best practices <https://pytorch.org/docs/stable/notes/serialization.html#best-practices>`_\ ,
+* the model it-self which should be saved following PyTorch serialization `best practices <https://pytorch.org/docs/stable/notes/serialization.html#best-practices>`__\ ,
 * the configuration file of the model which is saved as a JSON file, and
 * the vocabulary (and the merges for the BPE-based models GPT and GPT-2).
 

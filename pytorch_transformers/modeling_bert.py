@@ -729,7 +729,9 @@ class BertModel(BertPreTrainedModel):
 class BertForPreTraining(BertPreTrainedModel):
     """BERT model with pre-training heads.
     This module comprises the BERT model followed by the two pre-training heads:
+
         - the masked language modeling head, and
+
         - the next sentence classification head.
 
     Args:
