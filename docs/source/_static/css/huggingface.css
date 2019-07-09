@@ -113,6 +113,18 @@ a {
     text-transform: uppercase;
 }
 
+.footer {
+    margin-top: 20px;
+}
+
+.footer__Social {
+    display: flex;
+    flex-direction: row;
+}
+
+.footer__CustomImage {
+    margin: 2px 5px 0 0;
+}
 
 
 
