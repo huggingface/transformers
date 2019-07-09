@@ -176,7 +176,7 @@ class BertConfig(PretrainedConfig):
                 initializing all weight matrices.
             layer_norm_eps: The epsilon used by LayerNorm.
     """
-    pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
+    pretrained_config_archive_map = BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
                  vocab_size_or_config_json_file=30522,
