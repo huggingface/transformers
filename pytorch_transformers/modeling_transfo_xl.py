@@ -177,6 +177,38 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
 
 class TransfoXLConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `TransfoXLModel`.
+
+        Args:
+            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `TransfoXLModel` or a configuration json file.
+            cutoffs: cutoffs for the adaptive softmax
+            d_model: Dimensionality of the model's hidden states.
+            d_embed: Dimensionality of the embeddings
+            d_head: Dimensionality of the model's heads.
+            div_val: divident value for adapative input and softmax
+            pre_lnorm: apply LayerNorm to the input instead of the output
+            d_inner: Inner dimension in FF
+            n_layer: Number of hidden layers in the Transformer encoder.
+            n_head: Number of attention heads for each attention layer in
+                the Transformer encoder.
+            tgt_len: number of tokens to predict
+            ext_len: length of the extended context
+            mem_len: length of the retained previous heads
+            same_length: use the same attn length for all tokens
+            proj_share_all_but_first: True to share all but first projs, False not to share.
+            attn_type: attention type. 0 for Transformer-XL, 1 for Shaw et al, 2 for Vaswani et al, 3 for Al Rfou et al.
+            clamp_len: use the same pos embeddings after clamp_len
+            sample_softmax: number of samples in sampled softmax
+            adaptive: use adaptive softmax
+            tie_weight: tie the word embedding and softmax weights
+            dropout: The dropout probabilitiy for all fully connected
+                layers in the embeddings, encoder, and pooler.
+            dropatt: The dropout ratio for the attention probabilities.
+            untie_r: untie relative position biases
+            embd_pdrop: The dropout ratio for the embeddings.
+            init: parameter initializer to use
+            init_range: parameters initialized by U(-init_range, init_range).
+            proj_init_std: parameters initialized by N(0, init_std)
+            init_std: parameters initialized by N(0, init_std)
     """
     pretrained_config_archive_map = TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
 
@@ -210,38 +242,6 @@ class TransfoXLConfig(PretrainedConfig):
                  init_std=0.02,
                  **kwargs):
         """Constructs TransfoXLConfig.
-
-        Args:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `TransfoXLModel` or a configuration json file.
-            cutoffs: cutoffs for the adaptive softmax
-            d_model: Dimensionality of the model's hidden states.
-            d_embed: Dimensionality of the embeddings
-            d_head: Dimensionality of the model's heads.
-            div_val: divident value for adapative input and softmax
-            pre_lnorm: apply LayerNorm to the input instead of the output
-            d_inner: Inner dimension in FF
-            n_layer: Number of hidden layers in the Transformer encoder.
-            n_head: Number of attention heads for each attention layer in
-                the Transformer encoder.
-            tgt_len: number of tokens to predict
-            ext_len: length of the extended context
-            mem_len: length of the retained previous heads
-            same_length: use the same attn length for all tokens
-            proj_share_all_but_first: True to share all but first projs, False not to share.
-            attn_type: attention type. 0 for Transformer-XL, 1 for Shaw et al, 2 for Vaswani et al, 3 for Al Rfou et al.
-            clamp_len: use the same pos embeddings after clamp_len
-            sample_softmax: number of samples in sampled softmax
-            adaptive: use adaptive softmax
-            tie_weight: tie the word embedding and softmax weights
-            dropout: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
-            dropatt: The dropout ratio for the attention probabilities.
-            untie_r: untie relative position biases
-            embd_pdrop: The dropout ratio for the embeddings.
-            init: parameter initializer to use
-            init_range: parameters initialized by U(-init_range, init_range).
-            proj_init_std: parameters initialized by N(0, init_std)
-            init_std: parameters initialized by N(0, init_std)
         """
         super(TransfoXLConfig, self).__init__(**kwargs)
 
@@ -901,42 +901,20 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
 class TransfoXLModel(TransfoXLPreTrainedModel):
     """Transformer XL model ("Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context").
 
-    Transformer XL use a relative positioning (with sinusiodal patterns) and adaptive softmax inputs which means that:
-    - you don't need to specify positioning embeddings indices
-    - the tokens in the vocabulary have to be sorted to decreasing frequency.
+    Transformer XL uses relative positioning (with sinusiodal patterns) and adaptive softmax inputs which means that:
 
-    Params:
+        - you don't need to specify positioning embeddings indices.
+
+        - the tokens in the vocabulary have to be sorted in decreasing frequency.
+
+    Args:
         config: a TransfoXLConfig class instance with the configuration to build a new model
 
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the token indices selected in the range [0, self.config.n_token[
-        `mems`: optional memomry of hidden states from previous forward passes
-            as a list (num layers) of hidden states at the entry of each layer
-            each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
-    Outputs:
-        A tuple of (last_hidden_state, new_mems)
-        `last_hidden_state`: the encoded-hidden-states at the top of the model
-            as a torch.FloatTensor of size [batch_size, sequence_length, self.config.d_model]
-        `new_mems`: list (num layers) of updated mem states at the entry of each layer
-            each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
 
-    Example usage:
-    ```python
-    # Already been converted into BPE token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_ids_next = torch.LongTensor([[53, 21, 1], [64, 23, 100]])
+    Example::
 
-    config = TransfoXLConfig()
-
-    model = TransfoXLModel(config)
-    last_hidden_state, new_mems = model(input_ids)
-
-    # Another time on input_ids_next using the memory:
-    last_hidden_state, new_mems = model(input_ids_next, new_mems)
-    ```
+        config = TransfoXLConfig()
+        model = TransfoXLModel(config)
     """
     def __init__(self, config):
         super(TransfoXLModel, self).__init__(config)
@@ -1200,18 +1178,40 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         return outputs  # last hidden state, new_mems, (all hidden states), (all attentions)
 
     def forward(self, input_ids, mems=None, head_mask=None):
-        """ Params:
-                input_ids :: [bsz, len]
-                mems :: optional mems from previous forwar passes (or init_mems)
-                    list (num layers) of mem states at the entry of each layer
-                        shape :: [self.config.mem_len, bsz, self.config.d_model]
-                    Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
-            Returns:
-                tuple (last_hidden, new_mems) where:
-                    new_mems: list (num layers) of mem states at the entry of each layer
-                        shape :: [self.config.mem_len, bsz, self.config.d_model]
-                    last_hidden: output of the last layer:
-                        shape :: [bsz, len, self.config.d_model]
+        """
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
+
+        Args:
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
+                with the token indices selected in the range [0, self.config.n_token[
+            `mems`: optional memory of hidden states from previous forward passes
+                as a list (num layers) of hidden states at the entry of each layer
+                each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
+                Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
+
+        Returns:
+            A tuple of ``(last_hidden_state, new_mems)``.
+
+                ``last_hidden_state``: the encoded-hidden-states at the top of the model
+                as a ``torch.FloatTensor`` of size [batch_size, sequence_length, self.config.d_model]
+
+                ``new_mems``: list (num layers) of updated mem states at the entry of each layer
+                each mem state is a ``torch.FloatTensor`` of size [self.config.mem_len, batch_size, self.config.d_model]
+                Note that the first two dimensions are transposed in ``mems`` with regards to ``input_ids`` and
+                ``labels``
+
+        Example::
+
+            # Already been converted into BPE token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_ids_next = torch.LongTensor([[53, 21, 1], [64, 23, 100]])
+
+            last_hidden_state, new_mems = model(input_ids)
+            # or
+            last_hidden_state, new_mems = model.forward(input_ids)
+
+            # Another time on input_ids_next using the memory:
+            last_hidden_state, new_mems = model(input_ids_next, new_mems)
         """
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -1227,52 +1227,24 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     """Transformer XL model ("Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context").
 
-    This model add an (adaptive) softmax head on top of the TransfoXLModel
+    This model adds an (adaptive) softmax head on top of the ``TransfoXLModel``
 
-    Transformer XL use a relative positioning (with sinusiodal patterns) and adaptive softmax inputs which means that:
-    - you don't need to specify positioning embeddings indices
-    - the tokens in the vocabulary have to be sorted to decreasing frequency.
+    Transformer XL uses a relative positioning (with sinusoidal patterns) and adaptive softmax inputs which means that:
 
-    Call self.tie_weights() if you update/load the weights of the transformer to keep the weights tied.
+        - you don't need to specify positioning embeddings indices
 
-    Params:
-        config: a TransfoXLConfig class instance with the configuration to build a new model
+        - the tokens in the vocabulary have to be sorted in decreasing frequency.
 
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the token indices selected in the range [0, self.config.n_token[
-        `labels`: an optional torch.LongTensor of shape [batch_size, sequence_length]
-            with the labels token indices selected in the range [0, self.config.n_token[
-        `mems`: an optional memory of hidden states from previous forward passes
-            as a list (num layers) of hidden states at the entry of each layer
-            each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
+    Call ``self.tie_weights()`` if you update/load the weights of the transformer to keep the weights tied.
 
-    Outputs:
-        A tuple of (last_hidden_state, new_mems)
-        `softmax_output`: output of the (adaptive) softmax:
-            if labels is None:
-                Negative log likelihood of shape [batch_size, sequence_length] 
-            else:
-                log probabilities of tokens, shape [batch_size, sequence_length, n_tokens]
-        `new_mems`: list (num layers) of updated mem states at the entry of each layer
-            each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
+    Args:
+        config: a ``TransfoXLConfig`` class instance with the configuration to build a new model
 
-    Example usage:
-    ```python
-    # Already been converted into BPE token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_ids_next = torch.LongTensor([[53, 21, 1], [64, 23, 100]])
 
-    config = TransfoXLConfig()
+    Example::
 
-    model = TransfoXLModel(config)
-    last_hidden_state, new_mems = model(input_ids)
-
-    # Another time on input_ids_next using the memory:
-    last_hidden_state, new_mems = model(input_ids_next, mems=new_mems)
-    ```
+        config = TransfoXLConfig()
+        model = TransfoXLModel(config)
     """
     def __init__(self, config):
         super(TransfoXLLMHeadModel, self).__init__(config)
@@ -1290,7 +1262,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self.tie_weights()
 
     def tie_weights(self):
-        """ Run this to be sure output and input (adaptive) softmax weights are tied """
+        """
+        Run this to be sure output and input (adaptive) softmax weights are tied
+        """
         # sampled softmax
         if self.sample_softmax > 0:
             if self.config.tie_weight:
@@ -1314,18 +1288,43 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         return self.transformer.init_mems(data)
 
     def forward(self, input_ids, labels=None, mems=None, head_mask=None):
-        """ Params:
-                input_ids :: [bsz, len]
-                labels :: [bsz, len]
-            Returns:
-                tuple(softmax_output, new_mems) where:
-                    new_mems: list (num layers) of hidden states at the entry of each layer
-                        shape :: [mem_len, bsz, self.config.d_model] :: Warning: shapes are transposed here w. regards to input_ids
-                    softmax_output: output of the (adaptive) softmax:
-                        if labels is None:
-                            Negative log likelihood of shape :: [bsz, len] 
-                        else:
-                            log probabilities of tokens, shape :: [bsz, len, n_tokens]
+        """
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
+
+        Args:
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
+                with the token indices selected in the range [0, self.config.n_token[
+            `labels`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length]
+                with the labels token indices selected in the range [0, self.config.n_token[
+            `mems`: an optional memory of hidden states from previous forward passes
+                as a list (num layers) of hidden states at the entry of each layer
+                each hidden states has shape [self.config.mem_len, bsz, self.config.d_model]
+                Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
+
+        Returns:
+            A tuple of (last_hidden_state, new_mems)
+
+                ``last_hidden_state``: output of the (adaptive) softmax. If ``labels`` is ``None``, it is the negative
+                log likelihood of shape [batch_size, sequence_length]. Otherwise, it is the log probabilities of
+                tokens of, shape [batch_size, sequence_length, n_tokens].
+
+                ``new_mems``: list (num layers) of updated mem states at the entry of each layer
+                each mem state is a ``torch.FloatTensor`` of size [self.config.mem_len, batch_size, self.config.d_model]
+                Note that the first two dimensions are transposed in ``mems`` with regards to ``input_ids`` and
+                ``labels``
+
+        Example::
+
+            # Already been converted into BPE token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_ids_next = torch.LongTensor([[53, 21, 1], [64, 23, 100]])
+
+            last_hidden_state, new_mems = model(input_ids)
+            # or
+            last_hidden_state, new_mems = model.forward(input_ids)
+
+            # Another time on input_ids_next using the memory:
+            last_hidden_state, new_mems = model(input_ids_next, mems=new_mems)
         """
         bsz = input_ids.size(0)
         tgt_len = input_ids.size(1)

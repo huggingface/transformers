@@ -11,7 +11,7 @@ First let's prepare a tokenized input with ``BertTokenizer``
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
+   from pytorch_transformers import BertTokenizer, BertModel, BertForMaskedLM
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
@@ -89,7 +89,7 @@ First let's prepare a tokenized input with ``OpenAIGPTTokenizer``
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
+   from pytorch_transformers import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
@@ -177,7 +177,7 @@ First let's prepare a tokenized input with ``TransfoXLTokenizer``
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import TransfoXLTokenizer, TransfoXLModel, TransfoXLLMHeadModel
+   from pytorch_transformers import TransfoXLTokenizer, TransfoXLModel, TransfoXLLMHeadModel
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
@@ -253,7 +253,7 @@ First let's prepare a tokenized input with ``GPT2Tokenizer``
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
+   from pytorch_transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
