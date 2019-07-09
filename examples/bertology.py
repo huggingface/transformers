@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, SequentialSampler, TensorDataset, Subse
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from pytorch_pretrained_bert import BertForSequenceClassification, BertTokenizer
+from pytorch_transformers import BertForSequenceClassification, BertTokenizer
 
 from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
 
