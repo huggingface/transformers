@@ -30,9 +30,8 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .file_utils import cached_path
 from .modeling_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
-                          PreTrainedModel, prune_conv1d_layer, SequenceSummary)
+                             PreTrainedModel, prune_conv1d_layer, SequenceSummary)
 from .modeling_bert import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
@@ -150,9 +149,8 @@ class OpenAIGPTConfig(PretrainedConfig):
         predict_special_tokens=True,
         summary_type='token_ids',
         summary_use_proj=True,
-        summary_num_classes=1,
         summary_activation=None,
-        summary_dropout=0.1,
+        summary_first_dropout=0.1,
         **kwargs
     ):
         """Constructs OpenAIGPTConfig.
@@ -203,9 +201,8 @@ class OpenAIGPTConfig(PretrainedConfig):
             self.predict_special_tokens = predict_special_tokens
             self.summary_type = summary_type
             self.summary_use_proj = summary_use_proj
-            self.summary_num_classes = summary_num_classes
             self.summary_activation = summary_activation
-            self.summary_dropout = summary_dropout
+            self.summary_first_dropout = summary_first_dropout
         else:
             raise ValueError(
                 "First argument must be either a vocabulary size (int)"

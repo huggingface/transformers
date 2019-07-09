@@ -36,7 +36,6 @@ from torch.nn.parameter import Parameter
 
 from .modeling_bert import BertLayerNorm as LayerNorm
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
-from .file_utils import cached_path
 from .modeling_utils import CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel
 
 logger = logging.getLogger(__name__)

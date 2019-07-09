@@ -31,9 +31,8 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .file_utils import cached_path
 from .modeling_utils import (CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel,
-                          SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits)
+                             SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits)
 
 
 logger = logging.getLogger(__name__)
@@ -227,7 +226,7 @@ class XLNetConfig(PretrainedConfig):
                  summary_type='last',
                  summary_use_proj=True,
                  summary_activation='tanh',
-                 summary_dropout=0.1,
+                 summary_last_dropout=0.1,
                  start_n_top=5,
                  end_n_top=5,
                  **kwargs):
@@ -314,7 +313,7 @@ class XLNetConfig(PretrainedConfig):
             self.summary_type = summary_type
             self.summary_use_proj = summary_use_proj
             self.summary_activation = summary_activation
-            self.summary_dropout = summary_dropout
+            self.summary_last_dropout = summary_last_dropout
             self.start_n_top = start_n_top
             self.end_n_top = end_n_top
         else:

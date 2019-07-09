@@ -20,13 +20,9 @@ import json
 import logging
 import os
 import re
-import sys
 from io import open
 
-from tqdm import tqdm
-
-from .file_utils import cached_path
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_bert import BasicTokenizer
 
 logger = logging.getLogger(__name__)

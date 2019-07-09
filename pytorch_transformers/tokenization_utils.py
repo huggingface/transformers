@@ -142,11 +142,7 @@ class PreTrainedTokenizer(object):
         self.added_tokens_decoder = {}
 
         for key, value in kwargs.items():
-            if key not in self.SPECIAL_TOKENS_ATTRIBUTES:
-                raise ValueError(
-                    "PreTrainedTokenizer.__init__() argument {} should be in {}".format(
-                        key, ', '.join(self.SPECIAL_TOKENS_ATTRIBUTES)))
-            else:
+            if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 setattr(self, key, value)
 
 
