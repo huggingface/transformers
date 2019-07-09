@@ -211,8 +211,8 @@ def main():
             logger.info("No cache file at %s, preparing train features", cached_train_features_file)
             train_features = convert_examples_to_features(
                 train_examples, label_list, args.max_seq_length, tokenizer, output_mode,
-                cls_token_at_end=True, cls_token=tokenizer.CLS_TOKEN,
-                sep_token=tokenizer.SEP_TOKEN, cls_token_segment_id=2,
+                cls_token_at_end=True, cls_token=tokenizer.cls_token,
+                sep_token=tokenizer.sep_token, cls_token_segment_id=2,
                 pad_on_left=True, pad_token_segment_id=4)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving train features into cached file %s", cached_train_features_file)
@@ -369,8 +369,8 @@ def main():
             logger.info("No cache file at %s, preparing eval features", cached_eval_features_file)
             eval_features = convert_examples_to_features(
                 eval_examples, label_list, args.max_seq_length, tokenizer, output_mode,
-                cls_token_at_end=True, cls_token=tokenizer.CLS_TOKEN,
-                sep_token=tokenizer.SEP_TOKEN, cls_token_segment_id=2,
+                cls_token_at_end=True, cls_token=tokenizer.cls_token,
+                sep_token=tokenizer.sep_token, cls_token_segment_id=2,
                 pad_on_left=True, pad_token_segment_id=4)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving eval features into cached file %s", cached_eval_features_file)

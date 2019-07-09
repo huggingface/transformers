@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import sys
 from io import open
+import tempfile
 
 if sys.version_info[0] == 3:
     unicode = str
@@ -28,22 +29,19 @@ else:
 
 
 def create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
-    tokenizer = tokenizer_class(*inputs, **kwargs)
+    tokenizer = tokenizer_class.from_pretrained(*inputs, **kwargs)
 
     before_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
 
-    vocab_path="/tmp/"
-    output_files = tokenizer.save_vocabulary(vocab_path=vocab_path)
-    tokenizer = tokenizer.from_pretrained(vocab_path)
-
-    for f in output_files:
-        os.remove(f)
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tokenizer.save_pretrained(tmpdirname)
+        tokenizer = tokenizer.from_pretrained(tmpdirname)
 
     after_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
     tester.assertListEqual(before_tokens, after_tokens)
 
 def create_and_check_pickle_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
-    tokenizer = tokenizer_class(*inputs, **kwargs)
+    tokenizer = tokenizer_class.from_pretrained(*inputs, **kwargs)
 
     text = u"Munich and Berlin are nice cities"
     filename = u"/tmp/tokenizer.bin"
@@ -58,8 +56,54 @@ def create_and_check_pickle_tokenizer(tester, tokenizer_class, *inputs, **kwargs
     tester.assertListEqual(subwords, subwords_loaded)
 
 
+def create_and_check_add_tokens_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
+    tokenizer = tokenizer_class.from_pretrained(*inputs, **kwargs)
+
+    vocab_size = tokenizer.vocab_size
+    all_size = len(tokenizer)
+
+    tester.assertNotEqual(vocab_size, 0)
+    tester.assertEqual(vocab_size, all_size)
+
+    new_toks = ["aaaaabbbbbb", "cccccccccdddddddd"]
+    added_toks = tokenizer.add_tokens(new_toks)
+    vocab_size_2 = tokenizer.vocab_size
+    all_size_2 = len(tokenizer)
+
+    tester.assertNotEqual(vocab_size_2, 0)
+    tester.assertEqual(vocab_size, vocab_size_2)
+    tester.assertEqual(added_toks, len(new_toks))
+    tester.assertEqual(all_size_2, all_size + len(new_toks))
+
+    tokens = tokenizer.encode("aaaaabbbbbb low cccccccccdddddddd l")
+    tester.assertGreaterEqual(len(tokens), 4)
+    tester.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+    tester.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
+
+    new_toks_2 = {'eos_token': ">>>>|||<||<<|<<",
+                  'pad_token': "<<<<<|||>|>>>>|>"}
+    added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
+    vocab_size_3 = tokenizer.vocab_size
+    all_size_3 = len(tokenizer)
+
+    tester.assertNotEqual(vocab_size_3, 0)
+    tester.assertEqual(vocab_size, vocab_size_3)
+    tester.assertEqual(added_toks_2, len(new_toks_2))
+    tester.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
+
+    tokens = tokenizer.encode(">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l")
+
+    tester.assertGreaterEqual(len(tokens), 6)
+    tester.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+    tester.assertGreater(tokens[0], tokens[1])
+    tester.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
+    tester.assertGreater(tokens[-2], tokens[-3])
+    tester.assertEqual(tokens[0], tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
+    tester.assertEqual(tokens[-2], tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
+
+
 def create_and_check_required_methods_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
-    tokenizer = tokenizer_class(*inputs, **kwargs)
+    tokenizer = tokenizer_class.from_pretrained(*inputs, **kwargs)
 
     text = u"He is very happy, UNwant\u00E9d,running"
     tokens = tokenizer.tokenize(text)
@@ -75,5 +119,6 @@ def create_and_check_required_methods_tokenizer(tester, tokenizer_class, *inputs
 
 def create_and_check_tokenizer_commons(tester, tokenizer_class, *inputs, **kwargs):
     create_and_check_required_methods_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
+    create_and_check_add_tokens_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
     create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
     create_and_check_pickle_tokenizer(tester, tokenizer_class, *inputs, **kwargs)

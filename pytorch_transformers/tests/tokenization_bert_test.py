@@ -17,14 +17,12 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 from io import open
-import shutil
-import pytest
 
 from pytorch_transformers.tokenization_bert import (BasicTokenizer,
-                                                  BertTokenizer,
-                                                  WordpieceTokenizer,
-                                                  _is_control, _is_punctuation,
-                                                  _is_whitespace)
+                                                    BertTokenizer,
+                                                    WordpieceTokenizer,
+                                                    _is_control, _is_punctuation,
+                                                    _is_whitespace, VOCAB_FILES_NAMES)
 
 from .tokenization_tests_commons import create_and_check_tokenizer_commons
 
@@ -33,13 +31,15 @@ class TokenizationTest(unittest.TestCase):
     def test_full_tokenizer(self):
         vocab_tokens = [
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
-            "##ing", ","
+            "##ing", ",", "low", "lowest",
         ]
-        with open("/tmp/bert_tokenizer_test.txt", "w", encoding='utf-8') as vocab_writer:
+        vocab_directory = "/tmp/"
+        vocab_file = os.path.join(vocab_directory, VOCAB_FILES_NAMES['vocab_file'])
+        with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
             vocab_file = vocab_writer.name
 
-        create_and_check_tokenizer_commons(self, BertTokenizer, vocab_file)
+        create_and_check_tokenizer_commons(self, BertTokenizer, pretrained_model_name_or_path=vocab_directory)
 
         tokenizer = BertTokenizer(vocab_file)
 
@@ -80,7 +80,7 @@ class TokenizationTest(unittest.TestCase):
         vocab = {}
         for (i, token) in enumerate(vocab_tokens):
             vocab[token] = i
-        tokenizer = WordpieceTokenizer(vocab=vocab)
+        tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
 
         self.assertListEqual(tokenizer.tokenize(""), [])
 

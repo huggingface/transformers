@@ -17,10 +17,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
-import shutil
-import pytest
+import tempfile
 
-from pytorch_transformers.tokenization_xlm import XLMTokenizer
+from pytorch_transformers.tokenization_xlm import XLMTokenizer, VOCAB_FILES_NAMES
 
 from .tokenization_tests_commons import create_and_check_tokenizer_commons
 
@@ -31,31 +30,31 @@ class XLMTokenizationTest(unittest.TestCase):
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n",
                  "w</w>", "r</w>", "t</w>",
                  "lo", "low", "er</w>",
-                 "low</w>", "lowest</w>", "newer</w>", "wider</w>"]
+                 "low</w>", "lowest</w>", "newer</w>", "wider</w>", "<unk>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
-        with open("/tmp/openai_tokenizer_vocab_test.json", "w") as fp:
-            fp.write(json.dumps(vocab_tokens))
-            vocab_file = fp.name
-        with open("/tmp/openai_tokenizer_merges_test.txt", "w") as fp:
-            fp.write("\n".join(merges))
-            merges_file = fp.name
 
-        create_and_check_tokenizer_commons(self, XLMTokenizer, vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
+            merges_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['merges_file'])
+            with open(vocab_file, "w") as fp:
+                fp.write(json.dumps(vocab_tokens))
+            with open(merges_file, "w") as fp:
+                fp.write("\n".join(merges))
 
-        tokenizer = XLMTokenizer(vocab_file, merges_file, special_tokens=["<unk>", "<pad>"])
-        os.remove(vocab_file)
-        os.remove(merges_file)
+            create_and_check_tokenizer_commons(self, XLMTokenizer, tmpdirname)
 
-        text = "lower"
-        bpe_tokens = ["low", "er</w>"]
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, bpe_tokens)
+            tokenizer = XLMTokenizer(vocab_file, merges_file)
 
-        input_tokens = tokens + ["<unk>"]
-        input_bpe_tokens = [14, 15, 20]
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+            text = "lower"
+            bpe_tokens = ["low", "er</w>"]
+            tokens = tokenizer.tokenize(text)
+            self.assertListEqual(tokens, bpe_tokens)
+
+            input_tokens = tokens + ["<unk>"]
+            input_bpe_tokens = [14, 15, 20]
+            self.assertListEqual(
+                tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
 
 if __name__ == '__main__':

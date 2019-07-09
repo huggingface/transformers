@@ -20,12 +20,12 @@ import unittest
 import logging
 
 from pytorch_transformers import PretrainedConfig, PreTrainedModel
-from pytorch_transformers.modeling_bert import BertModel, BertConfig, PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 class ModelUtilsTest(unittest.TestCase):
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             config = BertConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, PretrainedConfig)

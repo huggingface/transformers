@@ -29,8 +29,7 @@ from pytorch_transformers.modeling_transfo_xl import (CONFIG_NAME,
                                                          TransfoXLConfig,
                                                          TransfoXLLMHeadModel,
                                                          load_tf_weights_in_transfo_xl)
-from pytorch_transformers.tokenization_transfo_xl import (CORPUS_NAME,
-                                                             VOCAB_NAME)
+from pytorch_transformers.tokenization_transfo_xl import (CORPUS_NAME, VOCAB_FILES_NAMES)
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -53,7 +52,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         with open(transfo_xl_dataset_file, "rb") as fp:
             corpus = pickle.load(fp, encoding="latin1")
         # Save vocabulary and dataset cache as Dictionaries (should be better than pickles for the long-term)
-        pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' + VOCAB_NAME
+        pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' + VOCAB_FILES_NAMES['pretrained_vocab_file']
         print("Save vocabulary to {}".format(pytorch_vocab_dump_path))
         corpus_vocab_dict = corpus.vocab.__dict__
         torch.save(corpus_vocab_dict, pytorch_vocab_dump_path)

@@ -16,10 +16,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import shutil
-import pytest
+import tempfile
 
-from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE)
+from pytorch_transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE, VOCAB_FILES_NAMES)
 
 from.tokenization_tests_commons import create_and_check_tokenizer_commons
 
@@ -29,34 +28,37 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 class XLNetTokenizationTest(unittest.TestCase):
 
     def test_full_tokenizer(self):
-        create_and_check_tokenizer_commons(self, XLNetTokenizer, SAMPLE_VOCAB)
-
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
-        tokens = tokenizer.tokenize(u'This is a test')
-        self.assertListEqual(tokens, [u'▁This', u'▁is', u'▁a', u'▁t', u'est'])
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
 
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382])
+            create_and_check_tokenizer_commons(self, XLNetTokenizer, tmpdirname)
 
-        tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
-        self.assertListEqual(tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
-                                      u'or', u'n', SPIECE_UNDERLINE + u'in', SPIECE_UNDERLINE + u'',
-                                      u'9', u'2', u'0', u'0', u'0', u',', SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
-                                      SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's', u'é', u'.'])
-        ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(
-            ids, [8, 21, 84, 55, 24, 19, 7, 0,
-                            602, 347, 347, 347, 3, 12, 66,
-                            46, 72, 80, 6, 0, 4])
+            tokens = tokenizer.tokenize(u'This is a test')
+            self.assertListEqual(tokens, [u'▁This', u'▁is', u'▁a', u'▁t', u'est'])
 
-        back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        self.assertListEqual(back_tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
-                                           u'or', u'n', SPIECE_UNDERLINE + u'in',
-                                           SPIECE_UNDERLINE + u'', u'<unk>', u'2', u'0', u'0', u'0', u',',
-                                           SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
-                                           SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's',
-                                           u'<unk>', u'.'])
+            self.assertListEqual(
+                tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382])
+
+            tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
+            self.assertListEqual(tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
+                                        u'or', u'n', SPIECE_UNDERLINE + u'in', SPIECE_UNDERLINE + u'',
+                                        u'9', u'2', u'0', u'0', u'0', u',', SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
+                                        SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's', u'é', u'.'])
+            ids = tokenizer.convert_tokens_to_ids(tokens)
+            self.assertListEqual(
+                ids, [8, 21, 84, 55, 24, 19, 7, 0,
+                    602, 347, 347, 347, 3, 12, 66,
+                    46, 72, 80, 6, 0, 4])
+
+            back_tokens = tokenizer.convert_ids_to_tokens(ids)
+            self.assertListEqual(back_tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
+                                            u'or', u'n', SPIECE_UNDERLINE + u'in',
+                                            SPIECE_UNDERLINE + u'', u'<unk>', u'2', u'0', u'0', u'0', u',',
+                                            SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
+                                            SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's',
+                                            u'<unk>', u'.'])
 
     def test_tokenizer_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=True)
