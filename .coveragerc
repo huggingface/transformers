@@ -1,5 +1,9 @@
 [run]
-source=pytorch_pretrained_bert
+source=pytorch_transformers
+omit =
+    # skip convertion scripts from testing for now
+    */convert_*
+    */__main__.py
 [report]
 exclude_lines =
     pragma: no cover

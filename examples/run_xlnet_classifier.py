@@ -34,10 +34,10 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from tensorboardX import SummaryWriter
 
-from pytorch_pretrained_bert import WEIGHTS_NAME, CONFIG_NAME
-from pytorch_pretrained_bert.modeling_xlnet import XLNetForSequenceClassification
-from pytorch_pretrained_bert.tokenization_xlnet import XLNetTokenizer
-from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
+from pytorch_transformers import WEIGHTS_NAME, CONFIG_NAME
+from pytorch_transformers.modeling_xlnet import XLNetForSequenceClassification
+from pytorch_transformers.tokenization_xlnet import XLNetTokenizer
+from pytorch_transformers.optimization import BertAdam, WarmupLinearSchedule
 
 from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
 
@@ -211,8 +211,8 @@ def main():
             logger.info("No cache file at %s, preparing train features", cached_train_features_file)
             train_features = convert_examples_to_features(
                 train_examples, label_list, args.max_seq_length, tokenizer, output_mode,
-                cls_token_at_end=True, cls_token=tokenizer.CLS_TOKEN,
-                sep_token=tokenizer.SEP_TOKEN, cls_token_segment_id=2,
+                cls_token_at_end=True, cls_token=tokenizer.cls_token,
+                sep_token=tokenizer.sep_token, cls_token_segment_id=2,
                 pad_on_left=True, pad_token_segment_id=4)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving train features into cached file %s", cached_train_features_file)
@@ -369,8 +369,8 @@ def main():
             logger.info("No cache file at %s, preparing eval features", cached_eval_features_file)
             eval_features = convert_examples_to_features(
                 eval_examples, label_list, args.max_seq_length, tokenizer, output_mode,
-                cls_token_at_end=True, cls_token=tokenizer.CLS_TOKEN,
-                sep_token=tokenizer.SEP_TOKEN, cls_token_segment_id=2,
+                cls_token_at_end=True, cls_token=tokenizer.cls_token,
+                sep_token=tokenizer.sep_token, cls_token_segment_id=2,
                 pad_on_left=True, pad_token_segment_id=4)
             if args.local_rank == -1 or torch.distributed.get_rank() == 0:
                 logger.info("  Saving eval features into cached file %s", cached_eval_features_file)

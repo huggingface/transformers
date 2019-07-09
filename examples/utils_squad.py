@@ -24,7 +24,7 @@ import math
 import collections
 from io import open
 
-from pytorch_pretrained_bert.tokenization_bert import BasicTokenizer, whitespace_tokenize
+from pytorch_transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 
 logger = logging.getLogger(__name__)
 
