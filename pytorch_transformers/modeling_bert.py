@@ -150,7 +150,7 @@ ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
 class BertConfig(PretrainedConfig):
     r"""
-        :class:`~pytorch_pretrained_bert.BertConfig` is the configuration class to store the configuration of a
+        :class:`~pytorch_transformers.BertConfig` is the configuration class to store the configuration of a
         `BertModel`.
 
         Arguments:
@@ -193,6 +193,29 @@ class BertConfig(PretrainedConfig):
                  layer_norm_eps=1e-12,
                  **kwargs):
         """Constructs BertConfig.
+
+        Arguments:
+            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `BertModel`.
+            hidden_size: Size of the encoder layers and the pooler layer.
+            num_hidden_layers: Number of hidden layers in the Transformer encoder.
+            num_attention_heads: Number of attention heads for each attention layer in
+                the Transformer encoder.
+            intermediate_size: The size of the "intermediate" (i.e., feed-forward)
+                layer in the Transformer encoder.
+            hidden_act: The non-linear activation function (function or string) in the
+                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
+            hidden_dropout_prob: The dropout probabilitiy for all fully connected
+                layers in the embeddings, encoder, and pooler.
+            attention_probs_dropout_prob: The dropout ratio for the attention
+                probabilities.
+            max_position_embeddings: The maximum sequence length that this model might
+                ever be used with. Typically set this to something large just in case
+                (e.g., 512 or 1024 or 2048).
+            type_vocab_size: The vocabulary size of the `token_type_ids` passed into
+                `BertModel`.
+            initializer_range: The sttdev of the truncated_normal_initializer for
+                initializing all weight matrices.
+            layer_norm_eps: The epsilon used by LayerNorm.
         """
         super(BertConfig, self).__init__(**kwargs)
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
@@ -217,6 +240,7 @@ class BertConfig(PretrainedConfig):
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
+
 
 
 try:
@@ -568,7 +592,7 @@ class BertPreTrainedModel(PreTrainedModel):
 class BertModel(BertPreTrainedModel):
     r"""BERT model ("Bidirectional Embedding Representations from a Transformer").
 
-    :class:`~pytorch_pretrained_bert.BertModel` is the basic BERT Transformer model with a layer of summed token, \
+    :class:`~pytorch_transformers.BertModel` is the basic BERT Transformer model with a layer of summed token, \
     position and sequence embeddings followed by a series of identical self-attention blocks (12 for BERT-base, 24 \
     for BERT-large). The model is instantiated with the following parameters.
 
@@ -605,23 +629,23 @@ class BertModel(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
 
         Arguments:
-            input_ids: a torch.LongTensor of shape [batch_size, sequence_length] with the word token indices in the \
+            input_ids: a ``torch.LongTensor`` of shape [batch_size, sequence_length] with the word token indices in the \
                 vocabulary(see the tokens pre-processing logic in the scripts `run_bert_extract_features.py`, \
                 `run_bert_classifier.py` and `run_bert_squad.py`)
-            token_type_ids: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token \
+            token_type_ids: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token \
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to \
                 a `sentence B` token (see BERT paper for more details).
-            attention_mask: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices \
+            attention_mask: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices \
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max \
                 input sequence length in the current batch. It's the mask that we typically use for attention when \
                 a batch has varying length sentences.
             output_all_encoded_layers: boolean which controls the content of the `encoded_layers` output as described \
             below. Default: `True`.
-            head_mask: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 \
+            head_mask: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 \
             and 1. It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 \
             => head is not masked.
 
@@ -633,12 +657,12 @@ class BertModel(BertPreTrainedModel):
             If ``output_all_encoded_layers`` is set to True, outputs a list of the full sequences of \
             encoded-hidden-states at the end of each attention \
             block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each encoded-hidden-state is a\
-            torch.FloatTensor of size [batch_size, sequence_length, hidden_size].
+            ``torch.FloatTensor`` of size [batch_size, sequence_length, hidden_size].
 
             If set to False, outputs only the full sequence of hidden-states corresponding \
             to the last attention block of shape [batch_size, sequence_length, hidden_size].
 
-            ``pooled_output`` is a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a \
+            ``pooled_output`` is a ``torch.FloatTensor`` of size [batch_size, hidden_size] which is the output of a \
             classifier pretrained on top of the hidden state associated to the first character of the \
             input (`CLS`) to train on the Next-Sentence task (see BERT's paper).
 
@@ -731,38 +755,40 @@ class BertForPreTraining(BertPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None,
                 next_sentence_label=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Args:
-            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
                 a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `masked_lm_labels`: optional masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
+            `masked_lm_labels`: optional masked language modeling labels: ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
                 is only computed for the labels set in [0, ..., vocab_size]
-            `next_sentence_label`: optional next sentence classification loss: torch.LongTensor of shape [batch_size]
+            `next_sentence_label`: optional next sentence classification loss: ``torch.LongTensor`` of shape [batch_size]
                 with indices selected in [0, 1].
                 0 => next sentence is the continuation, 1 => next sentence is a random sentence.
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 
         Returns:
-            Either a torch.Tensor or tuple(torch.Tensor, torch.Tensor).
+            Either a ``torch.Tensor`` or ``tuple(torch.Tensor, torch.Tensor)``.
 
             if ``masked_lm_labels`` and ``next_sentence_label`` are not ``None``, outputs the total_loss which is the \
              sum of the masked language modeling loss and the next \
             sentence classification loss.
 
-            if ``masked_lm_labels`` or ``next_sentence_label` is `None``, outputs a tuple comprising:
-                - the masked language modeling logits of shape [batch_size, sequence_length, vocab_size], and
+            if ``masked_lm_labels`` or ``next_sentence_label`` is ``None``, outputs a tuple made of:
+
+                - the masked language modeling logits of shape [batch_size, sequence_length, vocab_size]
+
                 - the next sentence classification logits of shape [batch_size, 2].
 
         Example ::
@@ -823,31 +849,31 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Args:
-            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
                 a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
+            `masked_lm_labels`: masked language modeling labels: ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
                 is only computed for the labels set in [0, ..., vocab_size]
-            `head_mask`: an optional torch.LongTensor of shape [num_heads] with indices
+            `head_mask`: an optional ``torch.LongTensor`` of shape [num_heads] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
         Returns:
-            Masked language modeling loss if `masked_lm_labels` is specified, masked language modeling
+            Masked language modeling loss if ``masked_lm_labels`` is specified, masked language modeling
             logits of shape [batch_size, sequence_length, vocab_size] otherwise.
 
         Example::
@@ -901,30 +927,30 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, next_sentence_label=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Args:
-            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary(see the tokens pre-processing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
                 a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `next_sentence_label`: next sentence classification loss: torch.LongTensor of shape [batch_size]
+            `next_sentence_label`: next sentence classification loss: ``torch.LongTensor`` of shape [batch_size]
                 with indices selected in [0, 1].
                 0 => next sentence is the continuation, 1 => next sentence is a random sentence.
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between
                 0 and 1.It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked,
                 0.0 => head is not masked.
 
         Returns:
-            If `next_sentence_label` is specified, outputs the total_loss which is the sum of the masked language \
-            modeling loss and the next sentence classification loss.
-            if `next_sentence_label` is `None`, outputs the next sentence classification logits of shape [batch_size, 2].
+            If ``next_sentence_label`` is specified, outputs the total_loss which is the sum of the masked language
+            modeling loss and the next sentence classification loss. If ``next_sentence_label`` is ``None``, outputs
+            the next sentence classification logits of shape [batch_size, 2].
 
 
         Example::
@@ -984,27 +1010,27 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Parameters:
-            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary. Items in the batch should begin with the special "CLS" token. (see the tokens preprocessing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
                 a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
+            `labels`: labels for the classification output: ``torch.LongTensor`` of shape [batch_size]
                 with indices selected in [0, ..., num_labels].
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
         Returns:
-            if `labels` is not `None`, outputs the CrossEntropy classification loss of the output with the labels.
-            if `labels` is `None`, outputs the classification logits of shape `[batch_size, num_labels]`.
+            If ``labels`` is not ``None``, outputs the CrossEntropy classification loss of the output with the labels.
+            If ``labels`` is ``None``, outputs the classification logits of shape [batch_size, num_labels].
 
         Example::
 
@@ -1070,27 +1096,27 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Parameters:
-            `input_ids`: a torch.LongTensor of shape [batch_size, num_choices, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, num_choices, sequence_length]
                 with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, num_choices, sequence_length]
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, num_choices, sequence_length]
                 with the token types indices selected in [0, 1]. Type 0 corresponds to a `sentence A`
                 and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, num_choices, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, num_choices, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
+            `labels`: labels for the classification output: ``torch.LongTensor`` of shape [batch_size]
                 with indices selected in [0, ..., num_choices].
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
         Returns:
-            if `labels` is not `None`, outputs the CrossEntropy classification loss of the output with the labels.
-            if `labels` is `None`, outputs the classification logits of shape [batch_size, num_labels].
+            If ``labels`` is not ``None``, outputs the CrossEntropy classification loss of the output with the labels.
+            If ``labels`` is ``None``, outputs the classification logits of shape [batch_size, num_labels].
 
         Example::
 
@@ -1159,27 +1185,27 @@ class BertForTokenClassification(BertPreTrainedModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
         """
-        Performs a model forward pass. Can be called by calling the class directly, once it has been instantiated.
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Parameters:
-            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary(see the tokens pre-processing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
                 a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `labels`: labels for the classification output: torch.LongTensor of shape [batch_size, sequence_length]
+            `labels`: labels for the classification output: ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with indices selected in [0, ..., num_labels].
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
         Returns:
-            if `labels` is not `None`, outputs the CrossEntropy classification loss of the output with the labels.
-            if `labels` is `None`, outputs the classification logits of shape [batch_size, sequence_length, num_labels].
+            If ``labels`` is not ``None``, outputs the CrossEntropy classification loss of the output with the labels.
+            If ``labels`` is ``None``, outputs the classification logits of shape [batch_size, sequence_length, num_labels].
 
         Example::
 
@@ -1243,6 +1269,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, start_positions=None,
                 end_positions=None, head_mask=None):
         """
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
+
         Parameters:
             `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
@@ -1260,13 +1288,13 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             `end_positions`: position of the last token for the labeled span: torch.LongTensor of shape [batch_size].
                 Positions are clamped to the length of the sequence and position outside of the sequence are not taken
                 into account for computing the loss.
-            `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
         Returns:
-            if `start_positions` and `end_positions` are not `None`, outputs the total_loss which is the sum of the
+            If ``start_positions`` and ``end_positions`` are not ``None``, outputs the total_loss which is the sum of the
             CrossEntropy loss for the start and end token positions.
-            if `start_positions` or `end_positions` is `None`, outputs a tuple of start_logits, end_logits which are the
+            If ``start_positions`` or ``end_positions`` is ``None``, outputs a tuple of start_logits, end_logits which are the
             logits respectively for the start and end position tokens of shape [batch_size, sequence_length].
 
         Example::
