@@ -15,21 +15,21 @@ OpenAI GPT2
     :members:
 
 
-14. ``GPT2Model``
+``GPT2Model``
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.GPT2Model
     :members:
 
 
-15. ``GPT2LMHeadModel``
+``GPT2LMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.GPT2LMHeadModel
     :members:
 
 
-16. ``GPT2DoubleHeadsModel``
+``GPT2DoubleHeadsModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.GPT2DoubleHeadsModel

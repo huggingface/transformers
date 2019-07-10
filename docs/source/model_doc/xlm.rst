@@ -7,29 +7,34 @@ XLM
 .. autoclass:: pytorch_transformers.XLMConfig
     :members:
 
+``XLMTokenizer``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-17. ``XLMModel``
+.. autoclass:: pytorch_transformers.XLMTokenizer
+    :members:
+
+``XLMModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLMModel
     :members:
 
 
-18. ``XLMWithLMHeadModel``
+``XLMWithLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLMWithLMHeadModel
     :members:
 
 
-19. ``XLMForSequenceClassification``
+``XLMForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLMForSequenceClassification
     :members:
 
 
-20. ``XLMForQuestionAnswering``
+``XLMForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLMForQuestionAnswering

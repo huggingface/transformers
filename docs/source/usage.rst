@@ -4,7 +4,7 @@ Usage
 BERT
 ^^^^
 
-Here is a quick-start example using ``BertTokenizer``\ , ``BertModel`` and ``BertForMaskedLM`` class with Google AI's pre-trained ``Bert base uncased`` model. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``BertTokenizer``\ , ``BertModel`` and ``BertForMaskedLM`` class with Google AI's pre-trained ``Bert base uncased`` model. See the `doc section <./model_doc/overview.html>`_ below for all the details on these classes.
 
 First let's prepare a tokenized input with ``BertTokenizer``
 
@@ -82,7 +82,7 @@ And how to use ``BertForMaskedLM``
 OpenAI GPT
 ^^^^^^^^^^
 
-Here is a quick-start example using ``OpenAIGPTTokenizer``\ , ``OpenAIGPTModel`` and ``OpenAIGPTLMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``OpenAIGPTTokenizer``\ , ``OpenAIGPTModel`` and ``OpenAIGPTLMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <./model_doc/overview.html>`_ for all the details on these classes.
 
 First let's prepare a tokenized input with ``OpenAIGPTTokenizer``
 
@@ -170,7 +170,7 @@ And how to use ``OpenAIGPTDoubleHeadsModel``
 Transformer-XL
 ^^^^^^^^^^^^^^
 
-Here is a quick-start example using ``TransfoXLTokenizer``\ , ``TransfoXLModel`` and ``TransfoXLModelLMHeadModel`` class with the Transformer-XL model pre-trained on WikiText-103. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``TransfoXLTokenizer``\ , ``TransfoXLModel`` and ``TransfoXLModelLMHeadModel`` class with the Transformer-XL model pre-trained on WikiText-103. See the `doc section <./model_doc/overview.html>`_ for all the details on these classes.
 
 First let's prepare a tokenized input with ``TransfoXLTokenizer``
 
@@ -246,7 +246,7 @@ And how to use ``TransfoXLLMHeadModel``
 OpenAI GPT-2
 ^^^^^^^^^^^^
 
-Here is a quick-start example using ``GPT2Tokenizer``\ , ``GPT2Model`` and ``GPT2LMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``GPT2Tokenizer``\ , ``GPT2Model`` and ``GPT2LMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <./model_doc/overview.html>`_ for all the details on these classes.
 
 First let's prepare a tokenized input with ``GPT2Tokenizer``
 

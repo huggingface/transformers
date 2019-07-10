@@ -8,28 +8,35 @@ XLNet
     :members:
 
 
-21. ``XLNetModel``
+``XLNetTokenizer``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.XLNetTokenizer
+    :members:
+
+
+``XLNetModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLNetModel
     :members:
 
 
-22. ``XLNetLMHeadModel``
+``XLNetLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLNetLMHeadModel
     :members:
 
 
-23. ``XLNetForSequenceClassification``
+``XLNetForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLNetForSequenceClassification
     :members:
 
 
-24. ``XLNetForQuestionAnswering``
+``XLNetForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.XLNetForQuestionAnswering

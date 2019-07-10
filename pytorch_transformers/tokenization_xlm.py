@@ -77,10 +77,15 @@ def text_standardize(text):
 class XLMTokenizer(PreTrainedTokenizer):
     """
     BPE tokenizer for XLM, adapted from OpenAI BPE tokenizer. Peculiarities:
+
         - lower case all inputs
-        - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
-        - argument special_tokens and function set_special_tokens:
-            can be used to add additional symbols (ex: "__classify__") to a vocabulary.
+
+        - uses `SpaCy tokenizer <https://spacy.io/api/tokenizer/>`_ and \
+        `ftfy <https://ftfy.readthedocs.io/en/latest/>`_ for pre-BPE tokenization if they are installed, \
+        fallback to BERT's BasicTokenizer if not.
+
+        - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
+        (ex: "__classify__") to a vocabulary.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

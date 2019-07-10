@@ -14,13 +14,8 @@ Here is a detailed documentation of the classes in the package and how to use th
    * - `Serialization best-practices <#serialization-best-practices>`__
      - How to save and reload a fine-tuned model
    * - `Configurations <#configurations>`__
-     - API of the configuration classes for BERT, GPT, GPT-2 and Transformer-XL
-   * - `Models <#models>`__
-     - API of the PyTorch model classes for BERT, GPT, GPT-2 and Transformer-XL
-   * - `Tokenizers <#tokenizers>`__
-     - API of the tokenizers class for BERT, GPT, GPT-2 and Transformer-XL
-   * - `Optimizers <#optimizers>`__
-     - API of the optimizers
+
+TODO Lysandre filled: Removed Models/Tokenizers/Optimizers as no single link can be made.
 
 
 Configurations
@@ -245,7 +240,7 @@ An overview of the implemented schedules:
 
 
 * ``ConstantLR``\ : always returns learning rate 1.
-* ``WarmupConstantSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
+* ``WarmupConstantSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps. \
     Keeps learning rate equal to 1. after warmup.
 
   .. image:: /imgs/warmup_constant_schedule.png
@@ -253,7 +248,7 @@ An overview of the implemented schedules:
      :alt:
 
 
-* ``WarmupLinearSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
+* ``WarmupLinearSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps. \
     Linearly decreases learning rate from 1. to 0. over remaining ``1 - warmup`` steps.
 
   .. image:: /imgs/warmup_linear_schedule.png
@@ -261,9 +256,9 @@ An overview of the implemented schedules:
      :alt:
 
 
-* ``WarmupCosineSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
-   Decreases learning rate from 1. to 0. over remaining ``1 - warmup`` steps following a cosine curve.
-   If ``cycles`` (default=0.5) is different from default, learning rate follows cosine function after warmup.
+* ``WarmupCosineSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps. \
+  Decreases learning rate from 1. to 0. over remaining ``1 - warmup`` steps following a cosine curve. \
+  If ``cycles`` (default=0.5) is different from default, learning rate follows cosine function after warmup.
 
   .. image:: /imgs/warmup_cosine_schedule.png
      :target: /imgs/warmup_cosine_schedule.png
@@ -271,7 +266,7 @@ An overview of the implemented schedules:
 
 
 * ``WarmupCosineWithHardRestartsSchedule`` : Linearly increases learning rate from 0 to 1 over ``warmup`` fraction of training steps.
-    If ``cycles`` (default=1.) is different from default, learning rate follows ``cycles`` times a cosine decaying learning rate (with hard restarts).
+  If ``cycles`` (default=1.) is different from default, learning rate follows ``cycles`` times a cosine decaying learning rate (with hard restarts).
 
   .. image:: /imgs/warmup_cosine_hard_restarts_schedule.png
      :target: /imgs/warmup_cosine_hard_restarts_schedule.png
@@ -279,9 +274,9 @@ An overview of the implemented schedules:
 
 
 * ``WarmupCosineWithWarmupRestartsSchedule`` : All training progress is divided in ``cycles`` (default=1.) parts of equal length.
-    Every part follows a schedule with the first ``warmup`` fraction of the training steps linearly increasing from 0. to 1.,
-    followed by a learning rate decreasing from 1. to 0. following a cosine curve.
-    Note that the total number of all warmup steps over all cycles together is equal to ``warmup`` * ``cycles``
+  Every part follows a schedule with the first ``warmup`` fraction of the training steps linearly increasing from 0. to 1.,
+  followed by a learning rate decreasing from 1. to 0. following a cosine curve.
+  Note that the total number of all warmup steps over all cycles together is equal to ``warmup`` * ``cycles``
 
   .. image:: /imgs/warmup_cosine_warm_restarts_schedule.png
      :target: /imgs/warmup_cosine_warm_restarts_schedule.png

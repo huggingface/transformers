@@ -22,21 +22,21 @@ OpenAI GPT
     :members:
 
 
-9. ``OpenAIGPTModel``
+``OpenAIGPTModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.OpenAIGPTModel
     :members:
 
 
-10. ``OpenAIGPTLMHeadModel``
+``OpenAIGPTLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.OpenAIGPTLMHeadModel
     :members:
 
 
-11. ``OpenAIGPTDoubleHeadsModel``
+``OpenAIGPTDoubleHeadsModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.OpenAIGPTDoubleHeadsModel
