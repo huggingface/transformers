@@ -16,14 +16,14 @@ Transformer XL
     :members:
 
 
-12. ``TransfoXLModel``
+``TransfoXLModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.TransfoXLModel
     :members:
 
 
-13. ``TransfoXLLMHeadModel``
+``TransfoXLLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.TransfoXLLMHeadModel

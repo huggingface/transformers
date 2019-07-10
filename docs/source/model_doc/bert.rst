@@ -21,56 +21,56 @@ BERT
 .. autoclass:: pytorch_transformers.BertAdam
     :members:
 
-1. ``BertModel``
+``BertModel``
 ~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertModel
     :members:
 
 
-2. ``BertForPreTraining``
+``BertForPreTraining``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForPreTraining
     :members:
 
 
-3. ``BertForMaskedLM``
+``BertForMaskedLM``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForMaskedLM
     :members:
 
 
-4. ``BertForNextSentencePrediction``
+``BertForNextSentencePrediction``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForNextSentencePrediction
     :members:
 
 
-5. ``BertForSequenceClassification``
+``BertForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForSequenceClassification
     :members:
 
 
-6. ``BertForMultipleChoice``
+``BertForMultipleChoice``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForMultipleChoice
     :members:
 
 
-7. ``BertForTokenClassification``
+``BertForTokenClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForTokenClassification
     :members:
 
 
-8. ``BertForQuestionAnswering``
+``BertForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: pytorch_transformers.BertForQuestionAnswering

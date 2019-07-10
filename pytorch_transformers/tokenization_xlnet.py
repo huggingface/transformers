@@ -52,7 +52,8 @@ SEG_ID_PAD = 4
 class XLNetTokenizer(PreTrainedTokenizer):
     """
         SentencePiece based tokenizer. Peculiarities:
-            - requires SentencePiece: https://github.com/google/sentencepiece
+
+            - requires `SentencePiece <https://github.com/google/sentencepiece>`_
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

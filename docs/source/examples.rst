@@ -6,22 +6,24 @@ Examples
 
    * - Sub-section
      - Description
-   * - `Training large models: introduction, tools and examples <#Training-large-models-introduction,-tools-and-examples>`_
+   * - `Training large models: introduction, tools and examples <#introduction>`_
      - How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models
-   * - `Fine-tuning with BERT: running the examples <#Fine-tuning-with-BERT-running-the-examples>`_
-     - Running the examples in `\ ``./examples`` <./examples/>`_\ : ``extract_classif.py``\ , ``run_bert_classifier.py``\ , ``run_bert_squad.py`` and ``run_lm_finetuning.py``
-   * - `Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2 <#openai-gpt-transformer-xl-and-gpt-2-running-the-examples>`_
-     - Running the examples in `\ ``./examples`` <./examples/>`_\ : ``run_openai_gpt.py``\ , ``run_transfo_xl.py`` and ``run_gpt2.py``
-   * - `Fine-tuning BERT-large on GPUs <#Fine-tuning-BERT-large-on-GPUs>`_
+   * - `Fine-tuning with BERT: running the examples <#fine-tuning-bert-examples>`_
+     - Running the examples in `examples <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples>`_\ : ``extract_classif.py``\ , ``run_bert_classifier.py``\ , ``run_bert_squad.py`` and ``run_lm_finetuning.py``
+   * - `Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2 <#fine-tuning>`_
+     - Running the examples in `examples <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples>`_\ : ``run_openai_gpt.py``\ , ``run_transfo_xl.py`` and ``run_gpt2.py``
+   * - `Fine-tuning BERT-large on GPUs <#fine-tuning-bert-large>`_
      - How to fine tune ``BERT large``
 
+
+.. _introduction:
 
 Training large models: introduction, tools and examples
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 BERT-base and BERT-large are respectively 110M and 340M parameters models and it can be difficult to fine-tune them on a single GPU with the recommended batch size for good performance (in most case a batch size of 32).
 
-To help with fine-tuning these models, we have included several techniques that you can activate in the fine-tuning scripts `\ ``run_bert_classifier.py`` <./examples/run_bert_classifier.py>`_ and `\ ``run_bert_squad.py`` <./examples/run_bert_squad.py>`_\ : gradient-accumulation, multi-gpu training, distributed training and 16-bits training . For more details on how to use these techniques you can read `the tips on training large batches in PyTorch <https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255>`_ that I published earlier this month.
+To help with fine-tuning these models, we have included several techniques that you can activate in the fine-tuning scripts `run_bert_classifier.py <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_classifier.py>`_ and `run_bert_squad.py <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_squad.py>`_\ : gradient-accumulation, multi-gpu training, distributed training and 16-bits training . For more details on how to use these techniques you can read `the tips on training large batches in PyTorch <https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255>`_ that I published earlier this year.
 
 Here is how to use these techniques in our scripts:
 
@@ -33,13 +35,15 @@ Here is how to use these techniques in our scripts:
 
 To use 16-bits training and distributed training, you need to install NVIDIA's apex extension `as detailed here <https://github.com/nvidia/apex>`__. You will find more information regarding the internals of ``apex`` and how to use ``apex`` in `the doc and the associated repository <https://github.com/nvidia/apex>`_. The results of the tests performed on pytorch-BERT by the NVIDIA team (and my trials at reproducing them) can be consulted in `the relevant PR of the present repository <https://github.com/huggingface/pytorch-pretrained-BERT/pull/116>`_.
 
-Note: To use *Distributed Training*\ , you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see `the above mentioned blog post <(https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255>`_\ ) for more details):
+Note: To use *Distributed Training*\ , you will need to run one training script on each of your machines. This can be done for example by running the following command on each server (see `the above mentioned blog post <https://medium.com/huggingface/training-larger-batches-practical-tips-on-1-gpu-multi-gpu-distributed-setups-ec88c3e51255>`_\ ) for more details):
 
 .. code-block:: bash
 
    python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_bert_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
 
 Where ``$THIS_MACHINE_INDEX`` is an sequential index assigned to each of your machine (0, 1, 2...) and the machine with rank 0 has an IP address ``192.168.1.1`` and an open port ``1234``.
+
+.. _fine-tuning-bert-examples:
 
 Fine-tuning with BERT: running the examples
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -333,10 +337,12 @@ LM Fine-tuning
 ~~~~~~~~~~~~~~
 
 The data should be a text file in the same format as `sample_text.txt <./samples/sample_text.txt>`_  (one sentence per line, docs separated by empty line).
-You can download an `exemplary training corpus <https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt>`_ generated from wikipedia articles and splitted into ~500k sentences with spaCy.
+You can download an `exemplary training corpus <https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt>`_ generated from wikipedia articles and split into ~500k sentences with spaCy.
 Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with ``train_batch_size=200`` and ``max_seq_length=128``\ :
 
-Thank to the work of @Rocketknight1 and @tholor there are now **several scripts** that can be used to fine-tune BERT using the pretraining objective (combination of masked-language modeling and next sentence prediction loss). These scripts are detailed in the `\ ``README`` <./examples/lm_finetuning/README.md>`_ of the `\ ``examples/lm_finetuning/`` <./examples/lm_finetuning/>`_ folder.
+Thank to the work of @Rocketknight1 and @tholor there are now **several scripts** that can be used to fine-tune BERT using the pretraining objective (combination of masked-language modeling and next sentence prediction loss). These scripts are detailed in the `README <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/lm_finetuning/README.md>`_ of the `examples/lm_finetuning/ <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/lm_finetuning/>`_ folder.
+
+.. _fine-tuning:
 
 OpenAI GPT, Transformer-XL and GPT-2: running the examples
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -401,6 +407,8 @@ Unconditional generation:
    python run_gpt2.py --unconditional
 
 The same option as in the original scripts are provided, please refere to the code of the example and the original repository of OpenAI.
+
+.. _fine-tuning-BERT-large:
 
 Fine-tuning BERT-large on GPUs
 ------------------------------
@@ -571,23 +579,4 @@ Here is an example on MNLI:
      global_step = 18408
      loss = 0.04755385363816904
 
-This is the example of the ``bert-large-uncased-whole-word-masking-finetuned-mnli`` model
-
-BERTology
----------
-
-There is a growing field of study concerned with investigating the inner working of large-scale transformers like BERT (that some call "BERTology"). Some good examples of this field are:
-
-
-* BERT Rediscovers the Classical NLP Pipeline by Ian Tenney, Dipanjan Das, Ellie Pavlick: https://arxiv.org/abs/1905.05950
-* Are Sixteen Heads Really Better than One? by Paul Michel, Omer Levy, Graham Neubig: https://arxiv.org/abs/1905.10650
-* What Does BERT Look At? An Analysis of BERT's Attention by Kevin Clark, Urvashi Khandelwal, Omer Levy, Christopher D. Manning: https://arxiv.org/abs/1906.04341
-
-In order to help this new field develop, we have included a few additional features in the BERT/GPT/GPT-2 models to help people access the inner representations, mainly adapted  from the great work of Paul Michel (https://arxiv.org/abs/1905.10650):
-
-
-* accessing all the hidden-states of BERT/GPT/GPT-2,
-* accessing all the attention weights for each head of BERT/GPT/GPT-2,
-* retrieving heads output values and gradients to be able to compute head importance score and prune head as explained in https://arxiv.org/abs/1905.10650.
-
-To help you understand and use these features, we have added a specific example script: `\ ``bertology.py`` <./examples/bertology.py>`_ while extract information and prune a model pre-trained on MRPC.
+This is the example of the ``bert-large-uncased-whole-word-masking-finetuned-mnli`` model.

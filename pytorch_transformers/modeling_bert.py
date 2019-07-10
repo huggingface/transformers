@@ -1274,20 +1274,20 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
 
         Parameters:
-            `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
                 with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
                 `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-            `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
                 types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
                 a `sentence B` token (see BERT paper for more details).
-            `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            `attention_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
                 selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
                 input sequence length in the current batch. It's the mask that we typically use for attention when
                 a batch has varying length sentences.
-            `start_positions`: position of the first token for the labeled span: torch.LongTensor of shape [batch_size].
+            `start_positions`: position of the first token for the labeled span: ``torch.LongTensor`` of shape [batch_size].
                 Positions are clamped to the length of the sequence and position outside of the sequence are not taken
                 into account for computing the loss.
-            `end_positions`: position of the last token for the labeled span: torch.LongTensor of shape [batch_size].
+            `end_positions`: position of the last token for the labeled span: ``torch.LongTensor`` of shape [batch_size].
                 Positions are clamped to the length of the sequence and position outside of the sequence are not taken
                 into account for computing the loss.
             `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
