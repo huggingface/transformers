@@ -11,6 +11,6 @@ We include `three Jupyter Notebooks <https://github.com/huggingface/pytorch-pret
   The second NoteBook (\ `Comparing-TF-and-PT-models-SQuAD.ipynb <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/notebooks/Comparing-TF-and-PT-models-SQuAD.ipynb>`_\ ) compares the loss computed by the TensorFlow and the PyTorch models for identical initialization of the fine-tuning layer of the ``BertForQuestionAnswering`` and computes the standard deviation between them. In the given example, we get a standard deviation of 2.5e-7 between the models.
 
 *
-  The third NoteBook (\ `Comparing-TF-and-PT-models-MLM-NSP.ipynb <https://github.com/huggingface/pytorch-pretrained-BERT/tree/mnotebooks/Comparing-TF-and-PT-models-MLM-NSP.ipynb>`_\ ) compares the predictions computed by the TensorFlow and the PyTorch models for masked token language modeling using the pre-trained masked language modeling model.
+  The third NoteBook (\ `Comparing-TF-and-PT-models-MLM-NSP.ipynb <https://github.com/huggingface/pytorch-pretrained-BERT/tree/notebooks/Comparing-TF-and-PT-models-MLM-NSP.ipynb>`_\ ) compares the predictions computed by the TensorFlow and the PyTorch models for masked token language modeling using the pre-trained masked language modeling model.
 
 Please follow the instructions given in the notebooks to run and modify them.

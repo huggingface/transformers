@@ -14,6 +14,8 @@ Here is a detailed documentation of the classes in the package and how to use th
    * - `Serialization best-practices <#serialization-best-practices>`__
      - How to save and reload a fine-tuned model
    * - `Configurations <#configurations>`__
+     - API of the configuration classes for BERT, GPT, GPT-2 and Transformer-XL
+
 
 TODO Lysandre filled: Removed Models/Tokenizers/Optimizers as no single link can be made.
 
