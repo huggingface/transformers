@@ -483,7 +483,14 @@ class GPT2Model(GPT2PreTrainedModel):
         self.apply(self.init_weights)
 
     def set_num_special_tokens(self, num_special_tokens=None):
-        """Update input embeddings with new embedding matrix if needed."""
+        """
+        Update input embeddings with new embedding matrix if needed.
+
+        Args:
+            num_special_tokens: Special tokens to be added to the embedding matrix
+
+        TODO Lysandre filled args
+        """
         if num_special_tokens is None or self.config.n_special == num_special_tokens:
             return
         # Update config
@@ -625,8 +632,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
             This can be used to compute head importance metrics. Default: False
 
-
-
     Example::
 
         config = modeling_gpt2.GPT2Config()
@@ -642,7 +647,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
         """
         Update input and output embeddings with new embedding matrix. Make sure we are sharing the embeddings.
-        TODO Shouldn't we put args + returns ?
+
+        Args:
+            num_special_tokens: Special tokens to be added to the embedding matrix
+            predict_special_tokens: if set to True, the model will try and predict the specified ``num_special_tokens``.
+                Defaults to True.
+
+        TODO Lysandre filled args
         """
         self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
         self.transformer.set_num_special_tokens(num_special_tokens)
@@ -737,7 +748,13 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
         """
         Update input and output embeddings with new embedding matrix.Make sure we are sharing the embeddings
-        TODO Shouldn't we put args + returns ?
+
+        Args:
+            num_special_tokens: Special tokens to be added to the embedding matrix
+            predict_special_tokens: if set to True, the model will try and predict the specified ``num_special_tokens``.
+                Defaults to True.
+
+        TODO Lysandre filled args
         """
         self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
         self.transformer.set_num_special_tokens(num_special_tokens)

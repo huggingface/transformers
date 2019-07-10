@@ -623,7 +623,7 @@ class XLNetPreTrainedModel(PreTrainedModel):
 class XLNetModel(XLNetPreTrainedModel):
     """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
 
-    TODO: this was copied from the XLNetLMHeadModel, check that it's ok.
+    TODO Lysandre filled: this was copied from the XLNetLMHeadModel, check that it's ok.
 
     Args:
         `config`: a XLNetConfig class instance with the configuration to build a new model
@@ -631,7 +631,15 @@ class XLNetModel(XLNetPreTrainedModel):
         `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
             This can be used to compute head importance metrics. Default: False
 
-    TODO: Add usage
+
+    Example::
+
+        config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
+            n_layer=12, num_attention_heads=12, intermediate_size=3072)
+
+        model = modeling.XLNetModel(config=config)
+
+    TODO Lysandre filled: Added example usage
     """
     def __init__(self, config):
         super(XLNetModel, self).__init__(config)
@@ -663,8 +671,8 @@ class XLNetModel(XLNetPreTrainedModel):
         Creates causal attention mask. Float mask where 1.0 indicates masked, 0.0 indicates not-masked.
 
         Args:
-            qlen: TODO
-            mlen: TODO
+            qlen: TODO Lysandre didn't fill
+            mlen: TODO Lysandre didn't fill
 
         ::
 
@@ -783,19 +791,25 @@ class XLNetModel(XLNetPreTrainedModel):
                 1 for tokens with losses and 0 for tokens without losses.
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
+            head_mask: TODO Lysandre didn't fill
 
-            mem_len: int, the number of tokens to cache.
-            reuse_len: int, the number of tokens in the currect batch to be cached
-                and reused in the future.
-            bi_data: bool, whether to use bidirectional input pipeline.
-                Usually set to True during pretraining and False during finetuning.
-            clamp_len: int, clamp all relative distances larger than clamp_len.
-                -1 means no clamping.
-            same_length: bool, whether to use the same attention length for each token.
-            summary_type: str, "last", "first", "mean", or "attn". The method
-                to pool the input to get a vector representation.
 
-        TODO: Add usage
+        Returns:
+            TODO Lysandre didn't fill: Missing returns!
+
+        Example::
+
+            # Already been converted into WordPiece token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+            token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+            all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+            # or
+            all_encoder_layers, pooled_output = model.forward(input_ids, token_type_ids, input_mask)
+
+        TODO Lysandre filled: Filled with the LMHead example, is probably different since it has a different output
+
         """
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -951,14 +965,14 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
             This can be used to compute head importance metrics. Default: False
 
-
-
     Example::
 
         config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
             n_layer=12, num_attention_heads=12, intermediate_size=3072)
 
-        model = modeling.XLNetModel(config=config)
+        model = modeling.XLNetLMHeadModel(config=config)
+
+    TODO Lysandre modified: Changed XLNetModel to XLNetLMHeadModel in the example
     """
     def __init__(self, config):
         super(XLNetLMHeadModel, self).__init__(config)
@@ -1122,7 +1136,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                 1 for tokens with losses and 0 for tokens without losses.
                 Only used during pre-training for two-stream attention.
                 Set to None during fine-tuning.
-            labels: TODO
+            labels: TODO Lysandre didn't fill
             head_mask: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
                 It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
