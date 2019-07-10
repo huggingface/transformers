@@ -37,7 +37,7 @@ from pytorch_transformers import (BertForSequenceClassification, XLNetForSequenc
                                   XLNET_PRETRAINED_MODEL_ARCHIVE_MAP, XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 from pytorch_transformers import (BertTokenizer, XLNetTokenizer,
                                   XLMTokenizer)
-from pytorch_transformers.optimization import BertAdam, WarmupLinearSchedule
+from pytorch_transformers.optimization import BertAdam
 
 from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
 
@@ -60,12 +60,12 @@ TOKENIZER_CLASSES = {
     'xlm': XLMTokenizer,
 }
 
-def train(args, train_dataset, model):
+def train(args, train_dataset, model, tokenizer):
     """ Train the model """
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
-    args.train_batch_size = args.train_batch_size // args.gradient_accumulation_steps
+    args.train_batch_size = args.per_gpu_train_batch_size * args.n_gpu
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
@@ -76,42 +76,36 @@ def train(args, train_dataset, model):
         num_train_optimization_steps = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     # Prepare optimizer
-    param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
+        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+    optimizer = BertAdam(optimizer_grouped_parameters, lr=args.learning_rate,
+                         t_total=num_train_optimization_steps, warmup=args.warmup_proportion)
     if args.fp16:
         try:
-            from apex.optimizers import FP16_Optimizer, FusedAdam
+            from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        optimizer = FusedAdam(optimizer_grouped_parameters, lr=args.learning_rate, bias_correction=False, max_grad_norm=1.0)
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
-        else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-        warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion, t_total=num_train_optimization_steps)
-
-    else:
-        optimizer = BertAdam(optimizer_grouped_parameters, lr=args.learning_rate, warmup=args.warmup_proportion,
-                             t_total=num_train_optimization_steps)
+        model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # Train!
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", len(train_dataset))
     logger.info("  Num Epochs = %d", args.num_train_epochs)
-    logger.info("  Batch size = %d", args.train_batch_size)
+    logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
+    logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
+                   args.train_batch_size * args.gradient_accumulation_steps * (torch.distributed.get_world_size() if args.local_rank != -1 else 1))
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", num_train_optimization_steps)
 
     global_step = 0
-    tr_loss = 0
-    model.train()
+    tr_loss, logging_loss = 0.0, 0.0
     optimizer.zero_grad()
     for _ in trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]):
         for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
+            model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
@@ -125,23 +119,25 @@ def train(args, train_dataset, model):
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
-            loss.backward() if not args.fp16 else optimizer.backward(loss)
+            if args.fp16:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                if args.fp16:
-                    # modify learning rate with special warm up BERT uses
-                    # if args.fp16 is False, BertAdam is used that handles this automatically
-                    lr_this_step = args.learning_rate * warmup_linear.get_lr(global_step, args.warmup_proportion)
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = lr_this_step
                 optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
-                if args.local_rank in [-1, 0]:
-                    if not args.fp16:
-                        tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
-                    tb_writer.add_scalar('loss', loss.item(), global_step)
+                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                    if args.local_rank == -1:  # Only evaluate on single GPU otherwise metrics may not average well
+                        results = evaluate(args, model, tokenizer)
+                        for key, value in results.items():
+                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+                    tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
+                    tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
+                    logging_loss = tr_loss
             if args.max_steps > 0 and global_step > args.max_steps:
                 break
         if args.max_steps > 0 and global_step > args.max_steps:
@@ -150,62 +146,71 @@ def train(args, train_dataset, model):
     return global_step, tr_loss / global_step
 
 
-def evalutate(args, eval_task, eval_output_dir, dataset, model):
-    """ Evaluate the model """
-    if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
-        os.makedirs(eval_output_dir)
+def evaluate(args, model, tokenizer):
+    # Loop to handle MNLI double evaluation (matched, mis-matched)
+    eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
+    eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
 
-    # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
-    eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    results = {}
+    for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
+        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
-    # Eval!
-    logger.info("***** Running evaluation *****")
-    logger.info("  Num examples = %d", len(dataset))
-    logger.info("  Batch size = %d", args.eval_batch_size)
-    model.eval()
-    eval_loss = 0
-    nb_eval_steps = 0
-    preds = None
-    out_label_ids = None
-    for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        batch = tuple(t.to(args.device) for t in batch)
+        """ Evaluate the model """
+        if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
+            os.makedirs(eval_output_dir)
 
-        with torch.no_grad():
-            inputs = {'input_ids':      batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM don't use segment_ids
-                      'labels':         batch[3]}
-            outputs = model(**inputs)
-            tmp_eval_loss, logits = outputs[:2]
+        # Note that DistributedSampler samples randomly
+        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
-        eval_loss += tmp_eval_loss.mean().item()
-        nb_eval_steps += 1
-        if preds is None:
-            preds = logits.detach().cpu().numpy()
-            out_label_ids = inputs['labels'].detach().cpu().numpy()
-        else:
-            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-            out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
+        # Eval!
+        logger.info("***** Running evaluation *****")
+        logger.info("  Num examples = %d", len(eval_dataset))
+        logger.info("  Batch size = %d", args.eval_batch_size)
+        model.eval()
+        eval_loss = 0
+        nb_eval_steps = 0
+        preds = None
+        out_label_ids = None
+        for batch in tqdm(eval_dataloader, desc="Evaluating"):
+            batch = tuple(t.to(args.device) for t in batch)
 
-    eval_loss = eval_loss / nb_eval_steps
-    if args.output_mode == "classification":
-        preds = np.argmax(preds, axis=1)
-    elif args.output_mode == "regression":
-        preds = np.squeeze(preds)
-    result = compute_metrics(eval_task, preds, out_label_ids)
+            with torch.no_grad():
+                inputs = {'input_ids':      batch[0],
+                          'attention_mask': batch[1],
+                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM don't use segment_ids
+                          'labels':         batch[3]}
+                outputs = model(**inputs)
+                tmp_eval_loss, logits = outputs[:2]
 
-    output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
-    with open(output_eval_file, "w") as writer:
-        logger.info("***** Eval results *****")
-        for key in sorted(result.keys()):
-            logger.info("  %s = %s", key, str(result[key]))
-            writer.write("%s = %s\n" % (key, str(result[key])))
+            eval_loss += tmp_eval_loss.mean().item()
+            nb_eval_steps += 1
+            if preds is None:
+                preds = logits.detach().cpu().numpy()
+                out_label_ids = inputs['labels'].detach().cpu().numpy()
+            else:
+                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+                out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
 
-    return result
+        eval_loss = eval_loss / nb_eval_steps
+        if args.output_mode == "classification":
+            preds = np.argmax(preds, axis=1)
+        elif args.output_mode == "regression":
+            preds = np.squeeze(preds)
+        result = compute_metrics(eval_task, preds, out_label_ids)
+        results.update(result)
+
+        output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+        with open(output_eval_file, "w") as writer:
+            logger.info("***** Eval results *****")
+            for key in sorted(result.keys()):
+                logger.info("  %s = %s", key, str(result[key]))
+                writer.write("%s = %s\n" % (key, str(result[key])))
+
+    return results
 
 
-def load_and_cache_examples(args, task, tokenizer, evaluate=False):
+def load_and_cache_examples(args, task, tokenizer, evaluate=False, overwrite_cache=False):
     processor = processors[task]()
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
@@ -214,7 +219,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         list(filter(None, args.model_name.split('/'))).pop(),
         str(args.max_seq_length),
         str(task)))
-    if os.path.exists(cached_features_file):
+    if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
@@ -270,39 +275,44 @@ def main():
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
-    parser.add_argument("--train_batch_size", default=32, type=int,
-                        help="Total batch size for training.")
+
+    parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
+                        help="Batch size per GPU for training.")
     parser.add_argument("--eval_batch_size", default=8, type=int,
                         help="Total batch size for eval.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--learning_rate", default=5e-5, type=float,
                         help="The initial learning rate for Adam.")
+    parser.add_argument("--weight_decay", default=0.0, type=float,
+                        help="Weight deay if we apply some.")
     parser.add_argument("--num_train_epochs", default=3.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--max_steps", default=-1, type=int,
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training with linear learning rate warmup (0.1 = 10%% of training).")
+
+    parser.add_argument('--logging_steps', type=int, default=100,
+                        help="Log every X updates steps.")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
     parser.add_argument('--overwrite_output_dir', action='store_true',
                         help="Overwrite the content of the output directory")
+    parser.add_argument('--overwrite_cache', action='store_true',
+                        help="Overwrite the cached training and evaluation sets")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
 
     parser.add_argument('--fp16', action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale', type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
-
+                        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
+    parser.add_argument('--fp16_opt_level', type=str, default='O1',
+                        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                             "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument("--local_rank", type=int, default=-1,
-                        help="local_rank for distributed training on gpus")
-
-    parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
-    parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+                        help="For distributed training: local_rank")
+    parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
+    parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -362,13 +372,10 @@ def main():
     if args.local_rank == 0:
         torch.distributed.barrier()
 
-    # Distributed, parrallel and fp16 model
-    if args.fp16:
-        model.half()
+    # Distributed and parrallel training
     model.to(args.device)
     if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(model,
-                                                          device_ids=[args.local_rank],
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank,
                                                           find_unused_parameters=True)
     elif args.n_gpu > 1:
@@ -377,7 +384,7 @@ def main():
     # Training
     if args.do_train:
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss = train(args, train_dataset, model)
+        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
@@ -402,17 +409,10 @@ def main():
         model.to(args.device)
 
     # Evaluation
-    if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        # Handle MNLI double evaluation
-        eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
-        eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
+    if args.do_eval and args.local_rank in [-1, 0]:
+        results = evaluate(args, model, tokenizer)
 
-        for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-            eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
-
-            result = evalutate(args, eval_task, eval_output_dir, eval_dataset, model)
-
-        return result
+        return results
 
 
 if __name__ == "__main__":
