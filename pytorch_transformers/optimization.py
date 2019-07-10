@@ -227,6 +227,8 @@ class BertAdam(Optimizer):
         lr = []
         for group in self.param_groups:
             for p in group['params']:
+                if p.grad is None:
+                    continue
                 state = self.state[p]
                 if len(state) == 0:
                     return [0]
