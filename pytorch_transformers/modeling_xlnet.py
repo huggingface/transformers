@@ -192,7 +192,48 @@ ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
 
 class XLNetConfig(PretrainedConfig):
-    """Configuration class to store the configuration of a `XLNetModel`.
+    """Configuration class to store the configuration of a ``XLNetModel``.
+
+    Args:
+        vocab_size_or_config_json_file: Vocabulary size of ``inputs_ids`` in ``XLNetModel``.
+        d_model: Size of the encoder layers and the pooler layer.
+        n_layer: Number of hidden layers in the Transformer encoder.
+        n_head: Number of attention heads for each attention layer in
+            the Transformer encoder.
+        d_inner: The size of the "intermediate" (i.e., feed-forward)
+            layer in the Transformer encoder.
+        ff_activation: The non-linear activation function (function or string) in the
+            encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
+        untie_r: untie relative position biases
+        attn_type: 'bi' for XLNet, 'uni' for Transformer-XL
+
+        dropout: The dropout probabilitiy for all fully connected
+            layers in the embeddings, encoder, and pooler.
+        dropatt: The dropout ratio for the attention
+            probabilities.
+        max_position_embeddings: The maximum sequence length that this model might
+            ever be used with. Typically set this to something large just in case
+            (e.g., 512 or 1024 or 2048).
+        initializer_range: The sttdev of the truncated_normal_initializer for
+            initializing all weight matrices.
+        layer_norm_eps: The epsilon used by LayerNorm.
+
+        dropout: float, dropout rate.
+        dropatt: float, dropout rate on attention probabilities.
+        init: str, the initialization scheme, either "normal" or "uniform".
+        init_range: float, initialize the parameters with a uniform distribution
+            in [-init_range, init_range]. Only effective when init="uniform".
+        init_std: float, initialize the parameters with a normal distribution
+            with mean 0 and stddev init_std. Only effective when init="normal".
+        mem_len: int, the number of tokens to cache.
+        reuse_len: int, the number of tokens in the currect batch to be cached
+            and reused in the future.
+        bi_data: bool, whether to use bidirectional input pipeline.
+            Usually set to True during pretraining and False during finetuning.
+        clamp_len: int, clamp all relative distances larger than clamp_len.
+            -1 means no clamping.
+        same_length: bool, whether to use the same attention length for each token.
+        finetuning_task: name of the glue task on which the model was fine-tuned if any
     """
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
 
@@ -227,42 +268,6 @@ class XLNetConfig(PretrainedConfig):
                  end_n_top=5,
                  **kwargs):
         """Constructs XLNetConfig.
-
-        Args:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `XLNetModel`.
-            d_model: Size of the encoder layers and the pooler layer.
-            n_layer: Number of hidden layers in the Transformer encoder.
-            n_head: Number of attention heads for each attention layer in
-                the Transformer encoder.
-            d_inner: The size of the "intermediate" (i.e., feed-forward)
-                layer in the Transformer encoder.
-            ff_activation: The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-            untie_r: untie relative position biases
-            attn_type: 'bi' for XLNet, 'uni' for Transformer-XL
-
-            dropout: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
-            dropatt: The dropout ratio for the attention
-                probabilities.
-            max_position_embeddings: The maximum sequence length that this model might
-                ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048).
-            initializer_range: The sttdev of the truncated_normal_initializer for
-                initializing all weight matrices.
-            layer_norm_eps: The epsilon used by LayerNorm.
-
-            dropout: float, dropout rate.
-            dropatt: float, dropout rate on attention probabilities.
-            mem_len: int, the number of tokens to cache.
-            reuse_len: int, the number of tokens in the currect batch to be cached
-                and reused in the future.
-            bi_data: bool, whether to use bidirectional input pipeline.
-                Usually set to True during pretraining and False during finetuning.
-            clamp_len: int, clamp all relative distances larger than clamp_len.
-                -1 means no clamping.
-            same_length: bool, whether to use the same attention length for each token.
-            finetuning_task: name of the glue task on which the model was fine-tuned if any
         """
         super(XLNetConfig, self).__init__(**kwargs)
 
@@ -608,6 +613,26 @@ class XLNetPreTrainedModel(PreTrainedModel):
 
 
 class XLNetModel(XLNetPreTrainedModel):
+    """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
+
+    TODO Lysandre filled: this was copied from the XLNetLMHeadModel, check that it's ok.
+
+    Args:
+        `config`: a XLNetConfig class instance with the configuration to build a new model
+        `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
+        `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
+            This can be used to compute head importance metrics. Default: False
+
+
+    Example::
+
+        config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
+            n_layer=12, num_attention_heads=12, intermediate_size=3072)
+
+        model = modeling.XLNetModel(config=config)
+
+    TODO Lysandre filled: Added example usage
+    """
     def __init__(self, config):
         super(XLNetModel, self).__init__(config)
         self.output_attentions = config.output_attentions
@@ -634,15 +659,23 @@ class XLNetModel(XLNetPreTrainedModel):
         pass
 
     def create_mask(self, qlen, mlen):
-        """ create causal attention mask.
-            float mask where 1.0 indicate masked, 0.0 indicated not-masked.
-             same_length=False:      same_length=True:
-             <mlen > <  qlen >       <mlen > <  qlen >
-          ^ [0 0 0 0 0 1 1 1 1]     [0 0 0 0 0 1 1 1 1]
-            [0 0 0 0 0 0 1 1 1]     [1 0 0 0 0 0 1 1 1]
-       qlen [0 0 0 0 0 0 0 1 1]     [1 1 0 0 0 0 0 1 1]
-            [0 0 0 0 0 0 0 0 1]     [1 1 1 0 0 0 0 0 1]
-          v [0 0 0 0 0 0 0 0 0]     [1 1 1 1 0 0 0 0 0]
+        """
+        Creates causal attention mask. Float mask where 1.0 indicates masked, 0.0 indicates not-masked.
+
+        Args:
+            qlen: TODO Lysandre didn't fill
+            mlen: TODO Lysandre didn't fill
+
+        ::
+
+                  same_length=False:      same_length=True:
+                  <mlen > <  qlen >       <mlen > <  qlen >
+               ^ [0 0 0 0 0 1 1 1 1]     [0 0 0 0 0 1 1 1 1]
+                 [0 0 0 0 0 0 1 1 1]     [1 0 0 0 0 0 1 1 1]
+            qlen [0 0 0 0 0 0 0 1 1]     [1 1 0 0 0 0 0 1 1]
+                 [0 0 0 0 0 0 0 0 1]     [1 1 1 0 0 0 0 0 1]
+               v [0 0 0 0 0 0 0 0 0]     [1 1 1 1 0 0 0 0 0]
+
         """
         attn_mask = torch.ones([qlen, qlen])
         mask_up = torch.triu(attn_mask, diagonal=1)
@@ -723,6 +756,8 @@ class XLNetModel(XLNetPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None, head_mask=None):
         """
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
+
         Args:
             input_ids: int32 Tensor in shape [bsz, len], the input token IDs.
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
@@ -748,17 +783,25 @@ class XLNetModel(XLNetPreTrainedModel):
                 1 for tokens with losses and 0 for tokens without losses.
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
+            head_mask: TODO Lysandre didn't fill
 
-            mem_len: int, the number of tokens to cache.
-            reuse_len: int, the number of tokens in the currect batch to be cached
-                and reused in the future.
-            bi_data: bool, whether to use bidirectional input pipeline.
-                Usually set to True during pretraining and False during finetuning.
-            clamp_len: int, clamp all relative distances larger than clamp_len.
-                -1 means no clamping.
-            same_length: bool, whether to use the same attention length for each token.
-            summary_type: str, "last", "first", "mean", or "attn". The method
-                to pool the input to get a vector representation.
+
+        Returns:
+            TODO Lysandre didn't fill: Missing returns!
+
+        Example::
+
+            # Already been converted into WordPiece token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+            token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+            all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+            # or
+            all_encoder_layers, pooled_output = model.forward(input_ids, token_type_ids, input_mask)
+
+        TODO Lysandre filled: Filled with the LMHead example, is probably different since it has a different output
+
         """
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -908,63 +951,20 @@ class XLNetModel(XLNetPreTrainedModel):
 class XLNetLMHeadModel(XLNetPreTrainedModel):
     """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
 
-    Params:
+    Args:
         `config`: a XLNetConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
         `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
             This can be used to compute head importance metrics. Default: False
 
-    Inputs:
-        input_ids: int32 Tensor in shape [bsz, len], the input token IDs.
-        token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-        input_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
-            0 for real tokens and 1 for padding.
-        attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
-            but with 1 for real tokens and 0 for padding.
-            Added for easy compatibility with the BERT model (which uses this negative masking).
-            You can only uses one among `input_mask` and `attention_mask`
-        mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
-            from previous batches. The length of the list equals n_layer.
-            If None, no memory is used.
-        perm_mask: [optional] float32 Tensor in shape [bsz, len, len].
-            If perm_mask[k, i, j] = 0, i attend to j in batch k;
-            if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
-            If None, each position attends to all the others.
-        target_mapping: [optional] float32 Tensor in shape [bsz, num_predict, len].
-            If target_mapping[k, i, j] = 1, the i-th predict in batch k is
-            on the j-th token.
-            Only used during pretraining for partial prediction.
-            Set to None during finetuning.
-        inp_q: [optional] float32 Tensor in shape [bsz, len].
-            1 for tokens with losses and 0 for tokens without losses.
-            Only used during pretraining for two-stream attention.
-            Set to None during finetuning.
+    Example::
 
+        config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
+            n_layer=12, num_attention_heads=12, intermediate_size=3072)
 
-    Outputs: Tuple of (encoded_layers, pooled_output)
-        `encoded_layers`: controled by `output_all_encoded_layers` argument:
-            - `output_all_encoded_layers=True`: outputs a list of the full sequences of encoded-hidden-states at the end
-                of each attention block (i.e. 12 full sequences for XLNet-base, 24 for XLNet-large), each
-                encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, d_model],
-            - `output_all_encoded_layers=False`: outputs only the full sequence of hidden-states corresponding
-                to the last attention block of shape [batch_size, sequence_length, d_model],
-        `pooled_output`: a torch.FloatTensor of size [batch_size, d_model] which is the output of a
-            classifier pretrained on top of the hidden state associated to the first character of the
-            input (`CLS`) to train on the Next-Sentence task (see XLNet's paper).
+        model = modeling.XLNetLMHeadModel(config=config)
 
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-
-    config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
-        n_layer=12, num_attention_heads=12, intermediate_size=3072)
-
-    model = modeling.XLNetModel(config=config)
-    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
-    ```
+    TODO Lysandre modified: Changed XLNetModel to XLNetLMHeadModel in the example
     """
     def __init__(self, config):
         super(XLNetLMHeadModel, self).__init__(config)
@@ -992,34 +992,61 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 labels=None, head_mask=None):
         """
+         all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+
         Args:
             input_ids: int32 Tensor in shape [bsz, len], the input token IDs.
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-            input_mask: float32 Tensor in shape [bsz, len], the input mask.
+            input_mask: [optional] float32 Tensor in shape [bsz, len], the input mask.
                 0 for real tokens and 1 for padding.
             attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
                 but with 1 for real tokens and 0 for padding.
                 Added for easy compatibility with the BERT model (which uses this negative masking).
                 You can only uses one among `input_mask` and `attention_mask`
-            mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
+            mems: [optional] a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
                 from previous batches. The length of the list equals n_layer.
                 If None, no memory is used.
-            perm_mask: float32 Tensor in shape [bsz, len, len].
+            perm_mask: [optional] float32 Tensor in shape [bsz, len, len].
                 If perm_mask[k, i, j] = 0, i attend to j in batch k;
                 if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
                 If None, each position attends to all the others.
-            target_mapping: float32 Tensor in shape [bsz, num_predict, len].
+            target_mapping: [optional] float32 Tensor in shape [bsz, num_predict, len].
                 If target_mapping[k, i, j] = 1, the i-th predict in batch k is
                 on the j-th token.
                 Only used during pretraining for partial prediction.
                 Set to None during finetuning.
-            inp_q: float32 Tensor in shape [bsz, len].
+            inp_q: [optional] float32 Tensor in shape [bsz, len].
                 1 for tokens with losses and 0 for tokens without losses.
                 Only used during pretraining for two-stream attention.
                 Set to None during finetuning.
 
-            summary_type: str, "last", "first", "mean", or "attn". The method
-                to pool the input to get a vector representation.
+
+        Returns:
+            A ``tuple(encoded_layers, pooled_output)``, with
+
+                ``encoded_layers``: controlled by ``output_all_encoded_layers`` argument:
+
+                    - ``output_all_encoded_layers=True``: outputs a list of the full sequences of encoded-hidden-states \
+                    at the end of each attention block (i.e. 12 full sequences for XLNet-base, 24 for XLNet-large), \
+                    each encoded-hidden-state is a ``torch.FloatTensor`` of size [batch_size, sequence_length, d_model],
+
+                    - ``output_all_encoded_layers=False``: outputs only the full sequence of hidden-states corresponding \
+                    to the last attention block of shape [batch_size, sequence_length, d_model],
+
+                ``pooled_output``: a ``torch.FloatTensor`` of size [batch_size, d_model] which is the output of a \
+                classifier pretrained on top of the hidden state associated to the first character of the \
+                input (`CLS`) to train on the Next-Sentence task (see XLNet's paper).
+
+        Example::
+
+            # Already been converted into WordPiece token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+            token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+            all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+            # or
+            all_encoder_layers, pooled_output = model.forward(input_ids, token_type_ids, input_mask)
         """
         transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
                                                mems, perm_mask, target_mapping, inp_q, head_mask)
@@ -1041,7 +1068,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
     """XLNet model ("XLNet: Generalized Autoregressive Pretraining for Language Understanding").
 
-    Params:
+    Args:
         `config`: a XLNetConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
         `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
@@ -1049,58 +1076,16 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         `summary_type`: str, "last", "first", "mean", or "attn". The method
             to pool the input to get a vector representation. Default: last
 
-    Inputs:
-        input_ids: int32 Tensor in shape [bsz, len], the input token IDs.
-        token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
-        input_mask: float32 Tensor in shape [bsz, len], the input mask.
-            0 for real tokens and 1 for padding.
-        attention_mask: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
-            but with 1 for real tokens and 0 for padding.
-            Added for easy compatibility with the BERT model (which uses this negative masking).
-            You can only uses one among `input_mask` and `attention_mask`
-        mems: a list of float32 Tensors in shape [mem_len, bsz, d_model], memory
-            from previous batches. The length of the list equals n_layer.
-            If None, no memory is used.
-        perm_mask: float32 Tensor in shape [bsz, len, len].
-            If perm_mask[k, i, j] = 0, i attend to j in batch k;
-            if perm_mask[k, i, j] = 1, i does not attend to j in batch k.
-            If None, each position attends to all the others.
-        target_mapping: float32 Tensor in shape [bsz, num_predict, len].
-            If target_mapping[k, i, j] = 1, the i-th predict in batch k is
-            on the j-th token.
-            Only used during pretraining for partial prediction.
-            Set to None during finetuning.
-        inp_q: float32 Tensor in shape [bsz, len].
-            1 for tokens with losses and 0 for tokens without losses.
-            Only used during pretraining for two-stream attention.
-            Set to None during finetuning.
-        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
-            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
 
 
-    Outputs: Tuple of (logits or loss, mems)
-        `logits or loss`:
-            if labels is None:
-                Token logits with shape [batch_size, sequence_length] 
-            else:
-                CrossEntropy loss with the targets
-        `new_mems`: list (num layers) of updated mem states at the entry of each layer
-            each mem state is a torch.FloatTensor of size [self.config.mem_len, batch_size, self.config.d_model]
-            Note that the first two dimensions are transposed in `mems` with regards to `input_ids` and `labels`
+    Example::
 
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+        # Already been converted into WordPiece token ids
+        input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+        input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+        token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
 
-    config = modeling.XLNetConfig(vocab_size_or_config_json_file=32000, d_model=768,
-        n_layer=12, num_attention_heads=12, intermediate_size=3072)
-
-    model = modeling.XLNetModel(config=config)
-    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
-    ```
+        all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
     """
     def __init__(self, config):
         super(XLNetForSequenceClassification, self).__init__(config)
@@ -1116,6 +1101,8 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 labels=None, head_mask=None):
         """
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
+
         Args:
             input_ids: int32 Tensor in shape [bsz, len], the input token IDs.
             token_type_ids: int32 Tensor in shape [bsz, len], the input segment IDs.
@@ -1135,12 +1122,38 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             target_mapping: float32 Tensor in shape [bsz, num_predict, len].
                 If target_mapping[k, i, j] = 1, the i-th predict in batch k is
                 on the j-th token.
-                Only used during pretraining for partial prediction.
-                Set to None during finetuning.
+                Only used during pre-training for partial prediction.
+                Set to None during fine-tuning.
             inp_q: float32 Tensor in shape [bsz, len].
                 1 for tokens with losses and 0 for tokens without losses.
-                Only used during pretraining for two-stream attention.
-                Set to None during finetuning.
+                Only used during pre-training for two-stream attention.
+                Set to None during fine-tuning.
+            labels: TODO Lysandre didn't fill
+            head_mask: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+                It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+
+
+        Returns:
+            A ``tuple(logits_or_loss, mems)``
+
+                ``logits_or_loss``: if ``labels`` is ``None``, ``logits_or_loss`` corresponds to token logits with shape \
+                [batch_size, sequence_length]. If it is not ``None``, it corresponds to the ``CrossEntropy`` loss \
+                with the targets.
+
+                ``new_mems``: list (num layers) of updated mem states at the entry of each layer \
+                each mem state is a ``torch.FloatTensor`` of size [self.config.mem_len, batch_size, self.config.d_model] \
+                Note that the first two dimensions are transposed in ``mems`` with regards to ``input_ids`` and ``labels``
+
+        Example::
+
+            # Already been converted into WordPiece token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+            token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+            all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
+            # or
+            all_encoder_layers, pooled_output = model.forward(input_ids, token_type_ids, input_mask)
         """
         transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
                                                mems, perm_mask, target_mapping, inp_q, head_mask)
@@ -1165,60 +1178,24 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
 
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
-    """ XLNet model for Question Answering (span extraction).
-    This module is composed of the XLNet model with a linear layer on top of
-    the sequence output that computes start_logits and end_logits
+    """
+    XLNet model for Question Answering (span extraction).
 
-    Params:
+    This module is composed of the XLNet model with a linear layer on top of
+    the sequence output that computes ``start_logits`` and ``end_logits``
+
+    Args:
         `config`: a XLNetConfig class instance with the configuration to build a new model
         `output_attentions`: If True, also output attentions weights computed by the model at each layer. Default: False
         `keep_multihead_output`: If True, saves output of the multi-head attention module with its gradient.
             This can be used to compute head importance metrics. Default: False
 
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
-            `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
-        `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
-            types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
-            a `sentence B` token (see XLNet paper for more details).
-        `attention_mask`: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
-            but with 1 for real tokens and 0 for padding.
-            Added for easy compatibility with the BERT model (which uses this negative masking).
-            You can only uses one among `input_mask` and `attention_mask`
-        `input_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
-            selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
-            a batch has varying length sentences.
-        `start_positions`: position of the first token for the labeled span: torch.LongTensor of shape [batch_size].
-            Positions are clamped to the length of the sequence and position outside of the sequence are not taken
-            into account for computing the loss.
-        `end_positions`: position of the last token for the labeled span: torch.LongTensor of shape [batch_size].
-            Positions are clamped to the length of the sequence and position outside of the sequence are not taken
-            into account for computing the loss.
-        `head_mask`: an optional torch.Tensor of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
-            It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+    Example::
 
-    Outputs:
-        if `start_positions` and `end_positions` are not `None`:
-            Outputs the total_loss which is the sum of the CrossEntropy loss for the start and end token positions.
-        if `start_positions` or `end_positions` is `None`:
-            Outputs a tuple of start_logits, end_logits which are the logits respectively for the start and end
-            position tokens of shape [batch_size, sequence_length].
+        config = XLNetConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
+            num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
 
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-
-    config = XLNetConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-
-    model = XLNetForQuestionAnswering(config)
-    start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
-    ```
+        model = XLNetForQuestionAnswering(config)
     """
     def __init__(self, config):
         super(XLNetForQuestionAnswering, self).__init__(config)
@@ -1236,6 +1213,53 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                 mems=None, perm_mask=None, target_mapping=None, inp_q=None,
                 start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None,
                 head_mask=None):
+
+        """
+        Performs a model forward pass. **Can be called by calling the class directly, once it has been instantiated.**
+
+        Args:
+            `input_ids`: a ``torch.LongTensor`` of shape [batch_size, sequence_length]
+                with the word token indices in the vocabulary(see the tokens pre-processing logic in the scripts
+                `run_bert_extract_features.py`, `run_bert_classifier.py` and `run_bert_squad.py`)
+            `token_type_ids`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with the token
+                types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
+                a `sentence B` token (see XLNet paper for more details).
+            `attention_mask`: [optional] float32 Tensor, SAME FUNCTION as `input_mask`
+                but with 1 for real tokens and 0 for padding.
+                Added for easy compatibility with the BERT model (which uses this negative masking).
+                You can only uses one among ``input_mask`` and ``attention_mask``
+            `input_mask`: an optional ``torch.LongTensor`` of shape [batch_size, sequence_length] with indices
+                selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
+                input sequence length in the current batch. It's the mask that we typically use for attention when
+                a batch has varying length sentences.
+            `start_positions`: position of the first token for the labeled span: ``torch.LongTensor`` of shape [batch_size].
+                Positions are clamped to the length of the sequence and position outside of the sequence are not taken
+                into account for computing the loss.
+            `end_positions`: position of the last token for the labeled span: ``torch.LongTensor`` of shape [batch_size].
+                Positions are clamped to the length of the sequence and position outside of the sequence are not taken
+                into account for computing the loss.
+            `head_mask`: an optional ``torch.Tensor`` of shape [num_heads] or [num_layers, num_heads] with indices between 0 and 1.
+                It's a mask to be used to nullify some heads of the transformer. 1.0 => head is fully masked, 0.0 => head is not masked.
+
+        Returns:
+            if ``start_positions`` and ``end_positions`` are not ``None``, outputs the total_loss which is the sum of the \
+            ``CrossEntropy`` loss for the start and end token positions.
+
+            if ``start_positions`` or ``end_positions`` is ``None``, outputs a tuple of ``start_logits``, ``end_logits``
+            which are the logits respectively for the start and end position tokens of shape \
+            [batch_size, sequence_length].
+
+        Example::
+
+            # Already been converted into WordPiece token ids
+            input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
+            input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
+            token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
+
+            start_logits, end_logits = model(input_ids, token_type_ids, input_mask)
+            # or
+            start_logits, end_logits = model.forward(input_ids, token_type_ids, input_mask)
+        """
         transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
                                                mems, perm_mask, target_mapping, inp_q, head_mask)
         hidden_states = transformer_outputs[0]

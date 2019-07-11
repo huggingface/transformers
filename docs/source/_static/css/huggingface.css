@@ -6,6 +6,7 @@
 /* To keep the logo centered */
 .wy-side-scroll {
     width: auto;
+    font-size: 20px;
 }
 
 /* The div that holds the Hugging Face logo */
@@ -104,10 +105,34 @@ a {
     background-color: #6670FF;
 }
 
+
+/* Source spans */
+.rst-content .viewcode-link, .rst-content .viewcode-back{
+    color: #6670FF;
+    font-size: 110%;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.footer {
+    margin-top: 20px;
+}
+
+.footer__Social {
+    display: flex;
+    flex-direction: row;
+}
+
+.footer__CustomImage {
+    margin: 2px 5px 0 0;
+}
+
+
+
 /* FONTS */
 body{
     font-family: Calibre;
-    font-size: 20px;
+    font-size: 16px;
 }
 
 h1 {
