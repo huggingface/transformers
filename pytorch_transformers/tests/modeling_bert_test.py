@@ -26,7 +26,7 @@ from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
                                      BertForTokenClassification, BertForMultipleChoice)
 from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_tests_commons import (create_and_check_commons, ConfigTester, ids_tensor)
+from .modeling_common_test import (create_and_check_commons, ConfigTester, ids_tensor)
 
 
 class BertModelTest(unittest.TestCase):

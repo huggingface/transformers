@@ -22,7 +22,14 @@ import shutil
 import json
 import random
 
+import unittest
+import logging
+
 import torch
+
+from pytorch_transformers import PretrainedConfig, PreTrainedModel
+from pytorch_transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -242,6 +249,7 @@ class ConfigTester(object):
 
     def create_and_test_config_common_properties(self):
         config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, 'vocab_size'))
         self.parent.assertTrue(hasattr(config, 'hidden_size'))
         self.parent.assertTrue(hasattr(config, 'num_attention_heads'))
         self.parent.assertTrue(hasattr(config, 'num_hidden_layers'))
@@ -276,7 +284,6 @@ class GPTModelTester(object):
                     use_token_type_ids=True,
                     use_labels=True,
                     vocab_size=99,
-                    n_special=1,
                     n_positions=33,
                     hidden_size=32,
                     num_hidden_layers=5,
@@ -299,7 +306,6 @@ class GPTModelTester(object):
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.n_special = n_special
         self.n_positions = n_positions
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -316,7 +322,7 @@ class GPTModelTester(object):
         self.all_model_classes = (base_model_class, lm_head_model_class, double_head_model_class)
 
     def prepare_config_and_inputs(self):
-        total_num_tokens = self.vocab_size + self.n_special
+        total_num_tokens = self.vocab_size
         input_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], total_num_tokens)
 
         position_ids = None
@@ -338,7 +344,6 @@ class GPTModelTester(object):
 
         config = self.config_class(
             vocab_size_or_config_json_file=self.vocab_size,
-            n_special=self.n_special,
             n_positions=self.n_positions,
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
@@ -370,7 +375,7 @@ class GPTModelTester(object):
         outputs = model(input_ids, position_ids, token_type_ids, lm_labels)
         loss, lm_logits = outputs[:2]
 
-        total_voc = self.n_special + self.vocab_size
+        total_voc = self.vocab_size
         self.parent.assertListEqual(
             list(lm_logits.size()),
             [self.batch_size, self.n_choices, self.seq_length, total_voc])
@@ -400,7 +405,7 @@ class GPTModelTester(object):
         lm_loss, mc_loss, lm_logits, mc_logits = outputs[:4]
         loss = [lm_loss, mc_loss]
 
-        total_voc = self.n_special + self.vocab_size
+        total_voc = self.vocab_size
         self.parent.assertListEqual(
             list(lm_logits.size()),
             [self.batch_size, self.n_choices, self.seq_length, total_voc])
@@ -441,6 +446,30 @@ class GPTModelTester(object):
         self.create_and_check_commons(*config_and_inputs)
 
     def run_slow_tests(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        self.create_and_check_model_from_pretrained(*config_and_inputs)
+        self.create_and_check_model_from_pretrained()
 
+
+class ModelUtilsTest(unittest.TestCase):
+    def test_model_from_pretrained(self):
+        logging.basicConfig(level=logging.INFO)
+        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            config = BertConfig.from_pretrained(model_name)
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, PretrainedConfig)
+
+            model = BertModel.from_pretrained(model_name)
+            model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, PreTrainedModel)
+            for value in loading_info.values():
+                self.assertEqual(len(value), 0)
+
+            config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+            model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
+            self.assertEqual(model.config.output_attentions, True)
+            self.assertEqual(model.config.output_hidden_states, True)
+            self.assertEqual(model.config, config)
+
+
+if __name__ == "__main__":
+    unittest.main()
