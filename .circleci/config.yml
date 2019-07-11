@@ -4,6 +4,7 @@ jobs:
         working_directory: ~/pytorch-transformers
         docker:
             - image: circleci/python:3.5
+        resource_class: large
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
@@ -14,6 +15,7 @@ jobs:
             - run: codecov
     build_py2:
         working_directory: ~/pytorch-transformers
+        resource_class: large
         docker:
             - image: circleci/python:2.7
         steps:

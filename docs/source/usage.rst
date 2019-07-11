@@ -4,14 +4,14 @@ Usage
 BERT
 ^^^^
 
-Here is a quick-start example using ``BertTokenizer``\ , ``BertModel`` and ``BertForMaskedLM`` class with Google AI's pre-trained ``Bert base uncased`` model. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``BertTokenizer``\ , ``BertModel`` and ``BertForMaskedLM`` class with Google AI's pre-trained ``Bert base uncased`` model. See the `doc section <./model_doc/overview.html>`_ below for all the details on these classes.
 
 First let's prepare a tokenized input with ``BertTokenizer``
 
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
+   from pytorch_transformers import BertTokenizer, BertModel, BertForMaskedLM
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
@@ -82,14 +82,14 @@ And how to use ``BertForMaskedLM``
 OpenAI GPT
 ^^^^^^^^^^
 
-Here is a quick-start example using ``OpenAIGPTTokenizer``\ , ``OpenAIGPTModel`` and ``OpenAIGPTLMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``OpenAIGPTTokenizer``\ , ``OpenAIGPTModel`` and ``OpenAIGPTLMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <./model_doc/overview.html>`_ for all the details on these classes.
 
 First let's prepare a tokenized input with ``OpenAIGPTTokenizer``
 
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
+   from pytorch_transformers import OpenAIGPTTokenizer, OpenAIGPTModel, OpenAIGPTLMHeadModel
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
@@ -170,14 +170,14 @@ And how to use ``OpenAIGPTDoubleHeadsModel``
 Transformer-XL
 ^^^^^^^^^^^^^^
 
-Here is a quick-start example using ``TransfoXLTokenizer``\ , ``TransfoXLModel`` and ``TransfoXLModelLMHeadModel`` class with the Transformer-XL model pre-trained on WikiText-103. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``TransfoXLTokenizer``\ , ``TransfoXLModel`` and ``TransfoXLModelLMHeadModel`` class with the Transformer-XL model pre-trained on WikiText-103. See the `doc section <./model_doc/overview.html>`_ for all the details on these classes.
 
 First let's prepare a tokenized input with ``TransfoXLTokenizer``
 
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import TransfoXLTokenizer, TransfoXLModel, TransfoXLLMHeadModel
+   from pytorch_transformers import TransfoXLTokenizer, TransfoXLModel, TransfoXLLMHeadModel
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
@@ -246,14 +246,14 @@ And how to use ``TransfoXLLMHeadModel``
 OpenAI GPT-2
 ^^^^^^^^^^^^
 
-Here is a quick-start example using ``GPT2Tokenizer``\ , ``GPT2Model`` and ``GPT2LMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <#doc>`_ below for all the details on these classes.
+Here is a quick-start example using ``GPT2Tokenizer``\ , ``GPT2Model`` and ``GPT2LMHeadModel`` class with OpenAI's pre-trained  model. See the `doc section <./model_doc/overview.html>`_ for all the details on these classes.
 
 First let's prepare a tokenized input with ``GPT2Tokenizer``
 
 .. code-block:: python
 
    import torch
-   from pytorch_pretrained_bert import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
+   from pytorch_transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 
    # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
    import logging
