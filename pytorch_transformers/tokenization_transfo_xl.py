@@ -98,14 +98,14 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.build_vocab()
 
     def count_file(self, path, verbose=False, add_eos=False):
-        if verbose: print('counting file {} ...'.format(path))
+        if verbose: logger.info('counting file {} ...'.format(path))
         assert os.path.exists(path)
 
         sents = []
         with open(path, 'r', encoding='utf-8') as f:
             for idx, line in enumerate(f):
                 if verbose and idx > 0 and idx % 500000 == 0:
-                    print('    line {}'.format(idx))
+                    logger.info('    line {}'.format(idx))
                 symbols = self.tokenize(line, add_eos=add_eos)
                 self.counter.update(symbols)
                 sents.append(symbols)
@@ -116,10 +116,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         """
             sents : a list of sentences, each a list of tokenized symbols
         """
-        if verbose: print('counting {} sents ...'.format(len(sents)))
+        if verbose: logger.info('counting {} sents ...'.format(len(sents)))
         for idx, symbols in enumerate(sents):
             if verbose and idx > 0 and idx % 500000 == 0:
-                print('    line {}'.format(idx))
+                logger.info('    line {}'.format(idx))
             self.counter.update(symbols)
 
     def _build_from_file(self, vocab_file):
@@ -147,11 +147,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def build_vocab(self):
         if self.vocab_file:
-            print('building vocab from {}'.format(self.vocab_file))
+            logger.info('building vocab from {}'.format(self.vocab_file))
             self._build_from_file(self.vocab_file)
-            print('final vocab size {}'.format(len(self)))
+            logger.info('final vocab size {}'.format(len(self)))
         else:
-            print('building vocab with min_freq={}, max_size={}'.format(
+            logger.info('building vocab with min_freq={}, max_size={}'.format(
                 self.min_freq, self.max_size))
             self.idx2sym = []
             self.sym2idx = OrderedDict()
@@ -163,18 +163,18 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 if cnt < self.min_freq: break
                 self.add_symbol(sym)
 
-            print('final vocab size {} from {} unique tokens'.format(
+            logger.info('final vocab size {} from {} unique tokens'.format(
                 len(self), len(self.counter)))
 
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True,
             add_double_eos=False):
-        if verbose: print('encoding file {} ...'.format(path))
+        if verbose: logger.info('encoding file {} ...'.format(path))
         assert os.path.exists(path)
         encoded = []
         with open(path, 'r', encoding='utf-8') as f:
             for idx, line in enumerate(f):
                 if verbose and idx > 0 and idx % 500000 == 0:
-                    print('    line {}'.format(idx))
+                    logger.info('    line {}'.format(idx))
                 symbols = self.tokenize(line, add_eos=add_eos,
                     add_double_eos=add_double_eos)
                 encoded.append(self.convert_to_tensor(symbols))
@@ -185,11 +185,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return encoded
 
     def encode_sents(self, sents, ordered=False, verbose=False):
-        if verbose: print('encoding {} sents ...'.format(len(sents)))
+        if verbose: logger.info('encoding {} sents ...'.format(len(sents)))
         encoded = []
         for idx, symbols in enumerate(sents):
             if verbose and idx > 0 and idx % 500000 == 0:
-                print('    line {}'.format(idx))
+                logger.info('    line {}'.format(idx))
             encoded.append(self.convert_to_tensor(symbols))
 
         if ordered:
@@ -218,7 +218,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
-            # print('encounter unk {}'.format(sym))
+            # logger.info('encounter unk {}'.format(sym))
             # assert '<eos>' not in sym
             if hasattr(self, 'unk_idx'):
                 return self.sym2idx.get(sym, self.unk_idx)
@@ -544,14 +544,14 @@ def get_lm_corpus(datadir, dataset):
     fn = os.path.join(datadir, 'cache.pt')
     fn_pickle = os.path.join(datadir, 'cache.pkl')
     if os.path.exists(fn):
-        print('Loading cached dataset...')
+        logger.info('Loading cached dataset...')
         corpus = torch.load(fn_pickle)
     elif os.path.exists(fn):
-        print('Loading cached dataset from pickle...')
+        logger.info('Loading cached dataset from pickle...')
         with open(fn, "rb") as fp:
             corpus = pickle.load(fp)
     else:
-        print('Producing dataset {}...'.format(dataset))
+        logger.info('Producing dataset {}...'.format(dataset))
         kwargs = {}
         if dataset in ['wt103', 'wt2']:
             kwargs['special'] = ['<eos>']
