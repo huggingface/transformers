@@ -36,7 +36,7 @@ from .modeling_xlm import (XLMConfig, XLMModel,
 from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
                           PretrainedConfig, PreTrainedModel, prune_layer, Conv1D)
 
-from .optimization import BertAdam
-from .optimization_openai import OpenAIAdam
+from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
+                           WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
 
 from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
