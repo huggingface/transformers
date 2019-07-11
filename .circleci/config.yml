@@ -5,6 +5,7 @@ jobs:
         docker:
             - image: circleci/python:3.5
         resource_class: large
+        parallelism: 4
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
@@ -12,10 +13,12 @@ jobs:
             - run: sudo pip install spacy ftfy==4.4.3
             - run: sudo python -m spacy download en
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./examples/
             - run: codecov
     build_py2:
         working_directory: ~/pytorch-transformers
         resource_class: large
+        parallelism: 4
         docker:
             - image: circleci/python:2.7
         steps:
@@ -25,6 +28,7 @@ jobs:
             - run: sudo pip install spacy ftfy==4.4.3
             - run: sudo python -m spacy download en
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./examples/
             - run: codecov
 workflows:
   version: 2
