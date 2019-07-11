@@ -167,14 +167,14 @@ class AdamW(Optimizer):
 
                 # Decay the first and second moment running average coefficient
                 # In-place operations to update the averages at the same time
-                exp_avg.mul_(beta1).add_(1 - beta1, grad)
-                exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+                exp_avg.mul_(beta1).add_(1.0 - beta1, grad)
+                exp_avg_sq.mul_(beta2).addcmul_(1.0 - beta2, grad, grad)
                 denom = exp_avg_sq.sqrt().add_(group['eps'])
 
                 step_size = group['lr']
                 if group['correct_bias']:  # No bias correction for Bert
-                    bias_correction1 = 1 - beta1 ** state['step']
-                    bias_correction2 = 1 - beta2 ** state['step']
+                    bias_correction1 = 1.0 - beta1 ** state['step']
+                    bias_correction2 = 1.0 - beta2 ** state['step']
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
 
                 p.data.addcdiv_(-step_size, exp_avg, denom)
@@ -187,7 +187,7 @@ class AdamW(Optimizer):
                 # with the m/v parameters. This is equivalent to adding the square
                 # of the weights to the loss with plain (non-momentum) SGD.
                 # Add weight decay at the end (fixed version)
-                if group['weight_decay'] > 0:
+                if group['weight_decay'] > 0.0:
                     p.data.add_(-group['lr'] * group['weight_decay'], p.data)
 
         return loss
