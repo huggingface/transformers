@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class ConstantLRSchedule(LambdaLR):
     def __init__(self, optimizer, last_epoch=-1):
-        super(ConstantLR, self).__init__(optimizer, lambda x: x, last_epoch=last_epoch)
+        super(ConstantLRSchedule, self).__init__(optimizer, lambda x: x, last_epoch=last_epoch)
 
 class WarmupCosineSchedule(LambdaLR):
     """
@@ -128,7 +128,7 @@ class AdamW(Optimizer):
             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
                         correct_bias=correct_bias)
-        super(BertAdam, self).__init__(params, defaults)
+        super(AdamW, self).__init__(params, defaults)
 
     def step(self, closure=None):
         """Performs a single optimization step.
