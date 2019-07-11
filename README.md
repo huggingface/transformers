@@ -1620,20 +1620,10 @@ and unpack it to some directory `$GLUE_DIR`.
 ```shell
 export GLUE_DIR=/path/to/glue
 
-python run_xlnet_classifier.py \
- --task_name STS-B \
- --do_train \
- --do_eval \
- --data_dir $GLUE_DIR/STS-B/ \
- --max_seq_length 128 \
- --train_batch_size 8 \
- --gradient_accumulation_steps 1 \
- --learning_rate 5e-5 \
- --num_train_epochs 3.0 \
- --output_dir /tmp/mrpc_output/
+CUDA_VISIBLE_DEVICES=0,1,2,3 python ./examples/run_glue.py   --do_train  --task_name=sts-b     --data_dir=${GLUE_DIR}/STS-B   --output_dir=./proc_data/sts-b-110   --max_seq_length=128   --per_gpu_eval_batch_size=8   --per_gpu_train_batch_size=8   --max_steps=1200  --model_name=xlnet-large-cased   --overwrite_output_dir   --overwrite_cache --warmup_steps=120
 ```
 
-Our test ran on a few seeds with [the original implementation hyper-parameters](https://github.com/zihangdai/xlnet#1-sts-b-sentence-pair-relevance-regression-with-gpus) gave evaluation results between 84% and 88%.
+This hyper-parameters give evaluation results pearsonr > 0.918.
 
 ### Distributed training
 
