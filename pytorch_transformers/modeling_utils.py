@@ -104,7 +104,7 @@ class PretrainedConfig(object):
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info("Model config {}".format(config))
+        logger.info("Model config %s", config)
         return config
 
     @classmethod

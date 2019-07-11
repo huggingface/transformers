@@ -211,10 +211,6 @@ class XLNetConfig(PretrainedConfig):
                  layer_norm_eps=1e-12,
 
                  dropout=0.1,
-                 dropatt=0.1,
-                 init="normal",
-                 init_range=0.1,
-                 init_std=0.02,
                  mem_len=None,
                  reuse_len=None,
                  bi_data=False,
@@ -258,11 +254,6 @@ class XLNetConfig(PretrainedConfig):
 
             dropout: float, dropout rate.
             dropatt: float, dropout rate on attention probabilities.
-            init: str, the initialization scheme, either "normal" or "uniform".
-            init_range: float, initialize the parameters with a uniform distribution
-                in [-init_range, init_range]. Only effective when init="uniform".
-            init_std: float, initialize the parameters with a normal distribution
-                with mean 0 and stddev init_std. Only effective when init="normal".
             mem_len: int, the number of tokens to cache.
             reuse_len: int, the number of tokens in the currect batch to be cached
                 and reused in the future.
@@ -297,11 +288,7 @@ class XLNetConfig(PretrainedConfig):
             self.initializer_range = initializer_range
             self.layer_norm_eps = layer_norm_eps
 
-            self.init = init
-            self.init_range = init_range
-            self.init_std = init_std
             self.dropout = dropout
-            self.dropatt = dropatt
             self.mem_len = mem_len
             self.reuse_len = reuse_len
             self.bi_data = bi_data
