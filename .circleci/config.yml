@@ -10,8 +10,7 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install spacy ftfy==4.4.3
-            - run: sudo python -m spacy download en
+            - run: sudo pip install tensorboardX scikit-learn
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
             - run: codecov
@@ -25,8 +24,7 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install spacy ftfy==4.4.3
-            - run: sudo python -m spacy download en
+            - run: sudo pip install tensorboardX scikit-learn
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
             - run: codecov
