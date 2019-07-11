@@ -96,8 +96,10 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
-    for _ in trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]):
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
+    train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
+    for _ in train_iterator:
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
@@ -129,7 +131,7 @@ def train(args, train_dataset, model, tokenizer):
 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics
-                    if args.local_rank == -1:  # Only evaluate when single GPU otherwise metrics may not average well
+                    if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
@@ -148,8 +150,10 @@ def train(args, train_dataset, model, tokenizer):
                     logger.info("Saving model checkpoint to %s", output_dir)
 
             if args.max_steps > 0 and global_step > args.max_steps:
+                epoch_iterator.close()
                 break
         if args.max_steps > 0 and global_step > args.max_steps:
+            train_iterator.close()
             break
 
     return global_step, tr_loss / global_step
@@ -164,11 +168,10 @@ def evaluate(args, model, tokenizer, prefix=""):
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
-        """ Evaluate the model """
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
 
-        args.eval_batch_size = args.per_gpu_eval_batch_size * args.n_gpu
+        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         # Note that DistributedSampler samples randomly
         eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -177,7 +180,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         logger.info("***** Running evaluation {} *****".format(prefix))
         logger.info("  Num examples = %d", len(eval_dataset))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_loss = 0
+        eval_loss = 0.0
         nb_eval_steps = 0
         preds = None
         out_label_ids = None
@@ -287,6 +290,8 @@ def main():
                         help="Whether to run training.")
     parser.add_argument("--do_eval", action='store_true',
                         help="Whether to run eval on the dev set.")
+    parser.add_argument("--evaluate_during_training", action='store_true',
+                        help="Rul evaluation during training at each logging step.")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
@@ -364,7 +369,7 @@ def main():
                         datefmt = '%m/%d/%Y %H:%M:%S',
                         level = logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
+                    args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
     # Setup seeds
     random.seed(args.seed)
@@ -409,6 +414,8 @@ def main():
     elif args.n_gpu > 1:
         model = torch.nn.DataParallel(model)
 
+    logger.info("Training/evaluation parameters %s", args)
+
     # Training
     if args.do_train:
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
@@ -438,22 +445,22 @@ def main():
         model.to(args.device)
 
     # Evaluation
+    results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        checkpoints = [args.output_dir + './' + WEIGHTS_NAME]
+        checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
-        results = {}
         for checkpoint in checkpoints:
-            global_step = int(checkpoint.split('-')[-1])
+            global_step = checkpoint.split('-')[-1]
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=global_step)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
 
-        return results
+    return results
 
 
 if __name__ == "__main__":

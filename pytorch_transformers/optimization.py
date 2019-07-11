@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class ConstantLRSchedule(LambdaLR):
     def __init__(self, optimizer, last_epoch=-1):
-        super(ConstantLRSchedule, self).__init__(optimizer, lambda x: x, last_epoch=last_epoch)
+        super(ConstantLRSchedule, self).__init__(optimizer, lambda _: 1.0, last_epoch=last_epoch)
 
 class WarmupCosineSchedule(LambdaLR):
     """
@@ -42,10 +42,10 @@ class WarmupCosineSchedule(LambdaLR):
 
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / max(1, warmup_steps)
+                return float(step) / float(max(1.0, warmup_steps))
             else:
-                progress = (step - warmup_steps) / max(1, t_total - warmup_steps)   # progress after warmup
-                return 0.5 * (1. + math.cos(math.pi * cycles * 2 * progress))
+                progress = float(step - warmup_steps) / float(max(1, t_total - warmup_steps))   # progress after warmup
+                return 0.5 * (1. + math.cos(math.pi * float(cycles) * 2.0 * progress))
 
         super(WarmupCosineSchedule, self).__init__(optimizer, lr_lambda, last_epoch=last_epoch)
 
@@ -59,11 +59,12 @@ class WarmupCosineWithHardRestartsSchedule(LambdaLR):
 
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / max(1, warmup_steps)
+                return float(step) / float(max(1, warmup_steps))
             else:
-                progress = (step - warmup_steps) / max(1, t_total - warmup_steps)   # progress after warmup
-                ret = 0.5 * (1. + math.cos(math.pi * ((cycles * progress) % 1)))
-                return ret
+                progress = float(step - warmup_steps) / float(max(1, t_total - warmup_steps))   # progress after warmup
+                if progress >= 1.0:
+                    return 0.0
+                return 0.5 * (1. + math.cos(math.pi * ((float(cycles) * progress) % 1.0)))
 
         super(WarmupCosineWithHardRestartsSchedule, self).__init__(optimizer, lr_lambda, last_epoch=last_epoch)
 
@@ -77,7 +78,7 @@ class WarmupConstantSchedule(LambdaLR):
 
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / warmup_steps
+                return float(step) / float(max(1.0, warmup_steps))
             return 1.
 
         super(WarmupConstantSchedule, self).__init__(optimizer, lr_lambda, last_epoch=last_epoch)
@@ -92,8 +93,8 @@ class WarmupLinearSchedule(LambdaLR):
 
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / max(1, warmup_steps)
-            return (t_total - step) / max(1, t_total - warmup_steps)
+                return float(step) / float(max(1, warmup_steps))
+            return float(t_total - step) / float(max(1.0, t_total - warmup_steps))
 
         super(WarmupLinearSchedule, self).__init__(optimizer, lr_lambda, last_epoch=last_epoch)
 
