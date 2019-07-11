@@ -110,7 +110,7 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        print("Initialize PyTorch weight {}".format(name))
+        logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
 

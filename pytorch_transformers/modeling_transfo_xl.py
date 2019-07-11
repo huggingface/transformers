@@ -126,7 +126,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        print("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+        logger.error("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
     # Build TF to PyTorch weights loading map
@@ -136,7 +136,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
     init_vars = tf.train.list_variables(tf_path)
     tf_weights = {}
     for name, shape in init_vars:
-        print("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info("Loading TF weight {} with shape {}".format(name, shape))
         array = tf.train.load_variable(tf_path, name)
         tf_weights[name] = array
 
@@ -157,7 +157,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
-                print("Initialize PyTorch weight {} for layer {}".format(name, i))
+                logger.info("Initialize PyTorch weight {} for layer {}".format(name, i))
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
@@ -165,13 +165,13 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
-            print("Initialize PyTorch weight {}".format(name))
+            logger.info("Initialize PyTorch weight {}".format(name))
             pointer.data = torch.from_numpy(array)
         tf_weights.pop(name, None)
         tf_weights.pop(name + '/Adam', None)
         tf_weights.pop(name + '/Adam_1', None)
 
-    print("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
+    logger.info("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
     return model
 
 
