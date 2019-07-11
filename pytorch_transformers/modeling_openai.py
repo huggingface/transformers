@@ -431,7 +431,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
         num_special_tokens = kwargs.get('num_special_tokens', None)
         kwargs.pop('num_special_tokens', None)
 
-        model = super(PreTrainedModel, cls).from_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path, *inputs, **kwargs)
+        model = super(OpenAIGPTPreTrainedModel, cls).from_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Add additional embeddings for special tokens if needed
         # This step also make sure we are still sharing the output and input embeddings after loading weights
