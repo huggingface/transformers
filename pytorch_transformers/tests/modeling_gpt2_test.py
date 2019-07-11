@@ -28,7 +28,7 @@ import torch
 from pytorch_transformers import (GPT2Config, GPT2Model,
                                      GPT2LMHeadModel, GPT2DoubleHeadsModel)
 
-from .modeling_tests_commons import (create_and_check_commons, ConfigTester, GPTModelTester)
+from .modeling_common_test import (create_and_check_commons, ConfigTester, GPTModelTester)
 
 class GPT2ModelTest(unittest.TestCase):
 

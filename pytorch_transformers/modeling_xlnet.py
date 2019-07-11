@@ -313,6 +313,10 @@ class XLNetConfig(PretrainedConfig):
                              "or the path to a pretrained model config file (str)")
 
     @property
+    def vocab_size(self):
+        return self.n_token
+
+    @property
     def hidden_size(self):
         return self.d_model
 
@@ -654,6 +658,9 @@ class XLNetModel(XLNetPreTrainedModel):
 
         self.apply(self.init_weights)
 
+    def _resize_token_embeddings(self, new_num_tokens):
+        self.word_embedding = self._get_resized_embeddings(self.word_embedding, new_num_tokens)
+
     def _prune_heads(self, heads_to_prune):
         logger.info("Head pruning is not implemented for XLNet")
         pass
@@ -970,12 +977,9 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         super(XLNetLMHeadModel, self).__init__(config)
         self.attn_type = config.attn_type
         self.same_length = config.same_length
-        self.torchscript = config.torchscript
 
         self.transformer = XLNetModel(config)
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
-
-        # Tie weights
 
         self.apply(self.init_weights)
         self.tie_weights()
@@ -983,7 +987,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def tie_weights(self):
         """ Make sure we are sharing the embeddings
         """
-        if self.torchscript:
+        if self.config.torchscript:
             self.lm_loss.weight = nn.Parameter(self.transformer.word_embedding.weight.clone())
         else:
             self.lm_loss.weight = self.transformer.word_embedding.weight

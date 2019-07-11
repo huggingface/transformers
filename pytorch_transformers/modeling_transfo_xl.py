@@ -288,6 +288,10 @@ class TransfoXLConfig(PretrainedConfig):
                              "or the path to a pretrained model config file (str)")
 
     @property
+    def vocab_size(self):
+        return self.n_token
+
+    @property
     def hidden_size(self):
         return self.d_model
 
@@ -997,6 +1001,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                     self.n_layer, self.max_klen, self.n_head, self.d_head))
 
         self.apply(self.init_weights)
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        raise NotImplementedError
 
     def backward_compatible(self):
         self.sample_softmax = -1
