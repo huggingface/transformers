@@ -423,7 +423,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
         """
         num_special_tokens = kwargs.pop('num_special_tokens', None)
 
-        model = PreTrainedModel.from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs)
+        model = super(PreTrainedModel, cls).from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Add additional embeddings for special tokens if needed
         # This step also make sure we are still sharing the output and input embeddings after loading weights
