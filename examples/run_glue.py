@@ -18,46 +18,37 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
+import glob
 import logging
 import os
 import random
-from tqdm import tqdm, trange
 
 import numpy as np
-
 import torch
+from tensorboardX import SummaryWriter
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
 
-from tensorboardX import SummaryWriter
-
-from pytorch_transformers import (BertForSequenceClassification, XLNetForSequenceClassification,
-                                  XLMForSequenceClassification, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                  XLNET_PRETRAINED_MODEL_ARCHIVE_MAP, XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
-from pytorch_transformers import (BertTokenizer, XLNetTokenizer,
-                                  XLMTokenizer)
+from pytorch_transformers import WEIGHTS_NAME
+from pytorch_transformers import (BertConfig, BertForSequenceClassification,
+                                  BertTokenizer, XLMConfig,
+                                  XLMForSequenceClassification, XLMTokenizer,
+                                  XLNetConfig, XLNetForSequenceClassification,
+                                  XLNetTokenizer)
 from pytorch_transformers.optimization import BertAdam
-
-from utils_glue import processors, output_modes, convert_examples_to_features, compute_metrics
-
+from utils_glue import (compute_metrics, convert_examples_to_features,
+                        output_modes, processors)
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum((tuple(m.keys()) for m in (BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                            XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                            XLM_PRETRAINED_MODEL_ARCHIVE_MAP)), ())
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
 
 MODEL_CLASSES = {
-    'bert': BertForSequenceClassification,
-    'xlnet': XLNetForSequenceClassification,
-    'xlm': XLMForSequenceClassification,
-}
-
-TOKENIZER_CLASSES = {
-    'bert': BertTokenizer,
-    'xlnet': XLNetTokenizer,
-    'xlm': XLMTokenizer,
+    'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
+    'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
+    'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
 }
 
 def train(args, train_dataset, model, tokenizer):
@@ -130,14 +121,26 @@ def train(args, train_dataset, model, tokenizer):
                 optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
+
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                    # Log metrics
                     if args.local_rank == -1:  # Only evaluate on single GPU otherwise metrics may not average well
-                        results = evaluate(args, model, tokenizer)
+                        results = evaluate(args, model, tokenizer, prefix=global_step)
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
                     tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
+
+                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                    # Save model checkpoint
+                    output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+                    model_to_save.save_pretrained(output_dir)
+                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+
             if args.max_steps > 0 and global_step > args.max_steps:
                 break
         if args.max_steps > 0 and global_step > args.max_steps:
@@ -146,7 +149,7 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer):
+def evaluate(args, model, tokenizer, prefix=""):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
     eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
@@ -202,7 +205,7 @@ def evaluate(args, model, tokenizer):
 
         output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
+            logger.info("***** Eval results {} *****".format(prefix))
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
@@ -264,6 +267,10 @@ def main():
                         help="The output directory where the model predictions and checkpoints will be written.")
 
     ## Other parameters
+    parser.add_argument("--config_name", default="", type=str,
+                        help="Pretrained config name or path if not the same as model_name")
+    parser.add_argument("--tokenizer_name", default="", type=str,
+                        help="Pretrained tokenizer name or path if not the same as model_name")
     parser.add_argument("--cache_dir", default="", type=str,
                         help="Where do you want to store the pre-trained models downloaded from s3")
     parser.add_argument("--max_seq_length", default=128, type=int,
@@ -293,8 +300,12 @@ def main():
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training with linear learning rate warmup (0.1 = 10%% of training).")
 
-    parser.add_argument('--logging_steps', type=int, default=100,
+    parser.add_argument('--logging_steps', type=int, default=50,
                         help="Log every X updates steps.")
+    parser.add_argument('--save_steps', type=int, default=50,
+                        help="Save checkpoint every X updates steps.")
+    parser.add_argument("--eval_all_checkpoints", action='store_true',
+                        help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
     parser.add_argument('--overwrite_output_dir', action='store_true',
@@ -363,11 +374,15 @@ def main():
         # Make sure only the first process in distributed training will download model & vocab
         torch.distributed.barrier()
 
-    args.model_type = args.model_name.lower().split('-')[0]
-    tokenizer_class = TOKENIZER_CLASSES[args.model_type]
-    model_class = MODEL_CLASSES[args.model_type]
-    tokenizer = tokenizer_class.from_pretrained(args.model_name, do_lower_case=args.do_lower_case)
-    model = model_class.from_pretrained(args.model_name, num_labels=num_labels)
+    args.model_type = ""
+    for key in MODEL_CLASSES:
+        if key in args.model_name.lower():
+            args.model_type = key  # take the first match in model types
+            break
+    config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name, num_labels=num_labels, finetuning_task=args.task_name)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name, do_lower_case=args.do_lower_case)
+    model = model_class.from_pretrained(args.model_name, from_tf=bool('.ckpt' in args.model_name), config=config)
 
     if args.local_rank == 0:
         torch.distributed.barrier()
@@ -410,8 +425,17 @@ def main():
 
     # Evaluation
     if args.do_eval and args.local_rank in [-1, 0]:
-        results = evaluate(args, model, tokenizer)
-
+        checkpoints = [args.output_dir + './' + WEIGHTS_NAME]
+        if args.eval_all_checkpoints:
+            checkpoints = list(os.path.dirname(c) for c in glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True))
+        logger.info("Evaluate the following checkpoints: %s", checkpoints)
+        results = {}
+        for checkpoint in checkpoints:
+            global_step = int(checkpoints.split('-')[-1])
+            model = model_class.from_pretrained(checkpoints)
+            model.to(args.device)
+            result = evaluate(args, model, tokenizer, prefix=global_step)
+            result = dict(n + '_{}'.format())
         return results
 
 
