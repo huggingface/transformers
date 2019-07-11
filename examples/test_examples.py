@@ -56,7 +56,8 @@ class ExamplesTests(unittest.TestCase):
                     "--learning_rate=1e-4",
                     "--max_steps=10",
                     "--warmup_steps=2",
-                    "--overwrite_output_dir"]
+                    "--overwrite_output_dir",
+                    "--seed=42"]
         model_name = "--model_name=bert-base-uncased"
         with patch.object(sys, 'argv', testargs + [model_name]):
             result = run_glue.main()

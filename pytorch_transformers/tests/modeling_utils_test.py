@@ -30,6 +30,7 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertIsNotNone(config)
             self.assertIsInstance(config, PretrainedConfig)
 
+            model = BertModel.from_pretrained(model_name)
             model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, PreTrainedModel)

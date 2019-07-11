@@ -49,7 +49,7 @@ class PretrainedConfig(object):
         self.torchscript = kwargs.pop('torchscript', False)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *input, **kwargs):
         """
         Instantiate a PretrainedConfig from a pre-trained model configuration.
 
