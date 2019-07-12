@@ -556,7 +556,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
             if len(nbest)==1:
                 nbest.insert(0,
                     _NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
-                
+
         # In very rare edge cases we could have no valid predictions. So we
         # just create a nonce prediction in this case to avoid failure.
         if not nbest:
@@ -608,6 +608,8 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
     if version_2_with_negative:
         with open(output_null_log_odds_file, "w") as writer:
             writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
+
+    return all_predictions
 
 
 def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
