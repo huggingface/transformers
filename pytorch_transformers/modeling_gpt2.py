@@ -566,7 +566,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         if self.config.torchscript:
             self.lm_head.weight = nn.Parameter(input_embeddings.clone())
         else:
-            self.lm_head.weight = input_embeddings  # Tied weights
+            self.lm_head = self.transformer.wte  # Tied weights
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None, head_mask=None):
         """
@@ -662,7 +662,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         if self.config.torchscript:
             self.lm_head.weight = nn.Parameter(input_embeddings.clone())
         else:
-            self.lm_head.weight = input_embeddings  # Tied weights
+            self.lm_head = self.transformer.wte  # Tied weights
 
     def forward(self, input_ids, mc_token_ids=None, lm_labels=None, mc_labels=None, token_type_ids=None,
                 position_ids=None, past=None, head_mask=None):
