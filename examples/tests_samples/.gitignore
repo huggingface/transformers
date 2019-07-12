@@ -2,4 +2,5 @@
 cache*
 temp*
 !*.tsv
+!*.json
 !.gitignore

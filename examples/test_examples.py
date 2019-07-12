@@ -28,6 +28,7 @@ except ImportError:
     from mock import patch
 
 import run_glue
+import run_squad
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -63,6 +64,31 @@ class ExamplesTests(unittest.TestCase):
             result = run_glue.main()
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
+
+    def test_run_squad(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        testargs = ["run_squad.py",
+                    "--train_file=./examples/tests_samples/SQUAD/dev-v2.0-small.json",
+                    "--predict_file=./examples/tests_samples/SQUAD/dev-v2.0-small.json",
+                    "--model_name=bert-base-uncased",
+                    "--output_dir=./examples/tests_samples/temp_dir",
+                    "--max_steps=10",
+                    "--warmup_steps=2",
+                    "--do_train",
+                    "--do_eval",
+                    "--version_2_with_negative",
+                    "--learning_rate=1e-4",
+                    "--per_gpu_train_batch_size=2",
+                    "--per_gpu_eval_batch_size=1",
+                    "--overwrite_output_dir",
+                    "--seed=42"]
+        model_name = "--model_name=bert-base-uncased"
+        with patch.object(sys, 'argv', testargs + [model_name]):
+            result = run_squad.main()
+            self.assertGreaterEqual(result['f1'], 30)
+            self.assertGreaterEqual(result['exact'], 30)
 
 
 if __name__ == "__main__":
