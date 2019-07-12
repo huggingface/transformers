@@ -288,6 +288,14 @@ class TransfoXLConfig(PretrainedConfig):
                              "or the path to a pretrained model config file (str)")
 
     @property
+    def vocab_size(self):
+        return self.n_token
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self.n_token = value
+
+    @property
     def hidden_size(self):
         return self.d_model
 
@@ -998,6 +1006,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         self.apply(self.init_weights)
 
+    def _resize_token_embeddings(self, new_num_tokens):
+        return self.word_emb
+
     def backward_compatible(self):
         self.sample_softmax = -1
 
@@ -1273,13 +1284,20 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             if self.config.tie_weight:
                 for i in range(len(self.crit.out_layers)):
-                    self.crit.out_layers[i].weight = self.transformer.word_emb.emb_layers[i].weight
+                    self._tie_or_clone_weights(self.crit.out_layers[i],
+                                               self.transformer.word_emb.emb_layers[i])
             if self.config.tie_projs:
                 for i, tie_proj in enumerate(self.config.tie_projs):
                     if tie_proj and self.config.div_val == 1 and self.config.d_model != self.config.d_embed:
-                        self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[0]
+                        if self.config.torchscript:
+                            self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[0].clone())
+                        else:
+                            self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[0]
                     elif tie_proj and self.config.div_val != 1:
-                        self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
+                        if self.config.torchscript:
+                            self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[i].clone())
+                        else:
+                            self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
 
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
