@@ -28,9 +28,15 @@ import torch
 from pytorch_transformers import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
 from pytorch_transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_tests_commons import ConfigTester, create_and_check_commons, ids_tensor
+from .modeling_common_test import ConfigTester, CommonTestCases, ids_tensor
 
-class TransfoXLModelTest(unittest.TestCase):
+class TransfoXLModelTest(CommonTestCases.CommonModelTester):
+
+    all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel)
+    test_pruning = False
+    test_torchscript = False
+    test_resize_embeddings = False
+
     class TransfoXLModelTester(object):
 
         def __init__(self,
@@ -52,7 +58,6 @@ class TransfoXLModelTest(unittest.TestCase):
                      num_hidden_layers=5,
                      scope=None,
                      seed=1,
-                     all_model_classes=(TransfoXLModel, TransfoXLLMHeadModel),
                      ):
             self.parent = parent
             self.batch_size = batch_size
@@ -73,7 +78,6 @@ class TransfoXLModelTest(unittest.TestCase):
             self.num_hidden_layers = num_hidden_layers
             self.scope = scope
             self.seed = seed
-            self.all_model_classes = all_model_classes
 
         def prepare_config_and_inputs(self):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -171,16 +175,31 @@ class TransfoXLModelTest(unittest.TestCase):
                 list(list(mem.size()) for mem in result["mems_2"]),
                 [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
-        def create_and_check_transfo_xl_commons(self, config, input_ids_1, input_ids_2, lm_labels):
+        def prepare_config_and_inputs_for_common(self):
+            config_and_inputs = self.prepare_config_and_inputs()
+            (config, input_ids_1, input_ids_2, lm_labels) = config_and_inputs
             inputs_dict = {'input_ids': input_ids_1}
-            create_and_check_commons(self, config, inputs_dict, test_pruning=False, test_torchscript=False)
+            return config, inputs_dict
 
-    def test_default(self):
-        self.run_tester(TransfoXLModelTest.TransfoXLModelTester(self))
+
+    def setUp(self):
+        self.model_tester = TransfoXLModelTest.TransfoXLModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=TransfoXLConfig, d_embed=37)
 
     def test_config(self):
-        config_tester = ConfigTester(self, config_class=TransfoXLConfig, d_embed=37)
-        config_tester.run_common_tests()
+        self.config_tester.run_common_tests()
+
+    def test_transfo_xl_model(self):
+        self.model_tester.set_seed()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        output_result = self.model_tester.create_transfo_xl_model(*config_and_inputs)
+        self.model_tester.check_transfo_xl_model_output(output_result)
+
+    def test_transfo_xl_lm_head(self):
+        self.model_tester.set_seed()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
+        self.model_tester.check_transfo_xl_lm_head_output(output_result)
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
@@ -189,23 +208,6 @@ class TransfoXLModelTest(unittest.TestCase):
             model = TransfoXLModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
-
-    def run_tester(self, tester):
-        config_and_inputs = tester.prepare_config_and_inputs()
-
-        tester.set_seed()
-        config_and_inputs = tester.prepare_config_and_inputs()
-        output_result = tester.create_transfo_xl_model(*config_and_inputs)
-        tester.check_transfo_xl_model_output(output_result)
-
-        tester.set_seed()
-        config_and_inputs = tester.prepare_config_and_inputs()
-        output_result = tester.create_transfo_xl_lm_head(*config_and_inputs)
-        tester.check_transfo_xl_lm_head_output(output_result)
-
-        tester.set_seed()
-        config_and_inputs = tester.prepare_config_and_inputs()
-        tester.create_and_check_transfo_xl_commons(*config_and_inputs)
 
 
 if __name__ == "__main__":

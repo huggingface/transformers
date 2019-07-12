@@ -104,7 +104,6 @@ class GPT2Config(PretrainedConfig):
 
     Args:
         vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `GPT2Model` or a configuration json file.
-        n_special: The number of special tokens to learn during fine-tuning ('[SEP]', '[CLF]', ...)
         n_positions: Number of positional embeddings.
         n_ctx: Size of the causal mask (usually same as n_positions).
         n_embd: Dimensionality of the embeddings and hidden states.
@@ -119,14 +118,12 @@ class GPT2Config(PretrainedConfig):
         embd_pdrop: The dropout ratio for the embeddings.
         initializer_range: The sttdev of the truncated_normal_initializer for
             initializing all weight matrices.
-        predict_special_tokens: should we predict special tokens (when the model has a LM head)
     """
     pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
         self,
         vocab_size_or_config_json_file=50257,
-        n_special=0,
         n_positions=1024,
         n_ctx=1024,
         n_embd=768,
@@ -137,7 +134,6 @@ class GPT2Config(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        predict_special_tokens=True,
 
         num_labels=1,
         summary_type='token_ids',
@@ -151,7 +147,6 @@ class GPT2Config(PretrainedConfig):
 
         Args:
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `GPT2Model` or a configuration json file.
-            n_special: The number of special tokens to learn during fine-tuning ('[SEP]', '[CLF]', ...)
             n_positions: Number of positional embeddings.
             n_ctx: Size of the causal mask (usually same as n_positions).
             n_embd: Dimensionality of the embeddings and hidden states.
@@ -166,7 +161,6 @@ class GPT2Config(PretrainedConfig):
             embd_pdrop: The dropout ratio for the embeddings.
             initializer_range: The sttdev of the truncated_normal_initializer for
                 initializing all weight matrices.
-            predict_special_tokens: should we predict special tokens (when the model has a LM head)
         """
         super(GPT2Config, self).__init__(**kwargs)
 
@@ -178,7 +172,6 @@ class GPT2Config(PretrainedConfig):
                 self.__dict__[key] = value
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
-            self.n_special = n_special
             self.n_ctx = n_ctx
             self.n_positions = n_positions
             self.n_embd = n_embd
@@ -189,7 +182,6 @@ class GPT2Config(PretrainedConfig):
             self.attn_pdrop = attn_pdrop
             self.layer_norm_epsilon = layer_norm_epsilon
             self.initializer_range = initializer_range
-            self.predict_special_tokens = predict_special_tokens
 
             self.num_labels = num_labels
             self.summary_type = summary_type
@@ -202,10 +194,6 @@ class GPT2Config(PretrainedConfig):
                 "First argument must be either a vocabulary size (int)"
                 "or the path to a pretrained model config file (str)"
             )
-
-    @property
-    def total_tokens_embeddings(self):
-        return self.vocab_size + self.n_special
 
     @property
     def hidden_size(self):
@@ -347,34 +335,6 @@ class Block(nn.Module):
         return outputs  # x, present, (attentions)
 
 
-class GPT2LMHead(nn.Module):
-    """ Language Model Head for the transformer """
-
-    def __init__(self, model_embeddings_weights, config):
-        super(GPT2LMHead, self).__init__()
-        self.n_embd = config.n_embd
-        self.vocab_size = config.vocab_size
-        self.predict_special_tokens = config.predict_special_tokens
-        self.torchscript = config.torchscript
-        embed_shape = model_embeddings_weights.shape
-        self.decoder = nn.Linear(embed_shape[1], embed_shape[0], bias=False)
-        self.set_embeddings_weights(model_embeddings_weights)
-
-    def set_embeddings_weights(self, model_embeddings_weights, predict_special_tokens=True):
-        self.predict_special_tokens = predict_special_tokens
-        # Export to TorchScript can't handle parameter sharing so we are cloning them.
-        if self.torchscript:
-            self.decoder.weight = nn.Parameter(model_embeddings_weights.clone())
-        else:
-            self.decoder.weight = model_embeddings_weights  # Tied weights
-
-    def forward(self, hidden_state):
-        lm_logits = self.decoder(hidden_state)
-        if not self.predict_special_tokens:
-            lm_logits = lm_logits[..., :self.vocab_size]
-        return lm_logits
-
-
 class GPT2PreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
@@ -400,36 +360,6 @@ class GPT2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        """
-        Instantiate a GPT2PreTrainedModel from a pre-trained model file or a pytorch state dict.
-        Download and cache the pre-trained model file if needed.
-
-        Params:
-            pretrained_model_name_or_path: either:
-                - a str with the name of a pre-trained model to load selected in the list of:
-                    . `gpt2`
-                - a path or url to a pretrained model archive containing:
-                    . `gpt2_config.json` a configuration file for the model
-                    . `pytorch_model.bin` a PyTorch dump of a GPT2Model instance
-                - a path or url to a pretrained model archive containing:
-                    . `gpt2_config.json` a configuration file for the model
-                    . a TensorFlow checkpoint with trained weights
-            from_tf: should we load the weights from a locally saved TensorFlow checkpoint
-            cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-            state_dict: an optional state dictionary (collections.OrderedDict object) to use instead of pre-trained models
-            *inputs, **kwargs: additional input for the specific GPT2 class
-        """
-        num_special_tokens = kwargs.pop('num_special_tokens', None)
-
-        model = super(GPT2PreTrainedModel, cls).from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
-        # Add additional embeddings for special tokens if needed
-        # This step also make sure we are still sharing the output and input embeddings after loading weights
-        model.set_num_special_tokens(num_special_tokens)
-        return model
-
 
 class GPT2Model(GPT2PreTrainedModel):
     """OpenAI GPT-2 model ("Language Models are Unsupervised Multitask Learners").
@@ -447,13 +377,13 @@ class GPT2Model(GPT2PreTrainedModel):
          config.vocab_size - 1,                                     ______________________
          config.vocab_size,
          ...                                                        -> special embeddings
-         config.vocab_size + config.n_special - 1]                  ______________________
+         config.vocab_size + n_special - 1]                  ______________________
 
-    where total_tokens_embeddings can be obtained as config.total_tokens_embeddings and is equal to
+    where total_tokens_embeddings is equal to
 
     ::
 
-        total_tokens_embeddings = config.vocab_size + config.n_special
+        total_tokens_embeddings = vocab_size + n_special
 
     You should use the associated indices to index the embeddings.
 
@@ -474,7 +404,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
-        self.wte = nn.Embedding(config.total_tokens_embeddings, config.n_embd)
+        self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
@@ -482,26 +412,9 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.apply(self.init_weights)
 
-    def set_num_special_tokens(self, num_special_tokens=None):
-        """
-        Update input embeddings with new embedding matrix if needed.
-
-        Args:
-            num_special_tokens: Special tokens to be added to the embedding matrix
-
-        TODO Lysandre filled args
-        """
-        if num_special_tokens is None or self.config.n_special == num_special_tokens:
-            return
-        # Update config
-        self.config.n_special = num_special_tokens
-        # Build new embeddings and initialize all new embeddings (in particular the special tokens)
-        old_embed = self.wte
-        self.wte = nn.Embedding(self.config.total_tokens_embeddings, self.config.n_embd)
-        self.wte.to(old_embed.weight.device)
-        self.init_weights(self.wte)
-        # Copy word embeddings from the previous weights
-        self.wte.weight.data[:self.config.vocab_size, :] = old_embed.weight.data[:self.config.vocab_size, :]
+    def _resize_token_embeddings(self, new_num_tokens):
+        self.wte = self._get_resized_embeddings(self.wte, new_num_tokens)
+        return self.wte
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -641,23 +554,17 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def __init__(self, config):
         super(GPT2LMHeadModel, self).__init__(config)
         self.transformer = GPT2Model(config)
-        self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+
         self.apply(self.init_weights)
+        self.tie_weights()
 
-    def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
+    def tie_weights(self):
+        """ Make sure we are sharing the input and output embeddings.
+            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
         """
-        Update input and output embeddings with new embedding matrix. Make sure we are sharing the embeddings.
-
-        Args:
-            num_special_tokens: Special tokens to be added to the embedding matrix
-            predict_special_tokens: if set to True, the model will try and predict the specified ``num_special_tokens``.
-                Defaults to True.
-
-        TODO Lysandre filled args
-        """
-        self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
-        self.transformer.set_num_special_tokens(num_special_tokens)
-        self.lm_head.set_embeddings_weights(self.transformer.wte.weight, predict_special_tokens=predict_special_tokens)
+        self._tie_or_clone_weights(self.lm_head,
+                                   self.transformer.wte)
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None, head_mask=None):
         """
@@ -740,25 +647,17 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def __init__(self, config):
         super(GPT2DoubleHeadsModel, self).__init__(config)
         self.transformer = GPT2Model(config)
-        self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
         self.apply(self.init_weights)
 
-    def set_num_special_tokens(self, num_special_tokens, predict_special_tokens=True):
+    def tie_weights(self):
+        """ Make sure we are sharing the input and output embeddings.
+            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
         """
-        Update input and output embeddings with new embedding matrix.Make sure we are sharing the embeddings
-
-        Args:
-            num_special_tokens: Special tokens to be added to the embedding matrix
-            predict_special_tokens: if set to True, the model will try and predict the specified ``num_special_tokens``.
-                Defaults to True.
-
-        TODO Lysandre filled args
-        """
-        self.config.predict_special_tokens = self.transformer.config.predict_special_tokens = predict_special_tokens
-        self.transformer.set_num_special_tokens(num_special_tokens)
-        self.lm_head.set_embeddings_weights(self.transformer.wte.weight, predict_special_tokens=predict_special_tokens)
+        self._tie_or_clone_weights(self.lm_head,
+                                   self.transformer.wte)
 
     def forward(self, input_ids, mc_token_ids=None, lm_labels=None, mc_labels=None, token_type_ids=None,
                 position_ids=None, past=None, head_mask=None):
