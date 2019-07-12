@@ -587,7 +587,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         if self.config.torchscript:
             self.lm_head.weight = nn.Parameter(input_embeddings.clone())
         else:
-            self.lm_head = self.transformer.tokens_embed  # Tied weights
+            self.lm_head.weight = input_embeddings  # Tied weights
 
     def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, head_mask=None):
         """
@@ -700,7 +700,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         if self.config.torchscript:
             self.lm_head.weight = nn.Parameter(input_embeddings.clone())
         else:
-            self.lm_head = self.transformer.tokens_embed  # Tied weights
+            self.lm_head.weight = input_embeddings  # Tied weights
 
     def forward(self, input_ids, mc_token_ids=None, lm_labels=None, mc_labels=None, token_type_ids=None,
                 position_ids=None, head_mask=None):
