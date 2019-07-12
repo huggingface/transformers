@@ -177,11 +177,11 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        return self.encoder.get(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
-        return self.decoder.get(index, self.unk_token)
+        return self.decoder.get(index)
 
     def _convert_ids_to_string(self, tokens_ids):
         """Converts a sequence of ids in a string."""
