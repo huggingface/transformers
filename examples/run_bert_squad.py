@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Run BERT on SQuAD."""
+""" Finetuning a question-answering Bert model on SQuAD."""
 
 from __future__ import absolute_import, division, print_function
 
