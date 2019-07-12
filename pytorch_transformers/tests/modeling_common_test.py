@@ -39,207 +39,471 @@ def _config_zero_init(config):
             setattr(configs_no_init, key, 0.0)
     return configs_no_init
 
-def _create_and_check_torchscript_output_attentions(tester, model_classes, config, inputs_dict):
-    config.output_attentions = True
-    _create_and_check_torchscript(tester, model_classes, config, inputs_dict)
+class CommonTestCases:
 
-def _create_and_check_torchscript_output_hidden_state(tester, model_classes, config, inputs_dict):
-    config.output_hidden_states = True
-    _create_and_check_torchscript(tester, model_classes, config, inputs_dict)
+    class CommonModelTester(unittest.TestCase):
 
-def _create_and_check_torchscript(tester, model_classes, config, inputs_dict):
-    configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-    configs_no_init.torchscript = True
-    for model_class in model_classes:
-        model = model_class(config=configs_no_init)
-        model.eval()
-        inputs = inputs_dict['input_ids']  # Let's keep only input_ids
+        model_tester = None
+        all_model_classes = ()
+        test_torchscript = True
+        test_pruning = True
+        test_resize_embeddings = True
 
-        try:
-            torch.jit.trace(model, inputs)
-        except RuntimeError:
-            tester.parent.fail("Couldn't trace module.")
+        def test_initialization(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        try:
-            traced_gpt2 = torch.jit.trace(model, inputs)
-            torch.jit.save(traced_gpt2, "traced_model.pt")
-        except RuntimeError:
-            tester.parent.fail("Couldn't save module.")
+            configs_no_init = _config_zero_init(config)
+            for model_class in self.all_model_classes:
+                model = model_class(config=configs_no_init)
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        self.assertIn(param.data.mean().item(), [0.0, 1.0],
+                        msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
 
-        try:
-            loaded_model = torch.jit.load("traced_model.pt")
-            os.remove("traced_model.pt")
-        except ValueError:
-            tester.parent.fail("Couldn't load module.")
+        def test_attention_outputs(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model.eval()
-        loaded_model.eval()
+            for model_class in self.all_model_classes:
+                config.output_attentions = True
+                config.output_hidden_states = False
+                model = model_class(config)
+                model.eval()
+                outputs = model(**inputs_dict)
+                attentions = outputs[-1]
+                self.assertEqual(model.config.output_attentions, True)
+                self.assertEqual(model.config.output_hidden_states, False)
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads,
+                    self.model_tester.seq_length,
+                    self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                out_len = len(outputs)
 
-        model_params = model.parameters()
-        loaded_model_params = loaded_model.parameters()
+                # Check attention is always last and order is fine
+                config.output_attentions = True
+                config.output_hidden_states = True
+                model = model_class(config)
+                model.eval()
+                outputs = model(**inputs_dict)
+                self.assertEqual(out_len+1, len(outputs))
+                self.assertEqual(model.config.output_attentions, True)
+                self.assertEqual(model.config.output_hidden_states, True)
 
-        models_equal = True
-        for p1, p2 in zip(model_params, loaded_model_params):
-            if p1.data.ne(p2.data).sum() > 0:
-                models_equal = False
+                attentions = outputs[-1]
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads,
+                    self.model_tester.seq_length,
+                    self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
 
-        tester.parent.assertTrue(models_equal)
+        def test_torchscript(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-def _create_and_check_initialization(tester, model_classes, config, inputs_dict):
-    configs_no_init = _config_zero_init(config)
-    for model_class in model_classes:
-        model = model_class(config=configs_no_init)
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                tester.parent.assertIn(param.data.mean().item(), [0.0, 1.0],
-                                       msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
+            self._create_and_check_torchscript(config, inputs_dict)
 
-def _create_and_check_for_headmasking(tester, model_classes, config, inputs_dict):
-    configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-    for model_class in model_classes:
-        config.output_attentions = True
-        config.output_hidden_states = True
-        model = model_class(config=configs_no_init)
-        model.eval()
+        def test_torchscript_output_attentions(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Prepare head_mask
-        # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior) 
-        head_mask = torch.ones(tester.num_hidden_layers, tester.num_attention_heads)
-        head_mask[0, 0] = 0
-        head_mask[-1, :-1] = 0
-        head_mask.requires_grad_(requires_grad=True)
-        inputs = inputs_dict.copy()
-        inputs['head_mask'] = head_mask
+            config.output_attentions = True
+            self._create_and_check_torchscript(config, inputs_dict)
 
-        outputs = model(**inputs)
+        def test_torchscript_output_hidden_state(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Test that we can get a gradient back for importance score computation
-        output = sum(t.sum() for t in outputs[0])
-        output = output.sum()
-        output.backward()
-        multihead_outputs = head_mask.grad
+            config.output_hidden_states = True
+            self._create_and_check_torchscript(config, inputs_dict)
 
-        attentions = outputs[-1]
-        hidden_states = outputs[-2]
+        def _create_and_check_torchscript(self, config, inputs_dict):
+            if not self.test_torchscript:
+                return
 
-        # Remove Nan
+            configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+            configs_no_init.torchscript = True
+            for model_class in self.all_model_classes:
+                model = model_class(config=configs_no_init)
+                model.eval()
+                inputs = inputs_dict['input_ids']  # Let's keep only input_ids
 
-        tester.parent.assertIsNotNone(multihead_outputs)
-        tester.parent.assertEqual(len(multihead_outputs), tester.num_hidden_layers)
-        tester.parent.assertAlmostEqual(
-            attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
-        tester.parent.assertNotEqual(
-            attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
-        tester.parent.assertNotEqual(
-            attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-        tester.parent.assertAlmostEqual(
-            attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
-        tester.parent.assertNotEqual(
-            attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+                try:
+                    torch.jit.trace(model, inputs)
+                except RuntimeError:
+                    self.fail("Couldn't trace module.")
 
+                try:
+                    traced_gpt2 = torch.jit.trace(model, inputs)
+                    torch.jit.save(traced_gpt2, "traced_model.pt")
+                except RuntimeError:
+                    self.fail("Couldn't save module.")
 
-def _create_and_check_for_head_pruning(tester, model_classes, config, inputs_dict):
-    for model_class in model_classes:
-        config.output_attentions = True
-        config.output_hidden_states = False
-        model = model_class(config=config)
-        model.eval()
-        heads_to_prune = {0: list(range(1, tester.num_attention_heads)),
-                          -1: [0]}
-        model.prune_heads(heads_to_prune)
-        outputs = model(**inputs_dict)
+                try:
+                    loaded_model = torch.jit.load("traced_model.pt")
+                    os.remove("traced_model.pt")
+                except ValueError:
+                    self.fail("Couldn't load module.")
 
-        attentions = outputs[-1]
+                model.eval()
+                loaded_model.eval()
 
-        tester.parent.assertEqual(
-            attentions[0].shape[-3], 1)
-        tester.parent.assertEqual(
-            attentions[1].shape[-3], tester.num_attention_heads)
-        tester.parent.assertEqual(
-            attentions[-1].shape[-3], tester.num_attention_heads - 1)
+                model_params = model.parameters()
+                loaded_model_params = loaded_model.parameters()
+
+                models_equal = True
+                for p1, p2 in zip(model_params, loaded_model_params):
+                    if p1.data.ne(p2.data).sum() > 0:
+                        models_equal = False
+
+                self.assertTrue(models_equal)
 
 
-def _create_and_check_for_attentions(tester, model_classes, config, inputs_dict):
-    for model_class in model_classes:
-        config.output_attentions = True
-        config.output_hidden_states = False
-        model = model_class(config)
-        model.eval()
-        outputs = model(**inputs_dict)
-        attentions = outputs[-1]
-        tester.parent.assertEqual(model.config.output_attentions, True)
-        tester.parent.assertEqual(model.config.output_hidden_states, False)
-        tester.parent.assertEqual(len(attentions), tester.num_hidden_layers)
-        tester.parent.assertListEqual(
-            list(attentions[0].shape[-3:]),
-            [tester.num_attention_heads,
-             tester.seq_length,
-             tester.key_len if hasattr(tester, 'key_len') else tester.seq_length])
-        out_len = len(outputs)
+        def test_headmasking(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Check attention is always last and order is fine
-        config.output_attentions = True
-        config.output_hidden_states = True
-        model = model_class(config)
-        model.eval()
-        outputs = model(**inputs_dict)
-        tester.parent.assertEqual(out_len+1, len(outputs))
-        tester.parent.assertEqual(model.config.output_attentions, True)
-        tester.parent.assertEqual(model.config.output_hidden_states, True)
+            config.output_attentions = True
+            config.output_hidden_states = True
+            configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+            for model_class in self.all_model_classes:
+                model = model_class(config=configs_no_init)
+                model.eval()
 
-        attentions = outputs[-1]
-        tester.parent.assertEqual(len(attentions), tester.num_hidden_layers)
-        tester.parent.assertListEqual(
-            list(attentions[0].shape[-3:]),
-            [tester.num_attention_heads,
-             tester.seq_length,
-             tester.key_len if hasattr(tester, 'key_len') else tester.seq_length])
+                # Prepare head_mask
+                # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior) 
+                head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads)
+                head_mask[0, 0] = 0
+                head_mask[-1, :-1] = 0
+                head_mask.requires_grad_(requires_grad=True)
+                inputs = inputs_dict.copy()
+                inputs['head_mask'] = head_mask
 
-def _create_and_check_for_hidden_states(tester, model_classes, config, inputs_dict):
-    for model_class in model_classes:
-        config.output_hidden_states = True
-        config.output_attentions = False
-        model = model_class(config)
-        model.eval()
-        outputs = model(**inputs_dict)
-        hidden_states = outputs[-1]
-        tester.parent.assertEqual(model.config.output_attentions, False)
-        tester.parent.assertEqual(model.config.output_hidden_states, True)
-        tester.parent.assertEqual(len(hidden_states), tester.num_hidden_layers + 1)
-        tester.parent.assertListEqual(
-            list(hidden_states[0].shape[-2:]),
-            [tester.seq_length, tester.hidden_size])
+                outputs = model(**inputs)
+
+                # Test that we can get a gradient back for importance score computation
+                output = sum(t.sum() for t in outputs[0])
+                output = output.sum()
+                output.backward()
+                multihead_outputs = head_mask.grad
+
+                attentions = outputs[-1]
+                hidden_states = outputs[-2]
+
+                # Remove Nan
+
+                self.assertIsNotNone(multihead_outputs)
+                self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
+                self.assertAlmostEqual(
+                    attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(
+                    attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(
+                    attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(
+                    attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(
+                    attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
 
 
-def create_and_check_commons(tester, config, inputs_dict, test_pruning=True, test_torchscript=True):
-    _create_and_check_initialization(tester, tester.all_model_classes, config, inputs_dict)
-    _create_and_check_for_attentions(tester, tester.all_model_classes, config, inputs_dict)
-    _create_and_check_for_headmasking(tester, tester.all_model_classes, config, inputs_dict)
-    _create_and_check_for_hidden_states(tester, tester.all_model_classes, config, inputs_dict)
+        def test_head_pruning(self):
+            if not self.test_pruning:
+                return
 
-    if test_torchscript:
-        _create_and_check_torchscript(tester, tester.all_model_classes, config, inputs_dict)
-        _create_and_check_torchscript_output_attentions(tester, tester.all_model_classes, config, inputs_dict)
-        _create_and_check_torchscript_output_hidden_state(tester, tester.all_model_classes, config, inputs_dict)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    if test_pruning:
-        _create_and_check_for_head_pruning(tester, tester.all_model_classes, config, inputs_dict)
+            for model_class in self.all_model_classes:
+                config.output_attentions = True
+                config.output_hidden_states = False
+                model = model_class(config=config)
+                model.eval()
+                heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
+                                -1: [0]}
+                model.prune_heads(heads_to_prune)
+                outputs = model(**inputs_dict)
+
+                attentions = outputs[-1]
+
+                self.assertEqual(
+                    attentions[0].shape[-3], 1)
+                self.assertEqual(
+                    attentions[1].shape[-3], self.model_tester.num_attention_heads)
+                self.assertEqual(
+                    attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
 
-def ids_tensor(shape, vocab_size, rng=None, name=None):
-    """Creates a random int32 tensor of the shape within the vocab size."""
-    if rng is None:
-        rng = random.Random()
+        def test_hidden_states_output(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    total_dims = 1
-    for dim in shape:
-        total_dims *= dim
+            for model_class in self.all_model_classes:
+                config.output_hidden_states = True
+                config.output_attentions = False
+                model = model_class(config)
+                model.eval()
+                outputs = model(**inputs_dict)
+                hidden_states = outputs[-1]
+                self.assertEqual(model.config.output_attentions, False)
+                self.assertEqual(model.config.output_hidden_states, True)
+                self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size])
 
-    values = []
-    for _ in range(total_dims):
-        values.append(rng.randint(0, vocab_size - 1))
+        def test_resize_tokens_embeddings(self):
+            original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if not self.test_resize_embeddings:
+                return
 
-    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+            for model_class in self.all_model_classes:
+                config = copy.deepcopy(original_config)
+                model = model_class(config)
+
+                model_vocab_size = config.vocab_size
+                # Retrieve the embeddings and clone theme
+                model_embed = model.resize_token_embeddings(model_vocab_size)
+                cloned_embeddings = model_embed.weight.clone()
+
+                # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+                model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+                self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+                # Check that it actually resizes the embeddings matrix
+                self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+
+                # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+                model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+                self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+                # Check that it actually resizes the embeddings matrix
+                self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+                # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+                models_equal = True
+                for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                    if p1.data.ne(p2.data).sum() > 0:
+                        models_equal = False
+
+                self.assertTrue(models_equal)
+
+        def test_tie_model_weights(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            def check_same_values(layer_1, layer_2):
+                equal = True
+                for p1, p2 in zip(layer_1.weight, layer_2.weight):
+                    if p1.data.ne(p2.data).sum() > 0:
+                        equal = False
+                return equal
+
+            for model_class in self.all_model_classes:
+                if not hasattr(model_class, 'tie_weights'):
+                    continue
+
+                config.torchscript = True
+                model_not_tied = model_class(config)
+                params_not_tied = list(model_not_tied.parameters())
+
+                config_tied = copy.deepcopy(config)
+                config_tied.torchscript = False
+                model_tied = model_class(config_tied)
+                params_tied = list(model_tied.parameters())
+
+                # Check that the embedding layer and decoding layer are the same in size and in value
+                self.assertGreater(len(params_not_tied), len(params_tied))
+                # self.assertTrue(check_same_values(embeddings, decoding))
+
+                # # Check that after modification, they remain the same.
+                # embeddings.weight.data.div_(2)
+                # # Check that the embedding layer and decoding layer are the same in size and in value
+                # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
+                # self.assertTrue(check_same_values(embeddings, decoding))
+
+                # # Check that after modification, they remain the same.
+                # decoding.weight.data.div_(4)
+                # # Check that the embedding layer and decoding layer are the same in size and in value
+                # self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
+                # self.assertTrue(check_same_values(embeddings, decoding))
+
+                # Check that after resize they remain tied.
+                model_tied.resize_token_embeddings(config.vocab_size + 10)
+                params_tied_2 = list(model_tied.parameters())
+                self.assertGreater(len(params_not_tied), len(params_tied))
+                self.assertEqual(len(params_tied_2), len(params_tied))
+
+                # decoding.weight.data.mul_(20)
+                # # Check that the embedding layer and decoding layer are the same in size and in value
+                # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
+                # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+
+    class GPTModelTester(CommonModelTester):
+
+        def __init__(self,
+                        parent,
+                        batch_size=13,
+                        seq_length=7,
+                        is_training=True,
+                        use_position_ids=True,
+                        use_token_type_ids=True,
+                        use_labels=True,
+                        vocab_size=99,
+                        n_positions=33,
+                        hidden_size=32,
+                        num_hidden_layers=5,
+                        num_attention_heads=4,
+                        n_choices=3,
+                        type_sequence_label_size=2,
+                        initializer_range=0.02,
+                        num_labels=3,
+                        scope=None,
+                        config_class=None,
+                        base_model_class=None,
+                        lm_head_model_class=None,
+                        double_head_model_class=None,
+                        ):
+            self.parent = parent
+            self.batch_size = batch_size
+            self.seq_length = seq_length
+            self.is_training = is_training
+            self.use_position_ids = use_position_ids
+            self.use_token_type_ids = use_token_type_ids
+            self.use_labels = use_labels
+            self.vocab_size = vocab_size
+            self.n_positions = n_positions
+            self.hidden_size = hidden_size
+            self.num_hidden_layers = num_hidden_layers
+            self.num_attention_heads = num_attention_heads
+            self.n_choices = n_choices
+            self.type_sequence_label_size = type_sequence_label_size
+            self.initializer_range = initializer_range
+            self.num_labels = num_labels
+            self.scope = scope
+            self.config_class = config_class
+            self.base_model_class = base_model_class
+            self.lm_head_model_class = lm_head_model_class
+            self.double_head_model_class = double_head_model_class
+            self.all_model_classes = (base_model_class, lm_head_model_class, double_head_model_class)
+
+        def prepare_config_and_inputs(self):
+            total_num_tokens = self.vocab_size
+            input_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], total_num_tokens)
+
+            position_ids = None
+            if self.use_position_ids:
+                position_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], self.n_positions)
+
+            token_type_ids = None
+            if self.use_token_type_ids:
+                total_voc = self.vocab_size
+                token_type_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], total_voc)
+
+            mc_labels = None
+            lm_labels = None
+            mc_token_ids = None
+            if self.use_labels:
+                mc_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+                lm_labels = ids_tensor([self.batch_size, self.n_choices, self.seq_length], self.num_labels)
+                mc_token_ids = ids_tensor([self.batch_size, self.n_choices], self.seq_length)
+
+            config = self.config_class(
+                vocab_size_or_config_json_file=self.vocab_size,
+                n_positions=self.n_positions,
+                n_embd=self.hidden_size,
+                n_layer=self.num_hidden_layers,
+                n_head=self.num_attention_heads,
+                initializer_range=self.initializer_range)
+
+            return (config, input_ids, token_type_ids, position_ids,
+                    mc_labels, lm_labels, mc_token_ids)
+
+        def create_and_check_base_model(self, config, input_ids, token_type_ids, position_ids,
+                                mc_labels, lm_labels, mc_token_ids):
+            model = self.base_model_class(config)
+            model.eval()
+
+            outputs = model(input_ids, position_ids, token_type_ids)
+            outputs = model(input_ids, position_ids)
+            outputs = model(input_ids)
+
+            hidden_state = outputs[0]
+            self.parent.assertListEqual(
+                list(hidden_state.size()),
+                [self.batch_size, self.n_choices, self.seq_length, self.hidden_size])
+
+
+        def create_and_check_lm_head(self, config, input_ids, token_type_ids, position_ids,
+                                        mc_labels, lm_labels, mc_token_ids):
+            model = self.lm_head_model_class(config)
+            model.eval()
+            outputs = model(input_ids, position_ids, token_type_ids, lm_labels)
+            loss, lm_logits = outputs[:2]
+
+            total_voc = self.vocab_size
+            self.parent.assertListEqual(
+                list(lm_logits.size()),
+                [self.batch_size, self.n_choices, self.seq_length, total_voc])
+            self.parent.assertListEqual(
+                list(loss.size()),
+                [])
+
+        def create_and_check_presents(self, config, input_ids, token_type_ids, position_ids,
+                                        mc_labels, lm_labels, mc_token_ids):
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.eval()
+                outputs = model(input_ids)
+                presents = outputs[-1]
+                self.parent.assertEqual(self.num_hidden_layers, len(presents))
+                self.parent.assertListEqual(
+                    list(presents[0].size()),
+                    [2, self.batch_size * self.n_choices, self.num_attention_heads,
+                        self.seq_length, self.hidden_size // self.num_attention_heads])
+
+        def create_and_check_double_heads(self, config, input_ids, token_type_ids, position_ids,
+                                        mc_labels, lm_labels, mc_token_ids):
+            model = self.double_head_model_class(config)
+            model.eval()
+            outputs = model(input_ids, mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels,
+                            token_type_ids=token_type_ids, position_ids=position_ids)
+            lm_loss, mc_loss, lm_logits, mc_logits = outputs[:4]
+            loss = [lm_loss, mc_loss]
+
+            total_voc = self.vocab_size
+            self.parent.assertListEqual(
+                list(lm_logits.size()),
+                [self.batch_size, self.n_choices, self.seq_length, total_voc])
+            self.parent.assertListEqual(
+                list(mc_logits.size()),
+                [self.batch_size, self.n_choices])
+            self.parent.assertListEqual(
+                [list(l.size()) for l in loss],
+                [[], []])
+
+        def create_and_check_model_from_pretrained(self):
+            cache_dir = "/tmp/pytorch_transformers_test/"
+            for model_name in list(self.base_model_class.pretrained_model_archive_map.keys())[:1]:
+                model = self.base_model_class.from_pretrained(model_name, cache_dir=cache_dir)
+                shutil.rmtree(cache_dir)
+                self.parent.assertIsNotNone(model)
+
+        def prepare_config_and_inputs_for_common(self):
+            config_and_inputs = self.prepare_config_and_inputs()
+            (config, input_ids, token_type_ids, position_ids,
+                mc_labels, lm_labels, mc_token_ids) = config_and_inputs
+            inputs_dict = {'input_ids': input_ids}
+            return config, inputs_dict
+
+        def run_common_tests(self, test_presents=False):
+            config_and_inputs = self.prepare_config_and_inputs()
+            self.create_and_check_base_model(*config_and_inputs)
+
+            config_and_inputs = self.prepare_config_and_inputs()
+            self.create_and_check_lm_head(*config_and_inputs)
+
+            config_and_inputs = self.prepare_config_and_inputs()
+            self.create_and_check_double_heads(*config_and_inputs)
+
+            if test_presents:
+                config_and_inputs = self.prepare_config_and_inputs()
+                self.create_and_check_presents(*config_and_inputs)
+
+        def run_slow_tests(self):
+            self.create_and_check_model_from_pretrained()
 
 
 class ConfigTester(object):
@@ -275,179 +539,22 @@ class ConfigTester(object):
         self.create_and_test_config_to_json_file()
 
 
-class GPTModelTester(object):
-    def __init__(self,
-                    parent,
-                    batch_size=13,
-                    seq_length=7,
-                    is_training=True,
-                    use_position_ids=True,
-                    use_token_type_ids=True,
-                    use_labels=True,
-                    vocab_size=99,
-                    n_positions=33,
-                    hidden_size=32,
-                    num_hidden_layers=5,
-                    num_attention_heads=4,
-                    n_choices=3,
-                    type_sequence_label_size=2,
-                    initializer_range=0.02,
-                    num_labels=3,
-                    scope=None,
-                    config_class=None,
-                    base_model_class=None,
-                    lm_head_model_class=None,
-                    double_head_model_class=None,
-                    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_position_ids = use_position_ids
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.n_positions = n_positions
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.n_choices = n_choices
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
-        self.config_class = config_class
-        self.base_model_class = base_model_class
-        self.lm_head_model_class = lm_head_model_class
-        self.double_head_model_class = double_head_model_class
-        self.all_model_classes = (base_model_class, lm_head_model_class, double_head_model_class)
-
-    def prepare_config_and_inputs(self):
-        total_num_tokens = self.vocab_size
-        input_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], total_num_tokens)
-
-        position_ids = None
-        if self.use_position_ids:
-            position_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], self.n_positions)
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            total_voc = self.vocab_size
-            token_type_ids = ids_tensor([self.batch_size, self.n_choices, self.seq_length], total_voc)
-
-        mc_labels = None
-        lm_labels = None
-        mc_token_ids = None
-        if self.use_labels:
-            mc_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            lm_labels = ids_tensor([self.batch_size, self.n_choices, self.seq_length], self.num_labels)
-            mc_token_ids = ids_tensor([self.batch_size, self.n_choices], self.seq_length)
-
-        config = self.config_class(
-            vocab_size_or_config_json_file=self.vocab_size,
-            n_positions=self.n_positions,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            initializer_range=self.initializer_range)
-
-        return (config, input_ids, token_type_ids, position_ids,
-                mc_labels, lm_labels, mc_token_ids)
-
-    def create_and_check_base_model(self, config, input_ids, token_type_ids, position_ids,
-                            mc_labels, lm_labels, mc_token_ids):
-        model = self.base_model_class(config)
-        model.eval()
-
-        outputs = model(input_ids, position_ids, token_type_ids)
-        outputs = model(input_ids, position_ids)
-        outputs = model(input_ids)
-
-        hidden_state = outputs[0]
-        self.parent.assertListEqual(
-            list(hidden_state.size()),
-            [self.batch_size, self.n_choices, self.seq_length, self.hidden_size])
 
 
-    def create_and_check_lm_head(self, config, input_ids, token_type_ids, position_ids,
-                                    mc_labels, lm_labels, mc_token_ids):
-        model = self.lm_head_model_class(config)
-        model.eval()
-        outputs = model(input_ids, position_ids, token_type_ids, lm_labels)
-        loss, lm_logits = outputs[:2]
+def ids_tensor(shape, vocab_size, rng=None, name=None):
+    """Creates a random int32 tensor of the shape within the vocab size."""
+    if rng is None:
+        rng = random.Random()
 
-        total_voc = self.vocab_size
-        self.parent.assertListEqual(
-            list(lm_logits.size()),
-            [self.batch_size, self.n_choices, self.seq_length, total_voc])
-        self.parent.assertListEqual(
-            list(loss.size()),
-            [])
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
 
-    def create_and_check_presents(self, config, input_ids, token_type_ids, position_ids,
-                                    mc_labels, lm_labels, mc_token_ids):
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.eval()
-            outputs = model(input_ids)
-            presents = outputs[-1]
-            self.parent.assertEqual(self.num_hidden_layers, len(presents))
-            self.parent.assertListEqual(
-                list(presents[0].size()),
-                [2, self.batch_size * self.n_choices, self.num_attention_heads,
-                    self.seq_length, self.hidden_size // self.num_attention_heads])
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.randint(0, vocab_size - 1))
 
-    def create_and_check_double_heads(self, config, input_ids, token_type_ids, position_ids,
-                                    mc_labels, lm_labels, mc_token_ids):
-        model = self.double_head_model_class(config)
-        model.eval()
-        outputs = model(input_ids, mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels,
-                        token_type_ids=token_type_ids, position_ids=position_ids)
-        lm_loss, mc_loss, lm_logits, mc_logits = outputs[:4]
-        loss = [lm_loss, mc_loss]
-
-        total_voc = self.vocab_size
-        self.parent.assertListEqual(
-            list(lm_logits.size()),
-            [self.batch_size, self.n_choices, self.seq_length, total_voc])
-        self.parent.assertListEqual(
-            list(mc_logits.size()),
-            [self.batch_size, self.n_choices])
-        self.parent.assertListEqual(
-            [list(l.size()) for l in loss],
-            [[], []])
-
-    def create_and_check_model_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(self.base_model_class.pretrained_model_archive_map.keys())[:1]:
-            model = self.base_model_class.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
-            self.parent.assertIsNotNone(model)
-
-    def create_and_check_commons(self, config, input_ids, token_type_ids, position_ids,
-                                    mc_labels, lm_labels, mc_token_ids):
-        inputs_dict = {'input_ids': input_ids}
-        create_and_check_commons(self, config, inputs_dict)
-
-    def run_common_tests(self, test_presents=False):
-        config_and_inputs = self.prepare_config_and_inputs()
-        self.create_and_check_base_model(*config_and_inputs)
-
-        config_and_inputs = self.prepare_config_and_inputs()
-        self.create_and_check_lm_head(*config_and_inputs)
-
-        config_and_inputs = self.prepare_config_and_inputs()
-        self.create_and_check_double_heads(*config_and_inputs)
-
-        if test_presents:
-            config_and_inputs = self.prepare_config_and_inputs()
-            self.create_and_check_presents(*config_and_inputs)
-
-        config_and_inputs = self.prepare_config_and_inputs()
-        self.create_and_check_commons(*config_and_inputs)
-
-    def run_slow_tests(self):
-        self.create_and_check_model_from_pretrained()
+    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
 class ModelUtilsTest(unittest.TestCase):
@@ -470,79 +577,6 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
-
-    def test_resize_tokens_embeddings(self):
-        logging.basicConfig(level=logging.INFO)
-
-
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            config = BertConfig.from_pretrained(model_name)
-            model = BertModel.from_pretrained(model_name)
-
-            model_vocab_size = config.vocab_size
-            # Retrieve the embeddings and clone theme
-            cloned_embeddings = model.embeddings.word_embeddings.weight.clone()
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model.embeddings.word_embeddings.weight.shape[0], cloned_embeddings.shape[0] + 10)
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size)
-            self.assertEqual(model.config.vocab_size, model_vocab_size)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model.embeddings.word_embeddings.weight.shape[0], cloned_embeddings.shape[0])
-
-            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
-            models_equal = True
-            for p1, p2 in zip(cloned_embeddings, model.embeddings.word_embeddings.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
-    def test_tie_model_weights(self):
-        logging.basicConfig(level=logging.INFO)
-
-        def check_same_values(layer_1, layer_2):
-            equal = True
-            for p1, p2 in zip(layer_1.weight, layer_2.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    equal = False
-            return equal
-
-        for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            config = GPT2Config.from_pretrained(model_name)
-            model = GPT2LMHeadModel.from_pretrained(model_name)
-
-            # Get the embeddings and decoding layer
-            embeddings = model.transformer.wte
-            decoding = model.lm_head
-
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after modification, they remain the same.
-            embeddings.weight.data.div_(2)
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after modification, they remain the same.
-            decoding.weight.data.div_(4)
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            self.assertTrue(embeddings.weight.shape, decoding.weight.shape)
-            self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after resize they remain tied.
-            model.resize_token_embeddings(config.vocab_size + 10)
-            decoding.weight.data.mul_(20)
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
-            self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
 
 if __name__ == "__main__":

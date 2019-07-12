@@ -23,10 +23,15 @@ import pytest
 from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering, XLMForSequenceClassification)
 from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (create_and_check_commons, ConfigTester, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
 
 
-class XLMModelTest(unittest.TestCase):
+class XLMModelTest(CommonTestCases.CommonModelTester):
+
+    all_model_classes = (XLMModel, XLMWithLMHeadModel,  
+                         XLMForQuestionAnswering, XLMForSequenceClassification) 
+                         # , XLMForSequenceClassification, XLMForTokenClassification),
+
     class XLMModelTester(object):
 
         def __init__(self,
@@ -58,8 +63,6 @@ class XLMModelTest(unittest.TestCase):
                      summary_type="last",
                      use_proj=True,
                      scope=None,
-                     all_model_classes = (XLMModel, XLMWithLMHeadModel,
-                                          XLMForQuestionAnswering, XLMForSequenceClassification),  # , XLMForSequenceClassification, XLMForTokenClassification),
                     ):
             self.parent = parent
             self.batch_size = batch_size
@@ -90,7 +93,6 @@ class XLMModelTest(unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
-            self.all_model_classes = all_model_classes
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -237,28 +239,23 @@ class XLMModelTest(unittest.TestCase):
                 [self.batch_size, self.type_sequence_label_size])
 
 
-        def create_and_check_xlm_commons(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+        def prepare_config_and_inputs_for_common(self):
+            config_and_inputs = self.prepare_config_and_inputs()
+            (config, input_ids, token_type_ids, input_lengths,
+             sequence_labels, token_labels, is_impossible_labels, input_mask) = config_and_inputs
             inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'lengths': input_lengths}
-            create_and_check_commons(self, config, inputs_dict)
+            return config, inputs_dict
 
-    def test_default(self):
-        self.run_tester(XLMModelTest.XLMModelTester(self))
+    def setUp(self):
+        self.model_tester = XLMModelTest.XLMModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
 
     def test_config(self):
-        config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
-        config_tester.run_common_tests()
+        self.config_tester.run_common_tests()
 
-    @pytest.mark.slow
-    def test_model_from_pretrained(self):
-        cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = XLMModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
-            self.assertIsNotNone(model)
-
-    def run_tester(self, tester):
-        config_and_inputs = tester.prepare_config_and_inputs()
-        tester.create_and_check_xlm_model(*config_and_inputs)
+    def test_xlm_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_model(*config_and_inputs)
 
         # config_and_inputs = tester.prepare_config_and_inputs()
         # tester.create_and_check_xlm_for_masked_lm(*config_and_inputs)
@@ -275,8 +272,14 @@ class XLMModelTest(unittest.TestCase):
         # config_and_inputs = tester.prepare_config_and_inputs()
         # tester.create_and_check_xlm_for_token_classification(*config_and_inputs)
 
-        config_and_inputs = tester.prepare_config_and_inputs()
-        tester.create_and_check_xlm_commons(*config_and_inputs)
+    @pytest.mark.slow
+    def test_model_from_pretrained(self):
+        cache_dir = "/tmp/pytorch_transformers_test/"
+        for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = XLMModel.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(model)
+
 
 if __name__ == "__main__":
     unittest.main()
