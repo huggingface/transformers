@@ -1,6 +1,13 @@
 TorchScript
 ================================================
 
+.. note::
+    This is the very beginning of our experiments with TorchScript and we are still exploring its capabilities
+    with variable-input-size models. It is a focus of interest to us and we will deepen our analysis in upcoming
+    releases, with more code examples, a more flexible implementation, and benchmarks comparing python-based codes
+    with compiled TorchScript.
+
+
 According to Pytorch's documentation: "TorchScript is a way to create serializable and optimizable models from PyTorch code".
 Pytorch's two modules `JIT and TRACE <https://pytorch.org/docs/stable/jit.html>`_ allow the developer to export
 their model to be re-used in other programs, such as efficiency-oriented C++ programs.

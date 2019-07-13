@@ -1,3 +1,5 @@
+examples.rst
+
 Examples
 ================================================
 
@@ -39,7 +41,13 @@ Note: To use *Distributed Training*\ , you will need to run one training script 
 
 .. code-block:: bash
 
-   python -m torch.distributed.launch --nproc_per_node=4 --nnodes=2 --node_rank=$THIS_MACHINE_INDEX --master_addr="192.168.1.1" --master_port=1234 run_bert_classifier.py (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
+    python -m torch.distributed.launch \
+        --nproc_per_node=4 \
+        --nnodes=2 \
+        --node_rank=$THIS_MACHINE_INDEX \
+        --master_addr="192.168.1.1" \
+        --master_port=1234 run_bert_classifier.py \
+        (--arg1 --arg2 --arg3 and all other arguments of the run_classifier script)
 
 Where ``$THIS_MACHINE_INDEX`` is an sequential index assigned to each of your machine (0, 1, 2...) and the machine with rank 0 has an IP address ``192.168.1.1`` and an open port ``1234``.
 
@@ -186,7 +194,19 @@ Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word
 
 .. code-block:: bash
 
-   python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name MRPC --do_train   --do_eval   --do_lower_case   --data_dir $GLUE_DIR/MRPC/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0  --output_dir /tmp/mrpc_output/
+    python -m torch.distributed.launch \
+        --nproc_per_node 8 run_bert_classifier.py \
+        --bert_model bert-large-uncased-whole-word-masking \
+        --task_name MRPC \
+        --do_train \
+        --do_eval \
+        --do_lower_case \
+        --data_dir $GLUE_DIR/MRPC/ \
+        --max_seq_length 128 \
+        --train_batch_size 8 \
+        --learning_rate 2e-5 \
+        --num_train_epochs 3.0 \
+         --output_dir /tmp/mrpc_output/
 
 Training with these hyper-parameters gave us the following results:
 
@@ -203,7 +223,20 @@ Here is an example on MNLI:
 
 .. code-block:: bash
 
-   python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --do_lower_case   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
+    python -m torch.distributed.launch \
+        --nproc_per_node 8 run_bert_classifier.py \
+        --bert_model bert-large-uncased-whole-word-masking \
+        --task_name mnli \
+        --do_train \
+        --do_eval \
+        --do_lower_case \
+        --data_dir /datadrive/bert_data/glue_data//MNLI/ \
+        --max_seq_length 128 \
+        --train_batch_size 8 \
+        --learning_rate 2e-5 \
+        --num_train_epochs 3.0 \
+        --output_dir ../models/wwm-uncased-finetuned-mnli/ \
+        --overwrite_output_dir
 
 .. code-block:: bash
 
@@ -293,7 +326,20 @@ And here is the model provided as ``bert-large-cased-whole-word-masking-finetune
 
 .. code-block:: bash
 
-   python -m torch.distributed.launch --nproc_per_node=8  run_bert_squad.py  --bert_model bert-large-cased-whole-word-masking   --do_train  --do_predict  --do_lower_case  --train_file $SQUAD_DIR/train-v1.1.json  --predict_file $SQUAD_DIR/dev-v1.1.json  --learning_rate 3e-5  --num_train_epochs 2  --max_seq_length 384  --doc_stride 128  --output_dir ../models/wwm_cased_finetuned_squad/  --train_batch_size 24  --gradient_accumulation_steps 12
+    python -m torch.distributed.launch --nproc_per_node=8  run_bert_squad.py \
+        --bert_model bert-large-cased-whole-word-masking \
+        --do_train \
+        --do_predict \
+        --do_lower_case \
+        --train_file $SQUAD_DIR/train-v1.1.json \
+        --predict_file $SQUAD_DIR/dev-v1.1.json \
+        --learning_rate 3e-5 \
+        --num_train_epochs 2 \
+        --max_seq_length 384 \
+        --doc_stride 128 \
+        --output_dir ../models/wwm_cased_finetuned_squad/ \
+        --train_batch_size 24 \
+        --gradient_accumulation_steps 12
 
 Training with these hyper-parameters gave us the following results:
 
@@ -563,7 +609,18 @@ Here is an example on MNLI:
 
 .. code-block:: bash
 
-   python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   --bert_model bert-large-uncased-whole-word-masking    --task_name mnli --do_train   --do_eval   --data_dir /datadrive/bert_data/glue_data//MNLI/   --max_seq_length 128   --train_batch_size 8   --learning_rate 2e-5   --num_train_epochs 3.0   --output_dir ../models/wwm-uncased-finetuned-mnli/ --overwrite_output_dir
+    python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py \
+        --bert_model bert-large-uncased-whole-word-masking \
+        --task_name mnli \
+        --do_train \
+        --do_eval \
+        --data_dir /datadrive/bert_data/glue_data//MNLI/ \
+        --max_seq_length 128 \
+        --train_batch_size 8 \
+        --learning_rate 2e-5 \
+        --num_train_epochs 3.0 \
+        --output_dir ../models/wwm-uncased-finetuned-mnli/ \
+        --overwrite_output_dir
 
 .. code-block:: bash
 
