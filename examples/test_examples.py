@@ -29,6 +29,7 @@ except ImportError:
 
 import run_glue
 import run_squad
+import run_generation
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -90,6 +91,19 @@ class ExamplesTests(unittest.TestCase):
             self.assertGreaterEqual(result['f1'], 30)
             self.assertGreaterEqual(result['exact'], 30)
 
+
+    def test_generation(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        testargs = ["run_generation.py",
+                    "--prompt=Hello",
+                    "--seed=42"]
+        model_name = "--model_name=openai-gpt"
+        with patch.object(sys, 'argv', testargs + [model_name]):
+            result = run_generation.main()
+            self.assertGreaterEqual(result['f1'], 30)
+            self.assertGreaterEqual(result['exact'], 30)
 
 if __name__ == "__main__":
     unittest.main()

@@ -172,7 +172,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
     def _convert_ids_to_string(self, tokens_ids):
         """Converts a sequence of ids in a string."""
-        out_string = ''.join(tokens_ids)
+        out_string = ''.join(tokens_ids).replace(SPIECE_UNDERLINE, ' ')
         return out_string
 
     def save_vocabulary(self, save_directory):

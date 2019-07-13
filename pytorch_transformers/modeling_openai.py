@@ -215,6 +215,10 @@ class OpenAIGPTConfig(PretrainedConfig):
             )
 
     @property
+    def max_position_embeddings(self):
+        return self.n_positions
+
+    @property
     def hidden_size(self):
         return self.n_embd
 

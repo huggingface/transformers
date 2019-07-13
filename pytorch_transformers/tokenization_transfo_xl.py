@@ -25,7 +25,6 @@ import os
 import sys
 from collections import Counter, OrderedDict
 from io import open
-import unicodedata
 
 import torch
 import numpy as np
