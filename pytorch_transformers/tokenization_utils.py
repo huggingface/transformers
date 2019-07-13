@@ -343,7 +343,7 @@ class PreTrainedTokenizer(object):
             return sum((split_on_tokens(tok_list[1:], sub_text.strip()) + [tok] \
                         for sub_text in split_text), [])[:-1]
 
-        added_tokens = list(self.added_tokens_encoder.keys())
+        added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
         return tokenized_text
 
@@ -466,7 +466,7 @@ class PreTrainedTokenizer(object):
 
 
 def clean_up_tokenization(out_string):
-    out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
+    out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
                     ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
                     ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
     return out_string

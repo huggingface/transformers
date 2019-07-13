@@ -37,9 +37,9 @@ from .modeling_bert import BertLayerNorm as LayerNorm
 logger = logging.getLogger(__name__)
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-pytorch_model.bin",
-                                "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-pytorch_model.bin"}
+                                     "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-pytorch_model.bin"}
 GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
-                                 "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json"}
+                                      "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json"}
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     """ Load tf checkpoints in a pytorch model
@@ -194,6 +194,10 @@ class GPT2Config(PretrainedConfig):
                 "First argument must be either a vocabulary size (int)"
                 "or the path to a pretrained model config file (str)"
             )
+
+    @property
+    def max_position_embeddings(self):
+        return self.n_positions
 
     @property
     def hidden_size(self):
