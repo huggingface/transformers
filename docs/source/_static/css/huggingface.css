@@ -1,3 +1,5 @@
+huggingface.css
+
 /* The literal code blocks */
 .rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
     color: #6670FF;
@@ -31,12 +33,12 @@
 
 /* When a list item that does belong to the selected block from the toc tree is hovered */
 .wy-menu-vertical li.current a:hover{
-    background-color: #FB8D68;
+    background-color: #B6C0FF;
 }
 
 /* When a list item that does NOT belong to the selected block from the toc tree is hovered. */
 .wy-menu-vertical li a:hover{
-    background-color: #FB8D68;
+    background-color: #A7AFFB;
 }
 
 /* The text items on the toc tree */
@@ -114,6 +116,11 @@ a {
     text-transform: uppercase;
 }
 
+/* It would be better for table to be visible without horizontal scrolling */
+.wy-table-responsive table td, .wy-table-responsive table th{
+    white-space: normal;
+}
+
 .footer {
     margin-top: 20px;
 }
@@ -127,6 +134,28 @@ a {
     margin: 2px 5px 0 0;
 }
 
+/* class and method names in doc */
+.rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) tt.descclassname, .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) code.descname, .rst-content dl:not(.docutils) tt.descclassname, .rst-content dl:not(.docutils) code.descclassname{
+    font-family: Calibre;
+    font-size: 20px !important;
+}
+
+/* class name in doc*/
+.rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) code.descname{
+    margin-right: 10px;
+    font-family: Calibre-Medium;
+}
+
+/* Method and class parameters */
+.sig-param{
+    line-height: 23px;
+}
+
+/* Class introduction "class" string at beginning */
+.rst-content dl:not(.docutils) .property{
+    font-size: 18px;
+    color: black;
+}
 
 
 /* FONTS */
@@ -167,3 +196,4 @@ h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
     src: url(./Calibre-Thin.otf);
     font-weight:400;
 }
+
