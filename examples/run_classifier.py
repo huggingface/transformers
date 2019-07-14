@@ -145,7 +145,7 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--classes', type=int, default=2, help="specify total number of classes in the set")
     parser.add_argument('--test', type=int, default=0, help="to evaluate test.tsv instead of dev.tsv")
-    
+
     args = parser.parse_args()
 
     if args.server_ip and args.server_port:
@@ -379,13 +379,15 @@ def main():
 
     ### Evaluation
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        eval_examples = processor.get_dev_examples(args.data_dir)
+        
         if args.test:
+            eval_examples = processor.get_test_examples(args.data_dir)
             cached_eval_features_file = os.path.join(args.data_dir, 'test_{0}_{1}_{2}'.format(
                 list(filter(None, args.bert_model.split('/'))).pop(),
                             str(args.max_seq_length),
                             str(task_name)))
         else:
+            eval_examples = processor.get_dev_examples(args.data_dir)
             cached_eval_features_file = os.path.join(args.data_dir, 'dev_{0}_{1}_{2}'.format(
                 list(filter(None, args.bert_model.split('/'))).pop(),
                             str(args.max_seq_length),
