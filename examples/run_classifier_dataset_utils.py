@@ -607,6 +607,7 @@ processors = {
     "rte": RteProcessor,
     "wnli": WnliProcessor,
     "multiclass": MultiClassProcessor,
+    "binary": Sst2Processor,
 }
 
 output_modes = {
@@ -620,4 +621,5 @@ output_modes = {
     "rte": "classification",
     "wnli": "classification",
     "multiclass": "classification",
+    "binary": "classification",
 }
