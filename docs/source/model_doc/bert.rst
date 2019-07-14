@@ -15,10 +15,10 @@ BERT
     :members:
 
 
-``BertAdam``
+``AdamW``
 ~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.BertAdam
+.. autoclass:: pytorch_transformers.AdamW
     :members:
 
 ``BertModel``

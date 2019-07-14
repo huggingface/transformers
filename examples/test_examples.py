@@ -91,7 +91,6 @@ class ExamplesTests(unittest.TestCase):
             self.assertGreaterEqual(result['f1'], 30)
             self.assertGreaterEqual(result['exact'], 30)
 
-
     def test_generation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)

@@ -60,10 +60,10 @@ This PyTorch implementation of Transformer-XL is an adaptation of the original `
 This PyTorch implementation of OpenAI GPT-2 is an adaptation of the `OpenAI's implementation <https://github.com/openai/gpt-2>`__ and is provided with `OpenAI's pre-trained model <https://github.com/openai/gpt-2>`__ and a command-line interface that was used to convert the TensorFlow checkpoint in PyTorch.
 
 **Facebook Research's XLM** was released together with the paper `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`__ by Guillaume Lample and Alexis Conneau.
-This PyTorch implementation of XLM is an adaptation of the original `PyTorch implementation <https://github.com/facebookresearch/XLM>`__. TODO Lysandre filled
+This PyTorch implementation of XLM is an adaptation of the original `PyTorch implementation <https://github.com/facebookresearch/XLM>`__.
 
 **Google's XLNet** was released together with the paper `XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang\*, Zihang Dai\*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov and Quoc V. Le.
-This PyTorch implementation of XLM is an adaptation of the `Tensorflow implementation <https://github.com/zihangdai/xlnet>`__. TODO Lysandre filled
+This PyTorch implementation of XLM is an adaptation of the `Tensorflow implementation <https://github.com/zihangdai/xlnet>`__.
 
 
 Content
@@ -91,7 +91,7 @@ Content
    * - `Migration <./migration.html>`__
      - Migrating from ``pytorch_pretrained_BERT`` (v0.6) to ``pytorch_transformers`` (v1.0)
    * - `Bertology <./bertology.html>`__
-     - TODO Lysandre didn't know how to fill
+     - Exploring the internals of the pretrained models.
    * - `TorchScript <./torchscript.html>`__
      - Convert a model to TorchScript for use in other programming languages
 
@@ -114,8 +114,6 @@ Content
      - XLM Models, Tokenizers and optimizers
    * - `XLNet <./model_doc/xlnet.html>`__
      - XLNet Models, Tokenizers and optimizers
-
-TODO Lysandre filled: might need an introduction for both parts. Is it even necessary, since there is a summary? Up to you Thom.
 
 Overview
 --------
@@ -219,17 +217,10 @@ TODO Lysandre filled: I filled in XLM and XLNet. I didn't do the Tokenizers beca
 
 
 *
-  Optimizer for **BERT** (in the `optimization.py <./_modules/pytorch_transformers/optimization.html>`__ file):
+  Optimizer (in the `optimization.py <./_modules/pytorch_transformers/optimization.html>`__ file):
 
 
-  * ``BertAdam`` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
-
-
-*
-  Optimizer for **OpenAI GPT** (in the `optimization_openai.py <./_modules/pytorch_transformers/optimization_openai.html>`__ file):
-
-
-  * ``OpenAIAdam`` - OpenAI GPT version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
+  * ``AdamW`` - Version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
 
 *

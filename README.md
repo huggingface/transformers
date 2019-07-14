@@ -131,11 +131,8 @@ This package comprises the following classes that can be imported in Python and 
 - Tokenizer for **OpenAI GPT-2** (using byte-level Byte-Pair-Encoding) (in the [`tokenization_gpt2.py`](./pytorch_transformers/tokenization_gpt2.py) file):
   - `GPT2Tokenizer` - perform byte-level Byte-Pair-Encoding (BPE) tokenization.
 
-- Optimizer for **BERT** (in the [`optimization.py`](./pytorch_transformers/optimization.py) file):
-  - `BertAdam` - Bert version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
-
-- Optimizer for **OpenAI GPT** (in the [`optimization_openai.py`](./pytorch_transformers/optimization_openai.py) file):
-  - `OpenAIAdam` - OpenAI GPT version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
+- Optimizer (in the [`optimization.py`](./pytorch_transformers/optimization.py) file):
+  - `AdamW` - Version of Adam algorithm with weight decay fix, warmup and linear decay of the learning rate.
 
 - Configuration classes for BERT, OpenAI GPT and Transformer-XL (in the respective [`modeling.py`](./pytorch_transformers/modeling.py), [`modeling_openai.py`](./pytorch_transformers/modeling_openai.py), [`modeling_transfo_xl.py`](./pytorch_transformers/modeling_transfo_xl.py) files):
   - `BertConfig` - Configuration class to store the configuration of a `BertModel` with utilities to read and write from JSON configuration files.
@@ -1104,12 +1101,11 @@ Please refer to [`tokenization_gpt2.py`](./pytorch_transformers/tokenization_gpt
 
 ### Optimizers
 
-#### `BertAdam`
+#### `AdamW`
 
-`BertAdam` is a `torch.optimizer` adapted to be closer to the optimizer used in the TensorFlow implementation of Bert. The differences with PyTorch Adam optimizer are the following:
+`AdamW` is a `torch.optimizer` adapted to be closer to the optimizer used in the TensorFlow implementation of Bert. The differences with PyTorch Adam optimizer are the following:
 
-- BertAdam implements weight decay fix,
-- BertAdam doesn't compensate for bias as in the regular Adam optimizer.
+- AdamW implements weight decay fix,
 
 The optimizer accepts the following arguments:
 
@@ -1126,13 +1122,6 @@ The optimizer accepts the following arguments:
 - `e` : Adams epsilon. Default : `1e-6`
 - `weight_decay:` Weight decay. Default : `0.01`
 - `max_grad_norm` : Maximum norm for the gradients (`-1` means no clipping). Default : `1.0`
-
-#### `OpenAIAdam`
-
-`OpenAIAdam` is similar to `BertAdam`.
-The differences with `BertAdam` is that `OpenAIAdam` compensate for bias as in the regular Adam optimizer.
-
-`OpenAIAdam` accepts the same arguments as `BertAdam`.
 
 #### Learning Rate Schedules
 

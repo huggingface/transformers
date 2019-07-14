@@ -36,6 +36,13 @@ WEIGHTS_NAME = "pytorch_model.bin"
 TF_WEIGHTS_NAME = 'model.ckpt'
 
 
+def add_start_docstrings(*docstr):
+    def docstring_decorator(fn):
+        fn.__doc__ = ''.join(docstr) + fn.__doc__
+        return fn
+    return docstring_decorator
+
+
 class PretrainedConfig(object):
     """ An abstract class to handle dowloading a model pretrained config.
     """
