@@ -166,6 +166,12 @@ class MultiClassProcessor(DataProcessor):
             self._read_tsv(os.path.join(data_dir, "dev.tsv")),
             "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")),
+            "dev")
+
     def get_labels(self, num):
         """See base class."""
         lbl = []
@@ -238,6 +244,11 @@ class Sst2Processor(DataProcessor):
         """See base class."""
         return self._create_examples(
             self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -546,7 +557,7 @@ def acc_and_f1(preds, labels):
 def acc_and_p_r_f_per_class(preds, labels, label_list):
     acc = simple_accuracy(preds, labels)
     prf = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='weighted')
-    prf_per_class = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='none', label_list)
+    prf_per_class = precision_recall_fscore_support(y_true=labels, y_pred=preds, average=None, labels=label_list)
 
     return {
         "acc": acc,
