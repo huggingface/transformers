@@ -379,7 +379,10 @@ def main():
 
     ### Evaluation
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        
+
+        eval_examples = []
+        cached_eval_features_file = ""
+
         if args.test:
             eval_examples = processor.get_test_examples(args.data_dir)
             cached_eval_features_file = os.path.join(args.data_dir, 'test_{0}_{1}_{2}'.format(
@@ -472,9 +475,10 @@ def main():
         result['eval_loss'] = eval_loss
         result['global_step'] = global_step
         result['loss'] = loss
+        result['test'] = args.test
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
+        with open(output_eval_file, "a") as writer:
             logger.info("***** Eval results *****")
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
