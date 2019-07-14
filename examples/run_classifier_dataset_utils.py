@@ -23,7 +23,7 @@ import os
 import sys
 
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import matthews_corrcoef, f1_score, precision_recall_fscore_support
+from sklearn.metrics import matthews_corrcoef, f1_score, precision_recall_fscore_support, classification_report, confusion_matrix, roc_auc_score
 
 logger = logging.getLogger(__name__)
 
@@ -557,7 +557,11 @@ def acc_and_f1(preds, labels):
 def acc_and_p_r_f_per_class(preds, labels, label_list):
     acc = simple_accuracy(preds, labels)
     prf = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='weighted')
-    prf_per_class = precision_recall_fscore_support(y_true=labels, y_pred=preds, average=None, labels=label_list)
+    #prf_per_class = precision_recall_fscore_support(y_true=labels, y_pred=preds, average=None, labels=label_list)
+    prf_per_class = classification_report(y_true=labels, y_pred=preds, digits=4, labels=label_list)
+    # to calculate per class accuracy
+    cm = confusion_matrix(y_true=labels, y_pred=pred)
+    cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
     return {
         "acc": acc,
@@ -565,6 +569,7 @@ def acc_and_p_r_f_per_class(preds, labels, label_list):
         "rec": prf[1],
         "f1": prf[2],
         "perclass": prf_per_class,
+        "perclassAcc": cm.diagonal(),
     }
 
 def pearson_and_spearman(preds, labels):
