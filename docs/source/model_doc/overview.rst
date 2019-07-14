@@ -236,7 +236,7 @@ Learning Rate Schedules
 
 The ``.optimization`` module also provides additional schedules in the form of schedule objects that inherit from ``_LRSchedule``.
 All ``_LRSchedule`` subclasses accept ``warmup`` and ``t_total`` arguments at construction.
-When an ``_LRSchedule`` object is passed into ``BertAdam`` or ``OpenAIAdam``\ ,
+When an ``_LRSchedule`` object is passed into ``AdamW``\ ,
 the ``warmup`` and ``t_total`` arguments on the optimizer are ignored and the ones in the ``_LRSchedule`` object are used.
 An overview of the implemented schedules:
 

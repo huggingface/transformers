@@ -34,7 +34,7 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE, WEIGHTS_NAME, CONFIG_NAME
 from pytorch_transformers.modeling_bert import BertForMultipleChoice, BertConfig
-from pytorch_transformers.optimization import BertAdam, WarmupLinearSchedule
+from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
 from pytorch_transformers.tokenization_bert import BertTokenizer
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',

@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Generation with GPT/GPT-2/Transformer-XL/XLNet models
+""" Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/Transformer-XL/XLNet)
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 

@@ -40,7 +40,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 
 from pytorch_transformers import (OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer,
-                                     OpenAIAdam, cached_path, WEIGHTS_NAME, CONFIG_NAME)
+                                     AdamW, cached_path, WEIGHTS_NAME, CONFIG_NAME)
 
 ROCSTORIES_URL = "https://s3.amazonaws.com/datasets.huggingface.co/ROCStories.tar.gz"
 
@@ -191,7 +191,7 @@ def main():
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
             ]
         num_train_optimization_steps = len(train_dataloader) * args.num_train_epochs
-        optimizer = OpenAIAdam(optimizer_grouped_parameters,
+        optimizer = AdamW(optimizer_grouped_parameters,
                                lr=args.learning_rate,
                                warmup=args.warmup_proportion,
                                max_grad_norm=args.max_grad_norm,
