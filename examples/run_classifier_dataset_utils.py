@@ -560,7 +560,7 @@ def acc_and_p_r_f_per_class(preds, labels, label_list):
     #prf_per_class = precision_recall_fscore_support(y_true=labels, y_pred=preds, average=None, labels=label_list)
     prf_per_class = classification_report(y_true=labels, y_pred=preds, digits=4, labels=label_list)
     # to calculate per class accuracy
-    cm = confusion_matrix(y_true=labels, y_pred=pred)
+    cm = confusion_matrix(y_true=labels, y_pred=preds)
     cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
     return {
