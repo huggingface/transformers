@@ -166,6 +166,9 @@ def train(args, train_dataset, model, tokenizer):
             train_iterator.close()
             break
 
+    if args.local_rank in [-1, 0]:
+        tb_writer.close()
+
     return global_step, tr_loss / global_step
 
 
@@ -229,9 +232,6 @@ def evaluate(args, model, tokenizer, prefix=""):
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
-
-    if args.local_rank in [-1, 0]:
-        tb_writer.close()
 
     return results
 
