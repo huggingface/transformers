@@ -454,7 +454,7 @@ def main():
             preds = np.argmax(preds, axis=1)
         elif output_mode == "regression":
             preds = np.squeeze(preds)
-        result = compute_metrics(task_name, preds, out_label_ids)
+        result = compute_metrics(task_name, preds, out_label_ids, label_list)
 
         loss = tr_loss/global_step if args.do_train else None
 
@@ -527,7 +527,7 @@ def main():
             eval_loss = eval_loss / nb_eval_steps
             preds = preds[0]
             preds = np.argmax(preds, axis=1)
-            result = compute_metrics(task_name, preds, out_label_ids)
+            result = compute_metrics(task_name, preds, out_label_ids, label_list)
 
             loss = tr_loss/global_step if args.do_train else None
 

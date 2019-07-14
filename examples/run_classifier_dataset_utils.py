@@ -23,7 +23,7 @@ import os
 import sys
 
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import matthews_corrcoef, f1_score
+from sklearn.metrics import matthews_corrcoef, f1_score, precision_recall_fscore_support
 
 logger = logging.getLogger(__name__)
 
@@ -543,6 +543,18 @@ def acc_and_f1(preds, labels):
         "acc_and_f1": (acc + f1) / 2,
     }
 
+def acc_and_p_r_f_per_class(preds, labels, label_list):
+    acc = simple_accuracy(preds, labels)
+    prf = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='weighted')
+    prf_per_class = precision_recall_fscore_support(y_true=labels, y_pred=preds, average='none', label_list)
+
+    return {
+        "acc": acc,
+        "prec": prf[0],
+        "rec": prf[1],
+        "f1": prf[2],
+        "perclass": prf_per_class,
+    }
 
 def pearson_and_spearman(preds, labels):
     pearson_corr = pearsonr(preds, labels)[0]
@@ -554,7 +566,7 @@ def pearson_and_spearman(preds, labels):
     }
 
 
-def compute_metrics(task_name, preds, labels):
+def compute_metrics(task_name, preds, labels, label_list):
     assert len(preds) == len(labels)
     if task_name == "cola":
         return {"mcc": matthews_corrcoef(labels, preds)}
@@ -577,7 +589,9 @@ def compute_metrics(task_name, preds, labels):
     elif task_name == "wnli":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "multiclass":
-        return {"acc": acc_and_f1(preds, labels)}
+        return {"acc": acc_and_p_r_f_per_class(preds, labels, label_list)}
+    elif task_name == "binary":
+        return {"acc": acc_and_p_r_f_per_class(preds, labels, label_list)}
     else:
         raise KeyError(task_name)
 
