@@ -66,15 +66,11 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
-    index = 0
     with open(vocab_file, "r", encoding="utf-8") as reader:
-        while True:
-            token = reader.readline()
-            if not token:
-                break
-            token = token.strip()
-            vocab[token] = index
-            index += 1
+        tokens = reader.read().splitlines()
+    for index, token in enumerate(tokens):
+        vocab[token] = index
+        index += 1
     return vocab
 
 
@@ -213,7 +209,7 @@ class BasicTokenizer(object):
         self.do_lower_case = do_lower_case
         self.never_split = never_split
 
-    def tokenize(self, text, never_split=None):
+    def tokenize(self, text, never_split=None, tokenize_chinese_chars=True):
         """Tokenizes a piece of text."""
         never_split = self.never_split + (never_split if never_split is not None else [])
         text = self._clean_text(text)
@@ -223,7 +219,8 @@ class BasicTokenizer(object):
         # and generally don't have any Chinese data in them (there are Chinese
         # characters in the vocabulary because Wikipedia does have some Chinese
         # words in the English Wikipedia.).
-        text = self._tokenize_chinese_chars(text)
+        if tokenize_chinese_chars:
+            text = self._tokenize_chinese_chars(text)
         orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
