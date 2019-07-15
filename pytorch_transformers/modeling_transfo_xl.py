@@ -1344,7 +1344,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         bsz = input_ids.size(0)
         tgt_len = input_ids.size(1)
 
-        transformer_outputs = self.transformer(input_ids, mems, head_mask)
+        transformer_outputs = self.transformer(input_ids, mems=mems, head_mask=head_mask)
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
