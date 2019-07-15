@@ -414,11 +414,11 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
         **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
-            Mask indices selected in ``[0, 1]``:
+            Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
-            Mask indices selected in ``[0, 1]``:
+            Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
@@ -536,7 +536,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 (linear layer with weights tied to the input embeddings). """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     r"""
-        **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
             Indices are selected in ``[-1, 0, ..., config.vocab_size]``
@@ -544,7 +544,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             computed for labels in ``[0, ..., config.vocab_size]``
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -562,7 +562,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         >>> model = OpenAIGPTLMHeadModel(config)
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, lm_labels=input_ids)
+        >>> outputs = model(input_ids, labels=input_ids)
         >>> loss, logits = outputs[:2]
 
     """
@@ -581,16 +581,16 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         self._tie_or_clone_weights(self.lm_head,
                                    self.transformer.tokens_embed)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, head_mask=None):
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, labels=None, head_mask=None):
         transformer_outputs = self.transformer(input_ids, position_ids, token_type_ids, head_mask)
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
 
         outputs = (lm_logits,) + transformer_outputs[1:]
-        if lm_labels is not None:
+        if labels is not None:
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = lm_labels[..., 1:].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
@@ -625,11 +625,11 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
         **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, num_choices, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
-            Mask indices selected in ``[0, 1]``:
+            Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
-            Mask indices selected in ``[0, 1]``:
+            Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for language modeling.
