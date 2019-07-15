@@ -31,7 +31,8 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
 from .modeling_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
-                          PreTrainedModel, prune_conv1d_layer, SequenceSummary)
+                             PreTrainedModel, prune_conv1d_layer, SequenceSummary,
+                             add_start_docstrings)
 from .modeling_bert import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
@@ -414,7 +415,7 @@ GPT2_INPUTS_DOCTRING = r"""    Inputs:
 @add_start_docstrings("The bare GPT2 Model transformer outputing raw hidden-states without any specific head on top.",
                       GPT2_START_DOCSTRING, GPT2_INPUTS_DOCTRING)
 class GPT2Model(GPT2PreTrainedModel):
-    __doc__ = r"""
+    r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
@@ -539,7 +540,7 @@ class GPT2Model(GPT2PreTrainedModel):
 @add_start_docstrings("""The GPT2 Model transformer with a language modeling head on top
 (linear layer with weights tied to the input embeddings). """, GPT2_START_DOCSTRING, GPT2_INPUTS_DOCTRING)
 class GPT2LMHeadModel(GPT2PreTrainedModel):
-    __doc__ = r"""
+    r"""
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
@@ -615,7 +616,7 @@ The language modeling head has its weights tied to the input embeddings,
 the classification head takes as input the input of a specified classification token index in the intput sequence).
 """, GPT2_START_DOCSTRING)
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
-    __doc__ = r"""    Inputs:
+    r"""    Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             The second dimension of the input (`num_choices`) indicates the number of choices to score.

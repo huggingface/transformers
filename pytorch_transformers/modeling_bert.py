@@ -646,7 +646,7 @@ BERT_INPUTS_DOCSTRING = r"""
 @add_start_docstrings("The bare Bert Model transformer outputing raw hidden-states without any specific head on top.",
                       BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertModel(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
@@ -742,7 +742,7 @@ class BertModel(BertPreTrainedModel):
     a `masked language modeling` head and a `next sentence prediction (classification)` head. """,
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForPreTraining(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
@@ -818,7 +818,7 @@ class BertForPreTraining(BertPreTrainedModel):
 @add_start_docstrings("""Bert Model transformer BERT model with a `language modeling` head on top. """,
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForMaskedLM(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
@@ -883,7 +883,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 @add_start_docstrings("""Bert Model transformer BERT model with a `next sentence prediction (classification)` head on top. """,
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForNextSentencePrediction(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
         **next_sentence_label**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
             Indices should be in ``[0, 1]``.
@@ -941,7 +941,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForSequenceClassification(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the sequence classification/regression loss.
             Indices should be in ``[0, ..., config.num_labels]``.
@@ -1009,7 +1009,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     BERT_START_DOCSTRING)
 class BertForMultipleChoice(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
@@ -1115,7 +1115,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForTokenClassification(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels]``.
@@ -1182,7 +1182,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForQuestionAnswering(BertPreTrainedModel):
-    __doc__ = r"""
+    r"""
         **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
