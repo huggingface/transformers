@@ -382,10 +382,10 @@ GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~pytorch_transformers.BertConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~pytorch_transformers.GPT2Config`): Model configuration class with all the parameters of the model.
 """
 
-GPT2_INPUTS_DOCTRING = r"""    Inputs:
+GPT2_INPUTS_DOCSTRING = r"""    Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             Indices can be obtained using :class:`pytorch_transformers.BPT2Tokenizer`.
@@ -413,7 +413,7 @@ GPT2_INPUTS_DOCTRING = r"""    Inputs:
 """
 
 @add_start_docstrings("The bare GPT2 Model transformer outputing raw hidden-states without any specific head on top.",
-                      GPT2_START_DOCSTRING, GPT2_INPUTS_DOCTRING)
+                      GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
 class GPT2Model(GPT2PreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -538,7 +538,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
 
 @add_start_docstrings("""The GPT2 Model transformer with a language modeling head on top
-(linear layer with weights tied to the input embeddings). """, GPT2_START_DOCSTRING, GPT2_INPUTS_DOCTRING)
+(linear layer with weights tied to the input embeddings). """, GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
 class GPT2LMHeadModel(GPT2PreTrainedModel):
     r"""
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:

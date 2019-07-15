@@ -31,7 +31,8 @@ from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
 from .modeling_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
-                             PreTrainedModel, prune_conv1d_layer, SequenceSummary)
+                             PreTrainedModel, prune_conv1d_layer, SequenceSummary,
+                             add_start_docstrings)
 from .modeling_bert import BertLayerNorm as LayerNorm
 
 logger = logging.getLogger(__name__)
@@ -395,10 +396,10 @@ OPENAI_GPT_START_DOCSTRING = r"""    OpenAI GPT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~pytorch_transformers.BertConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~pytorch_transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.
 """
 
-OPENAI_GPT_INPUTS_DOCTRING = r"""    Inputs:
+OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             Indices can be obtained using :class:`pytorch_transformers.BPT2Tokenizer`.
@@ -422,7 +423,7 @@ OPENAI_GPT_INPUTS_DOCTRING = r"""    Inputs:
 """
 
 @add_start_docstrings("The bare OpenAI GPT transformer model outputing raw hidden-states without any specific head on top.",
-                      OPENAI_GPT_START_DOCSTRING, GPT2_INPUTS_DOCTRING)
+                      OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -532,7 +533,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
 
 @add_start_docstrings("""OpenAI GPT Model transformer with a language modeling head on top
-(linear layer with weights tied to the input embeddings). """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCTRING)
+(linear layer with weights tied to the input embeddings). """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     r"""
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
