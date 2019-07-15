@@ -1162,8 +1162,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             Labels whether a question has an answer or no answer (SQuAD 2.0)
         **cls_index**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
-        **p_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...) 
+        **p_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
+            1.0 means token should be masked. 0.0 mean token is not masked.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
