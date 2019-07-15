@@ -614,19 +614,19 @@ class SQuADHead(nn.Module):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned if both ``start_positions`` and ``end_positions`` are provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
-        **start_top_log_probs**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+        **start_top_log_probs**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
             ``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``
             Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        **start_top_index**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+        **start_top_index**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
             ``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``
             Indices for the top config.start_n_top start token possibilities (beam-search).
-        **end_top_log_probs**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+        **end_top_log_probs**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
             ``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
             Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
-        **end_top_index**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+        **end_top_index**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
             ``torch.LongTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
             Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
-        **cls_logits**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+        **cls_logits**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
             ``torch.FloatTensor`` of shape ``(batch_size,)``
             Log probabilities for the ``is_impossible`` label of the answers.
     """
