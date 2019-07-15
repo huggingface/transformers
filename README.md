@@ -2,12 +2,14 @@
 
 [![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
-PyTorch-Transformers is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP). The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
+PyTorch-Transformers is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
+
+The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
 
 - **[Google's BERT model](https://github.com/google-research/bert)** released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 - **[OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm)** released  with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
 - **[OpenAI's GPT-2 model](https://blog.openai.com/better-language-models/)** released with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
-- **[Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl)** released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+- **[Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl)** released with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
 - **[Google/CMU's XLNet model](https://github.com/zihangdai/xlnet/)** released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 - **[Facebook's XLM model](https://github.com/facebookresearch/XLM/)** released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
 
