@@ -161,10 +161,9 @@ class BertTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
 
-    def _convert_ids_to_string(self, tokens_ids):
-        """Converts a sequence of ids in a string."""
-        tokens = self.convert_ids_to_tokens(tokens_ids)
-        out_string = ''.join(tokens).replace(' ##', '').strip()
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
     def save_vocabulary(self, vocab_path):

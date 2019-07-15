@@ -38,7 +38,10 @@ class TokenizationTest(unittest.TestCase):
             with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
                 vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-            create_and_check_tokenizer_commons(self, BertTokenizer, tmpdirname)
+            input_text = u"UNwant\u00E9d,running"
+            output_text = u"unwanted, running"
+
+            create_and_check_tokenizer_commons(self, input_text, output_text, BertTokenizer, tmpdirname)
 
             tokenizer = BertTokenizer(vocab_file)
 

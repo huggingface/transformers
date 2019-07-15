@@ -41,7 +41,10 @@ class GPT2TokenizationTest(unittest.TestCase):
             with open(merges_file, "w") as fp:
                 fp.write("\n".join(merges))
 
-            create_and_check_tokenizer_commons(self, GPT2Tokenizer, tmpdirname, **special_tokens_map)
+            input_text = u"lower newer"
+            output_text = u"lower<unk>newer"
+
+            create_and_check_tokenizer_commons(self, input_text, output_text, GPT2Tokenizer, tmpdirname, **special_tokens_map)
 
             tokenizer = GPT2Tokenizer(vocab_file, merges_file, **special_tokens_map)
             text = "lower"

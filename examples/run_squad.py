@@ -213,7 +213,6 @@ def evaluate(args, model, tokenizer, prefix=""):
                 inputs.update({'cls_index': batch[4],
                                'p_mask':    batch[5]})
             outputs = model(**inputs)
-            batch_start_logits, batch_end_logits = outputs[:2]
 
         for i, example_index in enumerate(example_indices):
             eval_feature = features[example_index.item()]
@@ -242,7 +241,8 @@ def evaluate(args, model, tokenizer, prefix=""):
         write_predictions_extended(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.predict_file,
-                        args.start_n_top, args.end_n_top, args.version_2_with_negative)
+                        model.config.start_n_top, model.config.end_n_top,
+                        args.version_2_with_negative, tokenizer, args.verbose_logging)
     else:
         write_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
@@ -262,7 +262,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     input_file = args.predict_file if evaluate else args.train_file
     cached_features_file = os.path.join(os.path.dirname(input_file), 'cached_{}_{}_{}'.format(
         'dev' if evaluate else 'train',
-        list(filter(None, args.model_name.split('/'))).pop(),
+        list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length)))
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
@@ -312,8 +312,10 @@ def main():
                         help="SQuAD json for training. E.g., train-v1.1.json")
     parser.add_argument("--predict_file", default=None, type=str, required=True,
                         help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
-    parser.add_argument("--model_name", default=None, type=str, required=True,
-                        help="Bert/XLNet/XLM pre-trained model selected in the list: " + ", ".join(ALL_MODELS))
+    parser.add_argument("--model_type", default=None, type=str, required=True,
+                        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
+    parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
+                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
 
@@ -438,15 +440,11 @@ def main():
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-    args.model_type = ""
-    for key in MODEL_CLASSES:
-        if key in args.model_name.lower():
-            args.model_type = key  # take the first match in model types
-            break
+    args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name, do_lower_case=args.do_lower_case)
-    model = model_class.from_pretrained(args.model_name, from_tf=bool('.ckpt' in args.model_name), config=config)
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
+    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab

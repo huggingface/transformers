@@ -361,49 +361,23 @@ class PreTrainedTokenizer(object):
             (resp.) a sequence of ids, using the vocabulary.
         """
         if isinstance(tokens, str) or (six.PY2 and isinstance(tokens, unicode)):
-            return self.convert_token_to_id_with_added_voc(tokens)
+            return self._convert_token_to_id_with_added_voc(tokens)
 
         ids = []
         for token in tokens:
-            ids.append(self.convert_token_to_id_with_added_voc(token))
+            ids.append(self._convert_token_to_id_with_added_voc(token))
         if len(ids) > self.max_len:
             logger.warning("Token indices sequence length is longer than the specified maximum sequence length "
                            "for this model ({} > {}). Running this sequence through the model will result in "
                            "indexing errors".format(len(ids), self.max_len))
         return ids
 
-
-    def convert_token_to_id_with_added_voc(self, token):
+    def _convert_token_to_id_with_added_voc(self, token):
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
-
     def _convert_token_to_id(self, token):
-        raise NotImplementedError
-
-
-    def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
-        """ Converts a single index or a sequence of indices (integers) in a token "
-            (resp.) a sequence of tokens (str/unicode), using the vocabulary and added tokens.
-
-            Args:
-                skip_special_tokens: Don't decode special tokens (self.all_special_tokens). Default: False
-        """
-        if isinstance(ids, int):
-            return self.convert_id_to_token(ids)
-        tokens = []
-        for index in ids:
-            if index in self.all_special_ids and skip_special_tokens:
-                continue
-            if index in self.added_tokens_decoder:
-                tokens.append(self.added_tokens_decoder[index])
-            else:
-                tokens.append(self._convert_id_to_token(index))
-        return tokens
-
-
-    def _convert_id_to_token(self, index):
         raise NotImplementedError
 
 
@@ -414,21 +388,47 @@ class PreTrainedTokenizer(object):
         return self.convert_tokens_to_ids(self.tokenize(text))
 
 
+    def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
+        """ Converts a single index or a sequence of indices (integers) in a token "
+            (resp.) a sequence of tokens (str/unicode), using the vocabulary and added tokens.
+
+            Args:
+                skip_special_tokens: Don't decode special tokens (self.all_special_tokens). Default: False
+        """
+        if isinstance(ids, int):
+            if ids in self.added_tokens_decoder:
+                return self.added_tokens_decoder[ids]
+            else:
+                return self._convert_id_to_token(ids)
+        tokens = []
+        for index in ids:
+            if index in self.all_special_ids and skip_special_tokens:
+                continue
+            if index in self.added_tokens_decoder:
+                tokens.append(self.added_tokens_decoder[index])
+            else:
+                tokens.append(self._convert_id_to_token(index))
+        return tokens
+
+    def _convert_id_to_token(self, index):
+        raise NotImplementedError
+
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string.
+            The most simple way to do it is ' '.join(self.convert_ids_to_tokens(token_ids))
+            but we often want to remove sub-word tokenization artifacts at the same time.
+        """
+        return ' '.join(self.convert_ids_to_tokens(tokens))
+
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         """ Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
             with options to remove special tokens and clean up tokenization spaces.
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        text = self._convert_ids_to_string(filtered_tokens)
+        text = self.convert_tokens_to_string(filtered_tokens)
         if clean_up_tokenization_spaces:
             text = clean_up_tokenization(text)
         return text
-
-    def _convert_ids_to_string(self, tokens_ids):
-        """ Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary.
-            roughtly same as ' '.join(self.convert_ids_to_tokens(token_ids)).
-        """
-        return ' '.join(self.convert_ids_to_tokens(tokens_ids))
 
     @property
     def special_tokens_map(self):

@@ -42,7 +42,10 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
             with open(merges_file, "w") as fp:
                 fp.write("\n".join(merges))
 
-            create_and_check_tokenizer_commons(self, OpenAIGPTTokenizer, tmpdirname)
+            input_text = u"lower newer"
+            output_text = u"lower newer"
+
+            create_and_check_tokenizer_commons(self, input_text, output_text, OpenAIGPTTokenizer, tmpdirname)
 
             tokenizer = OpenAIGPTTokenizer(vocab_file, merges_file)
 

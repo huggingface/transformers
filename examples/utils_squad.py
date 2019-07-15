@@ -87,6 +87,7 @@ class InputFeatures(object):
                  segment_ids,
                  cls_index,
                  p_mask,
+                 paragraph_len,
                  start_position=None,
                  end_position=None,
                  is_impossible=None):
@@ -101,6 +102,7 @@ class InputFeatures(object):
         self.segment_ids = segment_ids
         self.cls_index = cls_index
         self.p_mask = p_mask
+        self.paragraph_len = paragraph_len
         self.start_position = start_position
         self.end_position = end_position
         self.is_impossible = is_impossible
@@ -292,6 +294,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tokens.append(all_doc_tokens[split_token_index])
                 segment_ids.append(sequence_b_segment_id)
                 p_mask.append(0)
+            paragraph_len = doc_span.length
 
             # SEP token
             tokens.append(sep_token)
@@ -385,6 +388,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     segment_ids=segment_ids,
                     cls_index=cls_index,
                     p_mask=p_mask,
+                    paragraph_len=paragraph_len,
                     start_position=start_position,
                     end_position=end_position,
                     is_impossible=span_is_impossible))
@@ -673,8 +677,9 @@ RawResultExtended = collections.namedtuple("RawResultExtended",
 def write_predictions_extended(all_examples, all_features, all_results, n_best_size,
                                 max_answer_length, output_prediction_file,
                                 output_nbest_file,
-                                output_null_log_odds_file, orig_data,
-                                start_n_top, end_n_top, version_2_with_negative):
+                                output_null_log_odds_file, orig_data_file,
+                                start_n_top, end_n_top, version_2_with_negative,
+                                tokenizer, verbose_logging):
     """ XLNet write prediction logic (more complex than Bert's).
         Write final predictions to the json file and log-odds of null if needed.
 
@@ -764,13 +769,30 @@ def write_predictions_extended(all_examples, all_features, all_results, n_best_s
                 break
             feature = features[pred.feature_index]
 
-            tok_start_to_orig_index = feature.tok_start_to_orig_index
-            tok_end_to_orig_index = feature.tok_end_to_orig_index
-            start_orig_pos = tok_start_to_orig_index[pred.start_index]
-            end_orig_pos = tok_end_to_orig_index[pred.end_index]
+            # XLNet un-tokenizer
+            # Let's keep it simple for now and see if we need all this later.
+            # 
+            # tok_start_to_orig_index = feature.tok_start_to_orig_index
+            # tok_end_to_orig_index = feature.tok_end_to_orig_index
+            # start_orig_pos = tok_start_to_orig_index[pred.start_index]
+            # end_orig_pos = tok_end_to_orig_index[pred.end_index]
+            # paragraph_text = example.paragraph_text
+            # final_text = paragraph_text[start_orig_pos: end_orig_pos + 1].strip()
 
-            paragraph_text = example.paragraph_text
-            final_text = paragraph_text[start_orig_pos: end_orig_pos + 1].strip()
+            # Previously used Bert untokenizer
+            tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
+            orig_doc_start = feature.token_to_orig_map[pred.start_index]
+            orig_doc_end = feature.token_to_orig_map[pred.end_index]
+            orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
+            tok_text = tokenizer.convert_tokens_to_string(tok_tokens)
+
+            # Clean whitespace
+            tok_text = tok_text.strip()
+            tok_text = " ".join(tok_text.split())
+            orig_text = " ".join(orig_tokens)
+
+            final_text = get_final_text(tok_text, orig_text, tokenizer.do_lower_case,
+                                        verbose_logging)
 
             if final_text in seen_predictions:
                 continue
@@ -828,6 +850,9 @@ def write_predictions_extended(all_examples, all_features, all_results, n_best_s
     if version_2_with_negative:
         with open(output_null_log_odds_file, "w") as writer:
             writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
+
+    with open(orig_data_file, "r", encoding='utf-8') as reader:
+        orig_data = json.load(reader)["data"]
 
     qid_to_has_ans = make_qid_to_has_ans(orig_data)
     has_ans_qids = [k for k, v in qid_to_has_ans.items() if v]

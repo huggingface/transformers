@@ -229,9 +229,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             else:
                 raise ValueError('Token not in vocabulary and no <unk> token in vocabulary for replacement')
 
-    def _convert_ids_to_string(self, tokens_ids):
-        """Converts a sequence of ids in a string."""
-        out_string = ' '.join(tokens_ids).strip()
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        out_string = ' '.join(tokens).strip()
         return out_string
 
     def convert_to_tensor(self, symbols):

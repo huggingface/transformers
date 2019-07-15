@@ -60,8 +60,9 @@ class ExamplesTests(unittest.TestCase):
                     "--warmup_steps=2",
                     "--overwrite_output_dir",
                     "--seed=42"]
-        model_name = "--model_name=bert-base-uncased"
-        with patch.object(sys, 'argv', testargs + [model_name]):
+        model_type, model_name = ("--model_type=bert",
+                                  "--model_name_or_path=bert-base-uncased")
+        with patch.object(sys, 'argv', testargs + [model_type, model_name]):
             result = run_glue.main()
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
@@ -85,8 +86,9 @@ class ExamplesTests(unittest.TestCase):
                     "--per_gpu_eval_batch_size=1",
                     "--overwrite_output_dir",
                     "--seed=42"]
-        model_name = "--model_name=bert-base-uncased"
-        with patch.object(sys, 'argv', testargs + [model_name]):
+        model_type, model_name = ("--model_type=bert",
+                                  "--model_name_or_path=bert-base-uncased")
+        with patch.object(sys, 'argv', testargs + [model_type, model_name]):
             result = run_squad.main()
             self.assertGreaterEqual(result['f1'], 30)
             self.assertGreaterEqual(result['exact'], 30)
