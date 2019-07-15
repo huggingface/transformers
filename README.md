@@ -1,27 +1,23 @@
 # 👾 PyTorch-Transformers
 
-[![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-bert.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-bert)
+[![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
 
 PyTorch-Transformers is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP). The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
 
 - **[Google's BERT model](https://github.com/google-research/bert)** released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
-- **[OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm) released  with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/)** by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
+- **[OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm)** released  with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
 - **[OpenAI's GPT-2 model](https://blog.openai.com/better-language-models/)** released with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
 - **[Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl)** released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 - **[Google/CMU's XLNet model](https://github.com/zihangdai/xlnet/)** released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 - **[Facebook's XLM model](https://github.com/facebookresearch/XLM/)** released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet).
-
-You can find more details in the [Examples](#examples) section of the documentation.
-
-## Readme
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](#documentation).
 
 | Section | Description |
 |-|-|
 | [Installation](#installation) | How to install the package |
 | [Quick tour: Usage](#quick-tour-usage) | Tokenizers & models usage: Bert and GPT-2 |
-| [Quick tour: Fine-tuning/usage scripts](#quick-tour-fine-tuning-usage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
+| [Quick tour: Fine-tuning/usage scripts](#quick-tour-fine-tuning/usage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Documentation](#documentation) | Full API documentation and more |
 
 ## Installation
@@ -44,17 +40,6 @@ Clone the repository and run:
 pip install [--editable] .
 ```
 
-### SpaCy, ftfy
-
-If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you can install `ftfy` (version 4.4.3 if you are using Python 2) and `SpaCy` :
-
-```bash
-pip install spacy ftfy==4.4.3
-python -m spacy download en
-```
-
-If you don't install `ftfy` and `SpaCy`, the `OpenAI GPT` tokenizer will default to tokenize using BERT's `BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage, don't worry).
-
 ### Tests
 
 A series of tests is included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/pytorch-transformers/tree/master/pytorch_transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/pytorch-transformers/tree/master/examples).
@@ -72,11 +57,11 @@ python -m pytest -sv ./examples/
 
 Here are two quick-start examples using `Bert` and `GPT2` with pre-trained models.
 
-See the [documentation](#doc) for the details of all the models and classes.
+See the [documentation](#documentation) for the details of all the models and classes.
 
 ### BERT example
 
-First let's prepare a tokenized input with `BertTokenizer`
+First let's prepare a tokenized input from a text string using `BertTokenizer`
 
 ```python
 import torch
@@ -108,7 +93,7 @@ tokens_tensor = torch.tensor([indexed_tokens])
 segments_tensors = torch.tensor([segments_ids])
 ```
 
-Let's see how to use `BertModel` to get encoded inputs:
+Let's see how we can use `BertModel` to encode our inputs in hidden-states:
 
 ```python
 # Load pre-trained model (weights)
@@ -160,9 +145,9 @@ assert predicted_token == 'henson'
 
 ### OpenAI GPT-2
 
-Here is a quick-start example using `GPT2Tokenizer` and `GPT2LMHeadModel` class with OpenAI's pre-trained model.
+Here is a quick-start example using `GPT2Tokenizer` and `GPT2LMHeadModel` class with OpenAI's pre-trained model to predict the next token from a text prompt.
 
-First let's prepare a tokenized input with `GPT2Tokenizer`
+First let's prepare a tokenized input from our text string using `GPT2Tokenizer`
 
 ```python
 import torch
@@ -175,15 +160,15 @@ logging.basicConfig(level=logging.INFO)
 # Load pre-trained model tokenizer (vocabulary)
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
-# Encode some inputs
+# Encode a text inputs
 text = "Who was Jim Henson ? Jim Henson was a"
 indexed_tokens = tokenizer.encode(text)
 
-# Convert inputs to PyTorch tensors
+# Convert indexed tokens in a PyTorch tensor
 tokens_tensor = torch.tensor([indexed_tokens])
 ```
 
-Let's see how to use `GPT2LMHeadModel` to generate some text from our prompt:
+Let's see how to use `GPT2LMHeadModel` to generate the next token following our text:
 
 ```python
 # Load pre-trained model (weights)
@@ -208,17 +193,17 @@ predicted_text = tokenizer.decode(indexed_tokens + [predicted_index])
 assert predicted_text == 'Who was Jim Henson? Jim Henson was a man'
 ```
 
-Examples for each model class of each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the documentation.
+Examples for each model class of each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [documentation](#documentation).
 
 ## Quick tour: Fine-tuning/usage scripts
 
-We include several example script with SOTA performances for NLU and NLG tasks:
+The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
 - fine-tuning Bert/XLNet/XLM with a *sequence-level classifier* on nine different GLUE tasks,
 - fine-tuning Bert/XLNet/XLM with a *token-level classifier* on the question answering dataset SQuAD 2.0, and
 - using GPT/GPT-2/Transformer-XL and XLNet for conditional language generation.
 
-Here are three quick examples:
+Here are three quick usage examples for these scripts:
 
 ### Fine-tuning for sequence classification: GLUE tasks examples
 
