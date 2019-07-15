@@ -1,4 +1,5 @@
-"""Official evaluation script for SQuAD version 2.0.
+""" Official evaluation script for SQuAD version 2.0.
+    Modified by XLNet authors to update `find_best_threshold` scripts for SQuAD V2.0
 
 In addition to basic functionality, we also compute additional statistics and
 plot precision-recall curves if an additional na_prob.json file is provided.
@@ -232,6 +233,36 @@ def find_best_thresh(preds, scores, na_probs, qid_to_has_ans):
       best_thresh = na_probs[qid]
   return 100.0 * best_score / len(scores), best_thresh
 
+def find_best_thresh_v2(preds, scores, na_probs, qid_to_has_ans):
+  num_no_ans = sum(1 for k in qid_to_has_ans if not qid_to_has_ans[k])
+  cur_score = num_no_ans
+  best_score = cur_score
+  best_thresh = 0.0
+  qid_list = sorted(na_probs, key=lambda k: na_probs[k])
+  for i, qid in enumerate(qid_list):
+    if qid not in scores: continue
+    if qid_to_has_ans[qid]:
+      diff = scores[qid]
+    else:
+      if preds[qid]:
+        diff = -1
+      else:
+        diff = 0
+    cur_score += diff
+    if cur_score > best_score:
+      best_score = cur_score
+      best_thresh = na_probs[qid]
+
+  has_ans_score, has_ans_cnt = 0, 0
+  for qid in qid_list:
+    if not qid_to_has_ans[qid]: continue
+    has_ans_cnt += 1
+
+    if qid not in scores: continue
+    has_ans_score += scores[qid]
+
+  return 100.0 * best_score / len(scores), best_thresh, 1.0 * has_ans_score / has_ans_cnt
+
 def find_all_best_thresh(main_eval, preds, exact_raw, f1_raw, na_probs, qid_to_has_ans):
   best_exact, exact_thresh = find_best_thresh(preds, exact_raw, na_probs, qid_to_has_ans)
   best_f1, f1_thresh = find_best_thresh(preds, f1_raw, na_probs, qid_to_has_ans)
@@ -239,6 +270,16 @@ def find_all_best_thresh(main_eval, preds, exact_raw, f1_raw, na_probs, qid_to_h
   main_eval['best_exact_thresh'] = exact_thresh
   main_eval['best_f1'] = best_f1
   main_eval['best_f1_thresh'] = f1_thresh
+
+def find_all_best_thresh_v2(main_eval, preds, exact_raw, f1_raw, na_probs, qid_to_has_ans):
+  best_exact, exact_thresh, has_ans_exact = find_best_thresh_v2(preds, exact_raw, na_probs, qid_to_has_ans)
+  best_f1, f1_thresh, has_ans_f1 = find_best_thresh_v2(preds, f1_raw, na_probs, qid_to_has_ans)
+  main_eval['best_exact'] = best_exact
+  main_eval['best_exact_thresh'] = exact_thresh
+  main_eval['best_f1'] = best_f1
+  main_eval['best_f1_thresh'] = f1_thresh
+  main_eval['has_ans_exact'] = has_ans_exact
+  main_eval['has_ans_f1'] = has_ans_f1
 
 def main(OPTS):
   with open(OPTS.data_file) as f:
