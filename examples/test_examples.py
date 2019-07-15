@@ -103,7 +103,7 @@ class ExamplesTests(unittest.TestCase):
                     "--seed=42"]
         model_type, model_name = ("--model_type=openai-gpt",
                                   "--model_name_or_path=openai-gpt")
-        with patch.object(sys, 'argv', testargs + [model_name]):
+        with patch.object(sys, 'argv', testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result), 10)
 
