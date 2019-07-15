@@ -174,9 +174,9 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         """Converts an id in a token (BPE) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
-    def _convert_ids_to_string(self, tokens_ids):
-        """Converts a sequence of ids in a string."""
-        out_string = ''.join(tokens_ids).replace('</w>', ' ').strip()
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        out_string = ''.join(tokens).replace('</w>', ' ').strip()
         return out_string
 
     def save_vocabulary(self, save_directory):

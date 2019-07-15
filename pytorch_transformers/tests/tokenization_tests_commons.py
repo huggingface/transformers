@@ -113,23 +113,24 @@ def create_and_check_add_tokens_tokenizer(tester, tokenizer_class, *inputs, **kw
     tester.assertEqual(tokens[-2], tokenizer.convert_tokens_to_ids(tokenizer.pad_token))
 
 
-def create_and_check_required_methods_tokenizer(tester, tokenizer_class, *inputs, **kwargs):
+def create_and_check_required_methods_tokenizer(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs):
     tokenizer = tokenizer_class.from_pretrained(*inputs, **kwargs)
 
-    text = u"He is very happy, UNwant\u00E9d,running"
-    tokens = tokenizer.tokenize(text)
+    tokens = tokenizer.tokenize(input_text)
     ids = tokenizer.convert_tokens_to_ids(tokens)
-    ids_2 = tokenizer.encode(text)
+    ids_2 = tokenizer.encode(input_text)
     tester.assertListEqual(ids, ids_2)
 
     tokens_2 = tokenizer.convert_ids_to_tokens(ids)
     text_2 = tokenizer.decode(ids)
 
+    tester.assertEqual(text_2, output_text)
+
     tester.assertNotEqual(len(tokens_2), 0)
     tester.assertIsInstance(text_2, (str, unicode))
 
-def create_and_check_tokenizer_commons(tester, tokenizer_class, *inputs, **kwargs):
-    create_and_check_required_methods_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
+def create_and_check_tokenizer_commons(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs):
+    create_and_check_required_methods_tokenizer(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs)
     create_and_check_add_tokens_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
     create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
     create_and_check_pickle_tokenizer(tester, tokenizer_class, *inputs, **kwargs)

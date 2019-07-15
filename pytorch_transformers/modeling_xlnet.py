@@ -1167,12 +1167,23 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             1.0 means token should be masked. 0.0 mean token is not masked.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        **start_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
-            Span-start scores (before SoftMax).
-        **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
-            Span-end scores (before SoftMax).
+        **loss**: (`optional`, returned if both ``start_positions`` and ``end_positions`` are provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
+        **start_top_log_probs**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+            ``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``
+            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+        **start_top_index**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+            ``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``
+            Indices for the top config.start_n_top start token possibilities (beam-search).
+        **end_top_log_probs**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+            ``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
+            Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
+        **end_top_index**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+            ``torch.LongTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
+            Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
+        **cls_logits**: `(`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
+            ``torch.FloatTensor`` of shape ``(batch_size,)``
+            Log probabilities for the ``is_impossible`` label of the answers.
         **mems**:
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
@@ -1243,12 +1254,10 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                 loss_fct_cls = nn.BCEWithLogitsLoss()
                 cls_loss = loss_fct_cls(cls_logits, is_impossible)
 
-                # note(zhiliny): by default multiply the loss by 0.5 so that the scale is
-                # comparable to start_loss and end_loss
+                # note(zhiliny): by default multiply the loss by 0.5 so that the scale is comparable to start_loss and end_loss
                 total_loss += cls_loss * 0.5
-                outputs = (total_loss, start_logits, end_logits, cls_logits) + outputs
-            else:
-                outputs = (total_loss, start_logits, end_logits) + outputs
+
+            outputs = (total_loss,) + outputs
 
         else:
             # during inference, compute the end logits based on beam search
@@ -1256,8 +1265,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             start_log_probs = F.softmax(start_logits, dim=-1) # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(start_log_probs, self.start_n_top, dim=-1) # shape (bsz, start_n_top)
-            start_top_index = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
-            start_states = torch.gather(hidden_states, -2, start_top_index) # shape (bsz, start_n_top, hsz)
+            start_top_index_exp = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
+            start_states = torch.gather(hidden_states, -2, start_top_index_exp) # shape (bsz, start_n_top, hsz)
             start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1) # shape (bsz, slen, start_n_top, hsz)
 
             hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(start_states) # shape (bsz, slen, start_n_top, hsz)
@@ -1269,11 +1278,11 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)
             end_top_index = end_top_index.view(-1, self.start_n_top * self.end_n_top)
 
-            start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)
-            cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
+            start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)  # get the representation of START as weighted sum of hidden states
+            cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)  # Shape (batch size,): one single `cls_logits` for each sample
 
             outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits) + outputs
 
-        # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems, (hidden states), (attentions)
-        # or (if labels are provided) total_loss, start_logits, end_logits, (cls_logits), mems, (hidden states), (attentions)
+        # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits
+        # or (if labels are provided) (total_loss,)
         return outputs
