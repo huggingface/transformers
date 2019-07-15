@@ -1049,8 +1049,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
                 labels=None, head_mask=None):
-        transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
-                                               mems, perm_mask, target_mapping, head_mask)
+        transformer_outputs = self.transformer(input_ids, token_type_ids=token_type_ids,
+                                               input_mask=input_mask, attention_mask=attention_mask,
+                                               mems=mems, perm_mask=perm_mask, target_mapping=target_mapping,
+                                               head_mask=head_mask)
 
         logits = self.lm_loss(transformer_outputs[0])
 
@@ -1119,8 +1121,10 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
                 labels=None, head_mask=None):
-        transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
-                                               mems, perm_mask, target_mapping, head_mask)
+        transformer_outputs = self.transformer(input_ids, token_type_ids=token_type_ids,
+                                               input_mask=input_mask, attention_mask=attention_mask,
+                                               mems=mems, perm_mask=perm_mask, target_mapping=target_mapping,
+                                               head_mask=head_mask)
         output = transformer_outputs[0]
 
         output = self.sequence_summary(output)
@@ -1209,10 +1213,12 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                 mems=None, perm_mask=None, target_mapping=None,
                 start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None,
                 head_mask=None):
-        transformer_outputs = self.transformer(input_ids, token_type_ids, input_mask, attention_mask,
-                                               mems, perm_mask, target_mapping, head_mask)
+        transformer_outputs = self.transformer(input_ids, token_type_ids=token_type_ids,
+                                               input_mask=input_mask, attention_mask=attention_mask,
+                                               mems=mems, perm_mask=perm_mask, target_mapping=target_mapping,
+                                               head_mask=head_mask)
         hidden_states = transformer_outputs[0]
-        start_logits = self.start_logits(hidden_states, p_mask)
+        start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
         outputs = transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
 
