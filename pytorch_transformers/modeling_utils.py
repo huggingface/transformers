@@ -538,7 +538,6 @@ class PoolerAnswerClass(nn.Module):
 
 class SQuADHead(nn.Module):
     """ A SQuAD head inspired by XLNet.
-        Compute
     """
     def __init__(self, config):
         super(SQuADHead, self).__init__()
