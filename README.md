@@ -239,7 +239,7 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
-    --do_predict \
+    --do_eval \
     --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
@@ -269,7 +269,7 @@ The generation script include the [tricks](https://github.com/rusiaaman/XLNet-ge
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
 ```shell
-python ./examples/run_glue.py \
+python ./examples/run_generation.py \
     --model_type=gpt2 \
     --length=20 \
     --model_name_or_path=gpt2 \
