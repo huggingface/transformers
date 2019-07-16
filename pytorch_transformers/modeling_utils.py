@@ -306,7 +306,10 @@ class PreTrainedModel(nn.Module):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        r""" Instantiate a PretrainedConfig from a pre-trained model configuration.
+        r"""Instantiate a pretrained pytorch model from a pre-trained model configuration.
+
+            The model is set in evaluation mode by default using `model.eval()` (Dropout modules are desactivated)
+            To train the model, you should first set it back in training mode with `model.train()`
 
         Params:
             **pretrained_model_name_or_path**: either:
@@ -459,6 +462,9 @@ class PreTrainedModel(nn.Module):
 
         if hasattr(model, 'tie_weights'):
             model.tie_weights()  # make sure word embedding weights are still tied
+
+        # Set model in evaluation mode to desactivate DropOut modules by default
+        model.eval()
 
         if output_loading_info:
             loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys, "error_msgs": error_msgs}
