@@ -163,6 +163,11 @@ class PreTrainedTokenizer(object):
             for file_id, map_list in cls.pretrained_vocab_files_map.items():
                 vocab_files[file_id] = map_list[pretrained_model_name_or_path]
         else:
+            logger.info(
+                "Model name '{}' not found in model shortcut name list ({}). "
+                "Assuming '{}' is a path or url to a directory containing tokenizer files.".format(
+                    pretrained_model_name_or_path, ', '.join(s3_models),
+                    pretrained_model_name_or_path))
             all_vocab_files_names = {'added_tokens_file': ADDED_TOKENS_FILE,
                                      'special_tokens_map_file': SPECIAL_TOKENS_MAP_FILE}
             all_vocab_files_names.update(cls.vocab_files_names)
@@ -175,6 +180,14 @@ class PreTrainedTokenizer(object):
                     logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                     full_file_name = None
                 vocab_files[file_id] = full_file_name
+            if all(full_file_name is None for full_file_name in vocab_files.values()):
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find tokenizer files"
+                    "at this path or url.".format(
+                        pretrained_model_name_or_path, ', '.join(s3_models),
+                        pretrained_model_name_or_path, ))
+                return None
 
         # Get files from url, cache, or disk depending on the case
         try:

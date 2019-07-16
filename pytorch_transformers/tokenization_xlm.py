@@ -59,6 +59,13 @@ PRETRAINED_VOCAB_FILES_MAP = {
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'xlm-mlm-en-2048': 512,
+    'xlm-mlm-ende-1024': 512,
+    'xlm-mlm-enfr-1024': 512,
+    'xlm-mlm-enro-1024': 512,
+    'xlm-mlm-tlm-xnli15-1024': 512,
+    'xlm-mlm-xnli15-1024': 512,
+    'xlm-clm-enfr-1024': 512,
+    'xlm-clm-ende-1024': 512,
 }
 
 def get_pairs(word):
