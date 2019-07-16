@@ -208,7 +208,8 @@ class PreTrainedTokenizer(object):
             # if we're using a pretrained model, ensure the tokenizer
             # wont index sequences longer than the number of positional embeddings
             max_len = cls.max_model_input_sizes[pretrained_model_name_or_path]
-            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
+            if max_len is not None and isinstance(max_len, (int, float)):
+                kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
 
         # Merge resolved_vocab_files arguments in kwargs.
         added_tokens_file = resolved_vocab_files.pop('added_tokens_file', None)

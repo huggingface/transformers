@@ -26,6 +26,9 @@ from pytorch_transformers.modeling_openai import (CONFIG_NAME, WEIGHTS_NAME,
                                                      OpenAIGPTModel,
                                                      load_tf_weights_in_openai_gpt)
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 
 def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_config_file, pytorch_dump_folder_path):
     # Construct model
@@ -36,7 +39,7 @@ def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_c
     model = OpenAIGPTModel(config)
 
     # Load weights from numpy
-    load_tf_weights_in_openai_gpt(model, openai_checkpoint_folder_path)
+    load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path)
 
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + '/' + WEIGHTS_NAME

@@ -36,6 +36,9 @@ if sys.version_info[0] == 2:
 else:
     import pickle
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 # We do this to be able to load python 2 datasets pickles
 # See e.g. https://stackoverflow.com/questions/2121874/python-pickling-after-changing-a-modules-directory/2121918#2121918
 data_utils.Vocab = data_utils.TransfoXLTokenizer

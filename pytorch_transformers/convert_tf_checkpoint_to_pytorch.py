@@ -18,14 +18,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-import re
 import argparse
-import tensorflow as tf
 import torch
-import numpy as np
 
 from pytorch_transformers.modeling_bert import BertConfig, BertForPreTraining, load_tf_weights_in_bert
+
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
     # Initialise PyTorch model
@@ -34,7 +33,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytor
     model = BertForPreTraining(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_bert(model, tf_checkpoint_path)
+    load_tf_weights_in_bert(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))

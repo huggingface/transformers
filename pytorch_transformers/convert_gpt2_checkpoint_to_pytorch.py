@@ -26,6 +26,9 @@ from pytorch_transformers.modeling_gpt2 import (CONFIG_NAME, WEIGHTS_NAME,
                                                      GPT2Model,
                                                      load_tf_weights_in_gpt2)
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 
 def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path):
     # Construct model
@@ -36,7 +39,7 @@ def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, p
     model = GPT2Model(config)
 
     # Load weights from numpy
-    load_tf_weights_in_gpt2(model, gpt2_checkpoint_path)
+    load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path)
 
     # Save pytorch-model
     pytorch_weights_dump_path = pytorch_dump_folder_path + '/' + WEIGHTS_NAME
