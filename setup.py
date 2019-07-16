@@ -25,7 +25,7 @@ To create the package for pypi.
    (pypi suggest using twine as other methods upload files via plaintext.)
 
    Check that you can install it in a virtualenv by running:
-   pip install -i https://testpypi.python.org/pypi allennlp
+   pip install -i https://testpypi.python.org/pypi pytorch-transformers
 
 6. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
