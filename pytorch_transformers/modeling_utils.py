@@ -355,7 +355,6 @@ class PreTrainedModel(nn.Module):
         state_dict = kwargs.pop('state_dict', None)
         cache_dir = kwargs.pop('cache_dir', None)
         from_tf = kwargs.pop('from_tf', False)
-        output_loading_info = kwargs.pop('output_loading_info', False)
 
         # Load config
         if config is None:
@@ -407,6 +406,30 @@ class PreTrainedModel(nn.Module):
         if from_tf:
             # Directly load from a TensorFlow checkpoint
             return cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
+        
+        return model.load_from_state_dict(state_dict, **kwargs)
+
+    @classmethod
+    def from_state_dict(cls, config_file, state_dict, *inputs, **kwargs):
+        config = cls.config_class.from_json_file(config_file)
+        model = cls(config, *inputs, **kwargs)
+        state_dict = state_dict.copy()
+        for key in list(state_dict):
+            if not key.startswith("{}.".format(cls.base_model_prefix)):
+                logger.info("from_state_dict: Dropping {}".format(key))
+                del state_dict[key]
+
+        return model.load_from_state_dict(state_dict)
+
+    @classmethod
+    def from_state_dict_full(cls, config_file, state_dict, *inputs, **kwargs):
+        config = cls.config_class.from_json_file(config_file)
+        model = cls(config, *inputs, **kwargs)
+        model.load_state_dict(state_dict)
+        return model
+
+    def load_from_state_dict(self, state_dict, **kwargs):
+        output_loading_info = kwargs.pop('output_loading_info', False)
 
         # Convert old format to new format if needed from a PyTorch state_dict
         old_keys = []
@@ -443,34 +466,33 @@ class PreTrainedModel(nn.Module):
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ''
-        model_to_load = model
-        if not hasattr(model, cls.base_model_prefix) and any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
-            start_prefix = cls.base_model_prefix + '.'
-        if hasattr(model, cls.base_model_prefix) and not any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
-            model_to_load = getattr(model, cls.base_model_prefix)
+        if not hasattr(self, self.base_model_prefix) and any(s.startswith(self.base_model_prefix) for s in state_dict.keys()):
+            start_prefix = self.base_model_prefix + '.'
+        if hasattr(self, self.base_model_prefix) and not any(s.startswith(self.base_model_prefix) for s in state_dict.keys()):
+            self = getattr(self, self.base_model_prefix)
 
-        load(model_to_load, prefix=start_prefix)
+        load(self, prefix=start_prefix)
         if len(missing_keys) > 0:
             logger.info("Weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, missing_keys))
+                self.__class__.__name__, missing_keys))
         if len(unexpected_keys) > 0:
             logger.info("Weights from pretrained model not used in {}: {}".format(
-                model.__class__.__name__, unexpected_keys))
+                self.__class__.__name__, unexpected_keys))
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                               model.__class__.__name__, "\n\t".join(error_msgs)))
+                self.__class__.__name__, "\n\t".join(error_msgs)))
 
-        if hasattr(model, 'tie_weights'):
-            model.tie_weights()  # make sure word embedding weights are still tied
+        if hasattr(self, 'tie_weights'):
+            self.tie_weights()  # make sure word embedding weights are still tied
 
-        # Set model in evaluation mode to desactivate DropOut modules by default
-        model.eval()
+        # Set model in evaluation mode to deactivate DropOut modules by default
+            self.eval()
 
         if output_loading_info:
             loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys, "error_msgs": error_msgs}
-            return model, loading_info
+            return self, loading_info
 
-        return model
+        return self
 
 
 class Conv1D(nn.Module):
