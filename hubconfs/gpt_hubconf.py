@@ -1,5 +1,5 @@
-from pytorch_pretrained_bert.tokenization_openai import OpenAIGPTTokenizer
-from pytorch_pretrained_bert.modeling_openai import (
+from pytorch_transformers.tokenization_openai import OpenAIGPTTokenizer
+from pytorch_transformers.modeling_openai import (
 	OpenAIGPTModel,
 	OpenAIGPTLMHeadModel,
 	OpenAIGPTDoubleHeadsModel
@@ -77,7 +77,7 @@ def openAIGPTTokenizer(*args, **kwargs):
 
     Example:
 		>>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTTokenizer', 'openai-gpt')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 		
 		>>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
         >>> tokenized_text = tokenizer.tokenize(text)
@@ -98,7 +98,7 @@ def openAIGPTModel(*args, **kwargs):
     Example:
         # Load the tokenizer
 		>>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTTokenizer', 'openai-gpt')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
         >>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
@@ -107,7 +107,7 @@ def openAIGPTModel(*args, **kwargs):
         >>> tokens_tensor = torch.tensor([indexed_tokens])
 
         # Load openAIGPTModel
-        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTModel', 'openai-gpt')
+        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTModel', 'openai-gpt')
         >>> model.eval()
 
         # Predict hidden states features for each layer
@@ -127,7 +127,7 @@ def openAIGPTLMHeadModel(*args, **kwargs):
 	Example:
         # Load the tokenizer
         >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTTokenizer', 'openai-gpt')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
         >>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
@@ -136,7 +136,7 @@ def openAIGPTLMHeadModel(*args, **kwargs):
         >>> tokens_tensor = torch.tensor([indexed_tokens])
 
         # Load openAIGPTLMHeadModel
-        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTLMHeadModel', 'openai-gpt')
+        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTLMHeadModel', 'openai-gpt')
         >>> model.eval()
 
         # Predict hidden states features for each layer
@@ -162,7 +162,7 @@ def openAIGPTDoubleHeadsModel(*args, **kwargs):
 	Example:
         # Load the tokenizer
         >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTTokenizer', 'openai-gpt')
+        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
         >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
@@ -175,7 +175,7 @@ def openAIGPTDoubleHeadsModel(*args, **kwargs):
         >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
         # Load openAIGPTDoubleHeadsModel
-        >>> model = torch.hub.load('huggingface/pytorch-pretrained-BERT', 'openAIGPTDoubleHeadsModel', 'openai-gpt')
+        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTDoubleHeadsModel', 'openai-gpt')
         >>> model.eval()
 
         # Predict hidden states features for each layer

@@ -6,7 +6,7 @@ import shelve
 from multiprocessing import Pool
 
 from random import random, randrange, randint, shuffle, choice
-from pytorch_pretrained_bert.tokenization import BertTokenizer
+from pytorch_transformers.tokenization_bert import BertTokenizer
 import numpy as np
 import json
 import collections

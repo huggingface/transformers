@@ -8,3 +8,5 @@ boto3
 requests
 # For OpenAI GPT
 regex
+# For XLNet
+sentencepiece

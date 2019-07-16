@@ -1,28 +1,30 @@
 version: 2
 jobs:
     build_py3:
-        working_directory: ~/pytorch-pretrained-BERT
+        working_directory: ~/pytorch-transformers
         docker:
             - image: circleci/python:3.5
+        resource_class: large
+        parallelism: 4
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install spacy ftfy==4.4.3
-            - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/ --cov
+            - run: sudo pip install tensorboardX scikit-learn
+            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./examples/
             - run: codecov
     build_py2:
-        working_directory: ~/pytorch-pretrained-BERT
+        working_directory: ~/pytorch-transformers
+        resource_class: large
+        parallelism: 4
         docker:
             - image: circleci/python:2.7
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install spacy ftfy==4.4.3
-            - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/ --cov
+            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: codecov
 workflows:
   version: 2
