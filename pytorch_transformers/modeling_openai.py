@@ -429,13 +429,13 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
@@ -548,13 +548,13 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             Language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
@@ -655,13 +655,13 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **mc_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)``
             Prediction scores of the multiplechoice classification head (scores for each choice before SoftMax).
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
