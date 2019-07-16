@@ -259,7 +259,8 @@ class PreTrainedModel(nn.Module):
                 New number of tokens in the embedding matrix.
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
-                If not provided or None: does nothing.
+                If not provided or None: does nothing and just returns a pointer to the input tokens Embedding Module of the model.
+
         Return: ``torch.nn.Embeddings``
             Pointer to the input tokens Embedding Module of the model
         """
