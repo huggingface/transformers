@@ -32,12 +32,14 @@ VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
+    'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-spiece.model",
     'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'xlnet-large-cased': 512,
+    'xlnet-base-cased': None,
+    'xlnet-large-cased': None,
 }
 
 SPIECE_UNDERLINE = u'▁'
