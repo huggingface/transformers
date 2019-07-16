@@ -384,7 +384,10 @@ loss, logits, attentions = outputs
 
 ### Serialization
 
-While not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other seralization method before.
+Breaking change: Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method.
+To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+
+Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other seralization method before.
 
 Here is an example:
 
