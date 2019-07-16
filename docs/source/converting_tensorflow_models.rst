@@ -1,4 +1,4 @@
-Converting Tensorflow Models
+Converting Tensorflow Checkpoints
 ================================================
 
 A command-line interface is provided to convert a TensorFlow checkpoint in a PyTorch dump of the ``BertForPreTraining`` class  (for BERT) or NumPy checkpoint in a PyTorch dump of the ``OpenAIGPTModel`` class  (for OpenAI GPT).

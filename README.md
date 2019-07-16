@@ -1,19 +1,19 @@
 # 👾 PyTorch-Transformers
 
-[![CircleCI](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-pretrained-BERT)
+[![CircleCI](https://circleci.com/gh/huggingface/pytorch-transformers.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-transformers)
 
 PyTorch-Transformers is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
 
 The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
 
-- **[Google's BERT model](https://github.com/google-research/bert)** released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
-- **[OpenAI's GPT model](https://github.com/openai/finetune-transformer-lm)** released  with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
-- **[OpenAI's GPT-2 model](https://blog.openai.com/better-language-models/)** released with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
-- **[Google/CMU's Transformer-XL model](https://github.com/kimiyoung/transformer-xl)** released with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-- **[Google/CMU's XLNet model](https://github.com/zihangdai/xlnet/)** released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-- **[Facebook's XLM model](https://github.com/facebookresearch/XLM/)** released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
+1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
+2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
+3. **[GPT-2](https://blog.openai.com/better-language-models/)** (from OpenAI) released with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
+4. **[Transformer-XL](https://github.com/kimiyoung/transformer-xl)** (from Google/CMU) released with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
+5. **[XLNet](https://github.com/zihangdai/xlnet/)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](#documentation).
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/pytorch-transformers/examples.html).
 
 | Section | Description |
 |-|-|
@@ -21,7 +21,7 @@ These implementations have been tested on several datasets (see the example scri
 | [Quick tour: Usage](#quick-tour-usage) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-pytorch-transformers) | Migrating your code from pytorch-pretrained-bert to pytorch-transformers |
-| [Documentation](#documentation) | Full API documentation and more |
+| [Documentation](https://huggingface.co/pytorch-transformers/) | Full API documentation and more |
 
 ## Installation
 
@@ -202,13 +202,14 @@ Examples for each model class of each model architecture (Bert, GPT, GPT-2, Tran
 
 The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
-- fine-tuning Bert/XLNet/XLM with a *sequence-level classifier* on nine different GLUE tasks,
-- fine-tuning Bert/XLNet/XLM with a *token-level classifier* on the question answering dataset SQuAD 2.0, and
-- using GPT/GPT-2/Transformer-XL and XLNet for conditional language generation.
+- `run_glue.py`: an example fine-tuning Bert, XLNet and XLM on nine different GLUE tasks (*sequence-level classification*)
+- `run_squad.py`: an example fine-tuning Bert, XLNet and XLM on the question answering dataset SQuAD 2.0 (*token-level classification*)
+- `run_generation.py`: an example using GPT, GPT-2, Transformer-XL and XLNet for conditional language generation
+- other model-specific examples (see the documentation).
 
 Here are three quick usage examples for these scripts:
 
-### Fine-tuning for sequence classification: GLUE tasks examples
+### `run_glue.py`: Fine-tuning on GLUE tasks for sequence classification
 
 The [General Language Understanding Evaluation (GLUE) benchmark](https://gluebenchmark.com/) is a collection of nine sentence- or sentence-pair language understanding tasks for evaluating and analyzing natural language understanding systems.
 
@@ -302,7 +303,7 @@ Training with these hyper-parameters gave us the following results:
   loss = 0.07231863956341798
 ```
 
-### Fine-tuning for question-answering: SQuAD example
+### `run_squad.py`: Fine-tuning on SQuAD for question-answering
 
 This example code fine-tunes BERT on the SQuAD dataset using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
@@ -333,7 +334,7 @@ python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncase
 
 This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-squad`.
 
-### Conditional generation: Text generation with GPT, GPT-2, Transformer-XL and XLNet
+### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
 The generation script include the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
@@ -346,10 +347,6 @@ python ./examples/run_glue.py \
     --length=20 \
     --model_name_or_path=gpt2 \
 ```
-
-## Documentation
-
-The full documentation is available at https://huggingface.co/pytorch-transformers/.
 
 ## Migrating from pytorch-pretrained-bert to pytorch-transformers
 
