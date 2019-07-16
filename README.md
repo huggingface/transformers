@@ -102,10 +102,6 @@ Let's see how we can use `BertModel` to encode our inputs in hidden-states:
 # Load pre-trained model (weights)
 model = BertModel.from_pretrained('bert-base-uncased')
 
-# Set the model in evaluation mode to desactivate the DropOut modules
-# This is IMPORTANT to have reproductible results during evaluation!
-model.eval()
-
 # If you have a GPU, put everything on cuda
 tokens_tensor = tokens_tensor.to('cuda')
 segments_tensors = segments_tensors.to('cuda')
@@ -129,7 +125,6 @@ And how to use `BertForMaskedLM` to predict a masked token:
 ```python
 # Load pre-trained model (weights)
 model = BertForMaskedLM.from_pretrained('bert-base-uncased')
-model.eval()
 
 # If you have a GPU, put everything on cuda
 tokens_tensor = tokens_tensor.to('cuda')
@@ -177,10 +172,6 @@ Let's see how to use `GPT2LMHeadModel` to generate the next token following our 
 ```python
 # Load pre-trained model (weights)
 model = GPT2LMHeadModel.from_pretrained('gpt2')
-
-# Set the model in evaluation mode to desactivate the DropOut modules
-# This is IMPORTANT to have reproductible results during evaluation!
-model.eval()
 
 # If you have a GPU, put everything on cuda
 tokens_tensor = tokens_tensor.to('cuda')
