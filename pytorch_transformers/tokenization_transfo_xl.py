@@ -138,7 +138,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""
-        index = 0
         if os.path.isdir(vocab_path):
             vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['pretrained_vocab_file'])
         torch.save(self.__dict__, vocab_file)

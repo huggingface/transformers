@@ -119,6 +119,7 @@ with torch.no_grad():
     # See the models docstrings for the detail of all the outputs
     # In our case, the first element is the hidden state of the last layer of the Bert model
     encoded_layers = outputs[0]
+
 # We have encoded our input sequence in a FloatTensor of shape (batch size, sequence length, model hidden dimension)
 assert tuple(encoded_layers.shape) == (1, len(indexed_tokens), model.config.hidden_size)
 ```
@@ -218,22 +219,30 @@ Before running anyone of these GLUE tasks you should download the
 [this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
 and unpack it to some directory `$GLUE_DIR`.
 
+You should also install the additional packages required by the examples:
+
+```shell
+pip install -r ./examples/requirements.txt
+```
+
 ```shell
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
-python run_bert_classifier.py \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --do_lower_case \
-  --data_dir $GLUE_DIR/$TASK_NAME \
-  --bert_model bert-base-uncased \
-  --max_seq_length 128 \
-  --train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/$TASK_NAME/
+python ./examples/run_glue.py \
+    --model_type bert \
+    --model_name_or_path bert-base-uncased \
+    --task_name $TASK_NAME \
+    --do_train \
+    --do_eval \
+    --do_lower_case \
+    --data_dir $GLUE_DIR/$TASK_NAME \
+    --max_seq_length 128 \
+    --per_gpu_eval_batch_size=8   \
+    --per_gpu_train_batch_size=8   \
+    --learning_rate 2e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir /tmp/$TASK_NAME/
 ```
 
 where task name can be one of CoLA, SST-2, MRPC, STS-B, QQP, MNLI, QNLI, RTE, WNLI.
@@ -243,7 +252,7 @@ The dev set results will be present within the text file 'eval_results.txt' in t
 #### Fine-tuning XLNet model on the STS-B regression task
 
 This example code fine-tunes XLNet on the STS-B corpus using parallel training on a server with 4 V100 GPUs.
-Parallel training is a simple way to use several GPU (but it is slower and less flexible than distributed training, see below).
+Parallel training is a simple way to use several GPUs (but is slower and less flexible than distributed training, see below).
 
 ```shell
 export GLUE_DIR=/path/to/glue
@@ -252,6 +261,7 @@ python ./examples/run_glue.py \
     --model_type xlnet \
     --model_name_or_path xlnet-large-cased \
     --do_train  \
+    --do_eval   \
     --task_name=sts-b     \
     --data_dir=${GLUE_DIR}/STS-B  \
     --output_dir=./proc_data/sts-b-110   \
@@ -266,15 +276,14 @@ python ./examples/run_glue.py \
     --warmup_steps=120
 ```
 
-On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine.
-These hyper-parameters give evaluation results pearsonr of `0.918`.
+On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should results in a Pearson correlation coefficient of `+0.917` on the development set.
 
 #### Fine-tuning Bert model on the MRPC classification task
 
 This example code fine-tunes the Bert Whole Word Masking model on the Microsoft Research Paraphrase Corpus (MRPC) corpus using distributed training on 8 V100 GPUs to reach a F1 > 92.
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node 8 run_bert_classifier.py   \
+python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name MRPC \
@@ -308,7 +317,7 @@ Training with these hyper-parameters gave us the following results:
 This example code fine-tunes BERT on the SQuAD dataset using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \

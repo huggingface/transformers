@@ -129,7 +129,19 @@ def create_and_check_required_methods_tokenizer(tester, input_text, output_text,
     tester.assertNotEqual(len(tokens_2), 0)
     tester.assertIsInstance(text_2, (str, unicode))
 
+
+def create_and_check_pretrained_model_lists(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs):
+    weights_list = list(tokenizer_class.max_model_input_sizes.keys())
+    weights_lists_2 = []
+    for file_id, map_list in tokenizer_class.pretrained_vocab_files_map.items():
+        weights_lists_2.append(list(map_list.keys()))
+
+    for weights_list_2 in weights_lists_2:
+        tester.assertListEqual(weights_list, weights_list_2)
+
+
 def create_and_check_tokenizer_commons(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs):
+    create_and_check_pretrained_model_lists(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs)
     create_and_check_required_methods_tokenizer(tester, input_text, output_text, tokenizer_class, *inputs, **kwargs)
     create_and_check_add_tokens_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
     create_and_check_save_and_load_tokenizer(tester, tokenizer_class, *inputs, **kwargs)
