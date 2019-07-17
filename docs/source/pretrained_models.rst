@@ -43,8 +43,8 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | (see `details <https://github.com/google-research/bert/#bert>`__)                                                         |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 |                   | ``bert-large-uncased-whole-word-masking-finetuned-squad``  | 24-layer, 1024-hidden, 16-heads, 340M parameters                                                                          |
-|                   |                                                            | The ``bert-large-uncased-whole-word-masking`` model fine-tuned on SQuAD                                                   |
-|                   |                                                            | (see details of fine-tuning in the `example section`__)                                                                   |
+|                   |                                                            | The ``bert-large-uncased-whole-word-masking`` model fine-tuned on SQuAD (see details of fine-tuning in the                |
+|                   |                                                            | `example section <https://github.com/huggingface/pytorch-transformers/tree/master/examples>`__)                           |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 |                   | ``bert-large-cased-whole-word-masking-finetuned-squad``    | 24-layer, 1024-hidden, 16-heads, 340M parameters                                                                          |
 |                   |                                                            | The ``bert-large-cased-whole-word-masking`` model fine-tuned on SQuAD                                                     |
@@ -85,10 +85,10 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | XLM English-Romanian Multi-language model                                                                                 |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 |                   | ``xlm-mlm-xnli15-1024``                                    | 12-layer, 1024-hidden, 8-heads                                                                                            |
-|                   |                                                            | XLM Model pre-trained with MLM on the `15 XNLI languages<https://github.com/facebookresearch/XNLI>`__.                    |
+|                   |                                                            | XLM Model pre-trained with MLM on the `15 XNLI languages <https://github.com/facebookresearch/XNLI>`__.                   |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 |                   | ``xlm-mlm-tlm-xnli15-1024``                                | 12-layer, 1024-hidden, 8-heads                                                                                            |
-|                   |                                                            | XLM Model pre-trained with MLM + TLM on the `15 XNLI languages<https://github.com/facebookresearch/XNLI>`__.              |
+|                   |                                                            | XLM Model pre-trained with MLM + TLM on the `15 XNLI languages <https://github.com/facebookresearch/XNLI>`__.             |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 |                   | ``xlm-clm-enfr-1024``                                      | 12-layer, 1024-hidden, 8-heads                                                                                            |
 |                   |                                                            | XLM English model trained with CLM (Causal Language Modeling)                                                             |
