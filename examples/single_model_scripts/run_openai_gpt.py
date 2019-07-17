@@ -16,7 +16,6 @@
 """ OpenAI GPT model fine-tuning script.
     Adapted from https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/train.py
     It self adapted from https://github.com/openai/finetune-transformer-lm/blob/master/train.py
-
     This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset:
         python run_openai_gpt.py \
           --model_name openai-gpt \
@@ -40,32 +39,34 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 
 from pytorch_transformers import (OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer,
-                                     AdamW, cached_path, WEIGHTS_NAME, CONFIG_NAME)
+                                  AdamW, cached_path, WEIGHTS_NAME, CONFIG_NAME)
 
 ROCSTORIES_URL = "https://s3.amazonaws.com/datasets.huggingface.co/ROCStories.tar.gz"
 
-logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt = '%m/%d/%Y %H:%M:%S',
-                    level = logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def accuracy(out, labels):
     outputs = np.argmax(out, axis=1)
     return np.sum(outputs == labels)
+
 
 def load_rocstories_dataset(dataset_path):
     """ Output a list of tuples(story, 1st continuation, 2nd continuation, label) """
     with open(dataset_path, encoding='utf_8') as f:
         f = csv.reader(f)
         output = []
-        next(f) # skip the first line
+        next(f)  # skip the first line
         for line in tqdm(f):
             output.append((' '.join(line[1:5]), line[5], line[6], int(line[-1])-1))
     return output
 
+
 def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token):
     """ Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
-
         To Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
         input_ids[batch, alternative, :] = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
     """
@@ -90,6 +91,7 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
         tensor_datasets.append(tuple(torch.tensor(t) for t in all_inputs))
     return tensor_datasets
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='openai-gpt',
@@ -104,11 +106,11 @@ def main():
     parser.add_argument('--num_train_epochs', type=int, default=3)
     parser.add_argument('--train_batch_size', type=int, default=8)
     parser.add_argument('--eval_batch_size', type=int, default=16)
-    parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=6.25e-5)
-    parser.add_argument('--warmup_proportion', type=float, default=0.002)
-    parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
+    parser.add_argument('--adam_epsilon', type=float, default=1e-6)
+    parser.add_argument('--adam_betas', type=tuple, default=(0.9, 0.999))
     parser.add_argument('--weight_decay', type=float, default=0.01)
+    parser.add_argument('--correct_bias', type=bool, default=True)
     parser.add_argument('--lm_coef', type=float, default=0.9)
     parser.add_argument('--n_valid', type=int, default=374)
 
@@ -151,6 +153,7 @@ def main():
     # Load and encode the datasets
     if not args.train_dataset and not args.eval_dataset:
         roc_stories = cached_path(ROCSTORIES_URL)
+
     def tokenize_and_encode(obj):
         """ Tokenize and encode a nested object """
         if isinstance(obj, str):
@@ -167,7 +170,7 @@ def main():
     # Compute the max input length for the Transformer
     max_length = model.config.n_positions // 2 - 2
     input_length = max(len(story[:max_length]) + max(len(cont1[:max_length]), len(cont2[:max_length])) + 3  \
-                           for dataset in encoded_datasets for story, cont1, cont2, _ in dataset)
+                       for dataset in encoded_datasets for story, cont1, cont2, _ in dataset)
     input_length = min(input_length, model.config.n_positions)  # Max size of input for the pre-trained model
 
     # Prepare inputs tensors and dataloaders
@@ -189,14 +192,15 @@ def main():
         optimizer_grouped_parameters = [
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-            ]
-        num_train_optimization_steps = len(train_dataloader) * args.num_train_epochs
+        ]
+
         optimizer = AdamW(optimizer_grouped_parameters,
-                               lr=args.learning_rate,
-                               warmup=args.warmup_proportion,
-                               max_grad_norm=args.max_grad_norm,
-                               weight_decay=args.weight_decay,
-                               t_total=num_train_optimization_steps)
+                          lr=args.learning_rate,
+                          betas=args.adam_betas,
+                          eps=args.adam_epsilon,
+                          weight_decay=args.weight_decay,
+                          correct_bias=args.correct_bias
+                          )
 
     if args.do_train:
         nb_tr_steps, tr_loss, exp_average_loss = 0, 0, None
@@ -216,7 +220,7 @@ def main():
                 tr_loss += loss.item()
                 exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
                 nb_tr_steps += 1
-                tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
+                tqdm_bar.desc = "Training loss: {:.2e}".format(exp_average_loss)
 
     # Save a trained model
     if args.do_train:
@@ -259,7 +263,7 @@ def main():
 
         eval_loss = eval_loss / nb_eval_steps
         eval_accuracy = eval_accuracy / nb_eval_examples
-        train_loss = tr_loss/nb_tr_steps if args.do_train else None
+        train_loss = tr_loss / nb_tr_steps if args.do_train else None
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
                   'train_loss': train_loss}
@@ -270,6 +274,7 @@ def main():
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
+
 
 if __name__ == '__main__':
     main()
