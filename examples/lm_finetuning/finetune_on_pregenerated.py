@@ -155,11 +155,14 @@ def main():
                         help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                         "0 (default value): dynamic loss scaling.\n"
                         "Positive power of 2: static loss scaling value.\n")
-    parser.add_argument("--warmup_proportion",
-                        default=0.1,
+    parser.add_argument("--warmup_steps", 
+                        default=0, 
+                        type=int,
+                        help="Linear warmup over warmup_steps.")
+    parser.add_argument("--adam_epsilon", 
+                        default=1e-8, 
                         type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. "
-                             "E.g., 0.1 = 10%% of training.")
+                        help="Epsilon for Adam optimizer.")
     parser.add_argument("--learning_rate",
                         default=3e-5,
                         type=float,
@@ -270,13 +273,9 @@ def main():
             optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
         else:
             optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-        warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
-                                             t_total=num_train_optimization_steps)
     else:
-        optimizer = AdamW(optimizer_grouped_parameters,
-                             lr=args.learning_rate,
-                             warmup=args.warmup_proportion,
-                             t_total=num_train_optimization_steps)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
 
     global_step = 0
     logging.info("***** Running training *****")
@@ -298,7 +297,8 @@ def main():
             for step, batch in enumerate(train_dataloader):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, lm_label_ids, is_next = batch
-                loss = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
+                outputs = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
+                loss = outputs[0]
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
@@ -314,26 +314,16 @@ def main():
                 mean_loss = tr_loss * args.gradient_accumulation_steps / nb_tr_steps
                 pbar.set_postfix_str(f"Loss: {mean_loss:.5f}")
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16:
-                        # modify learning rate with special warm up BERT uses
-                        # if args.fp16 is False, BertAdam is used that handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear.get_lr(global_step, args.warmup_proportion)
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr_this_step
+                    scheduler.step()  # Update learning rate schedule
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
 
     # Save a trained model
-    logging.info("** ** * Saving fine-tuned model ** ** * ")
-    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-    
-    output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
-    output_config_file = os.path.join(args.output_dir, CONFIG_NAME)
-
-    torch.save(model_to_save.state_dict(), output_model_file)
-    model_to_save.config.to_json_file(output_config_file)
-    tokenizer.save_vocabulary(args.output_dir)
+    if  n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1 :
+        logging.info("** ** * Saving fine-tuned model ** ** * ")
+        model.save_pretrained(args.output_dir)
+        tokenizer.save_pretrained(args.output_dir)
 
 
 if __name__ == '__main__':
