@@ -19,7 +19,7 @@ These implementations have been tested on several datasets (see the example scri
 |-|-|
 | [Installation](#installation) | How to install the package |
 | [Quick tour: Usage](#quick-tour-usage) | Tokenizers & models usage: Bert and GPT-2 |
-| [Quick tour: Fine-tuning/usage scripts](#quick-tour-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
+| [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-pytorch-transformers) | Migrating your code from pytorch-pretrained-bert to pytorch-transformers |
 | [Documentation](https://huggingface.co/pytorch-transformers/) | Full API documentation and more |
 
@@ -118,7 +118,6 @@ tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
 ```
 
 ## Quick tour of the fine-tuning/usage scripts
-
 The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
 - `run_glue.py`: an example fine-tuning Bert, XLNet and XLM on nine different GLUE tasks (*sequence-level classification*)
