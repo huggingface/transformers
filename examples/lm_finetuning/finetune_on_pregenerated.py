@@ -159,6 +159,10 @@ def main():
                         default=0, 
                         type=int,
                         help="Linear warmup over warmup_steps.")
+    parser.add_argument("--adam_epsilon", 
+                        default=1e-8, 
+                        type=float,
+                        help="Epsilon for Adam optimizer.")
     parser.add_argument("--learning_rate",
                         default=3e-5,
                         type=float,

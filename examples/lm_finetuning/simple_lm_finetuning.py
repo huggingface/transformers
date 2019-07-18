@@ -434,6 +434,10 @@ def main():
                         default=3e-5,
                         type=float,
                         help="The initial learning rate for Adam.")
+    parser.add_argument("--adam_epsilon", 
+                        default=1e-8, 
+                        type=float,
+                        help="Epsilon for Adam optimizer.")
     parser.add_argument("--num_train_epochs",
                         default=3.0,
                         type=float,
