@@ -120,11 +120,15 @@ class PregeneratedDataset(Dataset):
                 torch.tensor(self.lm_label_ids[item].astype(np.int64)),
                 torch.tensor(self.is_nexts[item].astype(np.int64)))
 
-
+args = None
+optimizer_grouped_parameters = None
+num_train_optimization_steps = None
 def main():
     parser = ArgumentParser()
     parser.add_argument('--pregenerated_data', type=Path, required=True)
     parser.add_argument('--output_dir', type=Path, required=True)
+
+    # TODO: load model from file instead of one of the existing models
     parser.add_argument("--bert_model", type=str, required=True, help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
     parser.add_argument("--do_lower_case", action="store_true")
@@ -171,6 +175,8 @@ def main():
                         type=int,
                         default=42,
                         help="random seed for initialization")
+    parser.add_argument("--tpu_ip", type=str, default="", help="TPU IP address")
+    parser.add_argument('--tpu_report', action='store_true', help="Print xla metric report")
     args = parser.parse_args()
 
     assert args.pregenerated_data.is_dir(), \
@@ -193,7 +199,16 @@ def main():
     else:
         num_data_epochs = args.epochs
 
-    if args.local_rank == -1 or args.no_cuda:
+    if args.tpu_ip:
+        logging.info(f"TPU_IP: {args.tpu_ip}")
+        import torch_xla
+        import torch_xla_py.xla_model as tpu_xm
+        import torch_xla_py.data_parallel as tpu_dp
+        devices = tpu_xm.get_xla_supported_devices()
+        n_gpu = len(devices)
+        logging.info(f'Found {n_gpu} TPU cores')
+        device = 'tpu'
+    elif args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
     else:
@@ -237,16 +252,8 @@ def main():
     model = BertForPreTraining.from_pretrained(args.bert_model)
     if args.fp16:
         model.half()
-    model.to(device)
-    if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError(
-                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
-        model = DDP(model)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+    elif not args.tpu_ip:  # don't move the model to the device if it device is TPU
+        model.to(device)
 
     # Prepare optimizer
     param_optimizer = list(model.named_parameters())
@@ -257,32 +264,87 @@ def main():
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
-    if args.fp16:
+    if args.tpu_ip:
+        # use the TPU DataParallel
+        model = tpu_dp.DataParallel(model, device_ids=devices)
+    elif args.local_rank != -1:
         try:
-            from apex.optimizers import FP16_Optimizer
-            from apex.optimizers import FusedAdam
+            from apex.parallel import DistributedDataParallel as DDP
         except ImportError:
             raise ImportError(
                 "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+        model = DDP(model)
+    elif n_gpu > 1:
+        model = torch.nn.DataParallel(model)
 
-        optimizer = FusedAdam(optimizer_grouped_parameters,
-                              lr=args.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+    if not args.tpu_ip:  # with TPUs, a new optimizer is crearted for each core
+        if args.fp16:
+            try:
+                from apex.optimizers import FP16_Optimizer
+                from apex.optimizers import FusedAdam
+            except ImportError:
+                raise ImportError(
+                    "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+
+            optimizer = FusedAdam(optimizer_grouped_parameters,
+                                lr=args.learning_rate,
+                                bias_correction=False,
+                                max_grad_norm=1.0)
+            if args.loss_scale == 0:
+                optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+            else:
+                optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
         else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-    else:
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
+            optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
 
     global_step = 0
     logging.info("***** Running training *****")
     logging.info(f"  Num examples = {total_train_examples}")
     logging.info("  Batch size = %d", args.train_batch_size)
     logging.info("  Num steps = %d", num_train_optimization_steps)
-    model.train()
+    if not args.tpu_ip:
+        model.train()
+
+    def tpu_training_loop(model, loader, device, context):
+        """This function executes in each core of the TPU."""
+
+        import time
+        start = time.time()
+        logging.info(f"Creat optimizer for device: {device}")
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
+        model.train()
+        # tr_loss, nb_tr_steps, global_step = 0, 0, 0
+        logging.info(f"Start training on device: {device}")
+
+        for step, batch in loader:
+            input_ids, input_mask, segment_ids, lm_label_ids, is_next = batch
+            outputs = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
+            loss = outputs[0]
+            # if n_gpu > 1:
+            #     loss = loss.mean() # mean() to average on multi-gpu.
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+            loss.backward()
+
+            # TODO: check learning rate scheduling and gradient accumulation
+            # TODO: monitor loss
+
+            # tr_loss += loss.item()  # don't read loss every batch, it slows things down
+            # nb_tr_examples += input_ids.size(0)
+            # nb_tr_steps += 1
+            # mean_loss = tr_loss * args.gradient_accumulation_steps / nb_tr_steps
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                tpu_xm.optimizer_step(optimizer)
+                scheduler.step()
+                optimizer.zero_grad()
+                # global_step += 1
+
+            if step % 3 == 0:
+                logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}")
+        logging.info(f"Done training on device: {device}, elapsed time: {round(time.time() - start, 2)} seconds")
+
     for epoch in range(args.epochs):
         epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,
                                             num_data_epochs=num_data_epochs, reduce_memory=args.reduce_memory)
@@ -291,6 +353,10 @@ def main():
         else:
             train_sampler = DistributedSampler(epoch_dataset)
         train_dataloader = DataLoader(epoch_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+        if args.tpu_ip:
+            model(tpu_training_loop, train_dataloader)
+            continue
+
         tr_loss = 0
         nb_tr_examples, nb_tr_steps = 0, 0
         with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch}") as pbar:
@@ -318,13 +384,18 @@ def main():
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
+    if args.tpu_ip and args.tpu_report:
+        print(torch_xla._XLAC._xla_metrics_report())
 
     # Save a trained model
-    if  n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1 :
-        logging.info("** ** * Saving fine-tuned model ** ** * ")
-        model.save_pretrained(args.output_dir)
-        tokenizer.save_pretrained(args.output_dir)
-
+    if args.tpu_ip:
+        # TODO: save trained model
+        logging.error("TODO: save trained model")
+    else:
+        if  n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1 :
+            logging.info("** ** * Saving fine-tuned model ** ** * ")
+            model.save_pretrained(args.output_dir)
+            tokenizer.save_pretrained(args.output_dir)
 
 if __name__ == '__main__':
     main()
