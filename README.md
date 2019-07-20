@@ -58,7 +58,7 @@ python -m pytest -sv ./examples/
 
 ## Quick tour
 
-Let's do a very quick overview of PyTorch-Transformers. Detailled examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/pytorch-transformers/).
+Let's do a very quick overview of PyTorch-Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/pytorch-transformers/).
 
 ```python
 import torch
