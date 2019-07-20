@@ -1,4 +1,5 @@
-FROM gcr.io/tpu-pytorch/xla:r0.1
+FROM gcr.io/tpu-pytorch/xla:nightly_20190720
+
 RUN pip install ipdb
 Run apt-get install -y vim
 RUN echo "export XRT_TPU_CONFIG=\"tpu_worker;0;\$TPU_IP:8470\"" >> ~/.bashrc

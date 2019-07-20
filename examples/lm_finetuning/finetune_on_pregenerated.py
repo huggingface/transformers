@@ -312,8 +312,14 @@ def main():
         import time
         start = time.time()
         logging.info(f"Creat optimizer for device: {device}")
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
+        optimizer = context.getattr_or(
+            'optimizer',
+            AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon))
+        print(device, id(optimizer), optimizer)
+        scheduler = context.getattr_or(
+            'scheduler',
+            WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps))
+
         model.train()
         # tr_loss, nb_tr_steps, global_step = 0, 0, 0
         logging.info(f"Start training on device: {device}")
