@@ -359,7 +359,7 @@ class PreTrainedModel(nn.Module):
 
         # Load config
         if config is None:
-            config = cls.config_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            config = cls.config_class.from_pretrained(pretrained_model_name_or_path, cache_dir=cache_dir, *inputs, **kwargs)
 
         # Load model
         if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
