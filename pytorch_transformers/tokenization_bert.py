@@ -67,10 +67,9 @@ def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as reader:
-        tokens = reader.read().splitlines()
+        tokens = reader.readlines()
     for index, token in enumerate(tokens):
         vocab[token] = index
-        index += 1
     return vocab
 
 
