@@ -373,7 +373,8 @@ class PreTrainedModel(nn.Module):
         if config is None:
             config, model_kwargs = cls.config_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args,
-                return_unused_args=True, **kwargs
+                cache_dir=cache_dir, return_unused_args=True,
+                **kwargs
             )
         else:
             model_kwargs = kwargs
