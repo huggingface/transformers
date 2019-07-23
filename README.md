@@ -82,7 +82,8 @@ for model_class, tokenizer_class, pretrained_weights in MODELS:
 
     # Encode text
     input_ids = torch.tensor([tokenizer.encode("Here is some text to encode")])
-    last_hidden_states = model(input_ids)[0]  # Models outputs are now tuples
+    with torch.no_grad():
+        last_hidden_states = model(input_ids)[0]  # Models outputs are now tuples
 
 # Each architecture is provided with several class for fine-tuning on down-stream tasks, e.g.
 BERT_MODEL_CLASSES = [BertModel, BertForPreTraining, BertForMaskedLM, BertForNextSentencePrediction,
