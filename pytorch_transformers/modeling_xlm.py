@@ -436,7 +436,7 @@ XLM_INPUTS_DOCSTRING = r"""
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are selected in the pre-trained language vocabulary,
             i.e. in the range ``[0, config.n_langs - 1[``.
-        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -449,7 +449,7 @@ XLM_INPUTS_DOCSTRING = r"""
             hidden-states (key and values in the attention blocks) as computed by the model
             (see `cache` output below). Can be used to speed up sequential decoding.
             The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
-        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
