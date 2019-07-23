@@ -78,7 +78,7 @@ class PretrainedConfig(object):
         self.to_json_file(output_config_file)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r""" Instantiate a PretrainedConfig from a pre-trained model configuration.
 
         Params:
