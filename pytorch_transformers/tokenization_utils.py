@@ -174,8 +174,11 @@ class PreTrainedTokenizer(object):
             for file_id, file_name in all_vocab_files_names.items():
                 if os.path.isdir(pretrained_model_name_or_path):
                     full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                else:
-                    full_file_name = pretrained_model_name_or_path
+                elif os.path.isfile(pretrained_model_name_or_path):
+                    full_file_name = os.path.join(
+                        os.path.dirname(pretrained_model_name_or_path),
+                        file_name
+                    )
                 if not os.path.exists(full_file_name):
                     logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                     full_file_name = None
