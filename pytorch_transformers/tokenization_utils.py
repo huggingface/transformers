@@ -266,7 +266,7 @@ class PreTrainedTokenizer(object):
 
         with open(added_tokens_file, 'w', encoding='utf-8') as f:
             if self.added_tokens_encoder:
-                out_str = json.dumps(self.added_tokens_decoder, ensure_ascii=False)
+                out_str = json.dumps(self.added_tokens_encoder, ensure_ascii=False)
             else:
                 out_str = u"{}"
             f.write(out_str)
