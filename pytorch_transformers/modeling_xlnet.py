@@ -367,16 +367,16 @@ class XLNetRelativeAttention(nn.Module):
         self.d_model = config.d_model
         self.scale = 1 / (config.d_head ** 0.5)
 
-        self.q = nn.Parameter(torch.Tensor(config.d_model, self.n_head, self.d_head))
-        self.k = nn.Parameter(torch.Tensor(config.d_model, self.n_head, self.d_head))
-        self.v = nn.Parameter(torch.Tensor(config.d_model, self.n_head, self.d_head))
-        self.o = nn.Parameter(torch.Tensor(config.d_model, self.n_head, self.d_head))
-        self.r = nn.Parameter(torch.Tensor(config.d_model, self.n_head, self.d_head))
+        self.q = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
+        self.k = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
+        self.v = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
+        self.o = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
+        self.r = nn.Parameter(torch.FloatTensor(config.d_model, self.n_head, self.d_head))
 
-        self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-        self.r_s_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-        self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-        self.seg_embed = nn.Parameter(torch.Tensor(2, self.n_head, self.d_head))
+        self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+        self.r_s_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+        self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+        self.seg_embed = nn.Parameter(torch.FloatTensor(2, self.n_head, self.d_head))
 
         self.layer_norm = XLNetLayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
@@ -660,11 +660,11 @@ XLNET_INPUTS_DOCSTRING = r"""
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
-        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **input_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
+        **input_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Negative of `attention_mask`, i.e. with 0 for real tokens and 1 for padding.
             Kept for compatibility with the original code base.
@@ -685,7 +685,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask to indicate the output tokens to use.
             If ``target_mapping[k, i, j] = 1``, the i-th predict in batch k is on the j-th token.
             Only used during pretraining for partial prediction or for sequential decoding (generation).
-        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -735,7 +735,7 @@ class XLNetModel(XLNetPreTrainedModel):
         self.n_layer = config.n_layer
 
         self.word_embedding = nn.Embedding(config.n_token, config.d_model)
-        self.mask_emb = nn.Parameter(torch.Tensor(1, 1, config.d_model))
+        self.mask_emb = nn.Parameter(torch.FloatTensor(1, 1, config.d_model))
         self.layer = nn.ModuleList([XLNetLayer(config) for _ in range(config.n_layer)])
         self.dropout = nn.Dropout(config.dropout)
 

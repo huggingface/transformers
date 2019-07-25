@@ -82,7 +82,8 @@ for model_class, tokenizer_class, pretrained_weights in MODELS:
 
     # Encode text
     input_ids = torch.tensor([tokenizer.encode("Here is some text to encode")])
-    last_hidden_states = model(input_ids)[0]  # Models outputs are now tuples
+    with torch.no_grad():
+        last_hidden_states = model(input_ids)[0]  # Models outputs are now tuples
 
 # Each architecture is provided with several class for fine-tuning on down-stream tasks, e.g.
 BERT_MODEL_CLASSES = [BertModel, BertForPreTraining, BertForMaskedLM, BertForNextSentencePrediction,
@@ -310,8 +311,11 @@ loss, logits, attentions = outputs
 
 ### Serialization
 
-Breaking change: Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method.
-To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+Breaking change in the `from_pretrained()`method:
+
+1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+
+2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead which can break derived model classes build based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/pytorch-transformers/pull/866) by forwarding the the model `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuratoin class attributes.
 
 Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other serialization method before.
 

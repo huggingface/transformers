@@ -36,7 +36,7 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
     model = chkpt['model']
 
     config = chkpt['params']
-    config = dict((n, v) for n, v in config.items() if not isinstance(v, (torch.Tensor, numpy.ndarray)))
+    config = dict((n, v) for n, v in config.items() if not isinstance(v, (torch.FloatTensor, numpy.ndarray)))
 
     vocab = chkpt['dico_word2id']
     vocab = dict((s + '</w>' if s.find('@@') == -1 and i > 13 else s.replace('@@', ''), i) for s, i in vocab.items())
