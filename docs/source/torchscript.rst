@@ -74,7 +74,7 @@ according to a ``BertConfig`` class and then saved to disk under the filename ``
 
 .. code-block:: python
 
-    from pytorch_pretrained_bert import BertModel, BertTokenizer, BertConfig
+    from pytorch_transformers import BertModel, BertTokenizer, BertConfig
     import torch
 
     enc = BertTokenizer.from_pretrained("bert-base-uncased")
