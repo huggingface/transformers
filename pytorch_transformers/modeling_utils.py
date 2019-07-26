@@ -358,7 +358,7 @@ class PreTrainedModel(nn.Module):
                 Dictionary of key, values to update the configuration object after loading.
                 Can be used to override selected configuration parameters. E.g. ``output_attention=True``.
 
-               - If a configuration is provided with `config`, **kwargs will be directly passed
+               - If a configuration is providedictionaryfig`, **kwargs will be directly passed
                  to the underlying model's __init__ method.
                - If a configuration is not provided, **kwargs will be first passed to the pretrained
                  model configuration class loading function (`PretrainedConfig.from_pretrained`).
@@ -367,7 +367,7 @@ class PreTrainedModel(nn.Module):
                  Remaining keys that do not correspond to any configuration attribute will
                  be passed to the underlying model's __init__ function.
 
-        Examples::
+        Examples::dictionary
 
             >>> model = BertModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             >>> model = BertModel.from_pretrained('./test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`

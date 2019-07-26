@@ -40,7 +40,7 @@ gpt_docstring = """
 				. a series of NumPy files containing OpenAI TensorFlow trained weights
 		from_tf: should we load the weights from a locally saved TensorFlow checkpoint
 		cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-		state_dict: an optional state dictionnary (collections.OrderedDict object)
+		state_dict: an optional state dictionary (collections.OrderedDict object)
 		        	to use instead of pre-trained models
 		*inputs, **kwargs: additional input for the specific OpenAI-GPT class
 """

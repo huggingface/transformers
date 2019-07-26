@@ -37,7 +37,7 @@ class PreTrainedTokenizer(object):
             additional_special_tokens = []
 
         We defined an added_tokens_encoder to add new tokens to the vocabulary without having to handle the
-            specific vocabulary augmentation methods of the various underlying dictionnary structures (BPE, sentencepiece...).
+            specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
     vocab_files_names = {}
     pretrained_vocab_files_map = {}
@@ -324,7 +324,7 @@ class PreTrainedTokenizer(object):
 
 
     def add_special_tokens(self, special_tokens_dict):
-        """ Add a dictionnary of special tokens (eos, pad, cls...) to the encoder and link them
+        """ Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
             to class attributes. If the special tokens are not in the vocabulary, they are added
             to it and indexed starting from the last index of the current vocabulary.
 

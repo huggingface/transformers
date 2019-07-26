@@ -40,7 +40,7 @@ where
 
 - `cache_dir` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example `cache_dir='./pretrained_model_{}'.format(args.local_rank)` (see the section on distributed training for more information).
 - `from_tf`: should we load the weights from a locally saved TensorFlow checkpoint
-- `state_dict`: an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
+- `state_dict`: an optional state dictionary (collections.OrderedDict object) to use instead of Google pre-trained models
 - `*inputs`, `**kwargs`: additional input for the specific Bert class (ex: num_labels for BertForSequenceClassification)
 
 `Uncased` means that the text has been lowercased before WordPiece tokenization, e.g., `John Smith` becomes `john smith`. The Uncased model also strips out any accent markers. `Cased` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the [Multilingual README](https://github.com/google-research/bert/blob/master/multilingual.md) or the original TensorFlow repository.
