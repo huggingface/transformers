@@ -63,11 +63,11 @@ class InputFeatures(object):
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file):
         """Gets a collection of `InputExample`s for the train set."""
         raise NotImplementedError()
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file):
         """Gets a collection of `InputExample`s for the dev set."""
         raise NotImplementedError()
 
@@ -91,16 +91,16 @@ class DataProcessor(object):
 class MrpcProcessor(DataProcessor):
     """Processor for the MRPC data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
-        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
+        logger.info("LOOKING AT {}".format(os.path.join(data_dir, train_file)))
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
@@ -124,15 +124,15 @@ class MrpcProcessor(DataProcessor):
 class MnliProcessor(DataProcessor):
     """Processor for the MultiNLI data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev_matched.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev_matched.tsv")),
+            self._read_tsv(os.path.join(data_dir, dev_file)),
             "dev_matched")
 
     def get_labels(self):
@@ -157,25 +157,25 @@ class MnliProcessor(DataProcessor):
 class MnliMismatchedProcessor(MnliProcessor):
     """Processor for the MultiNLI Mismatched data set (GLUE version)."""
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev_mismatched.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev_mismatched.tsv")),
+            self._read_tsv(os.path.join(data_dir, dev_file)),
             "dev_matched")
 
 
 class ColaProcessor(DataProcessor):
     """Processor for the CoLA data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
@@ -196,15 +196,15 @@ class ColaProcessor(DataProcessor):
 class Sst2Processor(DataProcessor):
     """Processor for the SST-2 data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
@@ -227,15 +227,15 @@ class Sst2Processor(DataProcessor):
 class StsbProcessor(DataProcessor):
     """Processor for the STS-B data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
@@ -259,15 +259,15 @@ class StsbProcessor(DataProcessor):
 class QqpProcessor(DataProcessor):
     """Processor for the QQP data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
@@ -294,16 +294,15 @@ class QqpProcessor(DataProcessor):
 class QnliProcessor(DataProcessor):
     """Processor for the QNLI data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), 
-            "dev_matched")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev_matched")
 
     def get_labels(self):
         """See base class."""
@@ -327,15 +326,15 @@ class QnliProcessor(DataProcessor):
 class RteProcessor(DataProcessor):
     """Processor for the RTE data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
@@ -359,15 +358,15 @@ class RteProcessor(DataProcessor):
 class WnliProcessor(DataProcessor):
     """Processor for the WNLI data set (GLUE version)."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, train_file="train.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+            self._read_tsv(os.path.join(data_dir, train_file)), "train")
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, dev_file="dev.tsv"):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+            self._read_tsv(os.path.join(data_dir, dev_file)), "dev")
 
     def get_labels(self):
         """See base class."""
