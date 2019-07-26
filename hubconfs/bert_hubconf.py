@@ -37,7 +37,7 @@ bert_docstring = """
                  checkpoint
         cache_dir: an optional path to a folder in which the pre-trained models
                    will be cached.
-        state_dict: an optional state dictionnary
+        state_dict: an optional state dictionary
                     (collections.OrderedDict object) to use instead of Google
                     pre-trained models
         *inputs, **kwargs: additional input for the specific Bert class
