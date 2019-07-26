@@ -62,34 +62,34 @@ def convert_pytorch_checkpoint_to_tf(model:BertModel, ckpt_dir:str, model_name:s
     if not os.path.isdir(ckpt_dir):
         os.makedirs(ckpt_dir)
 
-    session = tf.Session()
     state_dict = model.state_dict()
-    tf_vars = []
 
     def to_tf_var_name(name:str):
         for patt, repl in iter(var_map):
             name = name.replace(patt, repl)
         return 'bert/{}'.format(name)
 
-    def assign_tf_var(tensor:np.ndarray, name:str):
+    def create_tf_var(tensor:np.ndarray, name:str, session:tf.Session):
         tf_dtype = tf.dtypes.as_dtype(tensor.dtype)
-        tf_var = tf.get_variable(dtype=tf_dtype, shape=tensor.shape, name=name)
+        tf_var = tf.get_variable(dtype=tf_dtype, shape=tensor.shape, name=name, initializer=tf.zeros_initializer())
         session.run(tf.variables_initializer([tf_var]))
-        tf.keras.backend.set_value(tf_var, tensor)
         session.run(tf_var)
         return tf_var
 
-    for var_name in state_dict:
-        tf_name = to_tf_var_name(var_name)
-        torch_tensor = state_dict[var_name].numpy()
-        if any([x in var_name for x in tensors_to_transopse]):
-            torch_tensor = torch_tensor.T
-        tf_tensor = assign_tf_var(tensor=torch_tensor, name=tf_name)
-        tf_vars.append(tf_tensor)
-        print("{0}{1}initialized".format(tf_name, " " * (60 - len(tf_name))))
+    tf.reset_default_graph()
+    with tf.Session() as session:
+        for var_name in state_dict:
+            tf_name = to_tf_var_name(var_name)
+            torch_tensor = state_dict[var_name].numpy()
+            if any([x in var_name for x in tensors_to_transopse]):
+                torch_tensor = torch_tensor.T
+            tf_var = create_tf_var(tensor=torch_tensor, name=tf_name, session=session)
+            tf.keras.backend.set_value(tf_var, torch_tensor)
+            tf_weight = session.run(tf_var)
+            print("Successfully created {}: {}".format(tf_name, np.allclose(tf_weight, torch_tensor)))
 
-    saver = tf.train.Saver(tf_vars)
-    saver.save(session, os.path.join(ckpt_dir, model_name.replace("-", "_") + ".ckpt"))
+        saver = tf.train.Saver(tf.trainable_variables())
+        saver.save(session, os.path.join(ckpt_dir, model_name.replace("-", "_") + ".ckpt"))
 
 
 def main(raw_args=None):
