@@ -472,12 +472,12 @@ class XLMModel(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> model = XLMModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        model = XLMModel(config)
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     ATTRIBUTES = ['encoder', 'eos_index', 'pad_index',  # 'with_output', 
@@ -745,12 +745,12 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> model = XLMWithLMHeadModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        model = XLMWithLMHeadModel(config)
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
@@ -805,14 +805,14 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> 
-        >>> model = XLMForSequenceClassification(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=labels)
-        >>> loss, logits = outputs[:2]
+        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        
+        model = XLMForSequenceClassification(config)
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
     """
     def __init__(self, config):
@@ -885,15 +885,15 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> 
-        >>> model = XLMForQuestionAnswering(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
-        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        >>> loss, start_scores, end_scores = outputs[:2]
+        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        
+        model = XLMForQuestionAnswering(config)
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        start_positions = torch.tensor([1])
+        end_positions = torch.tensor([3])
+        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        loss, start_scores, end_scores = outputs[:2]
 
     """
     def __init__(self, config):

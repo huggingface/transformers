@@ -105,15 +105,15 @@ class PretrainedConfig(object):
 
         Examples::
 
-            >>> config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            >>> config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
-            >>> config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-            >>> config = BertConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            >>> assert config.output_attention == True
-            >>> config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attention=True,
-            >>>                                                    foo=False, return_unused_kwargs=True)
-            >>> assert config.output_attention == True
-            >>> assert unused_kwargs == {'foo': False}
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
+            config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
+            config = BertConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
+            assert config.output_attention == True
+            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attention=True,
+                                                               foo=False, return_unused_kwargs=True)
+            assert config.output_attention == True
+            assert unused_kwargs == {'foo': False}
 
         """
         cache_dir = kwargs.pop('cache_dir', None)
@@ -369,13 +369,13 @@ class PreTrainedModel(nn.Module):
 
         Examples::dictionary
 
-            >>> model = BertModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            >>> model = BertModel.from_pretrained('./test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            >>> model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            >>> assert model.config.output_attention == True
-            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
-            >>> model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = BertModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = BertModel.from_pretrained('./test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
+            model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
         config = kwargs.pop('config', None)
