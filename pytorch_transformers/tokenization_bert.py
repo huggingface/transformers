@@ -119,7 +119,7 @@ class BertTokenizer(PreTrainedTokenizer):
                 Only has an effect when do_basic_tokenize=True
             **tokenize_chinese_chars**: (`optional`) boolean (default True)
                 Whether to tokenize Chinese characters.
-                This should likely be desactivated for Japanese:
+                This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
         super(BertTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
@@ -214,7 +214,7 @@ class BasicTokenizer(object):
                 List of token not to split.
             **tokenize_chinese_chars**: (`optional`) boolean (default True)
                 Whether to tokenize Chinese characters.
-                This should likely be desactivated for Japanese:
+                This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
         if never_split is None:
