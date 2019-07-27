@@ -78,8 +78,8 @@ class AutoTokenizer(object):
 
         Examples::
 
-            >>> config = AutoTokenizer.from_pretrained('bert-base-uncased')    # Download vocabulary from S3 and cache.
-            >>> config = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
+            config = AutoTokenizer.from_pretrained('bert-base-uncased')    # Download vocabulary from S3 and cache.
+            config = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
 
         """
         if 'bert' in pretrained_model_name_or_path:

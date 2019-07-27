@@ -439,12 +439,12 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
     Examples::
 
-        >>> config = OpenAIGPTConfig.from_pretrained('openai-gpt')
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        >>> model = OpenAIGPTModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        config = OpenAIGPTConfig.from_pretrained('openai-gpt')
+        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        model = OpenAIGPTModel(config)
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
@@ -558,12 +558,12 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
     Examples::
 
-        >>> config = OpenAIGPTConfig.from_pretrained('openai-gpt')
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        >>> model = OpenAIGPTLMHeadModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=input_ids)
-        >>> loss, logits = outputs[:2]
+        config = OpenAIGPTConfig.from_pretrained('openai-gpt')
+        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        model = OpenAIGPTLMHeadModel(config)
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=input_ids)
+        loss, logits = outputs[:2]
 
     """
     def __init__(self, config):
@@ -665,14 +665,14 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
 
     Examples::
 
-        >>> config = OpenAIGPTConfig.from_pretrained('openai-gpt')
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        >>> model = OpenAIGPTDoubleHeadsModel(config)
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]  # Assume you've added [CLS] to the vocabulary
-        >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        >>> mc_token_ids = torch.tensor([-1, -1]).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, mc_token_ids)
-        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
+        config = OpenAIGPTConfig.from_pretrained('openai-gpt')
+        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        model = OpenAIGPTDoubleHeadsModel(config)
+        choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]  # Assume you've added [CLS] to the vocabulary
+        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        mc_token_ids = torch.tensor([-1, -1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, mc_token_ids)
+        lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
     """
     def __init__(self, config):

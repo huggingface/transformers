@@ -89,15 +89,15 @@ class AutoConfig(object):
 
         Examples::
 
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            >>> config = AutoConfig.from_pretrained('./test/bert_saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
-            >>> config = AutoConfig.from_pretrained('./test/bert_saved_model/my_configuration.json')
-            >>> config = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            >>> assert config.output_attention == True
-            >>> config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True,
-            >>>                                                    foo=False, return_unused_kwargs=True)
-            >>> assert config.output_attention == True
-            >>> assert unused_kwargs == {'foo': False}
+            config = AutoConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            config = AutoConfig.from_pretrained('./test/bert_saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
+            config = AutoConfig.from_pretrained('./test/bert_saved_model/my_configuration.json')
+            config = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
+            assert config.output_attention == True
+            config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True,
+                                                               foo=False, return_unused_kwargs=True)
+            assert config.output_attention == True
+            assert unused_kwargs == {'foo': False}
 
         """
         if 'bert' in pretrained_model_name_or_path:
@@ -202,13 +202,13 @@ class AutoModel(object):
 
         Examples::
 
-            >>> model = AutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            >>> model = AutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            >>> model = AutoModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
-            >>> assert model.config.output_attention == True
-            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-            >>> model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = AutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = AutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
         if 'bert' in pretrained_model_name_or_path:
