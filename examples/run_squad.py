@@ -101,6 +101,10 @@ def train(args, train_dataset, model, tokenizer):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
@@ -241,7 +245,10 @@ def evaluate(args, model, tokenizer, prefix=""):
     # Compute predictions
     output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
     output_nbest_file = os.path.join(args.output_dir, "nbest_predictions_{}.json".format(prefix))
-    output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
+    if args.version_2_with_negative:
+        output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
+    else:
+        output_null_log_odds_file = None
 
     if args.model_type in ['xlnet', 'xlm']:
         # XLNet uses a more complex post-processing procedure
@@ -457,8 +464,6 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
-    if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
 
     logger.info("Training/evaluation parameters %s", args)
 
