@@ -157,7 +157,7 @@ class AutoModel(object):
             - contains `xlnet`: XLNetConfig (XLNet model)
             - contains `xlm`: XLMConfig (XLM model)
 
-            The model is set in evaluation mode by default using `model.eval()` (Dropout modules are desactivated)
+            The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
             To train the model, you should first set it back in training mode with `model.train()`
 
         Params:
@@ -179,7 +179,7 @@ class AutoModel(object):
                 - the model was saved using the `save_pretrained(save_directory)` (loaded by suppling the save directory).
             **state_dict**: an optional state dictionnary for the model to use instead of a state dictionary loaded
                 from saved weights file.
-                This option can be used if you want to create a model from a pretrained configuraton but load your own weights.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using `save_pretrained(dir)` and `from_pretrained(save_directory)` is not
                 a simpler option.
             **cache_dir**: (`optional`) string:
