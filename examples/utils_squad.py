@@ -108,7 +108,7 @@ class InputFeatures(object):
         self.is_impossible = is_impossible
 
 
-def read_squad_examples(input_file, is_training, version_2_with_negative):
+def read_squad_examples(input_file, version_2_with_negative):
     """Read a SQuAD json file into a list of SquadExample."""
     with open(input_file, "r", encoding='utf-8') as reader:
         input_data = json.load(reader)["data"]
@@ -143,36 +143,7 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
                 end_position = None
                 orig_answer_text = None
                 is_impossible = False
-                if is_training:
-                    if version_2_with_negative:
-                        is_impossible = qa["is_impossible"]
-                    if (len(qa["answers"]) != 1) and (not is_impossible):
-                        raise ValueError(
-                            "For training, each question should have exactly 1 answer.")
-                    if not is_impossible:
-                        answer = qa["answers"][0]
-                        orig_answer_text = answer["text"]
-                        answer_offset = answer["answer_start"]
-                        answer_length = len(orig_answer_text)
-                        start_position = char_to_word_offset[answer_offset]
-                        end_position = char_to_word_offset[answer_offset + answer_length - 1]
-                        # Only add answers where the text can be exactly recovered from the
-                        # document. If this CAN'T happen it's likely due to weird Unicode
-                        # stuff so we will just skip the example.
-                        #
-                        # Note that this means for training mode, every example is NOT
-                        # guaranteed to be preserved.
-                        actual_text = " ".join(doc_tokens[start_position:(end_position + 1)])
-                        cleaned_answer_text = " ".join(
-                            whitespace_tokenize(orig_answer_text))
-                        if actual_text.find(cleaned_answer_text) == -1:
-                            logger.warning("Could not find answer: '%s' vs. '%s'",
-                                           actual_text, cleaned_answer_text)
-                            continue
-                    else:
-                        start_position = -1
-                        end_position = -1
-                        orig_answer_text = ""
+
 
                 example = SquadExample(
                     qas_id=qas_id,
@@ -223,18 +194,6 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
         tok_start_position = None
         tok_end_position = None
-        if is_training and example.is_impossible:
-            tok_start_position = -1
-            tok_end_position = -1
-        if is_training and not example.is_impossible:
-            tok_start_position = orig_to_tok_index[example.start_position]
-            if example.end_position < len(example.doc_tokens) - 1:
-                tok_end_position = orig_to_tok_index[example.end_position + 1] - 1
-            else:
-                tok_end_position = len(all_doc_tokens) - 1
-            (tok_start_position, tok_end_position) = _improve_answer_span(
-                all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-                example.orig_answer_text)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
@@ -328,27 +287,6 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             span_is_impossible = example.is_impossible
             start_position = None
             end_position = None
-            if is_training and not span_is_impossible:
-                # For training, if our document chunk does not contain an annotation
-                # we throw it out, since there is nothing to predict.
-                doc_start = doc_span.start
-                doc_end = doc_span.start + doc_span.length - 1
-                out_of_span = False
-                if not (tok_start_position >= doc_start and
-                        tok_end_position <= doc_end):
-                    out_of_span = True
-                if out_of_span:
-                    start_position = 0
-                    end_position = 0
-                    span_is_impossible = True
-                else:
-                    doc_offset = len(query_tokens) + 2
-                    start_position = tok_start_position - doc_start + doc_offset
-                    end_position = tok_end_position - doc_start + doc_offset
-
-            if is_training and span_is_impossible:
-                start_position = cls_index
-                end_position = cls_index
 
             if example_index < 20:
                 logger.info("*** Example ***")
@@ -366,14 +304,6 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     "input_mask: %s" % " ".join([str(x) for x in input_mask]))
                 logger.info(
                     "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-                if is_training and span_is_impossible:
-                    logger.info("impossible example")
-                if is_training and not span_is_impossible:
-                    answer_text = " ".join(tokens[start_position:(end_position + 1)])
-                    logger.info("start_position: %d" % (start_position))
-                    logger.info("end_position: %d" % (end_position))
-                    logger.info(
-                        "answer: %s" % (answer_text))
 
             features.append(
                 InputFeatures(
