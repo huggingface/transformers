@@ -123,12 +123,13 @@ class PregeneratedDataset(Dataset):
 args = None
 optimizer_grouped_parameters = None
 num_train_optimization_steps = None
+epoch = None
 def main():
+    global epoch
     parser = ArgumentParser()
     parser.add_argument('--pregenerated_data', type=Path, required=True)
     parser.add_argument('--output_dir', type=Path, required=True)
 
-    # TODO: load model from file instead of one of the existing models
     parser.add_argument("--bert_model", type=str, required=True, help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
     parser.add_argument("--do_lower_case", action="store_true")
@@ -308,14 +309,12 @@ def main():
 
     def tpu_training_loop(model, loader, device, context):
         """This function executes in each core of the TPU."""
-
         import time
         start = time.time()
-        logging.info(f"Creat optimizer for device: {device}")
+        logging.info(f"Creat/fetch optimizer for device: {device} at epoch: {epoch}")
         optimizer = context.getattr_or(
             'optimizer',
             AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon))
-        print(device, id(optimizer), optimizer)
         scheduler = context.getattr_or(
             'scheduler',
             WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps))
@@ -336,6 +335,8 @@ def main():
 
             # TODO: check learning rate scheduling and gradient accumulation
             # TODO: monitor loss
+            # TODO: validation every x batches
+            # TODO: save model every now and then
 
             # tr_loss += loss.item()  # don't read loss every batch, it slows things down
             # nb_tr_examples += input_ids.size(0)
@@ -347,9 +348,10 @@ def main():
                 optimizer.zero_grad()
                 # global_step += 1
 
-            if step % 3 == 0:
+            if step % 10 == 0:
                 logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}")
         logging.info(f"Done training on device: {device}, elapsed time: {round(time.time() - start, 2)} seconds")
+
 
     for epoch in range(args.epochs):
         epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,
@@ -394,14 +396,14 @@ def main():
         print(torch_xla._XLAC._xla_metrics_report())
 
     # Save a trained model
-    if args.tpu_ip:
-        # TODO: save trained model
-        logging.error("TODO: save trained model")
-    else:
-        if  n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1 :
-            logging.info("** ** * Saving fine-tuned model ** ** * ")
-            model.save_pretrained(args.output_dir)
-            tokenizer.save_pretrained(args.output_dir)
+    if args.tpu_ip:  # TPU model is saved inside the training loop
+        # replace the xla_data_parallel model with the model in the first TPU core
+        model = model._models[0]
+
+    if args.tpu_ip or (n_gpu > 1 and torch.distributed.get_rank() == 0)  or n_gpu <=1 :
+        logging.info("** ** * Saving fine-tuned model ** ** * ")
+        model.save_pretrained(args.output_dir)
+        tokenizer.save_pretrained(args.output_dir)
 
 if __name__ == '__main__':
     main()

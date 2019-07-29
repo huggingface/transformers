@@ -4,9 +4,12 @@ docker build . -t myxla -f scripts/xla_dockerfile
 # run the docker image
 docker run -it --mount type=bind,source="$(pwd)",target=/code -e TPU_IP=10.240.0.2 myxla 
 
+# install pytorch-transformers
+pip install --editable .
+
 # pregenerate trainiing data
 python examples/lm_finetuning/pregenerate_training_data.py --train_corpus data/corpus/test10k.out --bert_model bert-base-uncased --do_lower_case --output_dir data/pregenerated_data_10k --epochs_to_generate 3  --max_seq_len 128
 
 # run pretraining on TPU 
-python examples/lm_finetuning/finetune_on_pregenerated.py  --pregenerated_data data/pregenerated_data/ --output_dir data/trained_models/ --do_lower_case --epochs 1 --bert_model bert-base-uncased --tpu_ip $TPU_IP
+python examples/lm_finetuning/finetune_on_pregenerated.py  --pregenerated_data data/pregenerated_data/ --output_dir data/trained_models/ --do_lower_case --epochs 1 --bert_model bert-base-uncased --tpu_ip $TPU_IP --tpu_report --bert_mode data/trained_models
 
