@@ -158,7 +158,7 @@ def read_squad_examples(input_file, version_2_with_negative):
 
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,
-                                 doc_stride, max_query_length, is_training,
+                                 doc_stride, max_query_length,
                                  cls_token_at_end=False,
                                  cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
                                  sequence_a_segment_id=0, sequence_b_segment_id=1,
