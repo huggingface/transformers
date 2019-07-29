@@ -1,0 +1,77 @@
+import argparse
+import json
+
+
+def create_example_dict(context, id, questions):
+    qas = []
+    count = id
+    for question in questions:
+        qas.append({
+                "answers": [{"answer_start": -1, "text": ""}],
+                "id": count,
+                "is_impossible": False,
+                "question": question,
+                }
+        )
+        count += 1
+
+    return {
+        "context": context,
+        "qas": qas,
+    }
+
+def create_para_dict(example_dicts, title=""):
+    if type(example_dicts) == dict:
+        example_dicts = [example_dicts]
+    return {"title": title,
+            "paragraphs": example_dicts}
+
+def convert_input_to_squad_format(
+    input_file, output_file):
+
+    with open(input_file, "r") as f:
+        raw_text = f.read()
+
+    paragraphs = raw_text.split("\n\n")
+
+    squad_dict = {"data": []}
+    count = 0
+
+    for p in paragraphs:
+        p = p.split("\n")
+        title = p[0]
+        context = p[1]
+        questions = p[2:]
+
+
+        squad_dict["data"].append(
+            create_para_dict(
+                create_example_dict(
+                    context=context,
+                    id=count,
+                    questions=questions,
+                ),
+            title)
+        )
+        count += len(questions)
+
+    with open(output_file, "w") as f:
+        json.dump(squad_dict, f)
+
+    return squad_dict
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--file", default=None, type=str, required=True,
+                        help="File to convert to SQuAD format")
+    parser.add_argument("--output", default=None, type=str, required=True,
+                        help="Output file location")
+    args = parser.parse_args()
+
+    convert_input_to_squad_format(args.file, args.output)
+
+
+if __name__ == "__main__":
+    main()
