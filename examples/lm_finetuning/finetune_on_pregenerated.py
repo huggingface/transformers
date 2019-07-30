@@ -177,7 +177,11 @@ def main():
     parser.add_argument("--log_steps",
                         default=10,
                         type=int,
-                        help="Number of steps to save the model and log loss.")
+                        help="Number of steps to log the loss.")
+    parser.add_argument("--save_steps",
+                        default=10,
+                        type=int,
+                        help="Number of steps to save the model.")
     parser.add_argument('--seed',
                         type=int,
                         default=42,
@@ -244,6 +248,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
+    tokenizer.save_pretrained(args.output_dir)
 
     total_train_examples = 0
     for i in range(args.epochs):
@@ -347,7 +352,17 @@ def main():
                 num_log_steps += 1
                 logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss/num_log_steps, 5)}")
 
-            # TODO: save model every now and then
+            if step % args.save_steps == 0 and str(device_to_save_model) ==  str(device):
+                save_start_time = time.time()
+                logging.info(f"Saving fine-tuned model from device {device}")
+                model.save_pretrained(args.output_dir)
+                logging.info(f"Done saving model. Elapsed time: {round(time.time() - save_start_time, 2)}")
+
+        if device_to_save_model ==  device:
+            save_start_time = time.time()
+            logging.info(f"Saving fine-tuned model from device {device}")
+            model.save_pretrained(args.output_dir)
+            logging.info(f"Done saving model. Elapsed time: {round(time.time() - save_start_time, 2)}")
         tr_loss += loss.item()
         num_log_steps += 1
         logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss/num_log_steps, 5)}")
@@ -362,6 +377,7 @@ def main():
             train_sampler = DistributedSampler(epoch_dataset)
         train_dataloader = DataLoader(epoch_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
         if args.tpu_ip:
+            device_to_save_model = devices[0]
             losses = model(tpu_training_loop, train_dataloader)
             logging.info(f'average loss at epoch {epoch}: {sum(losses)/len(losses)}')
             continue
