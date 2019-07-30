@@ -30,8 +30,6 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from tensorboardX import SummaryWriter
-
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForQuestionAnswering, BertTokenizer,
                                   XLMConfig, XLMForQuestionAnswering,
@@ -61,8 +59,6 @@ def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
 
 def to_list(tensor):
     return tensor.detach().cpu().tolist()
@@ -74,7 +70,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
 
-    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+    args.eval_batch_size = args.per_gpu_eval_batch_size
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -192,7 +188,7 @@ def initialize():
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default="bert-large-uncased-whole-word-masking-finetuned-squad", type=str,
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
-    parser.add_argument("--output_dir", default="../results", type=str,
+    parser.add_argument("--output_dir", default="./results", type=str,
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     ## Other parameters
@@ -200,7 +196,7 @@ def initialize():
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="bert-large-uncased", type=str,
                         help="Pretrained tokenizer name or path if not the same as model_name")
-    parser.add_argument("--cache_dir", default="", type=str,
+    parser.add_argument("--cache_dir", default="./cache", type=str,
                         help="Where do you want to store the pre-trained models downloaded from s3")
 
     parser.add_argument('--version_2_with_negative', action='store_true',

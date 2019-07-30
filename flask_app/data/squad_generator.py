@@ -26,11 +26,12 @@ def create_para_dict(example_dicts, title=""):
     return {"title": title,
             "paragraphs": example_dicts}
 
-def convert_input_to_squad_format(
-    input_file, output_file):
-
+def convert_file_input_to_squad(input_file, output_file):
     with open(input_file, "r") as f:
         raw_text = f.read()
+    return convert_text_input_to_squad(raw_text, output_file)
+
+def convert_text_input_to_squad(raw_text, output_file):
 
     paragraphs = raw_text.split("\n\n")
 
@@ -70,7 +71,7 @@ def main():
                         help="Output file location")
     args = parser.parse_args()
 
-    convert_input_to_squad_format(args.file, args.output)
+    convert_file_input_to_squad(args.file, args.output)
 
 
 if __name__ == "__main__":
