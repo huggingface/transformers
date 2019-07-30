@@ -1,2 +1,0 @@
-tensorboardX
-scikit-learn
