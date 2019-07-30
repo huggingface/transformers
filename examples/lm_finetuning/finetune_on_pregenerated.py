@@ -127,6 +127,8 @@ epoch = None
 def main():
     global epoch
     parser = ArgumentParser()
+    # TODO: where's the max_predictions_per_seq param?
+
     parser.add_argument('--pregenerated_data', type=Path, required=True)
     parser.add_argument('--output_dir', type=Path, required=True)
 
@@ -172,6 +174,10 @@ def main():
                         default=3e-5,
                         type=float,
                         help="The initial learning rate for Adam.")
+    parser.add_argument("--log_steps",
+                        default=10,
+                        type=int,
+                        help="Number of steps to save the model and log loss.")
     parser.add_argument('--seed',
                         type=int,
                         default=42,
@@ -244,6 +250,7 @@ def main():
         # The modulo takes into account the fact that we may loop over limited epochs of data
         total_train_examples += samples_per_epoch[i % len(samples_per_epoch)]
 
+    # TODO: are args.warmup_steps, args.learning_rate and the following values correct when TPUs are used?
     num_train_optimization_steps = int(
         total_train_examples / args.train_batch_size / args.gradient_accumulation_steps)
     if args.local_rank != -1:
@@ -319,39 +326,32 @@ def main():
             'scheduler',
             WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps))
 
+        tracker = tpu_xm.RateTracker()
         model.train()
-        # tr_loss, nb_tr_steps, global_step = 0, 0, 0
-        logging.info(f"Start training on device: {device}")
-
+        tr_loss = 0
+        num_log_steps = 0
         for step, batch in loader:
             input_ids, input_mask, segment_ids, lm_label_ids, is_next = batch
             outputs = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
             loss = outputs[0]
-            # if n_gpu > 1:
-            #     loss = loss.mean() # mean() to average on multi-gpu.
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
             loss.backward()
-
-            # TODO: check learning rate scheduling and gradient accumulation
-            # TODO: monitor loss
-            # TODO: validation every x batches
-            # TODO: save model every now and then
-
-            # tr_loss += loss.item()  # don't read loss every batch, it slows things down
-            # nb_tr_examples += input_ids.size(0)
-            # nb_tr_steps += 1
-            # mean_loss = tr_loss * args.gradient_accumulation_steps / nb_tr_steps
+            tracker.add(args.train_batch_size)
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 tpu_xm.optimizer_step(optimizer)
                 scheduler.step()
                 optimizer.zero_grad()
-                # global_step += 1
+            if step % args.log_steps == 0 and step > 0:
+                tr_loss += loss.item()
+                num_log_steps += 1
+                logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss/num_log_steps, 5)}")
 
-            if step % 10 == 0:
-                logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}")
-        logging.info(f"Done training on device: {device}, elapsed time: {round(time.time() - start, 2)} seconds")
-
+            # TODO: save model every now and then
+        tr_loss += loss.item()
+        num_log_steps += 1
+        logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss/num_log_steps, 5)}")
+        return tr_loss/num_log_steps
 
     for epoch in range(args.epochs):
         epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,
@@ -362,7 +362,8 @@ def main():
             train_sampler = DistributedSampler(epoch_dataset)
         train_dataloader = DataLoader(epoch_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
         if args.tpu_ip:
-            model(tpu_training_loop, train_dataloader)
+            losses = model(tpu_training_loop, train_dataloader)
+            logging.info(f'average loss at epoch {epoch}: {sum(losses)/len(losses)}')
             continue
 
         tr_loss = 0
