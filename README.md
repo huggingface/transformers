@@ -194,7 +194,7 @@ python ./examples/run_glue.py \
     --warmup_steps=120
 ```
 
-On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should results in a Pearson correlation coefficient of `+0.917` on the development set.
+On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should result in a Pearson correlation coefficient of `+0.917` on the development set.
 
 #### Fine-tuning Bert model on the MRPC classification task
 
@@ -264,7 +264,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 ### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
-The generation script include the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
+The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
 
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
