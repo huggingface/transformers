@@ -18,7 +18,7 @@ These implementations have been tested on several datasets (see the example scri
 | Section | Description |
 |-|-|
 | [Installation](#installation) | How to install the package |
-| [Quick tour: Usage](#quick-tour-usage) | Tokenizers & models usage: Bert and GPT-2 |
+| [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-pytorch-transformers) | Migrating your code from pytorch-pretrained-bert to pytorch-transformers |
 | [Documentation](https://huggingface.co/pytorch-transformers/) | Full API documentation and more |
