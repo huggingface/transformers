@@ -31,7 +31,25 @@ def convert_file_input_to_squad(input_file, output_file):
         raw_text = f.read()
     return convert_text_input_to_squad(raw_text, output_file)
 
+def validate_squad_input(input):
+    paragraphs = input.split("\n\n")
+    for p in paragraphs:
+        p = p.split("\n")
+        if len(p) < 3:
+            return False
+        else:
+            questions = p[2:]
+            for q in questions:
+                if not q:
+                    return False
+    return True
+
+
 def convert_text_input_to_squad(raw_text, output_file):
+
+    raw_text = raw_text.strip()
+
+    assert validate_squad_input(raw_text)
 
     paragraphs = raw_text.split("\n\n")
 

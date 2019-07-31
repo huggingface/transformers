@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<head>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+        <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+
+<body>
+
+<h1>Squad Results</h1>
+<ul>
+{% for file_url in file_urls %}
+     {% for packaged_prediction in predict(file_url) %}
+           <li> {{ packaged_prediction[0] }}
+                <ul>
+                    {% for context in packaged_prediction[1] %}
+                    <li>{{ context[0] }}
+                        <ul>
+                            {% for question in context[1] %}
+                            <li>
+                                <b>Q: </b>
+                                {{ question[0] }}
+                                <ul>
+                                    <li>
+                                        <b>A: </b>
+                                {{ question[1] }}
+                            </li>
+                                </ul>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </li>
+                    {% endfor %}
+                </ul>
+    </li>
+    {% endfor %}
+{% endfor %}
+</ul>
+</body>

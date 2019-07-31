@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Squad Demo</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+
+    {{ dropzone.load_css() }}
+    {{ dropzone.style('border: 2px dashed #0087F7; min-height: 400px;') }}
+</head>
+<body>
+<h1>
+    Squad Demo
+</h1>
+<div class="input">
+    <h2>File Upload</h2>
+    {{ dropzone.create(action_view='process_input') }}
+    {{ dropzone.load_js() }}
+    {{ dropzone.config() }}
+    <h2>Text Input</h2>
+    <form method="POST">
+        <textarea name="textbox"></textarea>
+    <button class="btn btn-primary" type="submit" name="submit">Submit</button>
+    </form>
+
+</div>
+</body>
+</html>

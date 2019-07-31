@@ -1,6 +1,6 @@
 # flask_app/server.py​
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session, url_for, redirect
 from flask_dropzone import Dropzone
 
 import logging
@@ -13,24 +13,36 @@ import requests, os
 
 # import settingspip u
 from run_squad import initialize, evaluate
-from data.squad_generator import convert_text_input_to_squad, convert_file_input_to_squad
+from data.squad_generator import convert_text_input_to_squad, \
+    convert_file_input_to_squad, validate_squad_input
 from settings import *
 
 os.makedirs(output_dir, exist_ok=True)
 
-args, model, tokenizer = None, None, None
-# args, model, tokenizer = initialize()
+# args, model, tokenizer = None, None, None
+args, model, tokenizer = initialize()
 
 app = Flask(__name__)
+
+app.config['DROPZONE_UPLOAD_MULTIPLE'] = True
+app.config['DROPZONE_REDIRECT_VIEW'] = 'results'
+app.config['DROPZONE_ALLOWED_FILE_TYPE'] = 'text'
+app.config['SECRET_KEY'] = 'supersecret'
+
 dropzone = Dropzone(app)
 
 @app.route("/")
-def text():
-    return render_template("text.html")
+def index():
+    return render_template("index.html")
 
 @app.route("/", methods=['POST'])
 def process_input():
     if request.files:
+        if "file_urls" not in session:
+            session['file_urls'] = []
+            # list to hold our uploaded image urls
+        file_urls = session['file_urls']
+
         file_obj = request.files
         for f in file_obj:
             file = request.files.get(f)
@@ -38,12 +50,14 @@ def process_input():
             os.makedirs("./uploads", exist_ok=True)
             filepath = os.path.join('./uploads', file.filename)
             file.save(filepath)
-            return render_template("file.html")
+            file_urls.append(filepath)
+        return "upload"
     else:
-        input = request.form["textbox"].strip()
-        if validate_input(input):
-            return predict_from_text(input)
-        return text()
+        input = request.form["textbox"]
+        try:
+            return predict_from_text_squad(input)
+        except AssertionError:
+            return index()
 
 
 # @app.route('/', methods=['POST'])
@@ -51,35 +65,51 @@ def process_input():
 #
 #     return "uploading..."
 
-def validate_input(input):
-    paragraphs = input.split("\n\n")
+def predict_from_text_squad(input):
+    squad_dict = convert_text_input_to_squad(input, gen_file)
+    return package_squad_prediction(evaluate_input(gen_file), squad_dict)
 
-    for p in paragraphs:
-        p = p.split("\n")
-        if len(p) < 3:
-            return False
-        else:
-            questions = p[2:]
-            for q in questions:
-                if not q:
-                    return False
-    return True
+def predict_from_file_squad(input):
+    try:
+        squad_dict = convert_file_input_to_squad(input, gen_file)
+    except AssertionError:
+        return []
+    return package_squad_prediction(evaluate_input(gen_file), squad_dict)
 
-def predict_from_text(input):
-    convert_text_input_to_squad(input, "./data/squad_input.json")
-    return evaluate_input()
+def package_squad_prediction(prediction, squad_dict):
+    squad_dict = squad_dict["data"]
+    packaged_predictions = []
+    for entry in squad_dict:
+        title = entry["title"]
+        inner_package = []
+        for p in entry["paragraphs"]:
+            context = p["context"]
+            qas = [(q["question"], prediction[q["id"]]) for q in p["qas"]]
+            inner_package.append((context, qas))
+        packaged_predictions.append((title, inner_package))
+    return packaged_predictions
 
-def predict_from_file(input):
-    convert_file_input_to_squad(input, "./data/squad_input.json")
-    return evaluate_input()
 
-def evaluate_input():
-    args.predict_file = "./data/squad_input.json"
+
+def evaluate_input(predict_file, passthrough=False):
+    args.predict_file = predict_file
     t = time.time()
     predictions = evaluate(args, model, tokenizer)
     dt = time.time() - t
     app.logger.info("Execution time: %0.02f seconds" % (dt))
-    return jsonify(predictions)
+    if passthrough:
+        return predictions, predict_file
+    return predictions
+
+
+@app.route('/results')
+def results():
+    if "file_urls" not in session or session['file_urls'] == []:
+        return redirect(url_for('index'))
+    file_urls = session['file_urls']
+    session.pop('file_urls', None)
+
+    return render_template('results.html', file_urls=file_urls, predict=predict_from_file_squad)
 
 
 
