@@ -56,6 +56,16 @@ python -m pytest -sv ./pytorch_transformers/tests/
 python -m pytest -sv ./examples/
 ```
 
+### Do you want to run a Transformer model on a mobile device?
+
+You should check out our [`swift-coreml-transformers`](https://github.com/huggingface/swift-coreml-transformers) repo.
+
+It contains an example of a conversion script from a Pytorch trained Transformer model (here, `GPT-2`) to a CoreML model that runs on iOS devices.
+
+At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models in PyTorch to productizing them in CoreML,
+or prototype a model or an app in CoreML then research its hyperparameters or architecture from PyTorch. Super exciting!
+
+
 ## Quick tour
 
 Let's do a very quick overview of PyTorch-Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/pytorch-transformers/).
