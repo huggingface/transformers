@@ -428,10 +428,10 @@ def main():
             warmup_linear = WarmupLinearSchedule(warmup=args.warmup_proportion,
                                                  t_total=num_train_optimization_steps)
         else:
-            optimizer = BertAdam(optimizer_grouped_parameters,
-                                 lr=args.learning_rate,
-                                 warmup=args.warmup_proportion,
-                                 t_total=num_train_optimization_steps)
+            optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+            scheduler = WarmupLinearSchedule(optimizer,
+                                             warmup_steps=args.warmup_proportion,
+                                             t_total=num_train_optimization_steps)
 
         global_step = 0
 
@@ -467,10 +467,13 @@ def main():
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     if args.fp16:
                         # modify learning rate with special warm up BERT uses
-                        # if args.fp16 is False, BertAdam is used that handles this automatically
+                        # if args.fp16 is False, AdamW is used that handles this automatically
                         lr_this_step = args.learning_rate * warmup_linear.get_lr(global_step, args.warmup_proportion)
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = lr_this_step
+                    else:
+                        # scheduler needs to iterate with AdamW 
+                        scheduler.step()
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
