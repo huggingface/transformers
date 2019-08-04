@@ -79,7 +79,7 @@ class PregeneratedDataset(Dataset):
             segment_ids = np.memmap(filename=self.working_dir/'segment_ids.memmap',
                                     shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
             lm_label_ids = np.memmap(filename=self.working_dir/'lm_label_ids.memmap',
-                                     shape=(num_samples, seq_len), mode='w+', dtype=np.int32)
+                                    shape=(num_samples, seq_len), mode='w+', dtype=np.int32)
             lm_label_ids[:] = -1
             is_nexts = np.memmap(filename=self.working_dir/'is_nexts.memmap',
                                  shape=(num_samples,), mode='w+', dtype=np.bool)
@@ -120,15 +120,9 @@ class PregeneratedDataset(Dataset):
                 torch.tensor(self.lm_label_ids[item].astype(np.int64)),
                 torch.tensor(self.is_nexts[item].astype(np.int64)))
 
-args = None
-optimizer_grouped_parameters = None
 num_train_optimization_steps = None
-epoch = None
 def main():
-    global epoch
     parser = ArgumentParser()
-    # TODO: where's the max_predictions_per_seq param?
-
     parser.add_argument('--pregenerated_data', type=Path, required=True)
     parser.add_argument('--output_dir', type=Path, required=True)
 
@@ -188,6 +182,7 @@ def main():
                         help="random seed for initialization")
     parser.add_argument("--tpu_ip", type=str, default="", help="TPU IP address")
     parser.add_argument('--tpu_report', action='store_true', help="Print xla metric report")
+    parser.add_argument('--one_tpu', action='store_true', help="Run on one tpu for degugging")
     args = parser.parse_args()
 
     assert args.pregenerated_data.is_dir(), \
@@ -215,7 +210,10 @@ def main():
         import torch_xla
         import torch_xla_py.xla_model as tpu_xm
         import torch_xla_py.data_parallel as tpu_dp
-        devices = tpu_xm.get_xla_supported_devices()
+        if args.one_tpu:
+            devices = [tpu_xm.xla_device()]
+        else:
+            devices = tpu_xm.get_xla_supported_devices()
         n_gpu = len(devices)
         logging.info(f'Found {n_gpu} TPU cores')
         device = 'tpu'
@@ -324,6 +322,13 @@ def main():
         import time
         start = time.time()
         logging.info(f"Creat/fetch optimizer for device: {device} at epoch: {epoch}")
+        param_optimizer = list(model.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
+            'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
         optimizer = context.getattr_or(
             'optimizer',
             AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon))
@@ -334,7 +339,6 @@ def main():
         tracker = tpu_xm.RateTracker()
         model.train()
         tr_loss = 0
-        num_log_steps = 0
         for step, batch in loader:
             input_ids, input_mask, segment_ids, lm_label_ids, is_next = batch
             outputs = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
@@ -347,12 +351,13 @@ def main():
                 tpu_xm.optimizer_step(optimizer)
                 scheduler.step()
                 optimizer.zero_grad()
+            if step == 0:
+                tr_loss = loss
+            else:
+                tr_loss += loss
             if step % args.log_steps == 0 and step > 0:
-                tr_loss += loss.item()
-                num_log_steps += 1
-                logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss/num_log_steps, 5)}")
-
-            if step % args.save_steps == 0 and str(device_to_save_model) ==  str(device):
+                logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss.item()/step, 5)}")
+            if step % args.save_steps == 0  and step > 0 and str(device_to_save_model) ==  str(device):
                 save_start_time = time.time()
                 logging.info(f"Saving fine-tuned model from device {device}")
                 model.save_pretrained(args.output_dir)
@@ -363,10 +368,9 @@ def main():
             logging.info(f"Saving fine-tuned model from device {device}")
             model.save_pretrained(args.output_dir)
             logging.info(f"Done saving model. Elapsed time: {round(time.time() - save_start_time, 2)}")
-        tr_loss += loss.item()
-        num_log_steps += 1
-        logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(tr_loss/num_log_steps, 5)}")
-        return tr_loss/num_log_steps
+        average_loss = tr_loss.item()/step
+        logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(average_loss, 5)}")
+        return average_loss
 
     for epoch in range(args.epochs):
         epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,
