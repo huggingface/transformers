@@ -1,3 +1,6 @@
+Serialization
+----------------------------------------------------
+
 ### Loading Google AI or OpenAI pre-trained weights or PyTorch dump
 
 ### `from_pretrained()` method
