@@ -210,10 +210,9 @@ def main():
         import torch_xla
         import torch_xla_py.xla_model as tpu_xm
         import torch_xla_py.data_parallel as tpu_dp
+        devices = tpu_xm.get_xla_supported_devices()
         if args.one_tpu:
-            devices = [tpu_xm.xla_device()]
-        else:
-            devices = tpu_xm.get_xla_supported_devices()
+            devices = [devices[0]]
         n_gpu = len(devices)
         logging.info(f'Found {n_gpu} TPU cores')
         device = 'tpu'
@@ -363,7 +362,7 @@ def main():
                 model.save_pretrained(args.output_dir)
                 logging.info(f"Done saving model. Elapsed time: {round(time.time() - save_start_time, 2)}")
 
-        if device_to_save_model ==  device:
+        if str(device_to_save_model) ==  str(device):
             save_start_time = time.time()
             logging.info(f"Saving fine-tuned model from device {device}")
             model.save_pretrained(args.output_dir)
