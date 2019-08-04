@@ -21,11 +21,20 @@ The library currently contains PyTorch implementations, pre-trained model weight
     pretrained_models
     examples
     notebooks
+    serialization
     converting_tensorflow_models
     migration
     bertology
     torchscript
 
+.. toctree::
+    :maxdepth: 2
+    :caption: Main classes
+
+    main_classes/configuration
+    main_classes/model
+    main_classes/tokenizer
+    main_classes/optimizer_schedules
 
 .. toctree::
     :maxdepth: 2

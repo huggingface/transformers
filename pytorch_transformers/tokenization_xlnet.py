@@ -23,7 +23,7 @@ from shutil import copyfile
 import unicodedata
 import six
 
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 

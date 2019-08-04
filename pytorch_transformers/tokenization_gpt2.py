@@ -31,7 +31,7 @@ except ImportError:
     def lru_cache():
         return lambda func: func
 
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 

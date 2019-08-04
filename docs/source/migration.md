@@ -35,10 +35,13 @@ loss, logits, attentions = outputs
 
 ### Serialization
 
-Breaking change: Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method.
-To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+Breaking change in the `from_pretrained()`method:
 
-Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other seralization method before.
+1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+
+2. The additional `*inputs` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute first which can break derived model classes build based on the previous `BertForSequenceClassification` examples. More precisely, the positional arguments `*inputs` provided to `from_pretrained()` are directly forwarded the model `__init__()` method while the keyword arguments `**kwargs` (i) which match configuration class attributes are used to update said attributes (ii) which don't match any configuration class attributes are forwarded to the model `__init__()` method.
+
+Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other serialization method before.
 
 Here is an example:
 

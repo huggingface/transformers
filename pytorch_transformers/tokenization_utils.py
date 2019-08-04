@@ -444,7 +444,7 @@ class PreTrainedTokenizer(object):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         text = self.convert_tokens_to_string(filtered_tokens)
         if clean_up_tokenization_spaces:
-            text = clean_up_tokenization(text)
+            text = self.clean_up_tokenization(text)
         return text
 
     @property
@@ -480,10 +480,9 @@ class PreTrainedTokenizer(object):
         all_ids = list(self.convert_tokens_to_ids(t) for t in all_toks)
         return all_ids
 
-
-
-def clean_up_tokenization(out_string):
-    out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
-                    ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
-                    ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
-    return out_string
+    @staticmethod
+    def clean_up_tokenization(out_string):
+        out_string = out_string.replace(' .', '.').replace(' ?', '?').replace(' !', '!').replace(' ,', ','
+                        ).replace(" ' ", "'").replace(" n't", "n't").replace(" 'm", "'m").replace(" do not", " don't"
+                        ).replace(" 's", "'s").replace(" 've", "'ve").replace(" 're", "'re")
+        return out_string
