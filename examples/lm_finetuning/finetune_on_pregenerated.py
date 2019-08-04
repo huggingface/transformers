@@ -183,6 +183,7 @@ def main():
     parser.add_argument("--tpu_ip", type=str, default="", help="TPU IP address")
     parser.add_argument('--tpu_report', action='store_true', help="Print xla metric report")
     parser.add_argument('--one_tpu', action='store_true', help="Run on one tpu for degugging")
+    parser.add_argument('--verbose', action='store_true', help="Verbose logging")
     args = parser.parse_args()
 
     assert args.pregenerated_data.is_dir(), \
@@ -320,7 +321,8 @@ def main():
         """This function executes in each core of the TPU."""
         import time
         start = time.time()
-        logging.info(f"Creat/fetch optimizer for device: {device} at epoch: {epoch}")
+        if args.verbose:
+            logging.info(f"Creat/fetch optimizer for device: {device} at epoch: {epoch}")
         param_optimizer = list(model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
@@ -361,15 +363,7 @@ def main():
                 logging.info(f"Saving fine-tuned model from device {device}")
                 model.save_pretrained(args.output_dir)
                 logging.info(f"Done saving model. Elapsed time: {round(time.time() - save_start_time, 2)}")
-
-        if str(device_to_save_model) ==  str(device):
-            save_start_time = time.time()
-            logging.info(f"Saving fine-tuned model from device {device}")
-            model.save_pretrained(args.output_dir)
-            logging.info(f"Done saving model. Elapsed time: {round(time.time() - save_start_time, 2)}")
-        average_loss = tr_loss.item()/step
-        logging.info(f"device: {device}, step: {step}, elapsed time: {round(time.time() - start, 2)}, rate: {round(tracker.rate(), 2)}, loss: {round(average_loss, 5)}")
-        return average_loss
+        return tr_loss.item()/step
 
     for epoch in range(args.epochs):
         epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,
@@ -381,8 +375,13 @@ def main():
         train_dataloader = DataLoader(epoch_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
         if args.tpu_ip:
             device_to_save_model = devices[0]
+            logging.info(f'start training, epoch {epoch}')
+            import time
+            start = time.time()
             losses = model(tpu_training_loop, train_dataloader)
-            logging.info(f'average loss at epoch {epoch}: {sum(losses)/len(losses)}')
+            logging.info(f'Epoch {epoch} took {round(time.time() - start, 2)} seconds. Average loss: {sum(losses)/len(losses)}')
+            logging.info("Saving fine-tuned model")
+            model._models[0].save_pretrained(args.output_dir)
             continue
 
         tr_loss = 0
