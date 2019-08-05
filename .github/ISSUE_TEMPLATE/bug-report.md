@@ -5,7 +5,19 @@ about: Submit a bug report to help us improve PyTorch Transformers
 
 ## 🐛 Bug
 
-<!-- A clear and concise description of what the bug is. -->
+<!-- Important information -->
+
+Model I am using (Bert, XLNet....):
+
+Language I am using the model on (English, Chinese....):
+
+The problem arise when using:
+* [ ] the official example scripts: (give details)
+* [ ] my own modified scripts: (give details)
+
+The tasks I am working on is:
+* [ ] an official GLUE/SQUaD task: (give the name)
+* [ ] my own task or dataset: (give details)
 
 ## To Reproduce
 
