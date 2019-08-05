@@ -58,7 +58,7 @@ class RobertaEmbeddings(BertEmbeddings):
             # cf. fairseq's `utils.make_positions`
             position_ids = torch.arange(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-        return super().forward(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
+        return super(RobertaEmbeddings, self).forward(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
 
 
 class RobertaConfig(BertConfig):
@@ -109,8 +109,8 @@ class RobertaForMaskedLM(BertPreTrainedModel):
 class RobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
-    def __init__(self, config: BertConfig):
-        super().__init__()
+    def __init__(self, config):
+        super(RobertaLMHead, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

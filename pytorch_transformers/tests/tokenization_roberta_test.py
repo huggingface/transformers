@@ -18,6 +18,7 @@ from __future__ import (absolute_import, division, print_function,
 import os
 import unittest
 import pytest
+import six
 
 from pytorch_transformers.tokenization_roberta import RobertaTokenizer
 
@@ -31,10 +32,11 @@ class RobertaTokenizationTest(unittest.TestCase):
             tokenizer.encode('Hello world!'),
             [0, 31414, 232, 328, 2]
         )
-        self.assertListEqual(
-            tokenizer.encode('Hello world! cécé herlolip'),
-            [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
-        )
+        if six.PY3:
+            self.assertListEqual(
+                tokenizer.encode('Hello world! cécé herlolip'),
+                [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
+            )
 
 
 
