@@ -19,6 +19,8 @@ from __future__ import (absolute_import, division, print_function,
 import json
 import logging
 import re
+from io import open
+import six
 
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
@@ -125,7 +127,7 @@ class Dictionary(object):
         Loads a pre-existing dictionary from a text file and adds its symbols
         to this instance.
         """
-        if isinstance(f, str):
+        if isinstance(f, six.string_types):
             try:
                 if not ignore_utf_errors:
                     with open(f, 'r', encoding='utf-8') as fd:
