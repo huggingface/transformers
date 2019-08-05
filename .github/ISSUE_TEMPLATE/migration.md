@@ -5,19 +5,19 @@ about: Report a problem when migrating from PyTorch-pretrained-Bert to PyTorch-T
 
 ## 📚 Migration
 
-<!-- Give at least the following information -->
+<!-- Important information -->
 
 Model I am using (Bert, XLNet....):
 
+Language I am using the model on (English, Chinese....):
+
 The problem arise when using:
-* [ ] the official example scripts
-* [ ] my own modified scripts
+* [ ] the official example scripts: (give details)
+* [ ] my own modified scripts: (give details)
 
 The tasks I am working on is:
 * [ ] an official GLUE/SQUaD task: (give the name)
 * [ ] my own task or dataset: (give details)
-
-Language I am using the model on (English, Chinese....):
 
 Details of the issue:
 
