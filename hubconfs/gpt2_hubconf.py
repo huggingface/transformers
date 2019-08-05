@@ -52,11 +52,11 @@ def gpt2Tokenizer(*args, **kwargs):
              Default: None
 
     Example:
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
 
-        >>> text = "Who was Jim Henson ?"
-        >>> indexed_tokens = tokenizer.encode(tokenized_text)
+        text = "Who was Jim Henson ?"
+        indexed_tokens = tokenizer.encode(tokenized_text)
     """
     tokenizer = GPT2Tokenizer.from_pretrained(*args, **kwargs)
     return tokenizer
@@ -71,24 +71,24 @@ def gpt2Model(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
 
         #  Prepare tokenized input
-        >>> text_1 = "Who was Jim Henson ?"
-        >>> text_2 = "Jim Henson was a puppeteer"
-        >>> indexed_tokens_1 = tokenizer.encode(text_1)
-        >>> indexed_tokens_2 = tokenizer.encode(text_2)
-        >>> tokens_tensor_1 = torch.tensor([indexed_tokens_1])
-        >>> tokens_tensor_2 = torch.tensor([indexed_tokens_2])
+        text_1 = "Who was Jim Henson ?"
+        text_2 = "Jim Henson was a puppeteer"
+        indexed_tokens_1 = tokenizer.encode(text_1)
+        indexed_tokens_2 = tokenizer.encode(text_2)
+        tokens_tensor_1 = torch.tensor([indexed_tokens_1])
+        tokens_tensor_2 = torch.tensor([indexed_tokens_2])
 
         # Load gpt2Model
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Model', 'gpt2')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Model', 'gpt2')
+        model.eval()
 
         # Predict hidden states features for each layer
         # past can be used to reuse precomputed hidden state in a subsequent predictions
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 hidden_states_1, past = model(tokens_tensor_1)
                 hidden_states_2, past = model(tokens_tensor_2, past=past)
     """
@@ -104,31 +104,31 @@ def gpt2LMHeadModel(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
 
         #  Prepare tokenized input
-        >>> text_1 = "Who was Jim Henson ?"
-        >>> text_2 = "Jim Henson was a puppeteer"
-        >>> indexed_tokens_1 = tokenizer.encode(text_1)
-        >>> indexed_tokens_2 = tokenizer.encode(text_2)
-        >>> tokens_tensor_1 = torch.tensor([indexed_tokens_1])
-        >>> tokens_tensor_2 = torch.tensor([indexed_tokens_2])
+        text_1 = "Who was Jim Henson ?"
+        text_2 = "Jim Henson was a puppeteer"
+        indexed_tokens_1 = tokenizer.encode(text_1)
+        indexed_tokens_2 = tokenizer.encode(text_2)
+        tokens_tensor_1 = torch.tensor([indexed_tokens_1])
+        tokens_tensor_2 = torch.tensor([indexed_tokens_2])
 
         # Load gpt2LMHeadModel
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'gpt2LMHeadModel', 'gpt2')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'gpt2LMHeadModel', 'gpt2')
+        model.eval()
 
         # Predict hidden states features for each layer
         # past can be used to reuse precomputed hidden state in a subsequent predictions
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 predictions_1, past = model(tokens_tensor_1)
                 predictions_2, past = model(tokens_tensor_2, past=past)
 
         # Get the predicted last token
-        >>> predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
-        >>> predicted_token = tokenizer.decode([predicted_index])
-        >>> assert predicted_token == ' who'
+        predicted_index = torch.argmax(predictions_2[0, -1, :]).item()
+        predicted_token = tokenizer.decode([predicted_index])
+        assert predicted_token == ' who'
     """
     model = GPT2LMHeadModel.from_pretrained(*args, **kwargs)
     return model
@@ -143,25 +143,25 @@ def gpt2DoubleHeadsModel(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'gpt2Tokenizer', 'gpt2')
 
         #  Prepare tokenized input
-        >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
-        >>> tokenized_text1 = tokenizer.tokenize(text1)
-        >>> tokenized_text2 = tokenizer.tokenize(text2)
-        >>> indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
-        >>> indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
-        >>> tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
-        >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+        text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+        tokenized_text1 = tokenizer.tokenize(text1)
+        tokenized_text2 = tokenizer.tokenize(text2)
+        indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+        indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+        tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+        mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
         # Load gpt2DoubleHeadsModel
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'gpt2DoubleHeadsModel', 'gpt2')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'gpt2DoubleHeadsModel', 'gpt2')
+        model.eval()
 
         # Predict hidden states features for each layer
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 lm_logits, multiple_choice_logits, presents = model(tokens_tensor, mc_token_ids)
     """
     model = GPT2DoubleHeadsModel.from_pretrained(*args, **kwargs)

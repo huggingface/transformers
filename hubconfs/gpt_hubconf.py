@@ -40,7 +40,7 @@ gpt_docstring = """
 				. a series of NumPy files containing OpenAI TensorFlow trained weights
 		from_tf: should we load the weights from a locally saved TensorFlow checkpoint
 		cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-		state_dict: an optional state dictionnary (collections.OrderedDict object)
+		state_dict: an optional state dictionary (collections.OrderedDict object)
 		        	to use instead of pre-trained models
 		*inputs, **kwargs: additional input for the specific OpenAI-GPT class
 """
@@ -76,12 +76,12 @@ def openAIGPTTokenizer(*args, **kwargs):
 			 Default: None
 
     Example:
-		>>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
+		import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 		
-		>>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+		text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
         [763, 509, 4265, 2298, 945, 257, 4265, 2298, 945, 509, 246, 10148, 39041, 483]
     """
     tokenizer = OpenAIGPTTokenizer.from_pretrained(*args, **kwargs)
@@ -97,21 +97,21 @@ def openAIGPTModel(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-		>>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
+		import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
-        >>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
+        text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        tokens_tensor = torch.tensor([indexed_tokens])
 
         # Load openAIGPTModel
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTModel', 'openai-gpt')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTModel', 'openai-gpt')
+        model.eval()
 
         # Predict hidden states features for each layer
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 hidden_states = model(tokens_tensor)
     """
     model = OpenAIGPTModel.from_pretrained(*args, **kwargs)
@@ -126,26 +126,26 @@ def openAIGPTLMHeadModel(*args, **kwargs):
 
 	Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
-        >>> text = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
+        text = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        tokens_tensor = torch.tensor([indexed_tokens])
 
         # Load openAIGPTLMHeadModel
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTLMHeadModel', 'openai-gpt')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTLMHeadModel', 'openai-gpt')
+        model.eval()
 
         # Predict hidden states features for each layer
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 predictions = model(tokens_tensor)
 
 		# Get the predicted last token
-		>>> predicted_index = torch.argmax(predictions[0, -1, :]).item()
-		>>> predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+		predicted_index = torch.argmax(predictions[0, -1, :]).item()
+		predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
         '.</w>'
     """
     model = OpenAIGPTLMHeadModel.from_pretrained(*args, **kwargs)
@@ -161,25 +161,25 @@ def openAIGPTDoubleHeadsModel(*args, **kwargs):
 
 	Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTTokenizer', 'openai-gpt')
 
         #  Prepare tokenized input
-        >>> text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
-        >>> text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
-        >>> tokenized_text1 = tokenizer.tokenize(text1)
-        >>> tokenized_text2 = tokenizer.tokenize(text2)
-        >>> indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
-        >>> indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
-        >>> tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
-        >>> mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
+        text1 = "Who was Jim Henson ? Jim Henson was a puppeteer"
+        text2 = "Who was Jim Henson ? Jim Henson was a mysterious young man"
+        tokenized_text1 = tokenizer.tokenize(text1)
+        tokenized_text2 = tokenizer.tokenize(text2)
+        indexed_tokens1 = tokenizer.convert_tokens_to_ids(tokenized_text1)
+        indexed_tokens2 = tokenizer.convert_tokens_to_ids(tokenized_text2)
+        tokens_tensor = torch.tensor([[indexed_tokens1, indexed_tokens2]])
+        mc_token_ids = torch.LongTensor([[len(tokenized_text1)-1, len(tokenized_text2)-1]])
 
         # Load openAIGPTDoubleHeadsModel
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTDoubleHeadsModel', 'openai-gpt')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'openAIGPTDoubleHeadsModel', 'openai-gpt')
+        model.eval()
 
         # Predict hidden states features for each layer
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 lm_logits, multiple_choice_logits = model(tokens_tensor, mc_token_ids)
     """
     model = OpenAIGPTDoubleHeadsModel.from_pretrained(*args, **kwargs)

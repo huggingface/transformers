@@ -1,5 +1,5 @@
 # PyTorch
-torch>=0.4.1
+torch>=1.0.0
 # progress bars in model download and training scripts
 tqdm
 # Accessing files from S3 directly.

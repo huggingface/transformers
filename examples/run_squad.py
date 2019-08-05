@@ -138,7 +138,7 @@ def train(args, train_dataset, model, tokenizer):
                       'end_positions':   batch[4]}
             if args.model_type in ['xlnet', 'xlm']:
                 inputs.update({'cls_index': batch[5],
-                               'p_mask':    batch[6]})
+                               'p_mask':       batch[6]})
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
