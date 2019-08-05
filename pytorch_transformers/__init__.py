@@ -7,6 +7,8 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_utils import (PreTrainedTokenizer)
 
+from .modeling_auto import (AutoConfig, AutoModel, AutoModelForSequenceClassification, AutoModelWithLMHead)
+
 from .modeling_bert import (BertConfig, BertModel, BertForPreTraining,
                        BertForMaskedLM, BertForNextSentencePrediction,
                        BertForSequenceClassification, BertForMultipleChoice,
