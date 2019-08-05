@@ -30,7 +30,7 @@ import torch
 import numpy as np
 
 from .file_utils import cached_path
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 
 if sys.version_info[0] == 2:
     import cPickle as pickle

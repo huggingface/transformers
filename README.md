@@ -25,7 +25,7 @@ These implementations have been tested on several datasets (see the example scri
 
 ## Installation
 
-This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 0.4.1 to 1.1.0
+This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 1.0.0+
 
 ### With pip
 
@@ -129,6 +129,7 @@ tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
 ```
 
 ## Quick tour of the fine-tuning/usage scripts
+
 The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
 - `run_glue.py`: an example fine-tuning Bert, XLNet and XLM on nine different GLUE tasks (*sequence-level classification*)
@@ -354,8 +355,13 @@ tokenizer = BertTokenizer.from_pretrained('./my_saved_model_directory/')
 
 ### Optimizers: BertAdam & OpenAIAdam are now AdamW, schedules are standard PyTorch schedules
 
-The two optimizers previously included, `BertAdam` and `OpenAIAdam`, have been replaced by a single `AdamW` optimizer.
-The new optimizer `AdamW` matches PyTorch `Adam` optimizer API.
+The two optimizers previously included, `BertAdam` and `OpenAIAdam`, have been replaced by a single `AdamW` optimizer which has a few differences:
+
+- it only implements weights decay correction,
+- schedules are now externals (see below),
+- gradient clipping is now also external (see below).
+
+The new optimizer `AdamW` matches PyTorch `Adam` optimizer API and let you use standard PyTorch or apex methods for the schedule and clipping.
 
 The schedules are now standard [PyTorch learning rate schedulers](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate) and not part of the optimizer anymore.
 
@@ -364,6 +370,7 @@ Here is a conversion examples from `BertAdam` with a linear warmup and decay sch
 ```python
 # Parameters:
 lr = 1e-3
+max_grad_norm = 1.0
 num_total_steps = 1000
 num_warmup_steps = 100
 warmup_proportion = float(num_warmup_steps) / float(num_total_steps)  # 0.1
@@ -383,6 +390,7 @@ scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, t_tot
 for batch in train_data:
     loss = model(batch)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
     scheduler.step()
     optimizer.step()
     optimizer.zero_grad()

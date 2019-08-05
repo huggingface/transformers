@@ -49,7 +49,7 @@ setup(
     url="https://github.com/huggingface/pytorch-transformers",
     packages=find_packages(exclude=["*.tests", "*.tests.*",
                                     "tests.*", "tests"]),
-    install_requires=['torch>=0.4.1',
+    install_requires=['torch>=1.0.0',
                       'numpy',
                       'boto3',
                       'requests',
