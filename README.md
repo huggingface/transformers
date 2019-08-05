@@ -385,6 +385,7 @@ for batch in train_data:
     loss.backward()
     scheduler.step()
     optimizer.step()
+    optimizer.zero_grad()
 ```
 
 ## Citation
