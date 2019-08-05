@@ -39,4 +39,4 @@ from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
 from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
                            WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
 
-from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
+from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, cached_path)

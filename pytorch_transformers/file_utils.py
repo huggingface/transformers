@@ -38,10 +38,13 @@ except ImportError:
 try:
     from pathlib import Path
     PYTORCH_PRETRAINED_BERT_CACHE = Path(
-        os.getenv('PYTORCH_PRETRAINED_BERT_CACHE', default_cache_path))
+        os.getenv('PYTORCH_TRANSFORMERS_CACHE', os.getenv('PYTORCH_PRETRAINED_BERT_CACHE', default_cache_path)))
 except (AttributeError, ImportError):
-    PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
-                                              default_cache_path)
+    PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_TRANSFORMERS_CACHE',
+                                              os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
+                                                        default_cache_path))
+
+PYTORCH_TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward compatibility
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -70,7 +73,7 @@ def filename_to_url(filename, cache_dir=None):
     Raise ``EnvironmentError`` if `filename` or its stored metadata do not exist.
     """
     if cache_dir is None:
-        cache_dir = PYTORCH_PRETRAINED_BERT_CACHE
+        cache_dir = PYTORCH_TRANSFORMERS_CACHE
     if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
@@ -98,7 +101,7 @@ def cached_path(url_or_filename, cache_dir=None):
     make sure the file exists and then return the path.
     """
     if cache_dir is None:
-        cache_dir = PYTORCH_PRETRAINED_BERT_CACHE
+        cache_dir = PYTORCH_TRANSFORMERS_CACHE
     if sys.version_info[0] == 3 and isinstance(url_or_filename, Path):
         url_or_filename = str(url_or_filename)
     if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
@@ -187,7 +190,7 @@ def get_from_cache(url, cache_dir=None):
     If it's not there, download it. Then return the path to the cached file.
     """
     if cache_dir is None:
-        cache_dir = PYTORCH_PRETRAINED_BERT_CACHE
+        cache_dir = PYTORCH_TRANSFORMERS_CACHE
     if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
     if sys.version_info[0] == 2 and not isinstance(cache_dir, str):
