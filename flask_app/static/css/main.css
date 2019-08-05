@@ -5,10 +5,16 @@ body {
   color: #444;
 }
 
-.input {
+.wrapper {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-column-gap: 50px;
+  grid-row-gap: 10px;
+  grid-auto-rows: minmax(100px, auto);
   margin: 10px;
   padding: 10px;
 }
+
 /*
  * Formatting the header area
  */
@@ -88,5 +94,82 @@ textarea {
             background-color: #f8f8f8;
             font-size: 16px;
             resize: none;
-            width: 50%;
-        }
+            width: 100%;
+}
+
+.top-left {
+grid-column: 1;
+  grid-row: 1;
+}
+
+.middle-left {
+grid-column: 1;
+  grid-row: 2;
+}
+
+.middle-middle {
+grid-column: 2;
+  grid-row: 2;
+}
+
+.or {
+
+  text-align: center;
+  margin-top: 50px
+}
+
+.bottom-left {
+grid-column: 1;
+  grid-row: 3;
+}
+
+.middle-right {
+grid-column: 2;
+  grid-row: 2;
+}
+
+.bottom-full{
+grid-column: 1/4;
+  grid-row: 3;
+}
+
+.top-right {
+grid-column: 2/4;
+  grid-row: 1;
+}
+.evaluate {
+
+}
+
+.reduced-margin-h2 {
+margin-top: 0px;
+}
+
+
+.no-margin-h2 {
+margin: 0px;
+}
+
+.pace {
+  -webkit-pointer-events: none;
+  pointer-events: none;
+
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+.pace-inactive {
+  display: none;
+}
+
+.pace .pace-progress {
+  background: #29d;
+  position: fixed;
+  z-index: 2000;
+  top: 0;
+  right: 100%;
+  width: 100%;
+  height: 2px;
+}
+

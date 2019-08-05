@@ -10,27 +10,46 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 
     {{ dropzone.load_css() }}
-    {{ dropzone.style('border: 2px dashed #0087F7; min-height: 200px; max-width: 50%; margin:6px') }}
+    {{ dropzone.style('border: 2px dashed #0087F7; min-height: 200px; max-width: 100%; margin-bottom:6px') }}
 </head>
 <body>
 <h1>
     Squad Demo
 </h1>
-<div class="input">
-    <h2>File Upload</h2>
+<div class="wrapper">
+
+    <div class="top-left">
+        <h4>Text</h4>
+    <textarea id=text_data>Enter text input</textarea>
+    </div>
+
+    <div class="bottom-full">
+<h4 class="reduced-margin-h2">File Upload</h4>
     {{ dropzone.create(action_view='process_input') }}
     <button id="upload-btn" class="btn btn-secondary">Upload</button>
 
     {{ dropzone.load_js() }}
       {{ dropzone.config(custom_init='dz = this;document.getElementById("upload-btn").addEventListener("click", function handler(e) {dz.processQueue();});',
                      custom_options='autoProcessQueue: false, addRemoveLinks: true, parallelUploads: 20,') }}
-    <h2>Text Input</h2>
+    </div>
 
-    <textarea id=text_data>Enter text input</textarea><br>
 
-    <button id=process class="btn btn-primary">Submit</button>
-    <span id=result></span>
+
+    <div class="top-right">
+        <h4>Questions</h4>
+        <textarea id=question_data>Enter additional questions separated by a new line</textarea>
+    </div>
+<div class="middle-middle">
+    <h3 class="or">Or</h3>
 </div>
+</div>
+<div class="evaluate">
+        <br><br>
+        <button id=process class="btn btn-primary">Evaluate</button>
+    </div>
+   <div>
+        <span id=result></span>
+    </div>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script>window.jQuery || document.write('<script src="{{
@@ -39,6 +58,7 @@
         $SCRIPT_ROOT = {{ request.script_root|tojson|safe }}; </script>
 
     <script src="{{ url_for('static', filename='script.js') }}"> </script>
+<script src="{{ url_for('static', filename='pace.js') }}"> </script>
 
 </body>
 
