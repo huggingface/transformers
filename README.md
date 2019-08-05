@@ -25,7 +25,7 @@ These implementations have been tested on several datasets (see the example scri
 
 ## Installation
 
-This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 0.4.1 to 1.1.0
+This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 1.0.0+
 
 ### With pip
 
