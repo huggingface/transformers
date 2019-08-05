@@ -40,6 +40,7 @@ The library currently contains PyTorch implementations, pre-trained model weight
     :maxdepth: 2
     :caption: Package Reference
 
+    model_doc/auto
     model_doc/bert
     model_doc/gpt
     model_doc/transformerxl

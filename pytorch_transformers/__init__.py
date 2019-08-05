@@ -1,4 +1,5 @@
 __version__ = "1.0.0"
+from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
