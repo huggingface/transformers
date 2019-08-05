@@ -7,6 +7,7 @@ import logging
 import random
 import time
 import os
+from urllib.parse import unquote
 
 
 import requests, os
@@ -14,7 +15,7 @@ import requests, os
 # import settingspip u
 from run_squad import initialize, evaluate
 from data.squad_generator import convert_text_input_to_squad, \
-    convert_file_input_to_squad, validate_squad_input
+    convert_file_input_to_squad
 from settings import *
 
 os.makedirs(output_dir, exist_ok=True)
@@ -25,7 +26,6 @@ args, model, tokenizer = initialize()
 app = Flask(__name__)
 
 app.config['DROPZONE_UPLOAD_MULTIPLE'] = True
-app.config['DROPZONE_REDIRECT_VIEW'] = 'results'
 app.config['DROPZONE_ALLOWED_FILE_TYPE'] = 'text'
 app.config['SECRET_KEY'] = 'supersecret'
 
@@ -59,11 +59,6 @@ def process_input():
         except AssertionError:
             return index()
 
-
-# @app.route('/', methods=['POST'])
-# def index():
-#
-#     return "uploading..."
 
 def predict_from_text_squad(input):
     squad_dict = convert_text_input_to_squad(input, gen_file)
@@ -101,16 +96,25 @@ def evaluate_input(predict_file, passthrough=False):
         return predictions, predict_file
     return predictions
 
-
-@app.route('/results')
-def results():
-    if "file_urls" not in session or session['file_urls'] == []:
-        return redirect(url_for('index'))
-    file_urls = session['file_urls']
-    session.pop('file_urls', None)
-
-    return render_template('results.html', file_urls=file_urls, predict=predict_from_file_squad)
-
+@app.route('/_input_helper')
+def input_helper():
+    text = unquote(request.args.get("text_data", "", type=str))
+    app.logger.info("input text: {}".format(text))
+    try:
+        return jsonify(result=
+                       render_template('results.html',
+                                       file_urls=[text],
+                                       predict=predict_from_text_squad))
+    except AssertionError:
+        if "file_urls" not in session or session['file_urls'] == []:
+            return redirect(url_for('index'))
+        file_urls = session['file_urls']
+        session.pop('file_urls', None)
+        app.logger.info("input file list: {}".format(file_urls))
+        return jsonify(result=
+                       render_template('results.html',
+                                       file_urls=file_urls,
+                                       predict=predict_from_file_squad))
 
 
 if __name__ == '__main__':

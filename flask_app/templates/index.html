@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Squad Demo</title>
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
+          crossorigin="anonymous">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 
     {{ dropzone.load_css() }}
-    {{ dropzone.style('border: 2px dashed #0087F7; min-height: 400px;') }}
+    {{ dropzone.style('border: 2px dashed #0087F7; min-height: 200px; max-width: 50%; margin:6px') }}
 </head>
 <body>
 <h1>
@@ -17,14 +19,28 @@
 <div class="input">
     <h2>File Upload</h2>
     {{ dropzone.create(action_view='process_input') }}
-    {{ dropzone.load_js() }}
-    {{ dropzone.config() }}
-    <h2>Text Input</h2>
-    <form method="POST">
-        <textarea name="textbox"></textarea>
-    <button class="btn btn-primary" type="submit" name="submit">Submit</button>
-    </form>
+    <button id="upload-btn" class="btn btn-secondary">Upload</button>
 
+    {{ dropzone.load_js() }}
+      {{ dropzone.config(custom_init='dz = this;document.getElementById("upload-btn").addEventListener("click", function handler(e) {dz.processQueue();});',
+                     custom_options='autoProcessQueue: false, addRemoveLinks: true, parallelUploads: 20,') }}
+    <h2>Text Input</h2>
+
+    <textarea id=text_data>Enter text input</textarea><br>
+
+    <button id=process class="btn btn-primary">Submit</button>
+    <span id=result></span>
 </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script>window.jQuery || document.write('<script src="{{
+        url_for('static', filename='jquery.js') }}">\x3C/script>')</script>
+    <script type=text/javascript>
+        $SCRIPT_ROOT = {{ request.script_root|tojson|safe }}; </script>
+
+    <script src="{{ url_for('static', filename='script.js') }}"> </script>
+
 </body>
+
+
 </html>
