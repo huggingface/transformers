@@ -226,26 +226,46 @@ class PreTrainedTokenizer(object):
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
         if pretrained_model_name_or_path in s3_models:
+            # Get the vocabulary from AWS S3 bucket
             for file_id, map_list in cls.pretrained_vocab_files_map.items():
                 vocab_files[file_id] = map_list[pretrained_model_name_or_path]
         else:
+            # Get the vocabulary from local files
             logger.info(
                 "Model name '{}' not found in model shortcut name list ({}). "
                 "Assuming '{}' is a path or url to a directory containing tokenizer files.".format(
                     pretrained_model_name_or_path, ', '.join(s3_models),
                     pretrained_model_name_or_path))
-            all_vocab_files_names = {'added_tokens_file': ADDED_TOKENS_FILE,
-                                     'special_tokens_map_file': SPECIAL_TOKENS_MAP_FILE}
-            all_vocab_files_names.update(cls.vocab_files_names)
-            for file_id, file_name in all_vocab_files_names.items():
+
+            # Look for the tokenizer main vocabulary files
+            for file_id, file_name in cls.vocab_files_names.items():
                 if os.path.isdir(pretrained_model_name_or_path):
+                    # If a directory is provided we look for the standard filenames
                     full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                 else:
+                    # If a path to a file is provided we use it (will only work for non-BPE tokenizer using a single vocabulary file)
                     full_file_name = pretrained_model_name_or_path
                 if not os.path.exists(full_file_name):
                     logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                     full_file_name = None
                 vocab_files[file_id] = full_file_name
+
+            # Look for the additional tokens files
+            all_vocab_files_names = {'added_tokens_file': ADDED_TOKENS_FILE,
+                                     'special_tokens_map_file': SPECIAL_TOKENS_MAP_FILE}
+
+            # If a path to a file was provided, get the parent directory
+            saved_directory = pretrained_model_name_or_path
+            if os.path.exists(saved_directory) and not os.path.isdir(saved_directory):
+                saved_directory = os.path.dirname(saved_directory)
+
+            for file_id, file_name in all_vocab_files_names.items():
+                full_file_name = os.path.join(saved_directory, file_name)
+                if not os.path.exists(full_file_name):
+                    logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
+                    full_file_name = None
+                vocab_files[file_id] = full_file_name
+
             if all(full_file_name is None for full_file_name in vocab_files.values()):
                 logger.error(
                     "Model name '{}' was not found in model name list ({}). "
@@ -333,7 +353,7 @@ class PreTrainedTokenizer(object):
 
         with open(added_tokens_file, 'w', encoding='utf-8') as f:
             if self.added_tokens_encoder:
-                out_str = json.dumps(self.added_tokens_decoder, ensure_ascii=False)
+                out_str = json.dumps(self.added_tokens_encoder, ensure_ascii=False)
             else:
                 out_str = u"{}"
             f.write(out_str)

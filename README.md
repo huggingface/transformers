@@ -18,7 +18,7 @@ These implementations have been tested on several datasets (see the example scri
 | Section | Description |
 |-|-|
 | [Installation](#installation) | How to install the package |
-| [Quick tour: Usage](#quick-tour-usage) | Tokenizers & models usage: Bert and GPT-2 |
+| [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-pytorch-transformers) | Migrating your code from pytorch-pretrained-bert to pytorch-transformers |
 | [Documentation](https://huggingface.co/pytorch-transformers/) | Full API documentation and more |
@@ -55,6 +55,16 @@ You can run the tests from the root of the cloned repository with the commands:
 python -m pytest -sv ./pytorch_transformers/tests/
 python -m pytest -sv ./examples/
 ```
+
+### Do you want to run a Transformer model on a mobile device?
+
+You should check out our [`swift-coreml-transformers`](https://github.com/huggingface/swift-coreml-transformers) repo.
+
+It contains an example of a conversion script from a Pytorch trained Transformer model (here, `GPT-2`) to a CoreML model that runs on iOS devices.
+
+At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models in PyTorch to productizing them in CoreML,
+or prototype a model or an app in CoreML then research its hyperparameters or architecture from PyTorch. Super exciting!
+
 
 ## Quick tour
 
@@ -195,7 +205,7 @@ python ./examples/run_glue.py \
     --warmup_steps=120
 ```
 
-On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should results in a Pearson correlation coefficient of `+0.917` on the development set.
+On this machine we thus have a batch size of 32, please increase `gradient_accumulation_steps` to reach the same batch size if you have a smaller machine. These hyper-parameters should result in a Pearson correlation coefficient of `+0.917` on the development set.
 
 #### Fine-tuning Bert model on the MRPC classification task
 
@@ -265,7 +275,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 ### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
-The generation script include the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
+The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
 
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
@@ -284,7 +294,7 @@ Here is a quick summary of what you should take care of when migrating from `pyt
 
 The main breaking change when migrating from `pytorch-pretrained-bert` to `pytorch-transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
-The exact content of the tuples for each model are detailled in the models' docstrings and the [documentation](https://huggingface.co/pytorch-transformers/).
+The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/pytorch-transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
@@ -383,6 +393,7 @@ for batch in train_data:
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
     scheduler.step()
     optimizer.step()
+    optimizer.zero_grad()
 ```
 
 ## Citation

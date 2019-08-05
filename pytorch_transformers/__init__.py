@@ -10,20 +10,20 @@ from .tokenization_utils import (PreTrainedTokenizer)
 
 from .modeling_auto import (AutoConfig, AutoModel)
 
-from .modeling_bert import (BertConfig, BertModel, BertForPreTraining,
-                       BertForMaskedLM, BertForNextSentencePrediction,
-                       BertForSequenceClassification, BertForMultipleChoice,
-                       BertForTokenClassification, BertForQuestionAnswering,
-                       load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-                       BERT_PRETRAINED_CONFIG_ARCHIVE_MAP)
-from .modeling_openai import (OpenAIGPTConfig, OpenAIGPTModel,
+from .modeling_bert import (BertConfig, BertPreTrainedModel, BertModel, BertForPreTraining,
+                            BertForMaskedLM, BertForNextSentencePrediction,
+                            BertForSequenceClassification, BertForMultipleChoice,
+                            BertForTokenClassification, BertForQuestionAnswering,
+                            load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+                            BERT_PRETRAINED_CONFIG_ARCHIVE_MAP)
+from .modeling_openai import (OpenAIGPTConfig, OpenAIGPTPreTrainedModel, OpenAIGPTModel,
                               OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
                               load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
                               OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel,
+from .modeling_transfo_xl import (TransfoXLConfig, TransfoXLPreTrainedModel, TransfoXLModel, TransfoXLLMHeadModel,
                                   load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                   TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_gpt2 import (GPT2Config, GPT2Model,
+from .modeling_gpt2 import (GPT2Config, GPT2PreTrainedModel, GPT2Model,
                             GPT2LMHeadModel, GPT2DoubleHeadsModel,
                             load_tf_weights_in_gpt2, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
                             GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
@@ -32,7 +32,7 @@ from .modeling_xlnet import (XLNetConfig,
                              XLNetForSequenceClassification, XLNetForQuestionAnswering,
                              load_tf_weights_in_xlnet, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
                              XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_xlm import (XLMConfig, XLMModel,
+from .modeling_xlm import (XLMConfig, XLMPreTrainedModel , XLMModel,
                            XLMWithLMHeadModel, XLMForSequenceClassification,
                            XLMForQuestionAnswering, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
                            XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
