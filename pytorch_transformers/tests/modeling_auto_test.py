@@ -21,7 +21,7 @@ import shutil
 import pytest
 import logging
 
-from pytorch_transformers import AutoConfig, BertConfig, AutoModel, BertModel, AutoModelForSequenceClassification, AutoModelWithLMHead
+from pytorch_transformers import AutoConfig, BertConfig, AutoModel, BertModel
 from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
@@ -41,14 +41,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertModel)
             for value in loading_info.values():
                 self.assertEqual(len(value), 0)
-
-            model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(getattr(model, model.base_model_prefix), BertModel)
-
-            model = AutoModelWithLMHead.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertIsInstance(getattr(model, model.base_model_prefix), BertModel)
 
 
 if __name__ == "__main__":
