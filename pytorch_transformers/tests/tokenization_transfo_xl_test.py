@@ -20,32 +20,39 @@ from io import open
 
 from pytorch_transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
 
-from.tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
+from.tokenization_tests_commons import CommonTestCases
 
-class TransfoXLTokenizationTest(unittest.TestCase):
+class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
-    def test_full_tokenizer(self):
+    tokenizer_class = TransfoXLTokenizer
+
+    def setUp(self):
+        super(TransfoXLTokenizationTest, self).setUp()
+
         vocab_tokens = [
             "<unk>", "[CLS]", "[SEP]", "want", "unwanted", "wa", "un",
             "running", ",", "low", "l",
         ]
-        with TemporaryDirectory() as tmpdirname:
-            vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-            with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
-                vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
+        with open(self.vocab_file, "w", encoding='utf-8') as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-            input_text = u"<unk> UNwanted , running"
-            output_text = u"<unk> unwanted, running"
+    def get_tokenizer(self):
+        return TransfoXLTokenizer.from_pretrained(self.tmpdirname, lower_case=True)
 
-            create_and_check_tokenizer_commons(self, input_text, output_text, TransfoXLTokenizer, tmpdirname, lower_case=True)
+    def get_input_output_texts(self):
+        input_text = u"<unk> UNwanted , running"
+        output_text = u"<unk> unwanted, running"
+        return input_text, output_text
 
-            tokenizer = TransfoXLTokenizer(vocab_file=vocab_file, lower_case=True)
+    def test_full_tokenizer(self):
+        tokenizer = TransfoXLTokenizer(vocab_file=self.vocab_file, lower_case=True)
 
-            tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
-            self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
+        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
+        self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
 
-            self.assertListEqual(
-                tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
 
     def test_full_tokenizer_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=True)

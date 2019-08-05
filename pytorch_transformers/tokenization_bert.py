@@ -86,7 +86,7 @@ def whitespace_tokenize(text):
 class BertTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a BertTokenizer.
-    :class:`~pytorch_pretrained_bert.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
+    :class:`~pytorch_transformers.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file

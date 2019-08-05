@@ -122,7 +122,7 @@ Here is the recommended way of saving the model, configuration and vocabulary to
 
 .. code-block:: python
 
-   from pytorch_pretrained_bert import WEIGHTS_NAME, CONFIG_NAME
+   from pytorch_transformers import WEIGHTS_NAME, CONFIG_NAME
 
    output_dir = "./models/"
 
