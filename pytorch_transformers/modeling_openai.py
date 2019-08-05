@@ -171,7 +171,7 @@ class OpenAIGPTConfig(PretrainedConfig):
         predict_special_tokens=True,
 
         num_labels=1,
-        summary_type='token_ids',
+        summary_type='cls_index',
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,

@@ -765,7 +765,7 @@ class SequenceSummary(nn.Module):
                 - 'last' => [default] take the last token hidden state (like XLNet)
                 - 'first' => take the first token hidden state (like Bert)
                 - 'mean' => take the mean of all tokens hidden states
-                - 'token_ids' => supply a Tensor of classification token indices (GPT/GPT-2)
+                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
                 - 'attn' => Not implemented now, use multi-head attention
             summary_use_proj: Add a projection after the vector extraction
             summary_proj_to_labels: If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
@@ -803,11 +803,11 @@ class SequenceSummary(nn.Module):
         if hasattr(config, 'summary_last_dropout') and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(self, hidden_states, token_ids=None):
+    def forward(self, hidden_states, cls_index=None):
         """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
-            token_ids: [optional] index of the classification token if summary_type == 'token_ids',
+            cls_index: [optional] position of the classification token if summary_type == 'cls_index',
                 shape (bsz,) or more generally (bsz, ...) where ... are optional leading dimensions of hidden_states.
-                if summary_type == 'token_ids' and token_ids is None:
+                if summary_type == 'cls_index' and cls_index is None:
                     we take the last token of the sequence as classification token
         """
         if self.summary_type == 'last':
@@ -816,14 +816,14 @@ class SequenceSummary(nn.Module):
             output = hidden_states[:, 0]
         elif self.summary_type == 'mean':
             output = hidden_states.mean(dim=1)
-        elif self.summary_type == 'token_ids':
-            if token_ids is None:
-                token_ids = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2]-1, dtype=torch.long)
+        elif self.summary_type == 'cls_index':
+            if cls_index is None:
+                cls_index = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2]-1, dtype=torch.long)
             else:
-                token_ids = token_ids.unsqueeze(-1).unsqueeze(-1)
-                token_ids = token_ids.expand((-1,) * (token_ids.dim()-1) + (hidden_states.size(-1),))
-            # shape of token_ids: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
-            output = hidden_states.gather(-2, token_ids).squeeze(-2) # shape (bsz, XX, hidden_size)
+                cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
+                cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2) # shape (bsz, XX, hidden_size)
         elif self.summary_type == 'attn':
             raise NotImplementedError
 
