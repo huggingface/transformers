@@ -28,8 +28,6 @@ class WikiTextDataset(Dataset):
 		# Sort the array by example length.
 		self.examples.sort(key=len)
 
-		print("nice")
-
 	def __len__(self):
 		return len(self.examples)
 

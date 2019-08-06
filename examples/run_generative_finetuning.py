@@ -30,7 +30,8 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
 
-from pytorch_transformers import (WEIGHTS_NAME, GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,)
+from pytorch_transformers import (WEIGHTS_NAME, GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
+                                  OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer)
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
 from utils_lm import WikiTextDataset
@@ -40,7 +41,8 @@ logger = logging.getLogger(__name__)
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config,)), ())
 
 MODEL_CLASSES = {
-    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer)
+    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
+    'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer)
 }
 
 
