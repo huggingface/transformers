@@ -11,4 +11,4 @@ pip install --editable .
 python examples/lm_finetuning/pregenerate_training_data.py --train_corpus data/corpus/test10k.out --bert_model bert-base-uncased --do_lower_case --output_dir data/pregenerated_data_10k --epochs_to_generate 3  --max_seq_len 128
 
 # run pretraining on TPU 
-python examples/lm_finetuning/finetune_on_pregenerated.py  --pregenerated_data data/pregenerated_data/ --output_dir data/trained_models/ --do_lower_case --epochs 1 --bert_model bert-base-uncased --tpu_ip $TPU_IP --tpu_report --bert_mode bert-base-uncased  --log_steps 1000 --save_steps 1000
+python examples/lm_finetuning/finetune_on_pregenerated.py  --pregenerated_data data/pregenerated_data/ --output_dir data/trained_models/ --do_lower_case --epochs 10 --bert_model bert-base-uncased --tpu_ip $TPU_IP --bert_mode bert-base-uncased  --log_steps 1000 --save_steps 1000

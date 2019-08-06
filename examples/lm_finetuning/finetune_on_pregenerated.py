@@ -375,7 +375,7 @@ def main():
         train_dataloader = DataLoader(epoch_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
         if args.tpu_ip:
             device_to_save_model = devices[0]
-            logging.info(f'start training, epoch {epoch}')
+            logging.info(f'start training, epoch {epoch} on {len(devices)} devices')
             import time
             start = time.time()
             losses = model(tpu_training_loop, train_dataloader)
