@@ -433,11 +433,11 @@ class GPT2Model(GPT2PreTrainedModel):
 
     Examples::
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2Model.from_pretrained('gpt2')
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        model = GPT2Model.from_pretrained('gpt2')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
@@ -566,11 +566,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     Examples::
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2LMHeadModel.from_pretrained('gpt2')
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=input_ids)
-        >>> loss, logits = outputs[:2]
+        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        model = GPT2LMHeadModel.from_pretrained('gpt2')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=input_ids)
+        loss, logits = outputs[:2]
 
     """
     def __init__(self, config):
@@ -681,13 +681,13 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     Examples::
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]  # Assume you've added [CLS] to the vocabulary
-        >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        >>> mc_token_ids = torch.tensor([-1, -1]).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, mc_token_ids)
-        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
+        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+        choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]  # Assume you've added [CLS] to the vocabulary
+        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        mc_token_ids = torch.tensor([-1, -1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, mc_token_ids)
+        lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
     """
     def __init__(self, config):
