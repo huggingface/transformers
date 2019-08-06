@@ -1,12 +1,24 @@
-# PyTorch
-torch>=0.4.1
-# progress bars in model download and training scripts
-tqdm
-# Accessing files from S3 directly.
-boto3
-# Used for downloading models over HTTP
-requests
-# For OpenAI GPT
-regex
-# For XLNet
-sentencepiece
+boto3==1.9.198
+botocore==1.12.198
+certifi==2019.6.16
+chardet==3.0.4
+Click==7.0
+docutils==0.14
+Flask==1.1.1
+Flask-Dropzone==1.5.3
+idna==2.8
+itsdangerous==1.1.0
+Jinja2==2.10.1
+jmespath==0.9.4
+MarkupSafe==1.1.1
+numpy==1.17.0
+python-dateutil==2.8.0
+regex==2019.6.8
+requests==2.22.0
+s3transfer==0.2.1
+sentencepiece==0.1.82
+six==1.12.0
+torch==1.1.0.post2
+tqdm==4.32.2
+urllib3==1.25.3
+Werkzeug==0.15.5
