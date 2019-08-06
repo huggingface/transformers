@@ -98,7 +98,7 @@ textarea {
 }
 
 .top-left {
-grid-column: 1;
+grid-column: 1/3;
   grid-row: 1;
 }
 
@@ -134,11 +134,12 @@ grid-column: 1/4;
 }
 
 .top-right {
-grid-column: 2/4;
+grid-column: 3;
   grid-row: 1;
 }
-.evaluate {
-
+.squad-results {
+  margin: 10px;
+  padding: 10px;
 }
 
 .reduced-margin-h2 {

@@ -20,12 +20,13 @@
 
     <div class="top-left">
         <h4>Text</h4>
-    <textarea id=text_data>Enter text input</textarea>
+    <textarea id=text_data placeholder="Enter title followed by context"></textarea>
+        <button id="random-btn" class="btn btn-secondary">Random</button>
     </div>
 
     <div class="bottom-full">
 <h4 class="reduced-margin-h2">File Upload</h4>
-    {{ dropzone.create(action_view='process_input') }}
+    {{ dropzone.create(action='process_input') }}
     <button id="upload-btn" class="btn btn-secondary">Upload</button>
 
     {{ dropzone.load_js() }}
@@ -37,19 +38,23 @@
 
     <div class="top-right">
         <h4>Questions</h4>
-        <textarea id=question_data>Enter additional questions separated by a new line</textarea>
+        <textarea id=question_data placeholder="Enter questions separated by a new line"></textarea>
     </div>
 <div class="middle-middle">
     <h3 class="or">Or</h3>
 </div>
 </div>
+<div class="squad-results">
+
 <div class="evaluate">
         <br><br>
         <button id=process class="btn btn-primary">Evaluate</button>
     </div>
+<br>
    <div>
         <span id=result></span>
     </div>
+</div>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script>window.jQuery || document.write('<script src="{{

@@ -74,7 +74,32 @@ def convert_text_input_to_squad(raw_text, output_file):
         )
         count += len(questions)
 
-    with open(output_file, "w") as f:
+    with open(output_file, "w+") as f:
+        json.dump(squad_dict, f)
+
+    return squad_dict
+
+def convert_context_and_questions_to_squad(context, questions, output_file):
+
+    squad_dict = {"data": []}
+    count = 0
+
+    title = context.split("\n")[0]
+    context = context[len(title):]
+    questions = questions.split("\n")
+
+    squad_dict["data"].append(
+        create_para_dict(
+            create_example_dict(
+                context=context,
+                id=count,
+                questions=questions,
+            ),
+        title)
+    )
+
+
+    with open(output_file, "w+") as f:
         json.dump(squad_dict, f)
 
     return squad_dict

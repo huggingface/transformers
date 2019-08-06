@@ -9,3 +9,14 @@ $(function() {
       return false;
     });
   });
+
+$(function() {
+    $('button#random-btn').on('click', function() {
+      $.getJSON($SCRIPT_ROOT + '/_random_page', {
+      }, function(data) {
+        $("#text_data").val(data.context);
+        $("#question_data").val(data.question);
+      });
+      return false;
+    });
+});

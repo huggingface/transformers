@@ -2,20 +2,14 @@
 
 from flask import Flask, request, jsonify, render_template, session, url_for, redirect
 from flask_dropzone import Dropzone
-
-import logging
-import random
 import time
-import os
 from urllib.parse import unquote
+import wikipedia
+import os
 
-
-import requests, os
-
-# import settingspip u
 from run_squad import initialize, evaluate
 from data.squad_generator import convert_text_input_to_squad, \
-    convert_file_input_to_squad
+    convert_file_input_to_squad, convert_context_and_questions_to_squad
 from settings import *
 
 os.makedirs(output_dir, exist_ok=True)
@@ -59,6 +53,19 @@ def process_input():
         except AssertionError:
             return index()
 
+@app.route("/_random_page")
+def random_page():
+    r = wikipedia.random(1)
+    try:
+        res = wikipedia.page(r)
+        res_title = res.title
+        res_sum = res.summary
+    except wikipedia.exceptions.DisambiguationError as e:
+        return random_page()
+    return jsonify(context='\n'.join([res_title, res_sum]),
+                   question="What is {}?".format(res_title))
+
+
 
 def predict_from_text_squad(input):
     squad_dict = convert_text_input_to_squad(input, gen_file)
@@ -69,6 +76,10 @@ def predict_from_file_squad(input):
         squad_dict = convert_file_input_to_squad(input, gen_file)
     except AssertionError:
         return []
+    return package_squad_prediction(evaluate_input(gen_file), squad_dict)
+
+def predict_from_input_squad(context, questions):
+    squad_dict = convert_context_and_questions_to_squad(context, questions, gen_file)
     return package_squad_prediction(evaluate_input(gen_file), squad_dict)
 
 def package_squad_prediction(prediction, squad_dict):
@@ -98,14 +109,15 @@ def evaluate_input(predict_file, passthrough=False):
 
 @app.route('/_input_helper')
 def input_helper():
-    text = unquote(request.args.get("text_data", "", type=str))
-    app.logger.info("input text: {}".format(text))
-    try:
+    text = unquote(request.args.get("text_data", "", type=str)).strip()
+    questions = unquote(request.args.get("question_data", "", type=str)).strip()
+    app.logger.info("input text: {}\n\nquestions:{}".format(text, questions))
+    if text and questions:
         return jsonify(result=
                        render_template('results.html',
                                        file_urls=[text],
-                                       predict=predict_from_text_squad))
-    except AssertionError:
+                                       predict=lambda x: predict_from_input_squad(text, questions)))
+    else:
         if "file_urls" not in session or session['file_urls'] == []:
             return redirect(url_for('index'))
         file_urls = session['file_urls']
