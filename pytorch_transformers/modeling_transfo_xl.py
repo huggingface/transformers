@@ -968,11 +968,11 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     Examples::
 
-        >>> tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-        >>> model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states, mems = outputs[:2]
+        tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
+        model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states, mems = outputs[:2]
 
     """
     def __init__(self, config):
@@ -1283,11 +1283,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
     Examples::
 
-        >>> tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-        >>> model = TransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> prediction_scores, mems = outputs[:2]
+        tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
+        model = TransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        prediction_scores, mems = outputs[:2]
 
     """
     def __init__(self, config):
