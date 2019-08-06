@@ -14,7 +14,7 @@ class WikiTextDataset(Dataset):
 
 		with open(os.path.join(directory, f"wiki.{file}.raw"), encoding="utf-8") as f:
 			text = f.read()
-			spans = list(filter(lambda item: len(item) > 120, text.split("\n")[:20]))
+			spans = list(filter(lambda item: len(item) > 120, text.split("\n")))
 
 			for span in spans:
 				span = tokenizer.encode(span)
