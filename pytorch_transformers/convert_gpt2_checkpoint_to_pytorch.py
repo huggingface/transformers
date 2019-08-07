@@ -58,7 +58,7 @@ if __name__ == "__main__":
                         default = None,
                         type = str,
                         required = True,
-                        help = "Path the TensorFlow checkpoint path.")
+                        help = "Path to the TensorFlow checkpoint path.")
     parser.add_argument("--pytorch_dump_folder_path",
                         default = None,
                         type = str,
