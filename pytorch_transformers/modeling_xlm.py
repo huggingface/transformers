@@ -472,9 +472,8 @@ class XLMModel(XLMPreTrainedModel):
 
     Examples::
 
-        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMModel(config)
+        model = XLMModel.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -745,9 +744,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
     Examples::
 
-        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMWithLMHeadModel(config)
+        model = XLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -805,10 +803,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
     Examples::
 
-        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        
-        model = XLMForSequenceClassification(config)
+        model = XLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -885,10 +881,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
     Examples::
 
-        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        
-        model = XLMForQuestionAnswering(config)
+        model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
