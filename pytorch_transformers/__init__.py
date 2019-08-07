@@ -5,6 +5,7 @@ from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
+from .tokenization_roberta import RobertaTokenizer
 from .tokenization_utils import (PreTrainedTokenizer, clean_up_tokenization)
 
 from .modeling_bert import (BertConfig, BertPreTrainedModel, BertModel, BertForPreTraining,
@@ -33,6 +34,8 @@ from .modeling_xlm import (XLMConfig, XLMPreTrainedModel , XLMModel,
                            XLMWithLMHeadModel, XLMForSequenceClassification,
                            XLMForQuestionAnswering, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
                            XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
+from .modeling_roberta import (RobertaConfig, RobertaForMaskedLM, RobertaModel,
+                               ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
                           PretrainedConfig, PreTrainedModel, prune_layer, Conv1D)
 
