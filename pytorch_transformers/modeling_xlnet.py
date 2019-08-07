@@ -335,7 +335,7 @@ class XLNetConfig(PretrainedConfig):
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as XLNetLayerNorm
-except ImportError:
+except (ImportError, AttributeError) as e:
     logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
     class XLNetLayerNorm(nn.Module):
         def __init__(self, d_model, eps=1e-12):
