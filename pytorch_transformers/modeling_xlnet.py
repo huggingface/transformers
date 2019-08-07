@@ -712,9 +712,8 @@ class XLNetModel(XLNetPreTrainedModel):
 
     Examples::
 
-        config = XLNetConfig.from_pretrained('xlnet-large-cased')
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetModel(config)
+        model = XLNetModel.from_pretrained('xlnet-large-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -1019,9 +1018,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
     Examples::
 
-        config = XLNetConfig.from_pretrained('xlnet-large-cased')
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetLMHeadModel(config)
+        model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased')
         # We show how to setup inputs to predict a next token using a bi-directional context.
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>")).unsqueeze(0)  # We will predict the masked token
         perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
@@ -1100,10 +1098,8 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
     Examples::
 
-        config = XLNetConfig.from_pretrained('xlnet-large-cased')
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        
-        model = XLNetForSequenceClassification(config)
+        model = XLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -1200,10 +1196,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
     Examples::
 
-        config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        
-        model = XLMForQuestionAnswering(config)
+        model = XLMForQuestionAnswering.from_pretrained('xlnet-large-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])

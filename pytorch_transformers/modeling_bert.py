@@ -643,9 +643,8 @@ class BertModel(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertModel(config)
+        model = BertModel.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -754,10 +753,8 @@ class BertForPreTraining(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForPreTraining(config)
+        model = BertForPreTraining.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         prediction_scores, seq_relationship_scores = outputs[:2]
@@ -824,10 +821,8 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForMaskedLM(config)
+        model = BertForMaskedLM.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
@@ -891,10 +886,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForNextSentencePrediction(config)
+        model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         seq_relationship_scores = outputs[0]
@@ -951,10 +944,8 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForSequenceClassification(config)
+        model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -1057,10 +1048,8 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForMultipleChoice(config)
+        model = BertForMultipleChoice.from_pretrained('bert-base-uncased')
         choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
         input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
@@ -1127,10 +1116,8 @@ class BertForTokenClassification(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForTokenClassification(config)
+        model = BertForTokenClassification.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -1203,10 +1190,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
     Examples::
 
-        config = BertConfig.from_pretrained('bert-base-uncased')
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
-        model = BertForQuestionAnswering(config)
+        model = BertForQuestionAnswering.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
