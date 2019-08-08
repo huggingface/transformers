@@ -925,7 +925,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels]``.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
@@ -1099,7 +1099,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels]``.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
