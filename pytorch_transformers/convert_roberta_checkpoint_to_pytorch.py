@@ -30,6 +30,7 @@ from pytorch_transformers.modeling_bert import (BertConfig, BertEncoder,
                                                 BertSelfOutput)
 from pytorch_transformers.modeling_roberta import (RobertaEmbeddings,
                                                    RobertaForMaskedLM,
+                                                   RobertaForSequenceClassification,
                                                    RobertaModel)
 
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 SAMPLE_TEXT = 'Hello world! cécé herlolip'
 
 
-def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_folder_path):
+def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_folder_path, classification_head):
     """
     Copy/paste/tweak roberta's weights to our BERT structure.
     """
@@ -53,9 +54,11 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         max_position_embeddings=514,
         type_vocab_size=1,
     )
+    if classification_head:
+        config.num_labels = roberta.args.num_classes
     print("Our BERT config:", config)
 
-    model = RobertaForMaskedLM(config)
+    model = RobertaForSequenceClassification(config) if classification_head else RobertaForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.
@@ -117,14 +120,20 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         bert_output.LayerNorm.variance_epsilon = roberta_layer.final_layer_norm.eps
         #### end of layer
     
-    # LM Head
-    model.lm_head.dense.weight = roberta.model.decoder.lm_head.dense.weight
-    model.lm_head.dense.bias = roberta.model.decoder.lm_head.dense.bias
-    model.lm_head.layer_norm.weight = roberta.model.decoder.lm_head.layer_norm.weight
-    model.lm_head.layer_norm.bias = roberta.model.decoder.lm_head.layer_norm.bias
-    model.lm_head.layer_norm.variance_epsilon = roberta.model.decoder.lm_head.layer_norm.eps
-    model.lm_head.decoder.weight = roberta.model.decoder.lm_head.weight
-    model.lm_head.bias = roberta.model.decoder.lm_head.bias
+    if classification_head:
+        model.classifier.dense.weight = roberta.model.classification_heads['mnli'].dense.weight
+        model.classifier.dense.bias = roberta.model.classification_heads['mnli'].dense.bias
+        model.classifier.out_proj.weight = roberta.model.classification_heads['mnli'].out_proj.weight
+        model.classifier.out_proj.bias = roberta.model.classification_heads['mnli'].out_proj.bias
+    else:
+        # LM Head
+        model.lm_head.dense.weight = roberta.model.decoder.lm_head.dense.weight
+        model.lm_head.dense.bias = roberta.model.decoder.lm_head.dense.bias
+        model.lm_head.layer_norm.weight = roberta.model.decoder.lm_head.layer_norm.weight
+        model.lm_head.layer_norm.bias = roberta.model.decoder.lm_head.layer_norm.bias
+        model.lm_head.layer_norm.variance_epsilon = roberta.model.decoder.lm_head.layer_norm.eps
+        model.lm_head.weight = roberta.model.decoder.lm_head.weight
+        model.lm_head.bias = roberta.model.decoder.lm_head.bias
 
     # Let's check that we get the same results.
     input_ids: torch.Tensor = roberta.encode(SAMPLE_TEXT).unsqueeze(0) # batch of size 1
@@ -157,8 +166,13 @@ if __name__ == "__main__":
                         type = str,
                         required = True,
                         help = "Path to the output PyTorch model.")
+    parser.add_argument("--classification_head",
+                        action = "store_true",
+                        help = "Whether to convert a final classification head.")
     args = parser.parse_args()
     convert_roberta_checkpoint_to_pytorch(
         args.roberta_checkpoint_path,
-        args.pytorch_dump_folder_path
+        args.pytorch_dump_folder_path,
+        args.classification_head
     )
+
