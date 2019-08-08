@@ -105,6 +105,9 @@ according to a ``BertConfig`` class and then saved to disk under the filename ``
     # The model needs to be in evaluation mode
     model.eval()
 
+    # If you are instantiating the model with `from_pretrained` you can also easily set the TorchScript flag
+    model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
+
     # Creating the trace
     traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])
     torch.jit.save(traced_model, "traced_bert.pt")
