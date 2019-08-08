@@ -23,7 +23,7 @@ import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from pytorch_transformers.modeling_bert import (BertConfig, BertEmbeddings,
                                                 BertLayerNorm, BertModel,
@@ -142,7 +142,6 @@ class RobertaLMHead(nn.Module):
         x = self.decoder(x) + self.bias
 
         return x
-
 
 
 class RobertaForSequenceClassification(BertPreTrainedModel):
