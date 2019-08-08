@@ -1,4 +1,5 @@
 __version__ = "1.0.0"
+from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
@@ -7,6 +8,10 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_utils import (PreTrainedTokenizer, clean_up_tokenization)
+
+from .tokenization_utils import (PreTrainedTokenizer)
+
+from .modeling_auto import (AutoConfig, AutoModel)
 
 from .modeling_bert import (BertConfig, BertPreTrainedModel, BertModel, BertForPreTraining,
                             BertForMaskedLM, BertForNextSentencePrediction,
@@ -42,4 +47,4 @@ from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
 from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
                            WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
 
-from .file_utils import (PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
+from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
