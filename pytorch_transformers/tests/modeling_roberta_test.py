@@ -179,5 +179,63 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
 
+
+
+class RobertaModelIntegrationTest(unittest.TestCase):
+
+    @pytest.mark.slow
+    def test_inference_masked_lm(self):
+        model = RobertaForMaskedLM.from_pretrained('roberta-base')
+        
+        input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 11, 50265))
+        self.assertEqual(
+            output.shape,
+            expected_shape
+        )
+        # compare the actual values for a slice.
+        expected_slice = torch.Tensor(
+            [[[33.8843, -4.3107, 22.7779],
+              [ 4.6533, -2.8099, 13.6252],
+              [ 1.8222, -3.6898,  8.8600]]]
+        )
+        self.assertTrue(
+            torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3)
+        )
+
+    @pytest.mark.slow
+    def test_inference_no_head(self):
+        model = RobertaModel.from_pretrained('roberta-base')
+        
+        input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
+        output = model(input_ids)[0]
+        # compare the actual values for a slice.
+        expected_slice = torch.Tensor(
+            [[[-0.0231,  0.0782,  0.0074],
+              [-0.1854,  0.0539, -0.0174],
+              [ 0.0548,  0.0799,  0.1687]]]
+        )
+        self.assertTrue(
+            torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3)
+        )
+
+    @pytest.mark.slow
+    def test_inference_classification_head(self):
+        model = RobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
+        
+        input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 3))
+        self.assertEqual(
+            output.shape,
+            expected_shape
+        )
+        expected_tensor = torch.Tensor([[-0.9469,  0.3913,  0.5118]])
+        self.assertTrue(
+            torch.allclose(output, expected_tensor, atol=1e-3)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
