@@ -132,7 +132,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         model.lm_head.layer_norm.weight = roberta.model.decoder.lm_head.layer_norm.weight
         model.lm_head.layer_norm.bias = roberta.model.decoder.lm_head.layer_norm.bias
         model.lm_head.layer_norm.variance_epsilon = roberta.model.decoder.lm_head.layer_norm.eps
-        model.lm_head.weight = roberta.model.decoder.lm_head.weight
+        model.lm_head.decoder.weight = roberta.model.decoder.lm_head.weight
         model.lm_head.bias = roberta.model.decoder.lm_head.bias
 
     # Let's check that we get the same results.
