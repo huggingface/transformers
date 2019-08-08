@@ -105,7 +105,7 @@ class CommonTestCases:
             self.assertEqual(added_toks, len(new_toks))
             self.assertEqual(all_size_2, all_size + len(new_toks))
 
-            tokens = tokenizer.encode("aaaaabbbbbb low cccccccccdddddddd l")
+            tokens = tokenizer.encode("aaaaabbbbbb low cccccccccdddddddd l", no_sep_cls_tokens=True)
             self.assertGreaterEqual(len(tokens), 4)
             self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
             self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
@@ -121,7 +121,8 @@ class CommonTestCases:
             self.assertEqual(added_toks_2, len(new_toks_2))
             self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
-            tokens = tokenizer.encode(">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l")
+            tokens = tokenizer.encode(">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l",
+                                      no_sep_cls_tokens=True)
 
             self.assertGreaterEqual(len(tokens), 6)
             self.assertGreater(tokens[0], tokenizer.vocab_size - 1)

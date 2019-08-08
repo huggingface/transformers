@@ -15,42 +15,68 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import json
 import unittest
 
-from pytorch_transformers.tokenization_roberta import RobertaTokenizer, VOCAB_FILES_NAMES
-from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
+from pytorch_transformers.tokenization_roberta import RobertaTokenizer, DICT_FILES_NAMES
+from pytorch_transformers.tokenization_gpt2 import GPT2Tokenizer, VOCAB_FILES_NAMES
+from .tokenization_tests_commons import CommonTestCases
 
 
-class RobertaTokenizationTest(unittest.TestCase):
+class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
+    tokenizer_class = RobertaTokenizer
 
-    def test_full_tokenizer(self):
-        """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
+    def setUp(self):
+        super(RobertaTokenizationTest, self).setUp()
+
+        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n",
                  "lo", "low", "er",
                  "low", "lowest", "newer", "wider", "<unk>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        special_tokens_map = {"unk_token": "<unk>"}
+        merges = ["#version: 0.2", "l o", "lo w", "e r", ""]
+        self.special_tokens_map = {"unk_token": "<unk>"}
 
-        with TemporaryDirectory() as tmpdirname:
-            vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-            with open(vocab_file, "w") as fp:
-                [fp.write(f"{vocab} {index}\n") for index, vocab in enumerate(vocab_tokens)]
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
+        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['merges_file'])
+        with open(self.vocab_file, "w") as fp:
+            fp.write(json.dumps(vocab_tokens))
+        with open(self.merges_file, "w") as fp:
+            fp.write("\n".join(merges))
 
-            input_text = u"lower newer"
-            output_text = u"lower<unk>newer"
+    def get_tokenizer(self):
+        bpe_tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname, **self.special_tokens_map)
+        return RobertaTokenizer.from_pretrained("roberta-base", bpe_tokenizer=bpe_tokenizer)
 
-            create_and_check_tokenizer_commons(self, input_text, output_text, RobertaTokenizer, tmpdirname, **special_tokens_map)
+    def get_input_output_texts(self):
+        input_text = u"lower newer"
+        output_text = u"lower<unk>newer"
+        return input_text, output_text
 
-            tokenizer = RobertaTokenizer(vocab_file, **special_tokens_map)
-            text = "lower"
-            bpe_tokens = ["low", "er"]
-            tokens = tokenizer.tokenize(text)
-            self.assertListEqual(tokens, bpe_tokens)
+    def test_full_tokenizer(self):
+        tokenizer = self.get_tokenizer()
+        text = "lower"
+        bpe_tokens = ["low", "er"]
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, bpe_tokens)
 
-            input_tokens = tokens + [tokenizer.unk_token]
-            input_bpe_tokens = [13, 12, 17]
-            self.assertListEqual(
-                tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        input_tokens = tokens + [tokenizer.unk_token]
+        input_bpe_tokens = [0, 4, 12, 176, 2]
+        tokenizer.convert_tokens_to_ids(input_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+
+    def roberta_dict_integration_testing(self):
+        tokenizer = self.get_tokenizer()
+
+        self.assertListEqual(
+            tokenizer.encode('Hello world!'),
+            [0, 31414, 232, 328, 2]
+        )
+        self.assertListEqual(
+            tokenizer.encode('Hello world! cécé herlolip'),
+            [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
+        )
 
 
 if __name__ == '__main__':
