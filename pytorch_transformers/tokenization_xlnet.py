@@ -177,6 +177,16 @@ class XLNetTokenizer(PreTrainedTokenizer):
         out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
         return out_string
 
+    def add_special_tokens_single_sentence(self, token_ids):
+        logger.warning("No method was defined for special tokens and single sentence streams in XLNet. "
+                       "Returning token_ids")
+        return token_ids
+
+    def add_special_tokens_sentences_pair(self, *token_ids):
+        sep = [self._convert_token_to_id(self.sep_token)]
+        cls = [self._convert_token_to_id(self.cls_token)]
+        return token_ids[0] + sep + token_ids[1] + sep + cls
+
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
             to a directory.

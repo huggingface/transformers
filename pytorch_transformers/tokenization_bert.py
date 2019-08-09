@@ -166,6 +166,14 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
+    def add_special_tokens_single_sentence(self, token_ids):
+        return [self._convert_token_to_id(self.cls_token)] + token_ids + [self._convert_token_to_id(self.sep_token)]
+
+    def add_special_tokens_sentences_pair(self, *token_ids):
+        sep = [self._convert_token_to_id(self.sep_token)]
+        cls = [self._convert_token_to_id(self.cls_token)]
+        return cls + token_ids[0] + sep + token_ids[1] + sep
+
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
