@@ -18,8 +18,7 @@ import os
 import json
 import unittest
 
-from pytorch_transformers.tokenization_roberta import RobertaTokenizer, DICT_FILES_NAMES
-from pytorch_transformers.tokenization_gpt2 import GPT2Tokenizer, VOCAB_FILES_NAMES
+from pytorch_transformers.tokenization_roberta import RobertaTokenizer, VOCAB_FILES_NAMES
 from .tokenization_tests_commons import CommonTestCases
 
 
@@ -45,8 +44,7 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
             fp.write("\n".join(merges))
 
     def get_tokenizer(self):
-        bpe_tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname, **self.special_tokens_map)
-        return RobertaTokenizer.from_pretrained("roberta-base", bpe_tokenizer=bpe_tokenizer)
+        return RobertaTokenizer.from_pretrained(self.tmpdirname, **self.special_tokens_map)
 
     def get_input_output_texts(self):
         input_text = u"lower newer"
@@ -54,15 +52,14 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.get_tokenizer()
+        tokenizer = RobertaTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower"
         bpe_tokens = ["low", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [0, 4, 12, 176, 2]
-        tokenizer.convert_tokens_to_ids(input_tokens)
+        input_bpe_tokens = [13, 12, 17]
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
