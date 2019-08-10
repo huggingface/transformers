@@ -15,12 +15,6 @@ BERT
     :members:
 
 
-``AdamW``
-~~~~~~~~~~~~~~~~
-
-.. autoclass:: pytorch_transformers.AdamW
-    :members:
-
 ``BertModel``
 ~~~~~~~~~~~~~~~~~~~~
 

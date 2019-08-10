@@ -247,6 +247,9 @@ def evaluate(args, model, tokenizer, prefix=""):
 
 
 def load_and_cache_examples(args, task, tokenizer, evaluate=False):
+    if args.local_rank not in [-1, 0]:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
     processor = processors[task]()
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
@@ -272,6 +275,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
+
+    if args.local_rank == 0:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
