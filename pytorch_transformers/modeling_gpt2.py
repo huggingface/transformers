@@ -50,7 +50,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        logger.error("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+        logger.error("Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
     tf_path = os.path.abspath(gpt2_checkpoint_path)
