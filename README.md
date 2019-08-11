@@ -123,7 +123,7 @@ traced_model = torch.jit.trace(model, (input_ids,))
 model.save_pretrained('./directory/to/save/')  # save
 model = model_class.from_pretrained('./directory/to/save/')  # re-load
 tokenizer.save_pretrained('./directory/to/save/')  # save
-tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
+tokenizer = tokenizer_class.from_pretrained('./directory/to/save/')  # re-load
 
 # SOTA examples for GLUE, SQUAD, text generation...
 ```
