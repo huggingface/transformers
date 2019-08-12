@@ -546,7 +546,7 @@ class PreTrainedTokenizer(object):
     def add_special_tokens_single_sentence(self, token_ids):
         raise NotImplementedError
 
-    def add_special_tokens_sentences_pair(self, *token_ids):
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
         raise NotImplementedError
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):

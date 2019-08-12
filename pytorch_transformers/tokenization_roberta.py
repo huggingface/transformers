@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for OpenAI GPT."""
+"""Tokenization classes for RoBERTa."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -57,15 +57,15 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'roberta-base': 1024,
-    'roberta-large': 1024,
-    'roberta-large-mnli': 1024,
+    'roberta-base': 512,
+    'roberta-large': 512,
+    'roberta-large-mnli': 512,
 }
 
 
 class RobertaTokenizer(PreTrainedTokenizer):
     """
-    GPT-2 BPE tokenizer. Peculiarities:
+    RoBERTa BPE tokenizer, derived from the GPT-2 tokenizer. Peculiarities:
         - Byte-level BPE
     """
     vocab_files_names = VOCAB_FILES_NAMES
@@ -161,12 +161,20 @@ class RobertaTokenizer(PreTrainedTokenizer):
         return text
 
     def add_special_tokens_single_sentence(self, token_ids):
+        """
+        Adds special tokens to a sequence for sequence classification tasks.
+        A RoBERTa sequence has the following format: [CLS] X [SEP]
+        """
         return [self._convert_token_to_id(self.cls_token)] + token_ids + [self._convert_token_to_id(self.sep_token)]
 
-    def add_special_tokens_sentences_pair(self, *token_ids):
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+        """
+        Adds special tokens to a sequence pair for sequence classification tasks.
+        A RoBERTa sequence pair has the following format: [CLS] A [SEP][SEP] B [SEP]
+        """
         sep = [self._convert_token_to_id(self.sep_token)]
         cls = [self._convert_token_to_id(self.cls_token)]
-        return cls + token_ids[0] + sep + sep + token_ids[1] + sep
+        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""
