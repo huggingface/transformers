@@ -519,24 +519,19 @@ class PreTrainedTokenizer(object):
     def _convert_token_to_id(self, token):
         raise NotImplementedError
 
-    def encode(self, text, add_special_tokens=False, *sequences):
+    def encode(self, text, text_pair=None, add_special_tokens=False):
         """ Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
         
         Same doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
         """
-
-        if len(sequences) == 0:
+        if text_pair is None:
             if add_special_tokens:
                 return self.add_special_tokens_single_sentence(self.convert_tokens_to_ids(self.tokenize(text)))
             else:
                 return self.convert_tokens_to_ids(self.tokenize(text))
 
-        if len(sequences) > 1:
-            logger.warning("Tokenization currently only supports sentence pairs. Ignoring every string following the "
-                           "initial two.")
-
         first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text)]
-        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(sequences[0])]
+        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair)]
 
         if add_special_tokens:
             return self.add_special_tokens_sentences_pair(first_sentence_tokens, second_sentence_tokens)
