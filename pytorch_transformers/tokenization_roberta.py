@@ -73,9 +73,10 @@ class RobertaTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, merges_file, errors='replace', bos_token="<s>", eos_token="</s>", sep_token="</s>",
-                 cls_token="<s>", unk_token="<unk>", **kwargs):
+                 cls_token="<s>", unk_token="<unk>", pad_token='<pad>', mask_token='<mask>', **kwargs):
         super(RobertaTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token,
-                                               sep_token=sep_token, cls_token=cls_token, **kwargs)
+                                               sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
+                                               mask_token=mask_token, **kwargs)
 
         self.encoder = json.load(open(vocab_file, encoding="utf-8"))
         self.decoder = {v: k for k, v in self.encoder.items()}

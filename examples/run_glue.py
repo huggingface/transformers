@@ -279,7 +279,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             sep_token=tokenizer.sep_token,
             sep_token_extra=bool(args.model_type in ['roberta']),           # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token=1 if args.model_type in ['roberta'] else 0, # TODO(Lysandre: replace with tokenizer.pad_token when implemented)
+            pad_token=tokenizer.encoder[tokenizer.pad_token] if args.model_type in ['roberta'] else tokenizer.vocab[tokenizer.pad_token],
             pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
         )
         if args.local_rank in [-1, 0]:
