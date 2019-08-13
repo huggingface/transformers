@@ -37,7 +37,7 @@ bert_docstring = """
                  checkpoint
         cache_dir: an optional path to a folder in which the pre-trained models
                    will be cached.
-        state_dict: an optional state dictionnary
+        state_dict: an optional state dictionary
                     (collections.OrderedDict object) to use instead of Google
                     pre-trained models
         *inputs, **kwargs: additional input for the specific Bert class
@@ -84,12 +84,12 @@ def bertTokenizer(*args, **kwargs):
                  Default: ["[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]"]
 
     Example:
-        >>> import torch
-        >>> sentence = 'Hello, World!'
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
-        >>> toks = tokenizer.tokenize(sentence)
+        import torch
+        sentence = 'Hello, World!'
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        toks = tokenizer.tokenize(sentence)
         ['Hello', '##,', 'World', '##!']
-        >>> ids = tokenizer.convert_tokens_to_ids(toks)
+        ids = tokenizer.convert_tokens_to_ids(toks)
         [8667, 28136, 1291, 28125]
     """
     tokenizer = BertTokenizer.from_pretrained(*args, **kwargs)
@@ -105,20 +105,20 @@ def bertModel(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertModel
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertModel', 'bert-base-cased')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertModel', 'bert-base-cased')
+        model.eval()
         # Predict hidden states features for each layer
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 encoded_layers, _ = model(tokens_tensor, segments_tensors)
     """
     model = BertModel.from_pretrained(*args, **kwargs)
@@ -134,20 +134,20 @@ def bertForNextSentencePrediction(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertForNextSentencePrediction
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForNextSentencePrediction', 'bert-base-cased')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForNextSentencePrediction', 'bert-base-cased')
+        model.eval()
         # Predict the next sentence classification logits
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 next_sent_classif_logits = model(tokens_tensor, segments_tensors)
     """
     model = BertForNextSentencePrediction.from_pretrained(*args, **kwargs)
@@ -164,17 +164,17 @@ def bertForPreTraining(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertForPreTraining
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForPreTraining', 'bert-base-cased')
-        >>> masked_lm_logits_scores, seq_relationship_logits = model(tokens_tensor, segments_tensors)
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForPreTraining', 'bert-base-cased')
+        masked_lm_logits_scores, seq_relationship_logits = model(tokens_tensor, segments_tensors)
     """
     model = BertForPreTraining.from_pretrained(*args, **kwargs)
     return model
@@ -188,25 +188,25 @@ def bertForMaskedLM(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> masked_index = 8
-        >>> tokenized_text[masked_index] = '[MASK]'
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        masked_index = 8
+        tokenized_text[masked_index] = '[MASK]'
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertForMaskedLM
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForMaskedLM', 'bert-base-cased')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForMaskedLM', 'bert-base-cased')
+        model.eval()
         # Predict all tokens
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 predictions = model(tokens_tensor, segments_tensors)
-        >>> predicted_index = torch.argmax(predictions[0, masked_index]).item()
-        >>> predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
+        predicted_index = torch.argmax(predictions[0, masked_index]).item()
+        predicted_token = tokenizer.convert_ids_to_tokens([predicted_index])[0]
         'henson'
     """
     model = BertForMaskedLM.from_pretrained(*args, **kwargs)
@@ -230,24 +230,24 @@ def bertForSequenceClassification(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertForSequenceClassification
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForSequenceClassification', 'bert-base-cased', num_labels=2)
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForSequenceClassification', 'bert-base-cased', num_labels=2)
+        model.eval()
         # Predict the sequence classification logits
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 seq_classif_logits = model(tokens_tensor, segments_tensors)
         # Or get the sequence classification loss
-        >>> labels = torch.tensor([1])
-        >>> seq_classif_loss = model(tokens_tensor, segments_tensors, labels=labels) # set model.train() before if training this loss
+        labels = torch.tensor([1])
+        seq_classif_loss = model(tokens_tensor, segments_tensors, labels=labels) # set model.train() before if training this loss
     """
     model = BertForSequenceClassification.from_pretrained(*args, **kwargs)
     return model
@@ -265,24 +265,24 @@ def bertForMultipleChoice(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens, indexed_tokens]).unsqueeze(0)
-        >>> segments_tensors = torch.tensor([segments_ids, segments_ids]).unsqueeze(0)
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens, indexed_tokens]).unsqueeze(0)
+        segments_tensors = torch.tensor([segments_ids, segments_ids]).unsqueeze(0)
         # Load bertForMultipleChoice
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForMultipleChoice', 'bert-base-cased', num_choices=2)
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForMultipleChoice', 'bert-base-cased', num_choices=2)
+        model.eval()
         # Predict the multiple choice logits
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 multiple_choice_logits = model(tokens_tensor, segments_tensors)
         # Or get the multiple choice loss
-        >>> labels = torch.tensor([1])
-        >>> multiple_choice_loss = model(tokens_tensor, segments_tensors, labels=labels) # set model.train() before if training this loss
+        labels = torch.tensor([1])
+        multiple_choice_loss = model(tokens_tensor, segments_tensors, labels=labels) # set model.train() before if training this loss
     """
     model = BertForMultipleChoice.from_pretrained(*args, **kwargs)
     return model
@@ -298,25 +298,25 @@ def bertForQuestionAnswering(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertForQuestionAnswering
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForQuestionAnswering', 'bert-base-cased')
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForQuestionAnswering', 'bert-base-cased')
+        model.eval()
         # Predict the start and end positions logits
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 start_logits, end_logits = model(tokens_tensor, segments_tensors)
         # Or get the total loss which is the sum of the CrossEntropy loss for the start and end token positions
-        >>> start_positions, end_positions = torch.tensor([12]), torch.tensor([14])
+        start_positions, end_positions = torch.tensor([12]), torch.tensor([14])
         # set model.train() before if training this loss
-        >>> multiple_choice_loss = model(tokens_tensor, segments_tensors, start_positions=start_positions, end_positions=end_positions)
+        multiple_choice_loss = model(tokens_tensor, segments_tensors, start_positions=start_positions, end_positions=end_positions)
     """
     model = BertForQuestionAnswering.from_pretrained(*args, **kwargs)
     return model
@@ -337,24 +337,24 @@ def bertForTokenClassification(*args, **kwargs):
 
     Example:
         # Load the tokenizer
-        >>> import torch
-        >>> tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
+        import torch
+        tokenizer = torch.hub.load('huggingface/pytorch-transformers', 'bertTokenizer', 'bert-base-cased', do_basic_tokenize=False)
         #  Prepare tokenized input
-        >>> text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
-        >>> tokenized_text = tokenizer.tokenize(text)
-        >>> indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
-        >>> segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
-        >>> tokens_tensor = torch.tensor([indexed_tokens])
-        >>> segments_tensors = torch.tensor([segments_ids])
+        text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+        tokenized_text = tokenizer.tokenize(text)
+        indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
+        segments_ids = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+        tokens_tensor = torch.tensor([indexed_tokens])
+        segments_tensors = torch.tensor([segments_ids])
         # Load bertForTokenClassification
-        >>> model = torch.hub.load('huggingface/pytorch-transformers', 'bertForTokenClassification', 'bert-base-cased', num_labels=2)
-        >>> model.eval()
+        model = torch.hub.load('huggingface/pytorch-transformers', 'bertForTokenClassification', 'bert-base-cased', num_labels=2)
+        model.eval()
         # Predict the token classification logits
-        >>> with torch.no_grad():
+        with torch.no_grad():
                 classif_logits = model(tokens_tensor, segments_tensors)
         # Or get the token classification loss
-        >>> labels = torch.tensor([[0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0]])
-        >>> classif_loss = model(tokens_tensor, segments_tensors, labels=labels) # set model.train() before if training this loss
+        labels = torch.tensor([[0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0]])
+        classif_loss = model(tokens_tensor, segments_tensors, labels=labels) # set model.train() before if training this loss
     """
     model = BertForTokenClassification.from_pretrained(*args, **kwargs)
     return model
