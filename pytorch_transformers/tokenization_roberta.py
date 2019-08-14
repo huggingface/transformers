@@ -65,8 +65,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class RobertaTokenizer(PreTrainedTokenizer):
     """
-    RoBERTa BPE tokenizer, derived from the GPT-2 tokenizer. Peculiarities:
-        - Byte-level BPE
+    RoBERTa BPE tokenizer, derived from the GPT-2 tokenizer. Peculiarities: Byte-level BPE
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

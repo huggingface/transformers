@@ -180,9 +180,10 @@ class PreTrainedTokenizer(object):
 
     @classmethod
     def from_pretrained(cls, *inputs, **kwargs):
-        r""" Instantiate a :class:`~pytorch_transformers.PreTrainedTokenizer` (or a derived class) from a predefined tokenizer.
+        r"""
+        Instantiate a :class:`~pytorch_transformers.PreTrainedTokenizer` (or a derived class) from a predefined tokenizer.
 
-        Parameters:
+        Args:
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
@@ -383,14 +384,15 @@ class PreTrainedTokenizer(object):
 
 
     def add_tokens(self, new_tokens):
-        """ Add a list of new tokens to the tokenizer class. If the new tokens are not in the
+        """
+        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
-            Parameters:
-                new_tokens: list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+        Args:
+            new_tokens: list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
 
-            Returns:
-                Number of tokens added to the vocabulary.
+        Returns:
+            Number of tokens added to the vocabulary.
 
         Examples::
 
@@ -422,17 +424,20 @@ class PreTrainedTokenizer(object):
 
 
     def add_special_tokens(self, special_tokens_dict):
-        """ Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
-            to class attributes. If special tokens are NOT in the vocabulary, they are added
-            to it (indexed starting from the last index of the current vocabulary).
+        """
+        Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
+        to class attributes. If special tokens are NOT in the vocabulary, they are added
+        to it (indexed starting from the last index of the current vocabulary).
 
-            Parameters:
-                special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes: [``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``].
-                
-                    Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+        Args:
+            special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes:
+                [``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``,
+                ``additional_special_tokens``].
 
-            Returns:
-                Number of tokens added to the vocabulary.
+                Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+
+        Returns:
+            Number of tokens added to the vocabulary.
 
         Examples::
 
@@ -520,9 +525,16 @@ class PreTrainedTokenizer(object):
         raise NotImplementedError
 
     def encode(self, text, text_pair=None, add_special_tokens=False):
-        """ Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
+        """
+        Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
         
-        Same doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
+        Same as doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
+
+        Args:
+            text: The first sequence to be encoded.
+            text_pair: Optional second sequence to be encoded.
+            add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
+                to their model.
         """
         if text_pair is None:
             if add_special_tokens:
@@ -577,9 +589,9 @@ class PreTrainedTokenizer(object):
         return ' '.join(self.convert_ids_to_tokens(tokens))
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
-        """ Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
-            with options to remove special tokens and clean up tokenization spaces.
-
+        """
+        Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
+        with options to remove special tokens and clean up tokenization spaces.
         Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
