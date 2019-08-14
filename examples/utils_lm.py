@@ -6,8 +6,7 @@ import torch.nn.functional as F
 
 
 class WikiTextDataset(Dataset):
-	def __init__(self, tokenizer, file='train', directory='wikitext', max_context_length=512, device='cpu'):
-		self.device = device
+	def __init__(self, tokenizer, file='train', directory='wikitext', max_context_length=512):
 		self.max_context_length = max_context_length
 
 		self.examples = []
@@ -32,7 +31,7 @@ class WikiTextDataset(Dataset):
 		return len(self.examples)
 
 	def __getitem__(self, item):
-		return torch.tensor(self.examples[item], device=self.device)
+		return torch.tensor(self.examples[item])
 
 	@staticmethod
 	def collate(values):
