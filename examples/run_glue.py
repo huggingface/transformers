@@ -288,7 +288,8 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             sep_token=tokenizer.sep_token,
             cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0)
+            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+            args.expl)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -390,7 +391,7 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     
     parser.add_argument('--expl', type=bool, default=False, const = True,nargs = '?', \
-                        help = 'whether to generate expl with esnli')
+                        help = 'whether to generate expl with esnli decoder, and separately encode premises and hypothesis')
     
     args = parser.parse_args()
     

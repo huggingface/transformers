@@ -1262,7 +1262,7 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
         '''
         self.decoder = AttentionDecoder(decoder_config)
     
-    def forward(self, input_ids, s1, s2, expl, mode, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, expl, mode, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
         
         if attention_mask is None:
