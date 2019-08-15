@@ -1242,7 +1242,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 sys.path.append('/data/rosa/e-SNLI-3/attention')
 from models_attention_bottom import AttentionDecoder
 
-class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
+class BertForESNLI(BertPreTrainedModel):
     def __init__(self,config):
         super(BertForESNLI, self).__init__(config) #or super(eSNLIAttention, self).__init__() ?
         
@@ -1332,12 +1332,15 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
         outputs2 = (sequence_output2, pooled_output2,) + encoder_outputs2[1:]
         
         
-        #u, u_emb = self.encoder(s1) #esnli s1: (s1_batch, s1_len)
+        #u, u_emb = self.encoder(s1) #esnli s1: (s1_batch, s1_len) # u/v: (?) ; u/v_emb: bsize x sentence_dim (?)
         #v, v_emb = self.encoder(s2) #esnli s2: (s2_batch, s2_len)
         u, u_emb = outputs, embedding_output # TODO: figure out if the dimension matches
+        print(type(u))
+        print(type(u_emb))
         v, v_emb = outputs2, embedding_output2
         
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
+        # expl: seqlen x bsize x word_embed_dim
         out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
         

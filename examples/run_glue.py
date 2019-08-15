@@ -46,6 +46,10 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
 import sys
 import time
 
+sys.path.append('/data/rosa/pytorch-transformers/pytorch_transformers/')
+print(sys.path)
+from modeling_bert import BertForESNLI
+
 file_handler = logging.FileHandler(filename='glue_'+time.strftime("%d:%m") + "_" + time.strftime("%H:%M:%S")+'.log')
 stdout_handler = logging.StreamHandler(sys.stdout)
 handlers = [file_handler, stdout_handler]
@@ -292,7 +296,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
             pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
-            args.expl)
+            expl=args.expl)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
