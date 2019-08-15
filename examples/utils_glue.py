@@ -55,11 +55,16 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_id):
+    def __init__(self, input_ids, input_mask, segment_ids, label_id, input_ids2=None, \
+                 input_mask2=None, segment_ids2=None, expl=None):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_id = label_id
+        self.input_ids2 = input_ids2
+        self.input_mask2 = input_mask2
+        self.segment_ids2 = segment_ids2
+        self.expl = expl
 
 
 class DataProcessor(object):
@@ -580,6 +585,66 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         
         if args.expl and tokens_b:
             #TODO: tokens2, input_ids2, input_mask2, segment_ids2
+            
+            tokens2 = tokens_b + [sep_token]
+            segment_ids2 = [sequence_a_segment_id] * len(tokens)
+
+            if cls_token_at_end:
+                tokens2 = tokens2 + [cls_token]
+                segment_ids2 = segment_ids2 + [cls_token_segment_id]
+            else:
+                tokens2 = [cls_token] + tokens2
+                segment_ids2 = [cls_token_segment_id] + segment_ids2
+
+            input_ids2 = tokenizer.convert_tokens_to_ids(tokens2)
+            
+            # The mask has 1 for real tokens and 0 for padding tokens. Only real
+            # tokens are attended to.
+            input_mask2 = [1 if mask_padding_with_zero else 0] * len(input_ids2)
+
+            # Zero-pad up to the sequence length.
+            padding_length2 = max_seq_length - len(input_ids2)
+            if pad_on_left:
+                input_ids2 = ([pad_token] * padding_length2) + input_ids2
+                input_mask2 = ([0 if mask_padding_with_zero else 1] * padding_length2) + input_mask2
+                segment_ids2 = ([pad_token_segment_id] * padding_length2) + segment_ids2
+            else:
+                input_ids2 = input_ids2 + ([pad_token] * padding_length2)
+                input_mask2 = input_mask2 + ([0 if mask_padding_with_zero else 1] * padding_length2)
+                segment_ids2 = segment_ids2 + ([pad_token_segment_id] * padding_length2)
+
+            assert len(input_ids2) == max_seq_length
+            assert len(input_mask2) == max_seq_length
+            assert len(segment_ids2) == max_seq_length
+            
+            if ex_index < 5:
+                logger.info("*** Example ***")
+                logger.info("guid: %s" % (example.guid))
+                logger.info("tokens: %s" % " ".join(
+                        [str(x) for x in tokens]))
+                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+                logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+                logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+                
+                logger.info("tokens2: %s" % " ".join(
+                        [str(x) for x in tokens2]))
+                logger.info("input_ids2: %s" % " ".join([str(x) for x in input_ids2]))
+                logger.info("input_mask2: %s" % " ".join([str(x) for x in input_mask2]))
+                logger.info("segment_ids2: %s" % " ".join([str(x) for x in segment_ids2]))
+                
+                logger.info("label: %s (id = %d)" % (example.label, label_id))
+                logger.info("expl: %s" % example.expl)
+                
+            features.append(
+                    InputFeatures(input_ids=input_ids,
+                                  input_mask=input_mask,
+                                  segment_ids=segment_ids,
+                                  input_ids2=input_ids2,
+                                  input_mask2=input_mask2,
+                                  segment_ids2=segment_ids2,
+                                  label_id=label_id,
+                                  expl=expl))
+            
         else:
             if ex_index < 5:
                 logger.info("*** Example ***")
@@ -590,14 +655,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
                 logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
                 logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
                 logger.info("label: %s (id = %d)" % (example.label, label_id))
-                logger.info("expl: %s" % example.expl)
                 
             features.append(
                     InputFeatures(input_ids=input_ids,
                                   input_mask=input_mask,
                                   segment_ids=segment_ids,
-                                  label_id=label_id,
-                                  expl=expl))
+                                  label_id=label_id))
         
     return features
 
