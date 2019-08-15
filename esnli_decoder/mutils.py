@@ -103,14 +103,14 @@ def bleu_prediction(pred_file, data):
             for j in range(1, 3):
                 current_refs.append(data['expl_' + str(j)][k].strip().split())
             if k % 5000 == 0:
-                print 'refs: ', current_refs
+                print( 'refs: ', current_refs)
             references.append(current_refs)
             if k == 3:
-                print "candidates ", candidates
-                print "references ", references, '\n\n\n'
+                print( "candidates ", candidates)
+                print( "references ", references, '\n\n\n')
     
     bleu_score = corpus_bleu(references, candidates)
-    print 'bleu: ', bleu_score
+    print( 'bleu: ', bleu_score)
     f.close()
     return bleu_score
 
@@ -127,7 +127,7 @@ def bleu_inter_annotations_expl3_wrt_12(data):
         references.append(current_refs)
     
     bleu_score = 100 * corpus_bleu(references, candidates)
-    print 'bleu: ', bleu_score
+    print( 'bleu: ', bleu_score)
     return round(bleu_score, 2)
 
 
@@ -184,7 +184,7 @@ def get_keys_from_vals(vals, dic_labels):
                 found = True
                 break
         if not found:
-            print "vals", vals
+            print( "vals", vals)
             raise NameError("invalid value " + str(val))
     return keys
 
@@ -347,11 +347,11 @@ if __name__ == "__main__":
     x[0,0] = 0.7
     x[0,1] = 0.6
     x[1,2] = 0.51
-    print "x", x
+    print( "x", x)
     y = Variable(torch.zeros(2,3))
     y[0,0] = 0.8
     y[1,1] = 0.9
-    print "y", y
+    print( "y", y)
     print(bow_precision_recall_fscore_row(x, y))
 
 
