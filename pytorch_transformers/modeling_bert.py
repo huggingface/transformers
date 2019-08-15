@@ -28,7 +28,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
+from modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
                              prune_linear_layer, add_start_docstrings)
 
 logger = logging.getLogger(__name__)
@@ -1239,8 +1239,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
-sys.path.append('/data/rosa/e-SNLI-3/attention')
-from models_attention_bottom import AttentionDecoder
+sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
+from models_attention_bottom_separate import AttentionDecoder
 
 class BertForESNLI(BertPreTrainedModel):
     def __init__(self,config):
