@@ -24,6 +24,7 @@ from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 from .tokenization_xlm import XLMTokenizer
+from .tokenization_roberta import RobertaTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class AutoTokenizer(object):
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
+            - contains `roberta`: RobertaTokenizer (RoBERTa model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -64,6 +66,7 @@ class AutoTokenizer(object):
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
+            - contains `roberta`: RobertaTokenizer (XLM model)
 
         Params:
             **pretrained_model_name_or_path**: either:
@@ -94,7 +97,9 @@ class AutoTokenizer(object):
             return XLNetTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'roberta' in pretrained_model_name_or_path:
+            return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
