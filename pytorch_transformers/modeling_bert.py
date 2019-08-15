@@ -1238,3 +1238,38 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+sys.path.append('/data/rosa/e-SNLI-3/attention')
+from models_attention_bottom import AttentionDecoder
+
+class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
+    def __init__(self,config):
+        super(BertForESNLI, self).__init__(config) #or super(eSNLIAttention, self).__init__() ?
+        
+        self.embeddings = BertEmbeddings(config)
+        self.encoder = BertEncoder(config)
+        self.pooler = BertPooler(config)
+
+        self.apply(self.init_weights)
+        
+        #decoder_config = ?
+        '''
+        'decoder_type','word_emb_dim','dec_rnn_dim','enc_rnn_dim','dpout_dec','n_vocab'
+        'word_index','word_vec','max_T_decoder','max_T_encoder','n_layers_dec','use_init'
+        'att_type' # 'lin' or 'dot'
+        'att_hid_dim','enc_rnn_dim'
+        'encoder_type'
+        '''
+        self.decoder = AttentionDecoder(decoder_config)
+    
+    def forward(self, s1, s2, expl, mode):
+        #s1: (s1_batch, s1_len)
+        #s2: (s2_batch, s2_len)
+        #expl: expl_batch
+        #u, u_emb = self.encoder(s1) #esnli
+        #v, v_emb = self.encoder(s2) #esnli
+        
+        #out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli
+        return out_expl
+    
+        
