@@ -127,7 +127,7 @@ class AutoConfig(object):
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
 
 
 class AutoModel(object):
@@ -242,4 +242,4 @@ class AutoModel(object):
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
