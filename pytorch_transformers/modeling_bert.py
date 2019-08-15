@@ -1262,13 +1262,17 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
         '''
         self.decoder = AttentionDecoder(decoder_config)
     
-    def forward(self, input_ids, expl, mode, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, input_ids2, expl, mode, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None): #, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
         
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
+        if attention_mask2 is None:
+            attention_mask2 = torch.ones_like(input_ids2)
+        if token_type_ids2 is None:
+            token_type_ids2 = torch.zeros_like(input_ids2)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -1276,6 +1280,7 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+        extended_attention_mask2 = attention_mask2.unsqueeze(1).unsqueeze(2)
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -1284,12 +1289,15 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask2 = extended_attention_mask2.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+        extended_attention_mask2 = (1.0 - extended_attention_mask2) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        '''
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
@@ -1299,6 +1307,8 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
             head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
+        '''
+        head_mask = [None] * self.config.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
         encoder_outputs = self.encoder(embedding_output,
@@ -1308,15 +1318,27 @@ class BertForESNLI(BertPreTrainedModel'''BertPreTrainedModel or nn.Module?'''):
         pooled_output = self.pooler(sequence_output)
 
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
-        #return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
         
-        #s1: (s1_batch, s1_len)
-        #s2: (s2_batch, s2_len)
-        #expl: expl_batch
-        #u, u_emb = self.encoder(s1) #esnli
-        #v, v_emb = self.encoder(s2) #esnli
+        # for s2
+        head_mask2 = [None] * self.config.num_hidden_layers
+
+        embedding_output2 = self.embeddings(input_ids2, position_ids=position_ids2, token_type_ids=token_type_ids2)
+        encoder_outputs2 = self.encoder(embedding_output2,
+                                       extended_attention_mask2,
+                                       head_mask=head_mask2)
+        sequence_output2 = encoder_outputs2[0]
+        pooled_output2 = self.pooler(sequence_output2)
+
+        outputs2 = (sequence_output2, pooled_output2,) + encoder_outputs2[1:]
         
-        #out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli
+        
+        #u, u_emb = self.encoder(s1) #esnli s1: (s1_batch, s1_len)
+        #v, v_emb = self.encoder(s2) #esnli s2: (s2_batch, s2_len)
+        u, u_emb = outputs, embedding_output # TODO: figure out if the dimension matches
+        v, v_emb = outputs2, embedding_output2
+        
+        # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
+        out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
         
         
