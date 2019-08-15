@@ -489,7 +489,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
                                  cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
                                  sequence_a_segment_id=0, sequence_b_segment_id=1,
                                  cls_token_segment_id=1, pad_token_segment_id=0,
-                                 mask_padding_with_zero=True):
+                                 mask_padding_with_zero=True, expl=False):
     """ Loads a data file into a list of `InputBatch`s
         `cls_token_at_end` define the location of the CLS token:
             - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
@@ -539,7 +539,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         tokens = tokens_a + [sep_token]
         segment_ids = [sequence_a_segment_id] * len(tokens)
 
-        if tokens_b:
+        if tokens_b and not args.expl:
             tokens += tokens_b + [sep_token]
             segment_ids += [sequence_b_segment_id] * (len(tokens_b) + 1)
 
@@ -577,27 +577,27 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             label_id = float(example.label)
         else:
             raise KeyError(output_mode)
-            
-        if example.expl:
-            print('expl exists in the dataset')
-
-        if ex_index < 5:
-            logger.info("*** Example ***")
-            logger.info("guid: %s" % (example.guid))
-            logger.info("tokens: %s" % " ".join(
-                    [str(x) for x in tokens]))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label: %s (id = %d)" % (example.label, label_id))
-            logger.info("expl: %s" % example.expl)
-
-        features.append(
-                InputFeatures(input_ids=input_ids,
-                              input_mask=input_mask,
-                              segment_ids=segment_ids,
-                              label_id=label_id,
-                              expl=expl))
+        
+        if args.expl and tokens_b:
+            #TODO: tokens2, input_ids2, input_mask2, segment_ids2
+        else:
+            if ex_index < 5:
+                logger.info("*** Example ***")
+                logger.info("guid: %s" % (example.guid))
+                logger.info("tokens: %s" % " ".join(
+                        [str(x) for x in tokens]))
+                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+                logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+                logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+                logger.info("label: %s (id = %d)" % (example.label, label_id))
+                logger.info("expl: %s" % example.expl)
+                
+            features.append(
+                    InputFeatures(input_ids=input_ids,
+                                  input_mask=input_mask,
+                                  segment_ids=segment_ids,
+                                  label_id=label_id,
+                                  expl=expl))
         
     return features
 
