@@ -83,7 +83,8 @@ MODELS = [(BertModel,       BertTokenizer,      'bert-base-uncased'),
           (GPT2Model,       GPT2Tokenizer,      'gpt2'),
           (TransfoXLModel,  TransfoXLTokenizer, 'transfo-xl-wt103'),
           (XLNetModel,      XLNetTokenizer,     'xlnet-base-cased'),
-          (XLMModel,        XLMTokenizer,       'xlm-mlm-enfr-1024')]
+          (XLMModel,        XLMTokenizer,       'xlm-mlm-enfr-1024'),
+          (RobertaModel,    RobertaTokenizer,   'roberta-base')]
 
 # Let's encode some text in a sequence of hidden-states using each model:
 for model_class, tokenizer_class, pretrained_weights in MODELS:
