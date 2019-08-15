@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
 
-    def __init__(self, guid, text_a, text_b=None, label=None):
+    def __init__(self, guid, text_a, text_b=None, label=None, expl=None):
         """Constructs a InputExample.
 
         Args:
@@ -49,6 +49,7 @@ class InputExample(object):
         self.text_a = text_a
         self.text_b = text_b
         self.label = label
+        self.expl = expl
 
 
 class InputFeatures(object):
@@ -444,8 +445,9 @@ class EsnliProcessor(DataProcessor):
             text_a = line[2]
             text_b = line[3]
             label = line[1]
+            expl = line[4]
             examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, expl=expl))
         return examples
 
 
