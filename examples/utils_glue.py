@@ -577,6 +577,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             label_id = float(example.label)
         else:
             raise KeyError(output_mode)
+            
+        if example.expl:
+            print('expl exists in the dataset')
 
         if ex_index < 5:
             logger.info("*** Example ***")
@@ -587,12 +590,15 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
             logger.info("label: %s (id = %d)" % (example.label, label_id))
+            logger.info("expl: %s" % example.expl)
 
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,
                               segment_ids=segment_ids,
-                              label_id=label_id))
+                              label_id=label_id,
+                              expl=expl))
+        
     return features
 
 
