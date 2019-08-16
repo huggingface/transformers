@@ -1245,21 +1245,11 @@ from models_attention_bottom_separate import AttentionDecoder
 class BertForESNLI(BertPreTrainedModel):
     def __init__(self,config):
         super(BertForESNLI, self).__init__(config)
-        self.num_labels = config.num_labels
-
-        self.bert = BertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
+        self.embeddings = BertEmbeddings(config)
+        self.encoder = BertEncoder(config)
+        self.pooler = BertPooler(config)
 
         self.apply(self.init_weights)
-        
-        #super(BertForESNLI, self).__init__(config) #or super(eSNLIAttention, self).__init__() ?
-        
-        #self.embeddings = BertEmbeddings(config)
-        #self.encoder = BertEncoder(config)
-        #self.pooler = BertPooler(config)
-
-        #self.apply(self.init_weights)
         
         decoder_config = None #TODO
         '''
@@ -1269,10 +1259,12 @@ class BertForESNLI(BertPreTrainedModel):
         'att_hid_dim','enc_rnn_dim'
         'encoder_type'
         '''
-        self.decoder = AttentionDecoder(decoder_config)
+        #self.decoder = AttentionDecoder(decoder_config)
     
-    def forward(self, input_ids, input_ids2, expl, mode, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None): #, position_ids=None, head_mask=None):
+    def forward(self, input_ids, input_ids2, expl, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
+        position_ids = None
+        position_ids2 = None
         
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)

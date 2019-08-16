@@ -544,7 +544,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         tokens = tokens_a + [sep_token]
         segment_ids = [sequence_a_segment_id] * len(tokens)
 
-        if tokens_b and not args.expl:
+        if tokens_b and not expl:
             tokens += tokens_b + [sep_token]
             segment_ids += [sequence_b_segment_id] * (len(tokens_b) + 1)
 
@@ -583,11 +583,11 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         else:
             raise KeyError(output_mode)
         
-        if args.expl and tokens_b:
-            #TODO: tokens2, input_ids2, input_mask2, segment_ids2
+        if expl and tokens_b:
+            #get tokens2, input_ids2, input_mask2, segment_ids2
             
             tokens2 = tokens_b + [sep_token]
-            segment_ids2 = [sequence_a_segment_id] * len(tokens)
+            segment_ids2 = [sequence_a_segment_id] * len(tokens2)
 
             if cls_token_at_end:
                 tokens2 = tokens2 + [cls_token]
