@@ -1251,15 +1251,28 @@ class BertForESNLI(BertPreTrainedModel):
 
         self.apply(self.init_weights)
         
-        decoder_config = None #TODO
+        decoder_config = None
         '''
-        'decoder_type','word_emb_dim','dec_rnn_dim','enc_rnn_dim','dpout_dec','n_vocab'
-        'word_index','word_vec','max_T_decoder','max_T_encoder','n_layers_dec','use_init'
-        'att_type' # 'lin' or 'dot'
-        'att_hid_dim','enc_rnn_dim'
-        'encoder_type'
+        decoder_config = {
+            'decoder_type',
+            'word_emb_dim',
+            'dec_rnn_dim',
+            'enc_rnn_dim',
+            'dpout_dec',
+            'n_vocab',
+            'word_index',
+            'word_vec',
+            'max_T_decoder',
+            'max_T_encoder',
+            'n_layers_dec',
+            'use_init',
+            'att_type', # 'lin' or 'dot'
+            'att_hid_dim',
+            'enc_rnn_dim',
+            'encoder_type'
+        }
         '''
-        #self.decoder = AttentionDecoder(decoder_config)
+        self.decoder = AttentionDecoder(decoder_config)
     
     def forward(self, input_ids, input_ids2, expl, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
@@ -1335,13 +1348,19 @@ class BertForESNLI(BertPreTrainedModel):
         
         #u, u_emb = self.encoder(s1) #esnli s1: (s1_batch, s1_len) # u/v: (?) ; u/v_emb: bsize x sentence_dim (?)
         #v, v_emb = self.encoder(s2) #esnli s2: (s2_batch, s2_len)
-        u, u_emb = outputs, embedding_output # TODO: figure out if the dimension matches
-        print(type(u))
-        print(type(u_emb))
-        v, v_emb = outputs2, embedding_output2
+        u, u_emb = outputs[0], outputs[1] # TODO: figure out if the dimension matches
+        v, v_emb = outputs2[0], outputs2[1]
+        
+        u_size = u.size()
+        u_emb_size = u_emb.size()
+        v_size = v.size()
+        v_emb_size = v_emb.size()
+        assert u_size == v_size, "encoding of premise and hypothesis differ in size"
+        assert u_emb_size == v_emb_size, "pooled encoding of premise and hypothesis differ in size"
         
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
         # expl: seqlen x bsize x word_embed_dim
+        print(expl.size())
         out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
         
