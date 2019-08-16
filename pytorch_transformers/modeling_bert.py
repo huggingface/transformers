@@ -1251,27 +1251,34 @@ class BertForESNLI(BertPreTrainedModel):
 
         self.apply(self.init_weights)
         
-        decoder_config = None
-        '''
         decoder_config = {
-            'decoder_type',
-            'word_emb_dim',
-            'dec_rnn_dim',
-            'enc_rnn_dim',
-            'dpout_dec',
-            'n_vocab',
-            'word_index',
-            'word_vec',
-            'max_T_decoder',
-            'max_T_encoder',
-            'n_layers_dec',
-            'use_init',
-            'att_type', # 'lin' or 'dot'
-            'att_hid_dim',
-            'enc_rnn_dim',
-            'encoder_type'
+            'word_emb_dim':, #?
+            'dec_rnn_dim':, #esnli
+            'enc_rnn_dim':,
+            
+            'dpout_dec':, #esnli
+            'dpout_enc':,
+            'dpout_fc':, #?
+            
+            'b_size':, # 8?
+            'n_classes':, # 3?
+            'pool_type':, #?
+            'encoder_type':, #?
+            'decoder_type':, #esnli
+            
+            'use_cuda':, #?
+            'n_vocab':, 
+            
+            'word_vec':, #?
+            'word_index':, #?
+            
+            'max_T_decoder':, #esnli
+            'max_T_encoder':, #?
+            'use_init':, #?
+            'n_layers_dec':, #?
+            'att_type':, # 'lin' or 'dot' ?
+            'att_hid_dim':, #?
         }
-        '''
         self.decoder = AttentionDecoder(decoder_config)
     
     def forward(self, input_ids, input_ids2, expl, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
@@ -1351,15 +1358,16 @@ class BertForESNLI(BertPreTrainedModel):
         u, u_emb = outputs[0], outputs[1] # TODO: figure out if the dimension matches
         v, v_emb = outputs2[0], outputs2[1]
         
-        u_size = u.size()
-        u_emb_size = u_emb.size()
-        v_size = v.size()
+        u_size = u.size() # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size(768, default)
+        u_emb_size = u_emb.size() # <batch size per gpu> (8, args) * hidden_size(768, default)
+        v_size = v.size() 
         v_emb_size = v_emb.size()
         assert u_size == v_size, "encoding of premise and hypothesis differ in size"
         assert u_emb_size == v_emb_size, "pooled encoding of premise and hypothesis differ in size"
+        assert u_size[2] == 768, "encoder output differs from hidden size"
         
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
-        # expl: seqlen x bsize x word_embed_dim
+        # expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
         print(expl.size())
         out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
