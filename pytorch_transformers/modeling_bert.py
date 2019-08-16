@@ -1251,33 +1251,49 @@ class BertForESNLI(BertPreTrainedModel):
 
         self.apply(self.init_weights)
         
+        decoder_config = None #delete once finished writing the decoder config
+        
+        sys.path.append('/data/rosa/e-SNLI-3/attention/')
+        from data_attention_bottom import get_train, get_dev_test_with_expl, build_vocab, get_word_dict
+        preproc = "preproc1_"
+        train_path = os.path.join('/data/rosa/e-SNLI-3/dataset', 'eSNLI')
+        train = get_train(train_path, preproc, 15, -1)
+        snli_dev = get_dev_test_with_expl('/data/rosa/e-SNLI-3/dataset/', 'dev', preproc, 15)
+
+        all_sentences = train['s1'] + train['s2'] + train['expl_1'] + snli_dev['s1'] + snli_dev['s2'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
+        word_vec = build_vocab(all_sentences, GLOVE_PATH)
+
+        expl_sentences = train['expl_1'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
+        word_index = get_word_dict(expl_sentences)
+        
+        #TODO: maybe use bert embedder instead of word_vec and word_index?
+        
         decoder_config = {
-            'word_emb_dim':, #?
-            'dec_rnn_dim':, #esnli
-            'enc_rnn_dim':,
+            'word_emb_dim':??, #??
+            'dec_rnn_dim':??, #esnli
+            'enc_rnn_dim': 384, #768/2, 768 is default hidden size
             
-            'dpout_dec':, #esnli
-            'dpout_enc':,
-            'dpout_fc':, #?
+            'dpout_dec':??, #esnli
+            #'dpout_enc':, # don't need
+            #'dpout_fc':, # don't need
             
-            'b_size':, # 8?
-            'n_classes':, # 3?
-            'pool_type':, #?
-            'encoder_type':, #?
-            'decoder_type':, #esnli
+            #'b_size':, # don't need, already passed in a batch when calling forward
+            #'pool_type':, # used only in encoder
+            'encoder_type': 'BertESNLIEncoder', 
+            'decoder_type':??, #esnli
             
-            'use_cuda':, #?
-            'n_vocab':, 
+            'use_cuda': True,
+            'n_vocab': 30522, #default
             
-            'word_vec':, #?
-            'word_index':, #?
+            'word_vec': word_vec, 
+            'word_index': word_index,
             
-            'max_T_decoder':, #esnli
-            'max_T_encoder':, #?
-            'use_init':, #?
-            'n_layers_dec':, #?
-            'att_type':, # 'lin' or 'dot' ?
-            'att_hid_dim':, #?
+            'max_T_decoder':??, #esnli
+            'max_T_encoder':??, #?
+            'use_init':??, #?
+            'n_layers_dec':??, #?
+            'att_type': 'dot', #according to esnli
+            'att_hid_dim':??, #?
         }
         self.decoder = AttentionDecoder(decoder_config)
     
