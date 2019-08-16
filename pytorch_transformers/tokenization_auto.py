@@ -85,7 +85,9 @@ class AutoTokenizer(object):
             config = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
 
         """
-        if 'bert' in pretrained_model_name_or_path:
+        if 'roberta' in pretrained_model_name_or_path:
+            return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'bert' in pretrained_model_name_or_path:
             return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
             return OpenAIGPTTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -97,8 +99,6 @@ class AutoTokenizer(object):
             return XLNetTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "

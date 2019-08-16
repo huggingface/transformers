@@ -110,7 +110,9 @@ class AutoConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        if 'bert' in pretrained_model_name_or_path:
+        if 'roberta' in pretrained_model_name_or_path:
+            return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif 'bert' in pretrained_model_name_or_path:
             return BertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
             return OpenAIGPTConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -122,8 +124,6 @@ class AutoConfig(object):
             return XLNetConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
@@ -225,7 +225,9 @@ class AutoModel(object):
             model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'bert' in pretrained_model_name_or_path:
+        if 'roberta' in pretrained_model_name_or_path:
+            return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'bert' in pretrained_model_name_or_path:
             return BertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
             return OpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -237,8 +239,6 @@ class AutoModel(object):
             return XLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
