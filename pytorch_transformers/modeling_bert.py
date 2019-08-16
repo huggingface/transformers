@@ -1244,15 +1244,24 @@ from models_attention_bottom_separate import AttentionDecoder
 
 class BertForESNLI(BertPreTrainedModel):
     def __init__(self,config):
-        super(BertForESNLI, self).__init__(config) #or super(eSNLIAttention, self).__init__() ?
-        
-        self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
-        self.pooler = BertPooler(config)
+        super(BertForESNLI, self).__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
         self.apply(self.init_weights)
         
-        #decoder_config = ?
+        #super(BertForESNLI, self).__init__(config) #or super(eSNLIAttention, self).__init__() ?
+        
+        #self.embeddings = BertEmbeddings(config)
+        #self.encoder = BertEncoder(config)
+        #self.pooler = BertPooler(config)
+
+        #self.apply(self.init_weights)
+        
+        decoder_config = None #TODO
         '''
         'decoder_type','word_emb_dim','dec_rnn_dim','enc_rnn_dim','dpout_dec','n_vocab'
         'word_index','word_vec','max_T_decoder','max_T_encoder','n_layers_dec','use_init'

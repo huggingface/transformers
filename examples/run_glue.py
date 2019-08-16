@@ -33,10 +33,11 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
+                                  BertForESNLI,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
-                                  XLNetTokenizer)
+                                  XLNetTokenizer, PretrainedConfig,)
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
@@ -45,10 +46,6 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
 
 import sys
 import time
-
-sys.path.append('/data/rosa/pytorch-transformers/pytorch_transformers/')
-print(sys.path)
-from modeling_bert import BertForESNLI
 
 file_handler = logging.FileHandler(filename='glue_'+time.strftime("%d:%m") + "_" + time.strftime("%H:%M:%S")+'.log')
 stdout_handler = logging.StreamHandler(sys.stdout)
