@@ -1253,10 +1253,12 @@ class BertForESNLI(BertPreTrainedModel):
         
         decoder_config = None #delete once finished writing the decoder config
         
-        sys.path.append('/data/rosa/e-SNLI-3/attention/')
+        sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
         from data_attention_bottom import get_train, get_dev_test_with_expl, build_vocab, get_word_dict
+        GLOVE_PATH = '/data/glove/glove.840B.300d.txt'
+        
         preproc = "preproc1_"
-        train_path = os.path.join('/data/rosa/e-SNLI-3/dataset', 'eSNLI')
+        train_path = os.path.join('/data/rosa/e-SNLI-3/dataset', '')
         train = get_train(train_path, preproc, 15, -1)
         snli_dev = get_dev_test_with_expl('/data/rosa/e-SNLI-3/dataset/', 'dev', preproc, 15)
 
