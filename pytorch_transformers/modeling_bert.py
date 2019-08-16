@@ -1269,18 +1269,14 @@ class BertForESNLI(BertPreTrainedModel):
         #TODO: maybe use bert embedder instead of word_vec and word_index?
         
         decoder_config = {
-            'word_emb_dim':??, #??
-            'dec_rnn_dim':??, #esnli
+            'dec_rnn_dim': 1024, #esnli's default
             'enc_rnn_dim': 384, #768/2, 768 is default hidden size
+            'word_emb_dim': 384, #bert embedding size is same as one of the encoding result's dimensions
             
-            'dpout_dec':??, #esnli
-            #'dpout_enc':, # don't need
-            #'dpout_fc':, # don't need
+            'dpout_dec': 0.5, #esnli's default
             
-            #'b_size':, # don't need, already passed in a batch when calling forward
-            #'pool_type':, # used only in encoder
             'encoder_type': 'BertESNLIEncoder', 
-            'decoder_type':??, #esnli
+            'decoder_type': 'lstm', #esnli's default
             
             'use_cuda': True,
             'n_vocab': 30522, #default
@@ -1288,12 +1284,11 @@ class BertForESNLI(BertPreTrainedModel):
             'word_vec': word_vec, 
             'word_index': word_index,
             
-            'max_T_decoder':??, #esnli
-            'max_T_encoder':??, #?
-            'use_init':??, #?
-            'n_layers_dec':??, #?
+            'max_T_decoder': 40, #esnli's default
+            'use_init': True, #esnli's default
+            'n_layers_dec': 1, #esnli's default
             'att_type': 'dot', #according to esnli
-            'att_hid_dim':??, #?
+            'att_hid_dim': 512, #esnli's default
         }
         self.decoder = AttentionDecoder(decoder_config)
     
