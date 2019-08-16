@@ -50,7 +50,7 @@ class AttentionDecoder(nn.Module):
 		if config['encoder_type'] == "LSTMEncoder":
 			self.sent_dim = self.sent_dim / 2 
 
-		assert self.sent_dim == 4096, str(self.sent_dim)
+		assert self.sent_dim == 768, str(self.sent_dim)
 		# TODO: remove this when implemented linear attention
 		assert self.att_type == 'dot'
 

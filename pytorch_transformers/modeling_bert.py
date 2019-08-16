@@ -1388,8 +1388,12 @@ class BertForESNLI(BertPreTrainedModel):
         assert u_size[2] == 768, "encoder output differs from hidden size"
         
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
-        # expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
-        print(expl.size())
+        # want: expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
+        print(expl.size()) #currently a tensor of size [8]
+        print(expl)
+        # ? TODO: make u (8 * 128 * 768) into (128 * 8 * 768)
+        # u_emb (8 * 768) is already (8 * 768)
+        # Note: maybe change 40 in the config to 128 if max_T_decoder lead to error somewhere
         out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
         
