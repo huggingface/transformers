@@ -425,9 +425,10 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             # Account for [CLS], [SEP], [SEP] with "- 3"
             _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
         else:
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(tokens_a) > max_seq_length - 2:
-                tokens_a = tokens_a[:(max_seq_length - 2)]
+            # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
+            special_tokens_count = 3 if sep_token_extra else 2
+            if len(tokens_a) > max_seq_length - special_tokens_count:
+                tokens_a = tokens_a[:(max_seq_length - special_tokens_count)]
 
         # The convention in BERT is:
         # (a) For sequence pairs:
