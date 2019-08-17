@@ -76,7 +76,7 @@ import torch
 from pytorch_transformers import *
 
 # PyTorch-Transformers has a unified API
-# for 6 transformer architectures and 27 pretrained weights.
+# for 7 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
 MODELS = [(BertModel,       BertTokenizer,      'bert-base-uncased'),
           (OpenAIGPTModel,  OpenAIGPTTokenizer, 'openai-gpt'),
