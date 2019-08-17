@@ -12,6 +12,7 @@ The library currently contains PyTorch implementations, pre-trained model weight
 4. **[Transformer-XL](https://github.com/kimiyoung/transformer-xl)** (from Google/CMU) released with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
 5. **[XLNet](https://github.com/zihangdai/xlnet/)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
+7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du et al.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/pytorch-transformers/examples.html).
 
@@ -82,7 +83,8 @@ MODELS = [(BertModel,       BertTokenizer,      'bert-base-uncased'),
           (GPT2Model,       GPT2Tokenizer,      'gpt2'),
           (TransfoXLModel,  TransfoXLTokenizer, 'transfo-xl-wt103'),
           (XLNetModel,      XLNetTokenizer,     'xlnet-base-cased'),
-          (XLMModel,        XLMTokenizer,       'xlm-mlm-enfr-1024')]
+          (XLMModel,        XLMTokenizer,       'xlm-mlm-enfr-1024'),
+          (RobertaModel,    RobertaTokenizer,   'roberta-base')]
 
 # Let's encode some text in a sequence of hidden-states using each model:
 for model_class, tokenizer_class, pretrained_weights in MODELS:
@@ -123,7 +125,7 @@ traced_model = torch.jit.trace(model, (input_ids,))
 model.save_pretrained('./directory/to/save/')  # save
 model = model_class.from_pretrained('./directory/to/save/')  # re-load
 tokenizer.save_pretrained('./directory/to/save/')  # save
-tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
+tokenizer = tokenizer_class.from_pretrained('./directory/to/save/')  # re-load
 
 # SOTA examples for GLUE, SQUAD, text generation...
 ```
