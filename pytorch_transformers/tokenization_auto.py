@@ -24,6 +24,7 @@ from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 from .tokenization_xlm import XLMTokenizer
+from .tokenization_roberta import RobertaTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class AutoTokenizer(object):
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
+            - contains `roberta`: RobertaTokenizer (RoBERTa model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -64,6 +66,7 @@ class AutoTokenizer(object):
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
+            - contains `roberta`: RobertaTokenizer (XLM model)
 
         Params:
             **pretrained_model_name_or_path**: either:
@@ -82,7 +85,9 @@ class AutoTokenizer(object):
             config = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
 
         """
-        if 'bert' in pretrained_model_name_or_path:
+        if 'roberta' in pretrained_model_name_or_path:
+            return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'bert' in pretrained_model_name_or_path:
             return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
             return OpenAIGPTTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -97,4 +102,4 @@ class AutoTokenizer(object):
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
