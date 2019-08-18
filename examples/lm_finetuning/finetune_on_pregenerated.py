@@ -155,12 +155,12 @@ def main():
                         help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                         "0 (default value): dynamic loss scaling.\n"
                         "Positive power of 2: static loss scaling value.\n")
-    parser.add_argument("--warmup_steps",
-                        default=0,
+    parser.add_argument("--warmup_steps", 
+                        default=0, 
                         type=int,
                         help="Linear warmup over warmup_steps.")
-    parser.add_argument("--adam_epsilon",
-                        default=1e-8,
+    parser.add_argument("--adam_epsilon", 
+                        default=1e-8, 
                         type=float,
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--learning_rate",
@@ -322,8 +322,7 @@ def main():
     # Save a trained model
     if args.local_rank == -1 or torch.distributed.get_rank() == 0:
         logging.info("** ** * Saving fine-tuned model ** ** * ")
-        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-        model_to_save.save_pretrained(args.output_dir)
+        model.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
 
 
