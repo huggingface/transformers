@@ -1143,6 +1143,50 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         return outputs  # return (loss), logits, mems, (hidden states), (attentions)
 
 
+class XLNetForMultipleChoice(XLNetPreTrainedModel):
+    r"""
+
+    """
+    def __init__(self, config):
+        super(XLNetForMultipleChoice, self).__init__(config)
+
+        self.transformer = XLNetModel(config)
+        self.sequence_summary = SequenceSummary(config)
+        self.logits_proj = nn.Linear(config.d_model, 1)
+
+        self.apply(self.init_weights)
+
+    def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
+                mems=None, perm_mask=None, target_mapping=None,
+                labels=None, head_mask=None):
+        num_choices = input_ids.shape[1]
+
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1))
+        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
+        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        flat_input_mask = input_mask.view(-1, input_mask.size(-1) if input_mask is not None else None)
+
+        transformer_outputs = self.transformer(flat_input_ids, token_type_ids=flat_token_type_ids,
+                                               input_mask=flat_input_mask, attention_mask=flat_attention_mask,
+                                               mems=mems, perm_mask=perm_mask, target_mapping=target_mapping,
+                                               head_mask=head_mask)
+
+
+        output = transformer_outputs[0]
+
+        output = self.sequence_summary(output)
+        logits = self.logits_proj(output)
+        reshaped_logits = logits.view(-1, num_choices)
+        outputs = (reshaped_logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # return (loss), logits, mems, (hidden states), (attentions)
+
+
 @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
