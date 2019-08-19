@@ -70,12 +70,11 @@ class RobertaEmbeddings(nn.Module):
         if position_ids is None:
             # Position numbers begin at padding_idx+1. Padding symbols are ignored.
             # cf. fairseq's `utils.make_positions`
-            # position_ids.masked_fill_(mask,self.padding_idx)
             # fairseq version for ONNX and XLA compatiblity
             mask = input_ids.ne(self.padding_idx).int()
             position_ids = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + self.padding_idx
 
-        if self.token_type_embeddings is not None and self.token_type_ids is None:
+        if self.token_type_embeddings is not None and token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids,dtype=torch.long, device=input_ids.device)
 
         words_embeddings = self.word_embeddings(input_ids)
