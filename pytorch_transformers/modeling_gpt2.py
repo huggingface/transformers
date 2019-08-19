@@ -383,6 +383,8 @@ GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.GPT2Config`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 GPT2_INPUTS_DOCSTRING = r"""    Inputs:
