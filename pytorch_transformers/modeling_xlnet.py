@@ -1164,7 +1164,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        flat_input_mask = input_mask.view(-1, input_mask.size(-1) if input_mask is not None else None)
+        flat_input_mask = input_mask.view(-1, input_mask.size(-1)) if input_mask is not None else None
 
         transformer_outputs = self.transformer(flat_input_ids, token_type_ids=flat_token_type_ids,
                                                input_mask=flat_input_mask, attention_mask=flat_attention_mask,
