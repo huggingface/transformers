@@ -39,12 +39,10 @@ from pytorch_transformers import (WEIGHTS_NAME, GPT2Config, GPT2LMHeadModel, GPT
                                   BertConfig, BertForMaskedLM, BertTokenizer, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from pytorch_transformers import AdamW, WarmupLinearSchedule
+logger = logging.getLogger(__name__)
 
 from utils_lm import WikiTextDataset
 
-logger = logging.getLogger(__name__)
-
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config,)), ())
 
 MODEL_CLASSES = {
     'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
@@ -68,10 +66,7 @@ def mask_tokens(inputs, tokenizer, args):
     labels[~masked_indices.bool()] = -1  # We only compute loss on masked tokens
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).byte() & masked_indices
 
-    if args.model_name == "bert":
-        inputs[indices_replaced.bool()] = tokenizer.vocab["[MASK]"]  # 80% of the time, replace masked input tokens with [MASK]
-    elif args.model_name == "roberta":
-        inputs[indices_replaced.bool()] = tokenizer.encoder["<mask>"]  # 80% of the time, replace masked input tokens with <mask>
+    inputs[indices_replaced.bool()] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token) # 80% of the time, replace masked input tokens with [MASK]
     indices_random = (torch.bernoulli(torch.full(labels.shape, 0.5)).byte() & masked_indices & ~indices_replaced).bool()
     random_words = torch.randint(args.num_embeddings, labels.shape, dtype=torch.long)
     inputs[indices_random] = random_words[
@@ -246,10 +241,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
-    if args.local_rank not in [-1, 0]:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    dataset = WikiTextDataset(tokenizer, file="test" if evaluate else "train", directory=args.data_dir)
+    dataset = WikiTextDataset(args, tokenizer, file="test" if evaluate else "train", directory=args.data_dir)
     return dataset
 
 
