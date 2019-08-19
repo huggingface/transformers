@@ -71,6 +71,10 @@ class PretrainedConfig(object):
     r""" Base class for all configuration classes.
         Handles a few parameters common to all models' configurations as well as methods for loading/downloading/saving configurations.
 
+        Note:
+            A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to initialize a model does **not** load the model weights.
+            It only affects the model's configuration.
+
         Class attributes (overridden by derived classes):
             - ``pretrained_config_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
 
