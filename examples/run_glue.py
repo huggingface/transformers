@@ -77,7 +77,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def train(args, train_dataset, model, tokenizer):
+def train(args, train_dataset, model, tokenizer, all_expl=None):
     """ Train the model """
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
@@ -145,7 +145,8 @@ def train(args, train_dataset, model, tokenizer):
                 inputs['input_ids2'] = batch[4]
                 inputs['attention_mask2'] = batch[5]
                 inputs['token_type_ids2'] = batch[6]
-                inputs['expl'] = batch[7]
+                #inputs['expl'] = batch[7]
+                inputs['expl'] = all_expl
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -314,13 +315,13 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         all_input_ids2 = torch.tensor([f.input_ids2 for f in features], dtype=torch.long)
         all_input_mask2 = torch.tensor([f.input_mask2 for f in features], dtype=torch.long)
         all_segment_ids2 = torch.tensor([f.segment_ids2 for f in features], dtype=torch.long)
-        all_expl = torch.tensor([f.expl for f in features], dtype=torch.long)
+        all_expl = [f.expl for f in features]
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids,
-                                all_input_ids2, all_input_mask2, all_segment_ids2, all_expl)
+                                all_input_ids2, all_input_mask2, all_segment_ids2)
+        return dataset, all_expl
     else:
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        
-    return dataset
+        return dataset
 
 
 def main():
@@ -427,7 +428,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         #device = torch.device("cuda:1") #TODO: get rid of this line once 0 is available
-        args.n_gpu = torch.cuda.device_count() #- 1 #TODO: get rid of -1 once 0 is available
+        args.n_gpu = torch.cuda.device_count() - 1 #TODO: get rid of -1 once other gpus are available
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
@@ -474,8 +475,12 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+        all_expl = None
+        if args.expl:
+            train_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        else:
+            train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        global_step, tr_loss = train(args, train_dataset, model, tokenizer, all_expl=all_expl)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 

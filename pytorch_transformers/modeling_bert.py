@@ -1376,7 +1376,7 @@ class BertForESNLI(BertPreTrainedModel):
         
         #u, u_emb = self.encoder(s1) #esnli s1: (s1_batch, s1_len) # u/v: (?) ; u/v_emb: bsize x sentence_dim (?)
         #v, v_emb = self.encoder(s2) #esnli s2: (s2_batch, s2_len)
-        u, u_emb = outputs[0], outputs[1] # TODO: figure out if the dimension matches
+        u, u_emb = outputs[0], outputs[1] 
         v, v_emb = outputs2[0], outputs2[1]
         
         u_size = u.size() # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size(768, default)
@@ -1389,8 +1389,8 @@ class BertForESNLI(BertPreTrainedModel):
         
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
         # want: expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
-        print(expl.size()) #currently a tensor of size [8]
-        print(expl)
+        print(len(expl)) #currently a tensor of size [8]
+        #print(expl)
         # ? TODO: make u (8 * 128 * 768) into (128 * 8 * 768)
         # u_emb (8 * 768) is already (8 * 768)
         # Note: maybe change 40 in the config to 128 if max_T_decoder lead to error somewhere
