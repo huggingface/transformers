@@ -25,7 +25,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from pytorch_transformers.modeling_bert import (BertConfig, BertEmbeddings,
+from pytorch_transformers.modeling_bert import (BertConfig,
                                                 BertLayerNorm, BertModel,
                                                 BertPreTrainedModel, gelu)
 
@@ -46,22 +46,47 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class RobertaEmbeddings(BertEmbeddings):
+class RobertaEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
     def __init__(self, config):
-        super(RobertaEmbeddings, self).__init__(config)
-        self.padding_idx = 1
+        super(RobertaEmbeddings, self).__init__()
+        self.padding_idx = config.padding_idx
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, 
+                                            padding_idx=config.padding_idx)
+        self.position_embeddings = nn.Embedding(self.padding_idx + config.max_position_embeddings + 1,
+                                                config.hidden_size,
+                                                padding_idx=config.padding_idx)
+        if config.type_vocab_size > 0:
+            self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        else:
+            self.token_type_embeddings = None
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, position_ids=None):
         seq_length = input_ids.size(1)
         if position_ids is None:
             # Position numbers begin at padding_idx+1. Padding symbols are ignored.
             # cf. fairseq's `utils.make_positions`
-            position_ids = torch.arange(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=torch.long, device=input_ids.device)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-        return super(RobertaEmbeddings, self).forward(input_ids, token_type_ids=token_type_ids, position_ids=position_ids)
+            # position_ids.masked_fill_(mask,self.padding_idx)
+            # fairseq version for ONNX and XLA compatiblity
+            mask = input_ids.ne(self.padding_idx).int()
+            position_ids = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + self.padding_idx
+
+        if self.token_type_embeddings is not None and self.token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids,dtype=torch.long, device=input_ids.device)
+
+        words_embeddings = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = words_embeddings + position_embeddings
+        if self.token_type_embeddings is not None:
+            token_type_embeddings = self.token_type_embeddings(token_type_ids)
+            embeddings = embeddings + token_type_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
 
 
 class RobertaConfig(BertConfig):
