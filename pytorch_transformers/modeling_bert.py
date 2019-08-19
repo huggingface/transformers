@@ -1249,6 +1249,20 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
 sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
 from models_attention_bottom_separate import AttentionDecoder
+sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
+from data_attention_bottom import get_train, get_dev_test_with_expl, build_vocab, get_word_dict, get_batch
+GLOVE_PATH = '/data/glove/glove.840B.300d.txt'
+
+preproc = "preproc1_"
+esnli_train_path = os.path.join('/data/rosa/e-SNLI-3/dataset', '')
+esnli_train = get_train(esnli_train_path, preproc, 15, -1)
+snli_dev = get_dev_test_with_expl('/data/rosa/e-SNLI-3/dataset/', 'dev', preproc, 15)
+
+all_sentences = esnli_train['s1'] + esnli_train['s2'] + esnli_train['expl_1'] + snli_dev['s1'] + snli_dev['s2'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
+esnli_word_vec = build_vocab(all_sentences, GLOVE_PATH)
+
+expl_sentences = esnli_train['expl_1'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
+esnli_word_index = get_word_dict(expl_sentences)
 
 class BertForESNLI(BertPreTrainedModel):
     def __init__(self,config):
@@ -1260,21 +1274,6 @@ class BertForESNLI(BertPreTrainedModel):
         self.apply(self.init_weights)
         
         decoder_config = None #delete once finished writing the decoder config
-        
-        sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
-        from data_attention_bottom import get_train, get_dev_test_with_expl, build_vocab, get_word_dict
-        GLOVE_PATH = '/data/glove/glove.840B.300d.txt'
-        
-        preproc = "preproc1_"
-        train_path = os.path.join('/data/rosa/e-SNLI-3/dataset', '')
-        train = get_train(train_path, preproc, 15, -1)
-        snli_dev = get_dev_test_with_expl('/data/rosa/e-SNLI-3/dataset/', 'dev', preproc, 15)
-
-        all_sentences = train['s1'] + train['s2'] + train['expl_1'] + snli_dev['s1'] + snli_dev['s2'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
-        word_vec = build_vocab(all_sentences, GLOVE_PATH)
-
-        expl_sentences = train['expl_1'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
-        word_index = get_word_dict(expl_sentences)
         
         #TODO: maybe use bert embedder instead of word_vec and word_index?
         
@@ -1291,8 +1290,8 @@ class BertForESNLI(BertPreTrainedModel):
             'use_cuda': True,
             'n_vocab': 30522, #default
             
-            'word_vec': word_vec, 
-            'word_index': word_index,
+            'word_vec': esnli_word_vec, 
+            'word_index': esnli_word_index,
             
             'max_T_decoder': 40, #esnli's default
             'use_init': True, #esnli's default
@@ -1388,8 +1387,11 @@ class BertForESNLI(BertPreTrainedModel):
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
         # want: expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
         expl = [all_expl[i] for i in expl_idx] # a list of 8 explanation texts
+        expl_token = [line.rstrip() for line in expl]
+        input_expl_batch, _ = get_batch(expl_token, esnli_word_vec)
+        
         # ? TODO: make u (8 * 128 * 768) into (128 * 8 * 768)
         # u_emb (8 * 768) is already (8 * 768)
         # Note: maybe change 40 in the config to 128 if max_T_decoder lead to error somewhere
-        out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
+        out_expl = self.decoder(input_expl_batch, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
