@@ -145,8 +145,8 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 inputs['input_ids2'] = batch[4]
                 inputs['attention_mask2'] = batch[5]
                 inputs['token_type_ids2'] = batch[6]
-                #inputs['expl'] = batch[7]
-                inputs['expl'] = all_expl
+                inputs['expl_idx'] = batch[7]
+                inputs['all_expl'] = all_expl
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -316,8 +316,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         all_input_mask2 = torch.tensor([f.input_mask2 for f in features], dtype=torch.long)
         all_segment_ids2 = torch.tensor([f.segment_ids2 for f in features], dtype=torch.long)
         all_expl = [f.expl for f in features]
+        all_expl_idx = torch.tensor([idx for idx in range(len(features))], dtype=torch.long)
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids,
-                                all_input_ids2, all_input_mask2, all_segment_ids2)
+                                all_input_ids2, all_input_mask2, all_segment_ids2, all_expl_idx)
         return dataset, all_expl
     else:
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)

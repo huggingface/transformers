@@ -1302,7 +1302,7 @@ class BertForESNLI(BertPreTrainedModel):
         }
         self.decoder = AttentionDecoder(decoder_config)
     
-    def forward(self, input_ids, input_ids2, expl, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, input_ids2, all_expl, expl_idx, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
         position_ids = None
         position_ids2 = None
@@ -1373,9 +1373,6 @@ class BertForESNLI(BertPreTrainedModel):
 
         outputs2 = (sequence_output2, pooled_output2,) + encoder_outputs2[1:]
         
-        
-        #u, u_emb = self.encoder(s1) #esnli s1: (s1_batch, s1_len) # u/v: (?) ; u/v_emb: bsize x sentence_dim (?)
-        #v, v_emb = self.encoder(s2) #esnli s2: (s2_batch, s2_len)
         u, u_emb = outputs[0], outputs[1] 
         v, v_emb = outputs2[0], outputs2[1]
         
@@ -1386,15 +1383,13 @@ class BertForESNLI(BertPreTrainedModel):
         assert u_size == v_size, "encoding of premise and hypothesis differ in size"
         assert u_emb_size == v_emb_size, "pooled encoding of premise and hypothesis differ in size"
         assert u_size[2] == 768, "encoder output differs from hidden size"
+        assert u_size[0] == len(expl_idx), "number of premises differ from number of explanations"
         
         # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
         # want: expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
-        print(len(expl)) #currently a tensor of size [8]
-        #print(expl)
+        expl = [all_expl[i] for i in expl_idx] # a list of 8 explanation texts
         # ? TODO: make u (8 * 128 * 768) into (128 * 8 * 768)
         # u_emb (8 * 768) is already (8 * 768)
         # Note: maybe change 40 in the config to 128 if max_T_decoder lead to error somewhere
         out_expl = self.decoder(expl, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
         return out_expl
-        
-        
