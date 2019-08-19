@@ -34,7 +34,7 @@ class AttentionDecoder(nn.Module):
 		self.word_index = config['word_index']
 		self.word_vec = config['word_vec']
 		self.max_T_decoder = config['max_T_decoder']
-		#self.max_T_encoder = config['max_T_encoder']
+		self.max_T_encoder = config['max_T_encoder']
 		self.n_layers_dec = config['n_layers_dec']
 		# for decoder intial state
 		self.use_init = config['use_init']

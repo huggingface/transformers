@@ -1280,7 +1280,7 @@ class BertForESNLI(BertPreTrainedModel):
         decoder_config = {
             'dec_rnn_dim': 1024, #esnli's default
             'enc_rnn_dim': 384, #768/2, 768 is default hidden size
-            'word_emb_dim': 384, #bert embedding size is same as one of the encoding result's dimensions
+            'word_emb_dim': 300, #bert emb: 384, esnli emb(glove): 300
             
             'dpout_dec': 0.5, #esnli's default
             
@@ -1294,6 +1294,7 @@ class BertForESNLI(BertPreTrainedModel):
             'word_index': esnli_word_index,
             
             'max_T_decoder': 40, #esnli's default
+            'max_T_encoder': 128, #make consistent with bert encoder
             'use_init': True, #esnli's default
             'n_layers_dec': 1, #esnli's default
             'att_type': 'dot', #according to esnli
@@ -1389,8 +1390,12 @@ class BertForESNLI(BertPreTrainedModel):
         expl = [all_expl[i] for i in expl_idx] # a list of 8 explanation texts
         expl_token = [line.rstrip() for line in expl]
         input_expl_batch, _ = get_batch(expl_token, esnli_word_vec)
+        print(type(input_expl_batch)) #tensor
+        print(input_expl_batch.size()) #122, 6, 300 want?: 128?, 6, 384?
         
-        # ? TODO: make u (8 * 128 * 768) into (128 * 8 * 768)
+        # make u (8 * 128 * 768) into (128 * 8 * 768)
+        u = u.permute(1, 0, 2)
+        v = v.permute(1, 0, 2)
         # u_emb (8 * 768) is already (8 * 768)
         # Note: maybe change 40 in the config to 128 if max_T_decoder lead to error somewhere
         out_expl = self.decoder(input_expl_batch, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
