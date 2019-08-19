@@ -253,7 +253,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results {} *****".format(prefix))
             writer.write("model           =%s\n" % str(args.model_name_or_path))
-            writer.write("total batch size=%d\n" % (args.train_batch_size * args.gradient_accumulation_steps *
+            writer.write("total batch size=%d\n" % (args.per_gpu_train_batch_size * args.gradient_accumulation_steps *
                          (torch.distributed.get_world_size() if args.local_rank != -1 else 1)))
             writer.write("train num epochs=%d\n" % args.num_train_epochs)
             writer.write("fp16            =%s\n" % args.fp16)
