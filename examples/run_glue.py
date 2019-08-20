@@ -149,6 +149,11 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 inputs['all_expl'] = all_expl
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
+            
+            a = tokenizer._convert_id_to_token(outputs)
+            print(a)
+            
+            
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
             if args.n_gpu > 1:

@@ -1247,23 +1247,37 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
-sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
-from models_attention_bottom_separate import AttentionDecoder
-sys.path.append('/data/rosa/pytorch-transformers/esnli_decoder/')
-from data_attention_bottom import get_train, get_dev_test_with_expl, build_vocab, get_word_dict, get_batch
-GLOVE_PATH = '/data/glove/glove.840B.300d.txt'
 
-preproc = "preproc1_"
-esnli_train_path = os.path.join('/data/rosa/e-SNLI-3/dataset', '')
-esnli_train = get_train(esnli_train_path, preproc, 15, -1)
-snli_dev = get_dev_test_with_expl('/data/rosa/e-SNLI-3/dataset/', 'dev', preproc, 15)
+class DecoderRNN(nn.Module):
+    def __init__(self, hidden_size, output_size):
+        super(DecoderRNN, self).__init__()
+        self.hidden_size = hidden_size
 
-all_sentences = esnli_train['s1'] + esnli_train['s2'] + esnli_train['expl_1'] + snli_dev['s1'] + snli_dev['s2'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
-esnli_word_vec = build_vocab(all_sentences, GLOVE_PATH)
+        self.embedding = nn.Embedding(output_size, hidden_size)
+        self.lstm = nn.LSTM(hidden_size, hidden_size, 1)
+        self.out = nn.Linear(hidden_size, output_size)
+        self.softmax = nn.LogSoftmax(dim=1)
 
-expl_sentences = esnli_train['expl_1'] + snli_dev['expl_1'] + snli_dev['expl_2'] + snli_dev['expl_3']
-esnli_word_index = get_word_dict(expl_sentences)
+    def forward(self, input1, hidden):
+        
+        #output = self.embedding(input1).view(1, 1, -1) # error: want scalar (int instead of float) type long, but got tensor.cuda.float type
+        #output = input1.view(1, 1, -1) # no new embedding layer
+        #input2 = torch.ones_like(input1, dtype=torch.float)
+        #hidden2 = torch.ones_like(hidden, dtype=torch.float)
 
+        output = input1#.view(1, 1, -1)
+        
+        import torch.nn.functional as F
+        output = F.relu(output)
+        
+        output, hidden = self.lstm(output, (hidden, hidden))
+        output = self.softmax(self.out(output[0]))
+        return output, hidden
+
+    def initHidden(self):
+        return torch.zeros(1, 1, self.hidden_size, device=device)
+    
+    
 class BertForESNLI(BertPreTrainedModel):
     def __init__(self,config):
         super(BertForESNLI, self).__init__(config)
@@ -1273,40 +1287,22 @@ class BertForESNLI(BertPreTrainedModel):
 
         self.apply(self.init_weights)
         
-        decoder_config = None #delete once finished writing the decoder config
+        hidden_size = 768 #to be consistent with bert
+        output_size = 128 #to be consistent with args max_seq_len
+        #self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=output_size).to('cuda')
         
-        #TODO: maybe use bert embedder instead of word_vec and word_index?
+        #self.cls = BertOnlyNSPHead(config)
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(config.hidden_size,
+                                 config.vocab_size,
+                                 bias=False)
         
-        decoder_config = {
-            'dec_rnn_dim': 1024, #esnli's default
-            'enc_rnn_dim': 384, #768/2, 768 is default hidden size
-            'word_emb_dim': 300, #bert emb: 384, esnli emb(glove): 300
-            
-            'dpout_dec': 0.5, #esnli's default
-            
-            'encoder_type': 'BertESNLIEncoder', 
-            'decoder_type': 'lstm', #esnli's default
-            
-            'use_cuda': True,
-            'n_vocab': 30522, #default
-            
-            'word_vec': esnli_word_vec, 
-            'word_index': esnli_word_index,
-            
-            'max_T_decoder': 40, #esnli's default
-            'max_T_encoder': 128, #make consistent with bert encoder
-            'use_init': True, #esnli's default
-            'n_layers_dec': 1, #esnli's default
-            'att_type': 'dot', #according to esnli
-            'att_hid_dim': 512, #esnli's default
-        }
-        self.decoder = AttentionDecoder(decoder_config)
     
     def forward(self, input_ids, input_ids2, all_expl, expl_idx, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
         position_ids = None
         position_ids2 = None
-        
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
@@ -1315,50 +1311,20 @@ class BertForESNLI(BertPreTrainedModel):
             attention_mask2 = torch.ones_like(input_ids2)
         if token_type_ids2 is None:
             token_type_ids2 = torch.zeros_like(input_ids2)
-
-        # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, to_seq_length]
-        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-        # this attention mask is more simple than the triangular masking of causal attention
-        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         extended_attention_mask2 = attention_mask2.unsqueeze(1).unsqueeze(2)
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         extended_attention_mask2 = extended_attention_mask2.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
         extended_attention_mask2 = (1.0 - extended_attention_mask2) * -10000.0
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        '''
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.config.num_hidden_layers
-        '''
         head_mask = [None] * self.config.num_hidden_layers
-
         embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
         encoder_outputs = self.encoder(embedding_output,
                                        extended_attention_mask,
                                        head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
-
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
         
         # for s2
@@ -1376,8 +1342,14 @@ class BertForESNLI(BertPreTrainedModel):
         u, u_emb = outputs[0], outputs[1] 
         v, v_emb = outputs2[0], outputs2[1]
         
-        u_size = u.size() # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size(768, default)
-        u_emb_size = u_emb.size() # <batch size per gpu> (8, args) * hidden_size(768, default)
+        # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size(768, default)
+        # a.k.a outputs
+        u_size = u.size() 
+        
+        # <batch size per gpu> (8, args) * hidden_size(768, default)
+        # a.k.a. final state
+        u_emb_size = u_emb.size() 
+        
         v_size = v.size() 
         v_emb_size = v_emb.size()
         assert u_size == v_size, "encoding of premise and hypothesis differ in size"
@@ -1385,18 +1357,28 @@ class BertForESNLI(BertPreTrainedModel):
         assert u_size[2] == 768, "encoder output differs from hidden size"
         assert u_size[0] == len(expl_idx), "number of premises differ from number of explanations"
         
-        # TODO: make expl into dim: T * bs * emb_dim, where T is length of longest sentence in the batch
-        # want: expl: seqlen(128) x bsize(8) x word_embed_dim (= hidden_size = 768)
         expl = [all_expl[i] for i in expl_idx] # a list of 8 explanation texts
         expl_token = [line.rstrip() for line in expl]
-        input_expl_batch, _ = get_batch(expl_token, esnli_word_vec)
-        print(type(input_expl_batch)) #tensor
-        print(input_expl_batch.size()) #122, 6, 300 want?: 128?, 6, 384?
-        
+
         # make u (8 * 128 * 768) into (128 * 8 * 768)
-        u = u.permute(1, 0, 2)
+        #u = u.permute(1, 0, 2)
         v = v.permute(1, 0, 2)
         # u_emb (8 * 768) is already (8 * 768)
-        # Note: maybe change 40 in the config to 128 if max_T_decoder lead to error somewhere
-        out_expl = self.decoder(input_expl_batch, u, v, u_emb, v_emb, mode, visualize = False) #esnli expl: expl_batch
-        return out_expl
+        
+        u = u.to('cuda')
+        u_emb = u_emb.to('cuda')
+        #decoder_output, decoder_hidden = self.decoder(u, u[-1].reshape((1,128,768))) #take only premise's encoding results and produce a next sentence for now
+        # decoder_output 128 * 128
+        # decoder_hidden[0] 1 * 128 * 768
+        
+        #prediction_scores = self.cls(u) # no decoder, directly predict next word?
+        #print(prediction_scores.size())
+        
+        hidden_states = u[-1][0]
+        hidden_states = self.decoder(hidden_states)
+        print(hidden_states.size())
+        
+        return hidden_states
+
+        # convert output/hidden to a string for explanation
+        return None
