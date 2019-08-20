@@ -390,10 +390,16 @@ class WnliProcessor(DataProcessor):
 
 def convert_examples_to_features(examples, label_list, max_seq_length,
                                  tokenizer, output_mode,
-                                 cls_token_at_end=False, pad_on_left=False,
-                                 cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
-                                 sequence_a_segment_id=0, sequence_b_segment_id=1,
-                                 cls_token_segment_id=1, pad_token_segment_id=0,
+                                 cls_token_at_end=False,
+                                 cls_token='[CLS]',
+                                 cls_token_segment_id=1,
+                                 sep_token='[SEP]',
+                                 sep_token_extra=False,
+                                 pad_on_left=False,
+                                 pad_token=0,
+                                 pad_token_segment_id=0,
+                                 sequence_a_segment_id=0, 
+                                 sequence_b_segment_id=1,
                                  mask_padding_with_zero=True):
     """ Loads a data file into a list of `InputBatch`s
         `cls_token_at_end` define the location of the CLS token:
@@ -416,12 +422,14 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             tokens_b = tokenizer.tokenize(example.text_b)
             # Modifies `tokens_a` and `tokens_b` in place so that the total
             # length is less than the specified length.
-            # Account for [CLS], [SEP], [SEP] with "- 3"
-            _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
+            # Account for [CLS], [SEP], [SEP] with "- 3". " -4" for RoBERTa.
+            special_tokens_count = 4 if sep_token_extra else 3
+            _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - special_tokens_count)
         else:
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(tokens_a) > max_seq_length - 2:
-                tokens_a = tokens_a[:(max_seq_length - 2)]
+            # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
+            special_tokens_count = 3 if sep_token_extra else 2
+            if len(tokens_a) > max_seq_length - special_tokens_count:
+                tokens_a = tokens_a[:(max_seq_length - special_tokens_count)]
 
         # The convention in BERT is:
         # (a) For sequence pairs:
@@ -442,6 +450,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         # used as as the "sentence vector". Note that this only makes sense because
         # the entire model is fine-tuned.
         tokens = tokens_a + [sep_token]
+        if sep_token_extra:
+            # roberta uses an extra separator b/w pairs of sentences
+            tokens += [sep_token]
         segment_ids = [sequence_a_segment_id] * len(tokens)
 
         if tokens_b:

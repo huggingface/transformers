@@ -15,27 +15,26 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import unittest
 import json
+import unittest
 
-from pytorch_transformers.tokenization_xlm import XLMTokenizer, VOCAB_FILES_NAMES
-
+from pytorch_transformers.tokenization_roberta import RobertaTokenizer, VOCAB_FILES_NAMES
 from .tokenization_tests_commons import CommonTestCases
 
-class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
-    tokenizer_class = XLMTokenizer
+class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
+    tokenizer_class = RobertaTokenizer
 
     def setUp(self):
-        super(XLMTokenizationTest, self).setUp()
+        super(RobertaTokenizationTest, self).setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n",
-                 "w</w>", "r</w>", "t</w>",
-                 "lo", "low", "er</w>",
-                 "low</w>", "lowest</w>", "newer</w>", "wider</w>", "<unk>"]
+                 "lo", "low", "er",
+                 "low", "lowest", "newer", "wider", "<unk>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
+        merges = ["#version: 0.2", "l o", "lo w", "e r", ""]
+        self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['merges_file'])
@@ -45,38 +44,52 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
             fp.write("\n".join(merges))
 
     def get_tokenizer(self):
-        return XLMTokenizer.from_pretrained(self.tmpdirname)
+        return RobertaTokenizer.from_pretrained(self.tmpdirname, **self.special_tokens_map)
 
     def get_input_output_texts(self):
         input_text = u"lower newer"
-        output_text = u"lower newer"
+        output_text = u"lower<unk>newer"
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
-        tokenizer = XLMTokenizer(self.vocab_file, self.merges_file)
-
+        tokenizer = RobertaTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower"
-        bpe_tokens = ["low", "er</w>"]
+        bpe_tokens = ["low", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
-        input_tokens = tokens + ["<unk>"]
-        input_bpe_tokens = [14, 15, 20]
+        input_tokens = tokens + [tokenizer.unk_token]
+        input_bpe_tokens = [13, 12, 17]
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    def roberta_dict_integration_testing(self):
+        tokenizer = self.get_tokenizer()
+
+        self.assertListEqual(
+            tokenizer.encode('Hello world!'),
+            [0, 31414, 232, 328, 2]
+        )
+        self.assertListEqual(
+            tokenizer.encode('Hello world! cécé herlolip 418'),
+            [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
+        )
+
     def test_sequence_builders(self):
-        tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
+        tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
         text = tokenizer.encode("sequence builders")
         text_2 = tokenizer.encode("multi-sequence build")
 
+        encoded_text_from_decode = tokenizer.encode("sequence builders", add_special_tokens=True)
+        encoded_pair_from_decode = tokenizer.encode("sequence builders", "multi-sequence build", add_special_tokens=True)
+
         encoded_sentence = tokenizer.add_special_tokens_single_sentence(text)
         encoded_pair = tokenizer.add_special_tokens_sentences_pair(text, text_2)
 
-        assert encoded_sentence == [1] + text + [1]
-        assert encoded_pair == [1] + text + [1] + text_2 + [1]
+        assert encoded_sentence == encoded_text_from_decode
+        assert encoded_pair == encoded_pair_from_decode
+
 
 if __name__ == '__main__':
     unittest.main()
