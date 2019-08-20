@@ -440,8 +440,10 @@ XLM_INPUTS_DOCSTRING = r"""
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
         **langs**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
-            Indices are selected in the pre-trained language vocabulary,
-            i.e. in the range ``[0, config.n_langs - 1[``.
+            Indices are languages ids which can be obtained from the language names by using two conversion mappings
+            provided in the configuration of the model (only provided for multilingual models).
+            More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
+            the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
