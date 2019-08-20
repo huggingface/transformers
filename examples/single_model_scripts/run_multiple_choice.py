@@ -256,7 +256,7 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
         result = {"eval_acc": acc, "eval_loss": eval_loss}
         results.update(result)
 
-        output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+        output_eval_file = os.path.join(eval_output_dir, "is_test_" + str(test) + "_eval_results.txt")
 
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results {} *****".format(str(prefix) + " is test:" + str(test)))
