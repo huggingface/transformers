@@ -150,14 +150,42 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             
-            
-            result_sentence = ""
-            for onehot in outputs:
-                result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(onehot)
-            print(result_sentence)
-            
-            
-            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            if args.expl:
+                result_sentence = ""
+                outputs_expl = []
+                for onehot in outputs:
+                    lastone = onehot[0,-1]
+                    result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(lastone) 
+                    outputs_expl.append(lastone.to('cuda'))
+                print(result_sentence)
+
+                from torch.nn import CrossEntropyLoss, MSELoss
+                loss_fct = CrossEntropyLoss(ignore_index=-1)
+
+                index = batch[7]
+                expl_sentence = all_expl[index] #assume batch size = 1
+                expl_sentence_t = expl_sentence.rstrip()
+                true_expl = []
+                for i in range(len(outputs)):
+                    word = expl_sentence_t[i]
+                    true_index = tokenizer._convert_token_to_id(word)
+                    true_expl.append(true_index)
+
+                outputs_expl = torch.stack(outputs_expl)
+                true_expl = torch.LongTensor(true_expl)
+                
+                #outputs_expl = outputs_expl.view(outputs_expl.size(0) * outputs_expl.size(1), -1)
+                
+                outputs_expl = outputs_expl.to('cuda')
+                true_expl = true_expl.to('cuda')
+                
+                #print('outputs: ',outputs_expl.size()) # 10 * vocab_size
+                #print('true expl: ',true_expl.size()) # 10
+                
+                loss = loss_fct(outputs_expl, true_expl)
+                
+            else:
+                loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -437,7 +465,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         #device = torch.device("cuda:1") #TODO: get rid of this line once 0 is available
-        args.n_gpu = torch.cuda.device_count() - 1 #TODO: get rid of -1 once other gpus are available
+        args.n_gpu = torch.cuda.device_count() - 3 #TODO: get rid of -3 once want to using one is working
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)

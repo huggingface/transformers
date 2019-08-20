@@ -1261,11 +1261,8 @@ class DecoderRNN(nn.Module):
     def forward(self, input1, hidden):
         
         #output = self.embedding(input1).view(1, 1, -1) # error: want scalar (int instead of float) type long, but got tensor.cuda.float type
-        #output = input1.view(1, 1, -1) # no new embedding layer
-        #input2 = torch.ones_like(input1, dtype=torch.float)
-        #hidden2 = torch.ones_like(hidden, dtype=torch.float)
 
-        output = input1#.view(1, 1, -1)
+        output = input1#.view(1, 1, -1) # no new embedding layer
         
         import torch.nn.functional as F
         output = F.relu(output)
@@ -1364,9 +1361,6 @@ class BertForESNLI(BertPreTrainedModel):
         v = v.permute(1, 0, 2)
         # u_emb (8 * 768) is already (8 * 768)
         
-        #u = u.to('cuda')
-        #u_emb = u_emb.to('cuda')
-        
         result = []
         hidden_states = u[-1].reshape((1,128,768))
         for i in range(10):
@@ -1378,6 +1372,3 @@ class BertForESNLI(BertPreTrainedModel):
             result.append(onehot)
         
         return result
-
-        # convert output/hidden to a string for explanation
-        return None
