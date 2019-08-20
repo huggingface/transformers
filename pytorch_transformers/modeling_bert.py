@@ -1356,9 +1356,9 @@ class BertForESNLI(BertPreTrainedModel):
         expl = [all_expl[i] for i in expl_idx] # a list of 8 explanation texts
         expl_token = [line.rstrip() for line in expl]
 
-        # make u (8 * 128 * 768) into (128 * 8 * 768)
+        # make u (8 * 128 * 768) into (128 * 8 * 768) # for esnli decoder only
         #u = u.permute(1, 0, 2)
-        v = v.permute(1, 0, 2)
+        #v = v.permute(1, 0, 2)
         # u_emb (8 * 768) is already (8 * 768)
         
         result = []
@@ -1368,7 +1368,8 @@ class BertForESNLI(BertPreTrainedModel):
             #decoder_output: 128 * 128
             #decoder_hidden[0]: 1 * 128 * 768
             hidden_states = decoder_hidden[0]
-            onehot = self.hid2vocab(hidden_states) # 
-            result.append(onehot)
+            probs = self.hid2vocab(hidden_states[0,-1]) 
+            #print('probs size:', probs.size()) # n_vocab
+            result.append(probs)
         
         return result

@@ -113,9 +113,9 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
     decoder = model.decoder
     dec_optimizer_grouped_parameters = [
         {'params': [p for n, p in decoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
-        {'params': [p for n, p in decoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        {'params': [p for n, p in decoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.001}
         ]
-    dec_optimizer = AdamW(dec_optimizer_grouped_parameters, lr=0.01, eps=args.adam_epsilon)
+    dec_optimizer = AdamW(dec_optimizer_grouped_parameters, lr=0.001, eps=args.adam_epsilon)
     dec_scheduler = WarmupLinearSchedule(dec_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     
     if args.fp16:
@@ -174,15 +174,14 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 result_sentence = ""
                 outputs_expl = []
                 for probs in outputs:
-                    lastone = probs[0,-1]
-                    max_idx = torch.argmax(lastone, 0, keepdim=True)
-                    one_hot = torch.FloatTensor(lastone.shape).to('cuda')
+                    max_idx = torch.argmax(probs, 0, keepdim=True)
+                    one_hot = torch.FloatTensor(probs.shape).to('cuda')
                     one_hot.zero_()
                     one_hot.scatter_(0, max_idx, 1)
                     max_idx = int(max_idx[0])
                     result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(max_idx) 
-                    outputs_expl.append(lastone.to('cuda'))
-                print(result_sentence)
+                    outputs_expl.append(probs.to('cuda'))
+                #print('generated expl:', result_sentence)
 
                 from torch.nn import CrossEntropyLoss, MSELoss
                 loss_fct = CrossEntropyLoss(ignore_index=-1)
@@ -211,7 +210,7 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 
             else:
                 loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
-
+            
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
             if args.gradient_accumulation_steps > 1:
@@ -223,15 +222,18 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 torch.nn.utils.clip_grad_norm_(amp.master_params(enc_optimizer), args.max_grad_norm)
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                #torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(decoder.parameters(), args.max_grad_norm)
 
+            
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                enc_scheduler.step()  # Update learning rate schedule
-                enc_optimizer.step()
-                encoder.zero_grad()
+                #enc_scheduler.step()  # Update learning rate schedule
+                #enc_optimizer.step() #causing problem: predicting UNK only
+                #encoder.zero_grad()
                 dec_scheduler.step()  
-                dec_optimizer.step()
+                dec_optimizer.step() #causing problem: predicting UNK only b/c learning rate is too high
                 decoder.zero_grad()
                 global_step += 1
 
@@ -245,6 +247,7 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                     tb_writer.add_scalar('lr', dec_scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
+                    
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
