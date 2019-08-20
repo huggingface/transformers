@@ -83,6 +83,10 @@ class DataProcessor(object):
         """Gets a collection of `InputExample`s for the dev set."""
         raise NotImplementedError()
 
+    def get_test_examples(self, data_dir):
+        """Gets a collection of `InputExample`s for the dev set."""
+        raise NotImplementedError()
+
     def get_labels(self):
         """Gets the list of labels for this data set."""
         raise NotImplementedError()
@@ -108,6 +112,15 @@ class RaceProcessor(DataProcessor):
         high = self._read_txt(high)
         middle = self._read_txt(middle)
         return self._create_examples(high + middle, 'dev')
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} test".format(data_dir))
+        high = os.path.join(data_dir, 'test/high')
+        middle = os.path.join(data_dir, 'test/middle')
+        high = self._read_txt(high)
+        middle = self._read_txt(middle)
+        return self._create_examples(high + middle, 'test')
 
     def get_labels(self):
         """See base class."""
@@ -156,6 +169,11 @@ class SwagProcessor(DataProcessor):
         """See base class."""
         logger.info("LOOKING AT {} dev".format(data_dir))
         return self._create_examples(self._read_csv(os.path.join(data_dir, "val.csv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} test".format(data_dir))
+        return self._create_examples(self._read_csv(os.path.join(data_dir, "test.csv")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -206,6 +224,10 @@ class ArcProcessor(DataProcessor):
         """See base class."""
         logger.info("LOOKING AT {} dev".format(data_dir))
         return self._create_examples(self._read_json(os.path.join(data_dir, "dev.jsonl")), "dev")
+
+    def get_test_examples(self, data_dir):
+        logger.info("LOOKING AT {} test".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
 
     def get_labels(self):
         """See base class."""
