@@ -928,6 +928,8 @@ TRANSFO_XL_START_DOCSTRING = r"""    The Transformer-XL model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 TRANSFO_XL_INPUTS_DOCSTRING = r"""
