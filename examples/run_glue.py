@@ -173,9 +173,14 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
             if args.expl:
                 result_sentence = ""
                 outputs_expl = []
-                for onehot in outputs:
-                    lastone = onehot[0,-1]
-                    result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(lastone) 
+                for probs in outputs:
+                    lastone = probs[0,-1]
+                    max_idx = torch.argmax(lastone, 0, keepdim=True)
+                    one_hot = torch.FloatTensor(lastone.shape).to('cuda')
+                    one_hot.zero_()
+                    one_hot.scatter_(0, max_idx, 1)
+                    max_idx = int(max_idx[0])
+                    result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(max_idx) 
                     outputs_expl.append(lastone.to('cuda'))
                 print(result_sentence)
 
