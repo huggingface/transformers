@@ -127,6 +127,7 @@ def train(args, train_dataset, model, tokenizer):
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
     best_dev_acc, best_dev_loss = 0.0, 99999999999.0
+    best_steps = 0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
@@ -171,10 +172,12 @@ def train(args, train_dataset, model, tokenizer):
                         if results["eval_loss"] < best_dev_loss:
                             best_dev_acc = results["eval_acc"]
                             best_dev_loss = results["eval_loss"]
-                            results_test = evaluate(args, model, tokenizer, test=True)
-                            for key, value in results_test.items():
-                                tb_writer.add_scalar('test_{}'.format(key), value, global_step)
-                            logger.info("test acc: %s, loss: %s, global steps: %s", str(results_test['eval_acc']), str(results_test['eval_loss']), str(global_step))
+                            best_steps = global_step
+                            if args.do_test:
+                                results_test = evaluate(args, model, tokenizer, test=True)
+                                for key, value in results_test.items():
+                                    tb_writer.add_scalar('test_{}'.format(key), value, global_step)
+                                logger.info("test acc: %s, loss: %s, global steps: %s", str(results_test['eval_acc']), str(results_test['eval_loss']), str(global_step))
                     tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logger.info("Average loss: %s at global step: %s", str((tr_loss - logging_loss)/args.logging_steps), str(global_step))
@@ -201,7 +204,7 @@ def train(args, train_dataset, model, tokenizer):
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
-    return global_step, tr_loss / global_step
+    return global_step, tr_loss / global_step, best_steps
 
 
 def evaluate(args, model, tokenizer, prefix="", test=False):
@@ -471,7 +474,7 @@ def main():
     # Training
     if args.do_train:
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+        global_step, tr_loss, _ = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
