@@ -599,7 +599,10 @@ BERT_INPUTS_DOCSTRING = r"""
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
                 
                 ``token_type_ids:   0   0   0   0  0     0   0``
-    
+
+            Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
             Indices can be obtained using :class:`pytorch_transformers.BertTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.

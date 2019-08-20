@@ -936,6 +936,8 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
+            Transformer-XL is a model with relative position embeddings so you can either pad the inputs on
+            the right or on the left.
             Indices can be obtained using :class:`pytorch_transformers.TransfoXLTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
