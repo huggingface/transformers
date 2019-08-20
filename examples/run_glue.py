@@ -150,8 +150,11 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             
-            a = tokenizer._convert_id_to_token(outputs)
-            print(a)
+            
+            result_sentence = ""
+            for onehot in outputs:
+                result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(onehot)
+            print(result_sentence)
             
             
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)

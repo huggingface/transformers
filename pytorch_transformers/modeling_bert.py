@@ -1289,12 +1289,11 @@ class BertForESNLI(BertPreTrainedModel):
         
         hidden_size = 768 #to be consistent with bert
         output_size = 128 #to be consistent with args max_seq_len
-        #self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=output_size).to('cuda')
+        self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=output_size).to('cuda')
         
-        #self.cls = BertOnlyNSPHead(config)
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size,
+        self.hid2vocab = nn.Linear(config.hidden_size,
                                  config.vocab_size,
                                  bias=False)
         
@@ -1365,20 +1364,20 @@ class BertForESNLI(BertPreTrainedModel):
         v = v.permute(1, 0, 2)
         # u_emb (8 * 768) is already (8 * 768)
         
-        u = u.to('cuda')
-        u_emb = u_emb.to('cuda')
-        #decoder_output, decoder_hidden = self.decoder(u, u[-1].reshape((1,128,768))) #take only premise's encoding results and produce a next sentence for now
-        # decoder_output 128 * 128
-        # decoder_hidden[0] 1 * 128 * 768
+        #u = u.to('cuda')
+        #u_emb = u_emb.to('cuda')
         
-        #prediction_scores = self.cls(u) # no decoder, directly predict next word?
-        #print(prediction_scores.size())
+        result = []
+        hidden_states = u[-1].reshape((1,128,768))
+        for i in range(10):
+            decoder_output, decoder_hidden = self.decoder(u, hidden_states) #take only premise's encoding results and produce a next sentence for now
+            #decoder_output: 128 * 128
+            #decoder_hidden[0]: 1 * 128 * 768
+            hidden_states = decoder_hidden[0]
+            onehot = self.hid2vocab(hidden_states) # 
+            result.append(onehot)
         
-        hidden_states = u[-1][0]
-        hidden_states = self.decoder(hidden_states)
-        print(hidden_states.size())
-        
-        return hidden_states
+        return result
 
         # convert output/hidden to a string for explanation
         return None
