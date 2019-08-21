@@ -58,6 +58,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'gpt2': 1024,
     'gpt2-medium': 1024,
+    'gpt2-large': 1024,
 }
 
 @lru_cache()
