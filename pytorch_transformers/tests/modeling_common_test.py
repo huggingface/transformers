@@ -210,6 +210,9 @@ class CommonTestCases:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+            if "head_mask" in inputs_dict:
+                del inputs_dict["head_mask"]
+
             for model_class in self.all_model_classes:
                 config.output_attentions = True
                 config.output_hidden_states = False
