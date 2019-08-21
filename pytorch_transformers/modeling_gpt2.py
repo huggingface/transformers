@@ -682,6 +682,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
+        model.resize_token_embeddings(tokenizer.vocab_size + 1)
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         mc_token_ids = torch.tensor([input_ids.size(-1), input_ids.size(-1)]).unsqueeze(0)  # Batch size 1
@@ -696,6 +697,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         self.multiple_choice_head = SequenceSummary(config)
 
         self.apply(self.init_weights)
+        self.tie_weights()
 
     def tie_weights(self):
         """ Make sure we are sharing the input and output embeddings.
