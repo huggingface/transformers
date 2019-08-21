@@ -144,7 +144,7 @@ def main():
                         default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--train_batch_size",
-                        default=32,
+                        default=8,
                         type=int,
                         help="Total batch size for training.")
     parser.add_argument('--fp16',
@@ -192,7 +192,7 @@ def main():
             break
     else:
         num_data_epochs = args.epochs
-
+    
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
@@ -232,7 +232,7 @@ def main():
         total_train_examples / args.train_batch_size / args.gradient_accumulation_steps)
     if args.local_rank != -1:
         num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
-
+    
     # Prepare model
     model = BertForPreTraining.from_pretrained(args.bert_model)
     if args.fp16:
@@ -284,8 +284,7 @@ def main():
     logging.info("  Num steps = %d", num_train_optimization_steps)
     model.train()
     for epoch in range(args.epochs):
-        epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,
-                                            num_data_epochs=num_data_epochs, reduce_memory=args.reduce_memory)
+        epoch_dataset = PregeneratedDataset(epoch=epoch, training_path=args.pregenerated_data, tokenizer=tokenizer,num_data_epochs=num_data_epochs, reduce_memory=args.reduce_memory)
         if args.local_rank == -1:
             train_sampler = RandomSampler(epoch_dataset)
         else:
@@ -293,11 +292,21 @@ def main():
         train_dataloader = DataLoader(epoch_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
         tr_loss = 0
         nb_tr_examples, nb_tr_steps = 0, 0
+        dead_vocab_idxs = [len(tokenizer.vocab), len(tokenizer.vocab) + 1]
         with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch}") as pbar:
             for step, batch in enumerate(train_dataloader):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, lm_label_ids, is_next = batch
-                outputs = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
+                #输入token的id过滤
+                batch_idxs = set(input_ids.flatten().detach().cpu().numpy())
+                dead_idxs = set(dead_vocab_idxs)
+                if len(batch_idxs & dead_idxs) > 0:
+                    continue
+                try:
+                    outputs = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next)
+                except:
+                    import pdb;pdb.set_trace()
+                    #continue
                 loss = outputs[0]
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
