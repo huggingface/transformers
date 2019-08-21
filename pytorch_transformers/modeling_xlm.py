@@ -559,6 +559,12 @@ class XLMModel(XLMPreTrainedModel):
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
+        if hasattr(config, "pruned_heads"):
+            pruned_heads = config.pruned_heads.copy().items()
+            for layer, heads in pruned_heads:
+                if self.attentions[int(layer)].n_heads == config.n_heads:
+                    self.prune_heads({int(layer): list(map(int, heads))})
+
         self.apply(self.init_weights)
 
     def _resize_token_embeddings(self, new_num_tokens):
