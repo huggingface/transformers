@@ -45,11 +45,13 @@ PRETRAINED_VOCAB_FILES_MAP = {
     {
         'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
         'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
+        'gpt2-large': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-vocab.json",
     },
     'merges_file':
     {
         'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
         'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
+        'gpt2-large': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-merges.txt",
     },
 }
 
