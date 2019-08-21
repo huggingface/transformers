@@ -207,5 +207,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
             model = GPT2Model.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
+
+
 if __name__ == "__main__":
     unittest.main()
