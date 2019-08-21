@@ -154,6 +154,9 @@ logging.basicConfig(level=logging.INFO)
 # Load pre-trained model tokenizer (vocabulary)
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
+# Add seperator token
+tokenizer.add_special_tokens({'sep_token': '[SEP]'})
+
 # Encode a text inputs
 text = "Who was Jim Henson ? Jim Henson was a"
 indexed_tokens = tokenizer.encode(text)
