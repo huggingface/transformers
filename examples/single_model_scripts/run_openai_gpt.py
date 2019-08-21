@@ -64,7 +64,7 @@ def load_rocstories_dataset(dataset_path):
             output.append((' '.join(line[1:5]), line[5], line[6], int(line[-1])-1))
     return output
 
-def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token):
+def pre_process_datasets(encoded_datasets, input_len, cap_length, pad_token, cls_token, sep_token, eos_token):
     """ Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
 
         To Transformer inputs of shape (n_batch, n_alternative, length) comprising for each batch, continuation:
@@ -73,13 +73,13 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
     tensor_datasets = []
     for dataset in encoded_datasets:
         n_batch = len(dataset)
-        input_ids = np.zeros((n_batch, 2, input_len), dtype=np.int64)
+        input_ids = np.full((n_batch, 2, input_len), fill_value=pad_token, dtype=np.int64)
         mc_token_ids = np.zeros((n_batch, 2), dtype=np.int64)
         lm_labels = np.full((n_batch, 2, input_len), fill_value=-1, dtype=np.int64)
         mc_labels = np.zeros((n_batch,), dtype=np.int64)
         for i, (story, cont1, cont2, mc_label), in enumerate(dataset):
-            with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
-            with_cont2 = [start_token] + story[:cap_length] + [delimiter_token] + cont2[:cap_length] + [clf_token]
+            with_cont1 = [cls_token] + story[:cap_length] + [sep_token] + cont1[:cap_length] + [eos_token]
+            with_cont2 = [cls_token] + story[:cap_length] + [sep_token] + cont2[:cap_length] + [eos_token]
             input_ids[i, 0, :len(with_cont1)] = with_cont1
             input_ids[i, 1, :len(with_cont2)] = with_cont2
             mc_token_ids[i, 0] = len(with_cont1) - 1
@@ -153,9 +153,17 @@ def main():
     # This loading functions also add new tokens and embeddings called `special tokens`
     # These new embeddings will be fine-tuned on the RocStories dataset
     special_tokens = ['_start_', '_delimiter_', '_classify_']
-    tokenizer = OpenAIGPTTokenizer.from_pretrained(args.model_name, special_tokens=special_tokens)
-    special_tokens_ids = list(tokenizer.convert_tokens_to_ids(token) for token in special_tokens)
-    model = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_name, num_special_tokens=len(special_tokens))
+    tokenizer = OpenAIGPTTokenizer.from_pretrained(args.model_name)
+    tokenizer.add_special_tokens({
+        'cls_token':'<CLS>',
+        'sep_token':'<SEP>',
+        'pad_token':'<PAD>',
+        'eos_token':'<EOS>'
+    })
+    model = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_name)
+    model.resize_token_embeddings(len(tokenizer))
+    special_tokens_ids = [tokenizer.convert_tokens_to_ids(special_token)
+                          for special_token in ['<PAD>', '<CLS>', '<SEP>', '<EOS>']]
     model.to(device)
 
     # Load and encode the datasets
