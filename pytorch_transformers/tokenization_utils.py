@@ -293,7 +293,7 @@ class PreTrainedTokenizer(object):
                     resolved_vocab_files[file_id] = None
                 else:
                     resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
-        except EnvironmentError:
+        except EnvironmentError as e:
             if pretrained_model_name_or_path in s3_models:
                 logger.error("Couldn't reach server to download vocabulary.")
             else:
@@ -303,7 +303,7 @@ class PreTrainedTokenizer(object):
                     "at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
                         pretrained_model_name_or_path, str(vocab_files.keys())))
-            return None
+            raise e
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:
