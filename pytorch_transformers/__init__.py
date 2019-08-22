@@ -1,5 +1,9 @@
 __version__ = "1.1.0"
+# Generic
 from .configuration_utils import PretrainedConfig, CONFIG_NAME
+from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
+
+# Tokenizers
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
@@ -8,11 +12,13 @@ from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
-
 from .tokenization_utils import (PreTrainedTokenizer)
 
-from .modeling_auto import (AutoConfig, AutoModel)
+# PyTorch
+from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
+                           WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
 
+from .modeling_auto import (AutoConfig, AutoModel)
 from .modeling_bert import (BertConfig, BertPreTrainedModel, BertModel, BertForPreTraining,
                             BertForMaskedLM, BertForNextSentencePrediction,
                             BertForSequenceClassification, BertForMultipleChoice,
@@ -42,9 +48,8 @@ from .modeling_xlm import (XLMConfig, XLMPreTrainedModel , XLMModel,
 from .modeling_roberta import (RobertaConfig, RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
                                ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_utils import (WEIGHTS_NAME, TF_WEIGHTS_NAME,
-                          PreTrainedModel, prune_layer, Conv1D)
+                             PreTrainedModel, prune_layer, Conv1D)
 
-from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
-                           WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
-
-from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
+# TensorFlow
+from .modeling_tf_utils import (TFPreTrainedModel)
+from .modeling_tf_bert import TFBertModel

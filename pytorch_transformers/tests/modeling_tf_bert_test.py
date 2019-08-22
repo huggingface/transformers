@@ -20,22 +20,23 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
-                                     BertForNextSentencePrediction, BertForPreTraining,
-                                     BertForQuestionAnswering, BertForSequenceClassification,
-                                     BertForTokenClassification, BertForMultipleChoice)
-from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+import tensorflow as tf
 
-from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
+from pytorch_transformers import (BertConfig)
+from pytorch_transformers.modeling_tf_bert import TFBertModel, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
+from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
-class BertModelTest(CommonTestCases.CommonModelTester):
+class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
-            BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
-            BertForTokenClassification)
+    all_model_classes = (TFBertModel,)
+                        # BertForMaskedLM, BertForNextSentencePrediction,
+                        # BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
+                        # BertForTokenClassification)
 
-    class BertModelTester(object):
+    class TFBertModelTester(object):
 
         def __init__(self,
                      parent,
@@ -124,134 +125,142 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [])
 
         def create_and_check_bert_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            model = BertModel(config=config)
-            model.eval()
+            model = TFBertModel(config=config)
+            # model.eval()
             sequence_output, pooled_output = model(input_ids, token_type_ids, input_mask)
             sequence_output, pooled_output = model(input_ids, token_type_ids)
             sequence_output, pooled_output = model(input_ids)
 
             result = {
-                "sequence_output": sequence_output,
-                "pooled_output": pooled_output,
+                "sequence_output": sequence_output.numpy(),
+                "pooled_output": pooled_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()),
+                list(result["sequence_output"].shape),
                 [self.batch_size, self.seq_length, self.hidden_size])
-            self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+            self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
 
         def create_and_check_bert_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            model = BertForMaskedLM(config=config)
-            model.eval()
-            loss, prediction_scores = model(input_ids, token_type_ids, input_mask, token_labels)
-            result = {
-                "loss": loss,
-                "prediction_scores": prediction_scores,
-            }
-            self.parent.assertListEqual(
-                list(result["prediction_scores"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
-            self.check_loss_output(result)
+            pass
+            # model = BertForMaskedLM(config=config)
+            # model.eval()
+            # loss, prediction_scores = model(input_ids, token_type_ids, input_mask, token_labels)
+            # result = {
+            #     "loss": loss,
+            #     "prediction_scores": prediction_scores,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["prediction_scores"].size()),
+            #     [self.batch_size, self.seq_length, self.vocab_size])
+            # self.check_loss_output(result)
+
 
         def create_and_check_bert_for_next_sequence_prediction(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            model = BertForNextSentencePrediction(config=config)
-            model.eval()
-            loss, seq_relationship_score = model(input_ids, token_type_ids, input_mask, sequence_labels)
-            result = {
-                "loss": loss,
-                "seq_relationship_score": seq_relationship_score,
-            }
-            self.parent.assertListEqual(
-                list(result["seq_relationship_score"].size()),
-                [self.batch_size, 2])
-            self.check_loss_output(result)
+            pass
+            # model = BertForNextSentencePrediction(config=config)
+            # model.eval()
+            # loss, seq_relationship_score = model(input_ids, token_type_ids, input_mask, sequence_labels)
+            # result = {
+            #     "loss": loss,
+            #     "seq_relationship_score": seq_relationship_score,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["seq_relationship_score"].size()),
+            #     [self.batch_size, 2])
+            # self.check_loss_output(result)
 
 
         def create_and_check_bert_for_pretraining(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            model = BertForPreTraining(config=config)
-            model.eval()
-            loss, prediction_scores, seq_relationship_score = model(input_ids, token_type_ids, input_mask, token_labels, sequence_labels)
-            result = {
-                "loss": loss,
-                "prediction_scores": prediction_scores,
-                "seq_relationship_score": seq_relationship_score,
-            }
-            self.parent.assertListEqual(
-                list(result["prediction_scores"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
-            self.parent.assertListEqual(
-                list(result["seq_relationship_score"].size()),
-                [self.batch_size, 2])
-            self.check_loss_output(result)
+            pass
+            # model = BertForPreTraining(config=config)
+            # model.eval()
+            # loss, prediction_scores, seq_relationship_score = model(input_ids, token_type_ids, input_mask, token_labels, sequence_labels)
+            # result = {
+            #     "loss": loss,
+            #     "prediction_scores": prediction_scores,
+            #     "seq_relationship_score": seq_relationship_score,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["prediction_scores"].size()),
+            #     [self.batch_size, self.seq_length, self.vocab_size])
+            # self.parent.assertListEqual(
+            #     list(result["seq_relationship_score"].size()),
+            #     [self.batch_size, 2])
+            # self.check_loss_output(result)
 
 
         def create_and_check_bert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            model = BertForQuestionAnswering(config=config)
-            model.eval()
-            loss, start_logits, end_logits = model(input_ids, token_type_ids, input_mask, sequence_labels, sequence_labels)
-            result = {
-                "loss": loss,
-                "start_logits": start_logits,
-                "end_logits": end_logits,
-            }
-            self.parent.assertListEqual(
-                list(result["start_logits"].size()),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["end_logits"].size()),
-                [self.batch_size, self.seq_length])
-            self.check_loss_output(result)
+            pass
+            # model = BertForQuestionAnswering(config=config)
+            # model.eval()
+            # loss, start_logits, end_logits = model(input_ids, token_type_ids, input_mask, sequence_labels, sequence_labels)
+            # result = {
+            #     "loss": loss,
+            #     "start_logits": start_logits,
+            #     "end_logits": end_logits,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["start_logits"].size()),
+            #     [self.batch_size, self.seq_length])
+            # self.parent.assertListEqual(
+            #     list(result["end_logits"].size()),
+            #     [self.batch_size, self.seq_length])
+            # self.check_loss_output(result)
 
 
         def create_and_check_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            config.num_labels = self.num_labels
-            model = BertForSequenceClassification(config)
-            model.eval()
-            loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.num_labels])
-            self.check_loss_output(result)
+            pass
+            # config.num_labels = self.num_labels
+            # model = BertForSequenceClassification(config)
+            # model.eval()
+            # loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
+            # result = {
+            #     "loss": loss,
+            #     "logits": logits,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["logits"].size()),
+            #     [self.batch_size, self.num_labels])
+            # self.check_loss_output(result)
 
 
         def create_and_check_bert_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            config.num_labels = self.num_labels
-            model = BertForTokenClassification(config=config)
-            model.eval()
-            loss, logits = model(input_ids, token_type_ids, input_mask, token_labels)
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.seq_length, self.num_labels])
-            self.check_loss_output(result)
+            pass
+            # config.num_labels = self.num_labels
+            # model = BertForTokenClassification(config=config)
+            # model.eval()
+            # loss, logits = model(input_ids, token_type_ids, input_mask, token_labels)
+            # result = {
+            #     "loss": loss,
+            #     "logits": logits,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["logits"].size()),
+            #     [self.batch_size, self.seq_length, self.num_labels])
+            # self.check_loss_output(result)
 
 
         def create_and_check_bert_for_multiple_choice(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            config.num_choices = self.num_choices
-            model = BertForMultipleChoice(config=config)
-            model.eval()
-            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            loss, logits = model(multiple_choice_inputs_ids,
-                         multiple_choice_token_type_ids,
-                         multiple_choice_input_mask,
-                         choice_labels)
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.num_choices])
-            self.check_loss_output(result)
+            pass
+            # config.num_choices = self.num_choices
+            # model = BertForMultipleChoice(config=config)
+            # model.eval()
+            # multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            # multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            # multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            # loss, logits = model(multiple_choice_inputs_ids,
+            #              multiple_choice_token_type_ids,
+            #              multiple_choice_input_mask,
+            #              choice_labels)
+            # result = {
+            #     "loss": loss,
+            #     "logits": logits,
+            # }
+            # self.parent.assertListEqual(
+            #     list(result["logits"].size()),
+            #     [self.batch_size, self.num_choices])
+            # self.check_loss_output(result)
 
 
         def prepare_config_and_inputs_for_common(self):
@@ -262,7 +271,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = BertModelTest.BertModelTester(self)
+        self.model_tester = TFBertModelTest.TFBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
 
     def test_config(self):
@@ -304,7 +313,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
+            model = TFBertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
 

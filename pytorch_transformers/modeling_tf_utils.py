@@ -36,7 +36,7 @@ CONFIG_NAME = "config.json"
 WEIGHTS_NAME = "tf_model.bin"
 
 
-class TFPreTrainedModel(tf.keras.layers.Layer):
+class TFPreTrainedModel(tf.keras.Model):
     r""" Base class for all TF models.
 
         :class:`~pytorch_transformers.TFPreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
@@ -59,7 +59,7 @@ class TFPreTrainedModel(tf.keras.layers.Layer):
     base_model_prefix = ""
 
     def __init__(self, config, *inputs, **kwargs):
-        super(PreTrainedModel, self).__init__()
+        super(TFPreTrainedModel, self).__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "

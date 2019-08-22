@@ -24,6 +24,7 @@ import os
 import sys
 from io import open
 
+import numpy as np
 import tensorflow as tf
 
 from .configuration_utils import CONFIG_NAME, PretrainedConfig
@@ -65,7 +66,7 @@ BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-def load_pytorch_weights_in_bert(model, config, pytorch_checkpoint_path):
+def load_pt_weights_in_bert(model, config, pytorch_checkpoint_path):
     """ Load pytorch checkpoints in a TF 2.0 model.
     """
     try:
@@ -150,7 +151,9 @@ def swish(x):
     return x * tf.sigmoid(x)
 
 
-ACT2FN = {"gelu": Activation(gelu), "relu": tf.keras.activations.relu, "swish": Activation(swish)}
+ACT2FN = {"gelu": tf.keras.layers.Activation(gelu),
+          "relu": tf.keras.activations.relu,
+          "swish": tf.keras.layers.Activation(swish)}
 
 
 class BertConfig(PretrainedConfig):
@@ -235,14 +238,13 @@ class BertEmbeddings(tf.keras.layers.Layer):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = tf.keras.layers.LayerNormalization(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, input_ids, token_type_ids=None, position_ids=None):
         seq_length = tf.shape(input_ids)[1]
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
         if token_type_ids is None:
             token_type_ids = tf.fill(tf.shape(input_ids), 0)
 
@@ -281,7 +283,7 @@ class BertSelfAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, hidden_states, attention_mask, head_mask=None):
-        batch_size = tf.shape(x)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -291,7 +293,7 @@ class BertSelfAttention(tf.keras.layers.Layer):
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)  # (..., seq_len_q, seq_len_k)
+        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)  # (batch size, num_heads, seq_len_q, seq_len_k)
         dk = tf.cast(tf.shape(key_layer)[-1], tf.float32) # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
         # Apply the attention mask is (precomputed for all layers in BertModel call() function)
@@ -322,7 +324,7 @@ class BertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertSelfOutput, self).__init__()
         self.dense = tf.keras.layers.Dense(config.hidden_size)
-        self.LayerNorm = tf.keras.layers.LayerNormalization(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor):
@@ -335,15 +337,15 @@ class BertSelfOutput(tf.keras.layers.Layer):
 class BertAttention(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertAttention, self).__init__()
-        self.self = BertSelfAttention(config)
-        self.output = BertSelfOutput(config)
+        self.self_attention = BertSelfAttention(config)
+        self.dense_output = BertSelfOutput(config)
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
     def call(self, input_tensor, attention_mask, head_mask=None):
-        self_outputs = self.self(input_tensor, attention_mask, head_mask)
-        attention_output = self.output(self_outputs[0], input_tensor)
+        self_outputs = self.self_attention(input_tensor, attention_mask, head_mask)
+        attention_output = self.dense_output(self_outputs[0], input_tensor)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -367,7 +369,7 @@ class BertOutput(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertOutput, self).__init__()
         self.dense = tf.keras.layers.Dense(config.hidden_size)
-        self.LayerNorm = tf.keras.layers.LayerNormalization(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor):
@@ -382,13 +384,13 @@ class BertLayer(tf.keras.layers.Layer):
         super(BertLayer, self).__init__()
         self.attention = BertAttention(config)
         self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+        self.bert_output = BertOutput(config)
 
     def call(self, hidden_states, attention_mask, head_mask=None):
         attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
+        layer_output = self.bert_output(intermediate_output, attention_output)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -398,7 +400,7 @@ class BertEncoder(tf.keras.layers.Layer):
         super(BertEncoder, self).__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = tf.keras.Sequential([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = [BertLayer(config) for _ in range(config.num_hidden_layers)]
 
     def call(self, hidden_states, attention_mask, head_mask=None):
         all_hidden_states = ()
@@ -446,7 +448,7 @@ class BertPredictionHeadTransform(tf.keras.layers.Layer):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = tf.keras.layers.LayerNormalization(config.hidden_size, epsilon=config.layer_norm_eps)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -512,7 +514,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "bert"
 
     def __init__(self, *inputs, **kwargs):
-        super(BertPreTrainedModel, self).__init__(*inputs, **kwargs)
+        super(TFBertPreTrainedModel, self).__init__(*inputs, **kwargs)
 
     def init_weights(self, module):
         """ Initialize the weights.
@@ -608,20 +610,20 @@ class TFBertModel(TFBertPreTrainedModel):
     Examples::
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertModel.from_pretrained('bert-base-uncased')
+        model = TFBertModel.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
-        super(BertModel, self).__init__(config)
+        super(TFBertModel, self).__init__(config)
 
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
         self.pooler = BertPooler(config)
 
-        self.apply(self.init_weights)
+        # self.apply(self.init_weights)  # TODO check weights initialization
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -644,14 +646,15 @@ class TFBertModel(TFBertPreTrainedModel):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = attention_mask[tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = attention_mask[:, tf.newaxis, tf.newaxis, :]
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        # extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+
+        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # Prepare head mask if needed
