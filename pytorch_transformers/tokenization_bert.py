@@ -155,7 +155,15 @@ class BertTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
-        return self.vocab.get(token, self.vocab.get(self.unk_token))
+        input_id_ = self.vocab.get(token, self.vocab.get(self.unk_token))
+        import pdb;pdb.set_trace()
+        special_line_start = 344
+        special_line_end = 13504
+        if input_id_ > special_line_start and input_id_ < special_line_end:
+            input_id_ -= 1
+        if input_id_ >= special_line_end:
+            input_id_ -= 2
+        return input_id_
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
