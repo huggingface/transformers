@@ -416,12 +416,18 @@ XLM_START_DOCSTRING = r"""    The XLM model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.XLMConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 XLM_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
+
+            XLM is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
             Indices can be obtained using :class:`pytorch_transformers.XLMTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -434,8 +440,10 @@ XLM_INPUTS_DOCSTRING = r"""
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
         **langs**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
-            Indices are selected in the pre-trained language vocabulary,
-            i.e. in the range ``[0, config.n_langs - 1[``.
+            Indices are languages ids which can be obtained from the language names by using two conversion mappings
+            provided in the configuration of the model (only provided for multilingual models).
+            More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
+            the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
