@@ -229,9 +229,9 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
             
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                #enc_scheduler.step()  # Update learning rate schedule
-                #enc_optimizer.step() #causing problem: predicting UNK only
-                #encoder.zero_grad()
+                enc_scheduler.step()  # Update learning rate schedule
+                enc_optimizer.step() #causing problem: predicting UNK only
+                encoder.zero_grad()
                 dec_scheduler.step()  
                 dec_optimizer.step() #causing problem: predicting UNK only b/c learning rate is too high
                 decoder.zero_grad()
@@ -279,7 +279,10 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
+        if args.expl:
+            eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        else:
+            eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)

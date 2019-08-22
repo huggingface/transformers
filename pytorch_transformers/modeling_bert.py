@@ -1285,6 +1285,7 @@ class BertForESNLI(BertPreTrainedModel):
         self.apply(self.init_weights)
         
         hidden_size = 768 #to be consistent with bert
+        #hidden_size = 100 #working with small dataset
         output_size = 128 #to be consistent with args max_seq_len
         self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=output_size).to('cuda')
         
@@ -1362,6 +1363,7 @@ class BertForESNLI(BertPreTrainedModel):
         # u_emb (8 * 768) is already (8 * 768)
         
         result = []
+        #u (8 * 128 * 768) -> take first 100 (8*128*100)
         hidden_states = u[-1].reshape((1,128,768))
         for i in range(10):
             decoder_output, decoder_hidden = self.decoder(u, hidden_states) #take only premise's encoding results and produce a next sentence for now
