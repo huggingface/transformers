@@ -23,7 +23,8 @@ import pytest
 from pytorch_transformers import (OpenAIGPTConfig, OpenAIGPTModel,
                                      OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
 
-from .modeling_common_test import CommonTestCases, ConfigTester
+from .modeling_common_test import CommonTestCases
+from .configuration_common_test import ConfigTester
 
 class OpenAIModelTest(unittest.TestCase):
 

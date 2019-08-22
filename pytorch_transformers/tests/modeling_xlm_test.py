@@ -23,7 +23,8 @@ import pytest
 from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering, XLMForSequenceClassification)
 from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
 class XLMModelTest(CommonTestCases.CommonModelTester):
