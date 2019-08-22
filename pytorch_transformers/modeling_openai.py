@@ -458,6 +458,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
         if hasattr(config, "pruned_heads"):
             pruned_heads = config.pruned_heads.copy().items()
+            config.pruned_heads = {}
             for layer, heads in pruned_heads:
                 if self.h[int(layer)].attn.n_head == config.n_head:
                     self.prune_heads({int(layer): list(map(int, heads))})
