@@ -30,8 +30,9 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import (PretrainedConfig, PreTrainedModel, add_start_docstrings,
-                             prune_linear_layer, SequenceSummary, SQuADHead)
+from .modeling_utils import (PreTrainedModel, prune_linear_layer, SequenceSummary, SQuADHead)
+from .configuration_utils import PretrainedConfig
+from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 

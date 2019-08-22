@@ -36,7 +36,9 @@ from torch.nn.parameter import Parameter
 
 from .modeling_bert import BertLayerNorm as LayerNorm
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
-from .modeling_utils import (PretrainedConfig, PreTrainedModel, add_start_docstrings)
+from .modeling_utils import PreTrainedModel
+from .configuration_utils import PretrainedConfig
+from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 

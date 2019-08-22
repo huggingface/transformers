@@ -1,4 +1,5 @@
 __version__ = "1.1.0"
+from .configuration_utils import PretrainedConfig, CONFIG_NAME
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
@@ -40,8 +41,8 @@ from .modeling_xlm import (XLMConfig, XLMPreTrainedModel , XLMModel,
                            XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_roberta import (RobertaConfig, RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
                                ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
-                          PretrainedConfig, PreTrainedModel, prune_layer, Conv1D)
+from .modeling_utils import (WEIGHTS_NAME, TF_WEIGHTS_NAME,
+                          PreTrainedModel, prune_layer, Conv1D)
 
 from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
                            WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)

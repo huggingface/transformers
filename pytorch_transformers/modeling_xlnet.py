@@ -29,9 +29,10 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import (CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig, PreTrainedModel,
-                             SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits,
-                             add_start_docstrings)
+from .modeling_utils import (WEIGHTS_NAME, PreTrainedModel,
+                             SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits)
+from .configuration_utils import CONFIG_NAME, PretrainedConfig
+from .file_utils import add_start_docstrings
 
 
 logger = logging.getLogger(__name__)

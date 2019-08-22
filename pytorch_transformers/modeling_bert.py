@@ -28,8 +28,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
-                             prune_linear_layer, add_start_docstrings)
+from .modeling_utils import (WEIGHTS_NAME, PreTrainedModel,
+                             prune_linear_layer)
+from .configuration_utils import CONFIG_NAME, PretrainedConfig
+from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 

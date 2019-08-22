@@ -25,11 +25,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from pytorch_transformers.modeling_bert import (BertConfig, BertEmbeddings,
-                                                BertLayerNorm, BertModel,
-                                                BertPreTrainedModel, gelu)
+from .modeling_bert import (BertConfig, BertEmbeddings, BertLayerNorm, BertModel,
+                            BertPreTrainedModel, gelu)
 
-from pytorch_transformers.modeling_utils import add_start_docstrings
+from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
