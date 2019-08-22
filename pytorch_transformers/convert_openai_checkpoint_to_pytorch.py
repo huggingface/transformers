@@ -35,7 +35,7 @@ def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_c
     if openai_config_file == "":
         config = OpenAIGPTConfig()
     else:
-        config = OpenAIGPTConfig(openai_config_file)
+        config = OpenAIGPTConfig.from_json_file(openai_config_file)
     model = OpenAIGPTModel(config)
 
     # Load weights from numpy
@@ -58,7 +58,7 @@ if __name__ == "__main__":
                         default = None,
                         type = str,
                         required = True,
-                        help = "Path the TensorFlow checkpoint path.")
+                        help = "Path to the TensorFlow checkpoint path.")
     parser.add_argument("--pytorch_dump_folder_path",
                         default = None,
                         type = str,

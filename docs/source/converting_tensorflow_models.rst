@@ -1,7 +1,7 @@
 Converting Tensorflow Checkpoints
 ================================================
 
-A command-line interface is provided to convert a TensorFlow checkpoint in a PyTorch dump of the ``BertForPreTraining`` class  (for BERT) or NumPy checkpoint in a PyTorch dump of the ``OpenAIGPTModel`` class  (for OpenAI GPT).
+A command-line interface is provided to convert original Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM checkpoints in models than be loaded using the ``from_pretrained`` methods of the library.
 
 BERT
 ^^^^
@@ -41,6 +41,20 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT model,
      $PYTORCH_DUMP_OUTPUT \
      [OPENAI_GPT_CONFIG]
 
+OpenAI GPT-2
+^^^^^^^^^^^^
+
+Here is an example of the conversion process for a pre-trained OpenAI GPT-2 model (see `here <https://github.com/openai/gpt-2>`__\ )
+
+.. code-block:: shell
+
+   export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
+
+   pytorch_transformers gpt2 \
+     $OPENAI_GPT2_CHECKPOINT_PATH \
+     $PYTORCH_DUMP_OUTPUT \
+     [OPENAI_GPT2_CONFIG]
+
 Transformer-XL
 ^^^^^^^^^^^^^^
 
@@ -55,19 +69,6 @@ Here is an example of the conversion process for a pre-trained Transformer-XL mo
      $PYTORCH_DUMP_OUTPUT \
      [TRANSFO_XL_CONFIG]
 
-GPT-2
-^^^^^
-
-Here is an example of the conversion process for a pre-trained OpenAI's GPT-2 model.
-
-.. code-block:: shell
-
-   export GPT2_DIR=/path/to/gpt2/checkpoint
-
-   pytorch_transformers gpt2 \
-     $GPT2_DIR/model.ckpt \
-     $PYTORCH_DUMP_OUTPUT \
-     [GPT2_CONFIG]
 
 XLNet
 ^^^^^
@@ -84,3 +85,17 @@ Here is an example of the conversion process for a pre-trained XLNet model, fine
      $TRANSFO_XL_CONFIG_PATH \
      $PYTORCH_DUMP_OUTPUT \
      STS-B \
+
+
+XLM
+^^^
+
+Here is an example of the conversion process for a pre-trained XLM model:
+
+.. code-block:: shell
+
+   export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
+
+   pytorch_transformers xlm \
+     $XLM_CHECKPOINT_PATH \
+     $PYTORCH_DUMP_OUTPUT \

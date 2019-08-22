@@ -74,7 +74,7 @@ according to a ``BertConfig`` class and then saved to disk under the filename ``
 
 .. code-block:: python
 
-    from pytorch_pretrained_bert import BertModel, BertTokenizer, BertConfig
+    from pytorch_transformers import BertModel, BertTokenizer, BertConfig
     import torch
 
     enc = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -104,6 +104,9 @@ according to a ``BertConfig`` class and then saved to disk under the filename ``
 
     # The model needs to be in evaluation mode
     model.eval()
+
+    # If you are instantiating the model with `from_pretrained` you can also easily set the TorchScript flag
+    model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
 
     # Creating the trace
     traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])

@@ -20,13 +20,17 @@ import json
 
 from pytorch_transformers.tokenization_openai import OpenAIGPTTokenizer, VOCAB_FILES_NAMES
 
-from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
+from .tokenization_tests_commons import CommonTestCases
 
 
-class OpenAIGPTTokenizationTest(unittest.TestCase):
+class OpenAIGPTTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
-    def test_full_tokenizer(self):
-        """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
+    tokenizer_class = OpenAIGPTTokenizer
+
+    def setUp(self):
+        super(OpenAIGPTTokenizationTest, self).setUp()
+
+        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n",
                  "w</w>", "r</w>", "t</w>",
                  "lo", "low", "er</w>",
@@ -34,30 +38,34 @@ class OpenAIGPTTokenizationTest(unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w", "e r</w>", ""]
 
-        with TemporaryDirectory() as tmpdirname:
-            vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-            merges_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['merges_file'])
-            with open(vocab_file, "w") as fp:
-                fp.write(json.dumps(vocab_tokens))
-            with open(merges_file, "w") as fp:
-                fp.write("\n".join(merges))
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
+        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['merges_file'])
+        with open(self.vocab_file, "w") as fp:
+            fp.write(json.dumps(vocab_tokens))
+        with open(self.merges_file, "w") as fp:
+            fp.write("\n".join(merges))
 
-            input_text = u"lower newer"
-            output_text = u"lower newer"
+    def get_tokenizer(self):
+        return OpenAIGPTTokenizer.from_pretrained(self.tmpdirname)
 
-            create_and_check_tokenizer_commons(self, input_text, output_text, OpenAIGPTTokenizer, tmpdirname)
+    def get_input_output_texts(self):
+        input_text = u"lower newer"
+        output_text = u"lower newer"
+        return input_text, output_text
 
-            tokenizer = OpenAIGPTTokenizer(vocab_file, merges_file)
 
-            text = "lower"
-            bpe_tokens = ["low", "er</w>"]
-            tokens = tokenizer.tokenize(text)
-            self.assertListEqual(tokens, bpe_tokens)
+    def test_full_tokenizer(self):
+        tokenizer = OpenAIGPTTokenizer(self.vocab_file, self.merges_file)
 
-            input_tokens = tokens + ["<unk>"]
-            input_bpe_tokens = [14, 15, 20]
-            self.assertListEqual(
-                tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        text = "lower"
+        bpe_tokens = ["low", "er</w>"]
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, bpe_tokens)
+
+        input_tokens = tokens + ["<unk>"]
+        input_bpe_tokens = [14, 15, 20]
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
 
 if __name__ == '__main__':

@@ -3,57 +3,113 @@ Pretrained models
 
 Here is the full list of the currently provided pretrained models together with a short presentation of each model.
 
-+===============+============================================================+===========================+ 
-| Architecture  | Shortcut name                                              | Details of the model      |
-+===============+============================================================+===========================+ 
-|               | ``bert-base-uncased``                                      | 12-layer, 768-hidden, 12-heads, 110M parameters
-|               |                                                            | Trained on lower-cased English text                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-large-uncased``                                     | 24-layer, 1024-hidden, 16-heads, 340M parameters
-|               |                                                            | Trained on lower-cased English text                  |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-base-cased``                                        | 12-layer, 768-hidden, 12-heads, 110M parameters
-|               |                                                            | Trained on cased English text                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-large-cased``                                       | 24-layer, 1024-hidden, 16-heads, 340M parameters                  |
-|               |                                                            | Trained on cased English text                  |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-base-multilingual-uncased``                         | (Original, not recommended) 12-layer, 768-hidden, 12-heads, 110M parameters
-|               |                                                            | Trained on lower-cased text in the top 102 languages with the largest Wikipedias
-|               |                                                            | (see `details <https://github.com/google-research/bert/blob/master/multilingual.md>`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-base-multilingual-cased``                           | (New, **recommended**) 12-layer, 768-hidden, 12-heads, 110M parameters                  |
-|               |                                                            | Trained on cased text in the top 104 languages with the largest Wikipedias
-|               |                                                            | (see `details <https://github.com/google-research/bert/blob/master/multilingual.md>`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|    BERT       | ``bert-base-chinese``                                      | 12-layer, 768-hidden, 12-heads, 110M parameters                  |
-|               |                                                            | Trained on cased Chinese Simplified and Traditional text |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-base-german-cased``                                 | 12-layer, 768-hidden, 12-heads, 110M parameters                  |
-|               |                                                            | Trained on cased German text by Deepset.ai |
-|               |                                                            | (see `details on deepset.ai website <https://deepset.ai/german-bert>`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-large-uncased-whole-word-masking``                  | 24-layer, 1024-hidden, 16-heads, 340M parameters                  |
-|               |                                                            | Trained on lower-cased English text using Whole-Word-Masking                  |
-|               |                                                            | (see `details <https://github.com/google-research/bert/#bert>`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-large-cased-whole-word-masking``                    | 24-layer, 1024-hidden, 16-heads, 340M parameters                  |
-|               |                                                            | Trained on cased English text using Whole-Word-Masking                  |
-|               |                                                            | (see `details <https://github.com/google-research/bert/#bert>`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-large-uncased-whole-word-masking-finetuned-squad``  | 24-layer, 1024-hidden, 16-heads, 340M parameters                  |
-|               |                                                            | The ``bert-large-uncased-whole-word-masking`` model fine-tuned on SQuAD                  |
-|               |                                                            | (see details of fine-tuning in the `example section`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-large-cased-whole-word-masking-finetuned-squad``    | 24-layer, 1024-hidden, 16-heads, 340M parameters                  |
-|               |                                                            | The ``bert-large-cased-whole-word-masking`` model fine-tuned on SQuAD                  |
-|               |                                                            | (see `details of fine-tuning in the example section <https://huggingface.co/pytorch-transformers/examples.html>`_)                 |
-|               +------------------------------------------------------------+---------------------------+ 
-|               | ``bert-base-cased-finetuned-mrpc``                         | 12-layer, 768-hidden, 12-heads, 110M parameters                  |
-|               |                                                            | The ``bert-base-cased`` model fine-tuned on MRPC                  |
-|               |                                                            | (see `details of fine-tuning in the example section <https://huggingface.co/pytorch-transformers/examples.html>`_)                 |
-+---------------+------------------------------------------------------------+---------------------------+ 
-|    GPT        | Cells may span columns.                                                                |
-+---------------+----------------------------------------------------------------------------------------+ 
 
-.. <https://huggingface.co/pytorch-transformers/examples.html>`_
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| Architecture      | Shortcut name                                              | Details of the model                                                                                                                  |
++===================+============================================================+=======================================================================================================================================+
+| BERT              | ``bert-base-uncased``                                      | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on lower-cased English text.                                                                                                |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-large-uncased``                                     | | 24-layer, 1024-hidden, 16-heads, 340M parameters.                                                                                   |
+|                   |                                                            | | Trained on lower-cased English text.                                                                                                |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-cased``                                        | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on cased English text.                                                                                                      |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-large-cased``                                       | | 24-layer, 1024-hidden, 16-heads, 340M parameters.                                                                                   |
+|                   |                                                            | | Trained on cased English text.                                                                                                      |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-multilingual-uncased``                         | | (Original, not recommended) 12-layer, 768-hidden, 12-heads, 110M parameters.                                                        |
+|                   |                                                            | | Trained on lower-cased text in the top 102 languages with the largest Wikipedias                                                    |
+|                   |                                                            | (see `details <https://github.com/google-research/bert/blob/master/multilingual.md>`__).                                              |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-multilingual-cased``                           | | (New, **recommended**) 12-layer, 768-hidden, 12-heads, 110M parameters.                                                             |
+|                   |                                                            | | Trained on cased text in the top 104 languages with the largest Wikipedias                                                          |
+|                   |                                                            | (see `details <https://github.com/google-research/bert/blob/master/multilingual.md>`__).                                              |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-chinese``                                      | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on cased Chinese Simplified and Traditional text.                                                                           |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-german-cased``                                 | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on cased German text by Deepset.ai                                                                                          |
+|                   |                                                            | (see `details on deepset.ai website <https://deepset.ai/german-bert>`__).                                                             |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-large-uncased-whole-word-masking``                  | | 24-layer, 1024-hidden, 16-heads, 340M parameters.                                                                                   |
+|                   |                                                            | | Trained on lower-cased English text using Whole-Word-Masking                                                                        |
+|                   |                                                            | (see `details <https://github.com/google-research/bert/#bert>`__).                                                                    |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-large-cased-whole-word-masking``                    | | 24-layer, 1024-hidden, 16-heads, 340M parameters.                                                                                   |
+|                   |                                                            | | Trained on cased English text using Whole-Word-Masking                                                                              |
+|                   |                                                            | (see `details <https://github.com/google-research/bert/#bert>`__).                                                                    |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-large-uncased-whole-word-masking-finetuned-squad``  | | 24-layer, 1024-hidden, 16-heads, 340M parameters.                                                                                   |
+|                   |                                                            | | The ``bert-large-uncased-whole-word-masking`` model fine-tuned on SQuAD                                                             |
+|                   |                                                            | (see details of fine-tuning in the `example section <https://github.com/huggingface/pytorch-transformers/tree/master/examples>`__).   |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-large-cased-whole-word-masking-finetuned-squad``    | | 24-layer, 1024-hidden, 16-heads, 340M parameters                                                                                    |
+|                   |                                                            | | The ``bert-large-cased-whole-word-masking`` model fine-tuned on SQuAD                                                               |
+|                   |                                                            | (see `details of fine-tuning in the example section <https://huggingface.co/pytorch-transformers/examples.html>`__)                   |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-cased-finetuned-mrpc``                         | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | The ``bert-base-cased`` model fine-tuned on MRPC                                                                                    |
+|                   |                                                            | (see `details of fine-tuning in the example section <https://huggingface.co/pytorch-transformers/examples.html>`__)                   |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| GPT               | ``openai-gpt``                                             | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | OpenAI GPT English model                                                                                                            |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| GPT-2             | ``gpt2``                                                   | | 12-layer, 768-hidden, 12-heads, 117M parameters.                                                                                    |
+|                   |                                                            | | OpenAI GPT-2 English model                                                                                                          |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``gpt2-medium``                                            | | 24-layer, 1024-hidden, 16-heads, 345M parameters.                                                                                   |
+|                   |                                                            | | OpenAI's Medium-sized GPT-2 English model                                                                                           |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``gpt2-large``                                             | | 36-layer, 1280-hidden, 20-heads, 774M parameters.                                                                                   |
+|                   |                                                            | | OpenAI's Large-sized GPT-2 English model                                                                                            |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| Transformer-XL    | ``transfo-xl-wt103``                                       | | 18-layer, 1024-hidden, 16-heads, 257M parameters.                                                                                   |
+|                   |                                                            | | English model trained on wikitext-103                                                                                               |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| XLNet             | ``xlnet-base-cased``                                       | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | XLNet English model                                                                                                                 |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlnet-large-cased``                                      | | 24-layer, 1024-hidden, 16-heads, 340M parameters.                                                                                   |
+|                   |                                                            | | XLNet Large English model                                                                                                           |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| XLM               | ``xlm-mlm-en-2048``                                        | | 12-layer, 2048-hidden, 16-heads                                                                                                     |
+|                   |                                                            | | XLM English model                                                                                                                   |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-mlm-ende-1024``                                      | | 6-layer, 1024-hidden, 8-heads                                                                                                       |
+|                   |                                                            | | XLM English-German Multi-language model                                                                                             |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-mlm-enfr-1024``                                      | | 6-layer, 1024-hidden, 8-heads                                                                                                       |
+|                   |                                                            | | XLM English-French Multi-language model                                                                                             |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-mlm-enro-1024``                                      | | 6-layer, 1024-hidden, 8-heads                                                                                                       |
+|                   |                                                            | | XLM English-Romanian Multi-language model                                                                                           |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-mlm-xnli15-1024``                                    | | 12-layer, 1024-hidden, 8-heads                                                                                                      |
+|                   |                                                            | | XLM Model pre-trained with MLM on the `15 XNLI languages <https://github.com/facebookresearch/XNLI>`__.                             |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-mlm-tlm-xnli15-1024``                                | | 12-layer, 1024-hidden, 8-heads                                                                                                      |
+|                   |                                                            | | XLM Model pre-trained with MLM + TLM on the `15 XNLI languages <https://github.com/facebookresearch/XNLI>`__.                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-clm-enfr-1024``                                      | | 12-layer, 1024-hidden, 8-heads                                                                                                      |
+|                   |                                                            | | XLM English model trained with CLM (Causal Language Modeling)                                                                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-clm-ende-1024``                                      | | 6-layer, 1024-hidden, 8-heads                                                                                                       |
+|                   |                                                            | | XLM English-German Multi-language model trained with CLM (Causal Language Modeling)                                                 |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| RoBERTa           | ``roberta-base``                                           | | 12-layer, 768-hidden, 12-heads, 125M parameters                                                                                     |
+|                   |                                                            | | RoBERTa using the BERT-base architecture                                                                                            |
+|                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`__)                                                   |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``roberta-large``                                          | | 24-layer, 1024-hidden, 16-heads, 355M parameters                                                                                    |
+|                   |                                                            | | RoBERTa using the BERT-large architecture                                                                                           |
+|                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`__)                                                   |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``roberta-large-mnli``                                     | | 24-layer, 1024-hidden, 16-heads, 355M parameters                                                                                    |
+|                   |                                                            | | ``roberta-large`` fine-tuned on `MNLI <http://www.nyu.edu/projects/bowman/multinli/>`__.                                            |
+|                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`__)                                                   |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+
+.. <https://huggingface.co/pytorch-transformers/examples.html>`__

@@ -21,20 +21,30 @@ The library currently contains PyTorch implementations, pre-trained model weight
     pretrained_models
     examples
     notebooks
+    serialization
     converting_tensorflow_models
     migration
     bertology
     torchscript
 
+.. toctree::
+    :maxdepth: 2
+    :caption: Main classes
+
+    main_classes/configuration
+    main_classes/model
+    main_classes/tokenizer
+    main_classes/optimizer_schedules
 
 .. toctree::
     :maxdepth: 2
     :caption: Package Reference
 
-    model_doc/overview
+    model_doc/auto
     model_doc/bert
     model_doc/gpt
     model_doc/transformerxl
     model_doc/gpt2
     model_doc/xlm
     model_doc/xlnet
+    model_doc/roberta

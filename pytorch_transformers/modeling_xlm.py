@@ -416,27 +416,35 @@ XLM_START_DOCSTRING = r"""    The XLM model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.XLMConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 XLM_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
+
+            XLM is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
             Indices can be obtained using :class:`pytorch_transformers.XLMTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1[``.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
         **langs**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
-            Indices are selected in the pre-trained language vocabulary,
-            i.e. in the range ``[0, config.n_langs - 1[``.
-        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
+            Indices are languages ids which can be obtained from the language names by using two conversion mappings
+            provided in the configuration of the model (only provided for multilingual models).
+            More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
+            the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -449,7 +457,7 @@ XLM_INPUTS_DOCSTRING = r"""
             hidden-states (key and values in the attention blocks) as computed by the model
             (see `cache` output below). Can be used to speed up sequential decoding.
             The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
-        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -472,12 +480,11 @@ class XLMModel(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> model = XLMModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        model = XLMModel.from_pretrained('xlm-mlm-en-2048')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     ATTRIBUTES = ['encoder', 'eos_index', 'pad_index',  # 'with_output', 
@@ -745,12 +752,11 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> model = XLMWithLMHeadModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        model = XLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
@@ -786,7 +792,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels]``.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
@@ -805,14 +811,12 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> 
-        >>> model = XLMForSequenceClassification(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=labels)
-        >>> loss, logits = outputs[:2]
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        model = XLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
     """
     def __init__(self, config):
@@ -885,15 +889,13 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
     Examples::
 
-        >>> config = XLMConfig.from_pretrained('xlm-mlm-en-2048')
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> 
-        >>> model = XLMForQuestionAnswering(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
-        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        >>> loss, start_scores, end_scores = outputs[:2]
+        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        start_positions = torch.tensor([1])
+        end_positions = torch.tensor([3])
+        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        loss, start_scores, end_scores = outputs[:2]
 
     """
     def __init__(self, config):

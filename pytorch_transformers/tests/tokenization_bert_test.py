@@ -24,30 +24,37 @@ from pytorch_transformers.tokenization_bert import (BasicTokenizer,
                                                     _is_control, _is_punctuation,
                                                     _is_whitespace, VOCAB_FILES_NAMES)
 
-from .tokenization_tests_commons import create_and_check_tokenizer_commons, TemporaryDirectory
+from .tokenization_tests_commons import CommonTestCases
 
-class TokenizationTest(unittest.TestCase):
+class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
-    def test_full_tokenizer(self):
+    tokenizer_class = BertTokenizer
+
+    def setUp(self):
+        super(BertTokenizationTest, self).setUp()
+
         vocab_tokens = [
             "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
             "##ing", ",", "low", "lowest",
         ]
-        with TemporaryDirectory() as tmpdirname:
-            vocab_file = os.path.join(tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-            with open(vocab_file, "w", encoding='utf-8') as vocab_writer:
-                vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
+        with open(self.vocab_file, "w", encoding='utf-8') as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-            input_text = u"UNwant\u00E9d,running"
-            output_text = u"unwanted, running"
+    def get_tokenizer(self):
+        return BertTokenizer.from_pretrained(self.tmpdirname)
 
-            create_and_check_tokenizer_commons(self, input_text, output_text, BertTokenizer, tmpdirname)
+    def get_input_output_texts(self):
+        input_text = u"UNwant\u00E9d,running"
+        output_text = u"unwanted, running"
+        return input_text, output_text
 
-            tokenizer = BertTokenizer(vocab_file)
+    def test_full_tokenizer(self):
+        tokenizer = BertTokenizer(self.vocab_file)
 
-            tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
-            self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-            self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
+        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()
@@ -118,6 +125,17 @@ class TokenizationTest(unittest.TestCase):
         self.assertFalse(_is_punctuation(u"A"))
         self.assertFalse(_is_punctuation(u" "))
 
+    def test_sequence_builders(self):
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+
+        text = tokenizer.encode("sequence builders")
+        text_2 = tokenizer.encode("multi-sequence build")
+
+        encoded_sentence = tokenizer.add_special_tokens_single_sentence(text)
+        encoded_pair = tokenizer.add_special_tokens_sentences_pair(text, text_2)
+
+        assert encoded_sentence == [101] + text + [102]
+        assert encoded_pair == [101] + text + [102] + text_2 + [102]
 
 if __name__ == '__main__':
     unittest.main()

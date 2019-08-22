@@ -394,8 +394,8 @@ class MultiHeadAttn(nn.Module):
         self.pre_lnorm = pre_lnorm
 
         if r_r_bias is None or r_w_bias is None: # Biases are not shared
-            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
         else:
             self.r_r_bias = r_r_bias
             self.r_w_bias = r_w_bias
@@ -483,8 +483,8 @@ class RelMultiHeadAttn(nn.Module):
         self.pre_lnorm = pre_lnorm
 
         if r_r_bias is None or r_w_bias is None: # Biases are not shared
-            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
         else:
             self.r_r_bias = r_r_bias
             self.r_w_bias = r_w_bias
@@ -803,13 +803,13 @@ class AdaptiveEmbedding(nn.Module):
                 nn.Embedding(n_token, d_embed, sparse=sample_softmax>0)
             )
             if d_proj != d_embed:
-                self.emb_projs.append(nn.Parameter(torch.Tensor(d_proj, d_embed)))
+                self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_embed)))
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i+1]
                 d_emb_i = d_embed // (div_val ** i)
                 self.emb_layers.append(nn.Embedding(r_idx-l_idx, d_emb_i))
-                self.emb_projs.append(nn.Parameter(torch.Tensor(d_proj, d_emb_i)))
+                self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
 
     def forward(self, inp):
         if self.div_val == 1:
@@ -928,12 +928,16 @@ TRANSFO_XL_START_DOCSTRING = r"""    The Transformer-XL model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 TRANSFO_XL_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
+            Transformer-XL is a model with relative position embeddings so you can either pad the inputs on
+            the right or on the left.
             Indices can be obtained using :class:`pytorch_transformers.TransfoXLTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -941,7 +945,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `mems` output below). Can be used to speed up sequential decoding and attend to longer context.
-        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -968,12 +972,11 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     Examples::
 
-        >>> config = TransfoXLConfig.from_pretrained('transfo-xl-wt103')
-        >>> tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-        >>> model = TransfoXLModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states, mems = outputs[:2]
+        tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
+        model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states, mems = outputs[:2]
 
     """
     def __init__(self, config):
@@ -1003,8 +1006,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.attn_type = config.attn_type
 
         if not config.untie_r:
-            self.r_w_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
-            self.r_r_bias = nn.Parameter(torch.Tensor(self.n_head, self.d_head))
+            self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
+            self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
 
         self.layers = nn.ModuleList()
         if config.attn_type == 0: # the default attention
@@ -1046,14 +1049,14 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         if self.attn_type == 0: # default attention
             self.pos_emb = PositionalEmbedding(self.d_model)
         elif self.attn_type == 1: # learnable
-            self.r_emb = nn.Parameter(torch.Tensor(
+            self.r_emb = nn.Parameter(torch.FloatTensor(
                     self.n_layer, self.max_klen, self.n_head, self.d_head))
-            self.r_bias = nn.Parameter(torch.Tensor(
+            self.r_bias = nn.Parameter(torch.FloatTensor(
                     self.n_layer, self.max_klen, self.n_head))
         elif self.attn_type == 2: # absolute standard
             self.pos_emb = PositionalEmbedding(self.d_model)
         elif self.attn_type == 3: # absolute deeper SA
-            self.r_emb = nn.Parameter(torch.Tensor(
+            self.r_emb = nn.Parameter(torch.FloatTensor(
                     self.n_layer, self.max_klen, self.n_head, self.d_head))
 
         self.apply(self.init_weights)
@@ -1284,12 +1287,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
     Examples::
 
-        >>> config = TransfoXLConfig.from_pretrained('transfo-xl-wt103')
-        >>> tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-        >>> model = TransfoXLLMHeadModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> prediction_scores, mems = outputs[:2]
+        tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
+        model = TransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        prediction_scores, mems = outputs[:2]
 
     """
     def __init__(self, config):

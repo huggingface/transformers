@@ -23,7 +23,7 @@ from shutil import copyfile
 import unicodedata
 import six
 
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +176,24 @@ class XLNetTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
         return out_string
+
+    def add_special_tokens_single_sentence(self, token_ids):
+        """
+        Adds special tokens to a sequence pair for sequence classification tasks.
+        An XLNet sequence pair has the following format: A [SEP] B [SEP][CLS]
+        """
+        sep = [self._convert_token_to_id(self.sep_token)]
+        cls = [self._convert_token_to_id(self.cls_token)]
+        return token_ids + sep + cls
+
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+        """
+        Adds special tokens to a sequence for sequence classification tasks.
+        An XLNet sequence has the following format: X [SEP][CLS]
+        """
+        sep = [self._convert_token_to_id(self.sep_token)]
+        cls = [self._convert_token_to_id(self.cls_token)]
+        return token_ids_0 + sep + token_ids_1 + sep + cls
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
