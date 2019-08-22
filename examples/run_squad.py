@@ -264,9 +264,14 @@ def evaluate(args, model, tokenizer, prefix=""):
                         args.version_2_with_negative, args.null_score_diff_threshold)
 
     # Evaluate with the official SQuAD script
-    evaluate_options = EVAL_OPTS(data_file=args.predict_file,
-                                 pred_file=output_prediction_file,
-                                 na_prob_file=output_null_log_odds_file)
+    if args.version_2_with_negative:
+        evaluate_options = EVAL_OPTS(data_file=args.predict_file,
+                                     pred_file=output_prediction_file,
+                                     na_prob_file=output_null_log_odds_file)
+    else:
+        evaluate_options = EVAL_OPTS(data_file=args.predict_file,
+                                     pred_file=output_prediction_file,
+                                     na_prob_file="")
     results = evaluate_on_squad(evaluate_options)
     return results
 
