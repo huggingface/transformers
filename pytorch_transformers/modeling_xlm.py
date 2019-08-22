@@ -561,6 +561,7 @@ class XLMModel(XLMPreTrainedModel):
 
         if hasattr(config, "pruned_heads"):
             pruned_heads = config.pruned_heads.copy().items()
+            config.pruned_heads = {}
             for layer, heads in pruned_heads:
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
