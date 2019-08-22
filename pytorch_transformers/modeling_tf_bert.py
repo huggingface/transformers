@@ -66,30 +66,29 @@ BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-def load_pt_weights_in_bert(model, config, pytorch_checkpoint_path):
-    """ Load pytorch checkpoints in a TF 2.0 model.
+def load_pt_weights_in_bert(tf_model, config):
+    """ Load pytorch checkpoints in a TF 2.0 model and save it using HDF5 format
+        We use HDF5 to easily do transfer learning
+        (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
     """
     try:
-        import re
-        import numpy as np
+        import h5py
+        HDF5_OBJECT_HEADER_LIMIT = 64512
         import torch
     except ImportError:
-        logger.error("Loading a PyTorch model in TensorFlow, requires PyTorch to be installed. Please see "
+        logger.error("Loading a PyTorch model in TensorFlow, requires PyTorch and HDF5 to be installed. Please see "
             "https://pytorch.org/ for installation instructions.")
         raise
-    pt_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting PyTorch checkpoint from {}".format(pt_path))
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(pt_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-        array = tf.train.load_variable(pt_path, name)
-        names.append(name)
-        arrays.append(array)
 
-    for name, array in zip(names, arrays):
+    with h5py.File(filepath, 'w') as f:
+        saving.save_weights_to_hdf5_group(f, self.layers)
+
+    pt_path = os.path.abspath(tf_checkpoint_path)
+    logger.info("Loading PyTorch weights from {}".format(pt_path))
+    # Load pytorch model
+    state_dict = torch.load(pt_path, map_location='cpu')
+
+    for name, array in state_dict.items():
         name = name.split('/')
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
@@ -227,11 +226,11 @@ class BertConfig(PretrainedConfig):
 
 
 
-class BertEmbeddings(tf.keras.layers.Layer):
+class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings.
     """
     def __init__(self, config):
-        super(BertEmbeddings, self).__init__()
+        super(TFBertEmbeddings, self).__init__()
         self.word_embeddings = tf.keras.layers.Embedding(config.vocab_size, config.hidden_size)
         self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = tf.keras.layers.Embedding(config.type_vocab_size, config.hidden_size)
@@ -241,7 +240,7 @@ class BertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, input_ids, token_type_ids=None, position_ids=None):
+    def call(self, input_ids, token_type_ids=None, position_ids=None, training=None):
         seq_length = tf.shape(input_ids)[1]
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
@@ -254,13 +253,14 @@ class BertEmbeddings(tf.keras.layers.Layer):
 
         embeddings = words_embeddings + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
+        if training:
+            embeddings = self.dropout(embeddings)
         return embeddings
 
 
-class BertSelfAttention(tf.keras.layers.Layer):
+class TFBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertSelfAttention, self).__init__()
+        super(TFBertSelfAttention, self).__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -282,7 +282,7 @@ class BertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, hidden_states, attention_mask, head_mask=None):
+    def call(self, hidden_states, attention_mask, head_mask=None, training=None):
         batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
@@ -296,15 +296,16 @@ class BertSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)  # (batch size, num_heads, seq_len_q, seq_len_k)
         dk = tf.cast(tf.shape(key_layer)[-1], tf.float32) # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
-        # Apply the attention mask is (precomputed for all layers in BertModel call() function)
+        # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
         attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        if training:
+            # This is actually dropping out entire tokens to attend to, which might
+            # seem a bit unusual, but is taken from the original Transformer paper.
+            attention_probs = self.dropout(attention_probs)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -320,39 +321,40 @@ class BertSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class BertSelfOutput(tf.keras.layers.Layer):
+class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertSelfOutput, self).__init__()
+        super(TFBertSelfOutput, self).__init__()
         self.dense = tf.keras.layers.Dense(config.hidden_size)
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, hidden_states, input_tensor):
+    def call(self, hidden_states, input_tensor, training=None):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        if training:
+            hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-class BertAttention(tf.keras.layers.Layer):
+class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertAttention, self).__init__()
-        self.self_attention = BertSelfAttention(config)
-        self.dense_output = BertSelfOutput(config)
+        super(TFBertAttention, self).__init__()
+        self.self_attention = TFBertSelfAttention(config)
+        self.dense_output = TFBertSelfOutput(config)
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, input_tensor, attention_mask, head_mask=None):
-        self_outputs = self.self_attention(input_tensor, attention_mask, head_mask)
-        attention_output = self.dense_output(self_outputs[0], input_tensor)
+    def call(self, input_tensor, attention_mask, head_mask=None, training=None):
+        self_outputs = self.self_attention(input_tensor, attention_mask, head_mask, training=training)
+        attention_output = self.dense_output(self_outputs[0], input_tensor, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
-class BertIntermediate(tf.keras.layers.Layer):
+class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertIntermediate, self).__init__()
+        super(TFBertIntermediate, self).__init__()
         self.dense = tf.keras.layers.Dense(config.intermediate_size)
         if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -365,51 +367,52 @@ class BertIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-class BertOutput(tf.keras.layers.Layer):
+class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertOutput, self).__init__()
+        super(TFBertOutput, self).__init__()
         self.dense = tf.keras.layers.Dense(config.hidden_size)
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, hidden_states, input_tensor):
+    def call(self, hidden_states, input_tensor, training=None):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        if training:
+            hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
-class BertLayer(tf.keras.layers.Layer):
+class TFBertLayer(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertLayer, self).__init__()
-        self.attention = BertAttention(config)
-        self.intermediate = BertIntermediate(config)
-        self.bert_output = BertOutput(config)
+        super(TFBertLayer, self).__init__()
+        self.attention = TFBertAttention(config)
+        self.intermediate = TFBertIntermediate(config)
+        self.bert_output = TFBertOutput(config)
 
-    def call(self, hidden_states, attention_mask, head_mask=None):
-        attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
+    def call(self, hidden_states, attention_mask, head_mask=None, training=None):
+        attention_outputs = self.attention(hidden_states, attention_mask, head_mask, training=training)
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.bert_output(intermediate_output, attention_output)
+        layer_output = self.bert_output(intermediate_output, attention_output, training=training)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
         return outputs
 
 
-class BertEncoder(tf.keras.layers.Layer):
+class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertEncoder, self).__init__()
+        super(TFBertEncoder, self).__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = [BertLayer(config) for _ in range(config.num_hidden_layers)]
+        self.layer = [TFBertLayer(config) for _ in range(config.num_hidden_layers)]
 
-    def call(self, hidden_states, attention_mask, head_mask=None):
+    def call(self, hidden_states, attention_mask, head_mask=None, training=None):
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i])
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask=head_mask[i], training=training)
             hidden_states = layer_outputs[0]
 
             if self.output_attentions:
@@ -427,9 +430,9 @@ class BertEncoder(tf.keras.layers.Layer):
         return outputs  # outputs, (hidden states), (attentions)
 
 
-class BertPooler(tf.keras.layers.Layer):
+class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertPooler, self).__init__()
+        super(TFBertPooler, self).__init__()
         self.dense = tf.keras.layers.Dense(config.hidden_size, activation='tanh')
 
     def call(self, hidden_states):
@@ -440,9 +443,9 @@ class BertPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-class BertPredictionHeadTransform(tf.keras.layers.Layer):
+class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertPredictionHeadTransform, self).__init__()
+        super(TFBertPredictionHeadTransform, self).__init__()
         self.dense = tf.keras.layers.Dense(config.hidden_size)
         if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
             self.transform_act_fn = ACT2FN[config.hidden_act]
@@ -457,10 +460,10 @@ class BertPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
-class BertLMPredictionHead(tf.keras.layers.Layer):
+class TFBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertLMPredictionHead, self).__init__()
-        self.transform = BertPredictionHeadTransform(config)
+        super(TFBertLMPredictionHead, self).__init__()
+        self.transform = TFBertPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -472,36 +475,24 @@ class BertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class BertOnlyMLMHead(tf.keras.layers.Layer):
+class TFBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertOnlyMLMHead, self).__init__()
-        self.predictions = BertLMPredictionHead(config)
+        super(TFBertOnlyMLMHead, self).__init__()
+        self.predictions = TFBertLMPredictionHead(config)
 
     def call(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
-class BertOnlyNSPHead(tf.keras.layers.Layer):
+class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config):
-        super(BertOnlyNSPHead, self).__init__()
+        super(TFBertOnlyNSPHead, self).__init__()
         self.seq_relationship = tf.keras.layers.Dense(2)
 
     def call(self, pooled_output):
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
-
-
-class BertPreTrainingHeads(tf.keras.layers.Layer):
-    def __init__(self, config):
-        super(BertPreTrainingHeads, self).__init__()
-        self.predictions = BertLMPredictionHead(config)
-        self.seq_relationship = tf.keras.layers.Dense(2)
-
-    def call(self, sequence_output, pooled_output):
-        prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
 
 
 class TFBertPreTrainedModel(TFPreTrainedModel):
@@ -619,9 +610,9 @@ class TFBertModel(TFBertPreTrainedModel):
     def __init__(self, config):
         super(TFBertModel, self).__init__(config)
 
-        self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
-        self.pooler = BertPooler(config)
+        self.embeddings = TFBertEmbeddings(config)
+        self.encoder = TFBertEncoder(config)
+        self.pooler = TFBertPooler(config)
 
         # self.apply(self.init_weights)  # TODO check weights initialization
 
@@ -635,7 +626,7 @@ class TFBertModel(TFBertPreTrainedModel):
         """
         raise NotImplementedError
 
-    def call(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
+    def call(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None, training=None):
         if attention_mask is None:
             attention_mask = tf.fill(tf.shape(input_ids), 1)
         if token_type_ids is None:
@@ -667,12 +658,210 @@ class TFBertModel(TFBertPreTrainedModel):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
+        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids, training=training)
         encoder_outputs = self.encoder(embedding_output,
                                        extended_attention_mask,
-                                       head_mask=head_mask)
+                                       head_mask=head_mask,
+                                       training=training)
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""Bert Model with two heads on top as done during the pre-training:
+    a `masked language modeling` head and a `next sentence prediction (classification)` head. """,
+    BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+class TFBertForPreTraining(TFBertPreTrainedModel):
+    r"""
+        **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+        **next_sentence_label**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
+            Indices should be in ``[0, 1]``.
+            ``0`` indicates sequence B is a continuation of sequence A,
+            ``1`` indicates sequence B is a random sequence.
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when both ``masked_lm_labels`` and ``next_sentence_label`` are provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
+        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        **seq_relationship_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, 2)``
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        prediction_scores, seq_relationship_scores = outputs[:2]
+
+    """
+    def __init__(self, config):
+        super(TFBertForPreTraining, self).__init__(config)
+
+        self.bert = TFBertModel(config)
+        self.cls_mlm = TFBertMLMHead(config)
+        self.cls_nsp = TFBertNSPHead(config)
+
+        # self.apply(self.init_weights)  # TODO check added weights initialization
+        self.tie_weights()
+
+    def tie_weights(self):
+        """ Make sure we are sharing the input and output embeddings.
+        """
+        pass  # TODO add weights tying
+
+    def call(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
+        outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                            attention_mask=attention_mask, head_mask=head_mask)
+
+        sequence_output, pooled_output = outputs[:2]
+        prediction_scores = self.cls_mlm(sequence_output)
+        seq_relationship_score = self.cls_nsp(pooled_output)
+
+        outputs = (prediction_scores, seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
+
+        # if masked_lm_labels is not None and next_sentence_label is not None:
+        #     loss_fct = CrossEntropyLoss(ignore_index=-1)
+        #     masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+        #     next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+        #     total_loss = masked_lm_loss + next_sentence_loss
+        #     outputs = (total_loss,) + outputs
+        # TODO add example with losses using model.compile and a dictionary of losses (give names to the output layers)
+
+        return outputs  # prediction_scores, seq_relationship_score, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""Bert Model with a `language modeling` head on top. """,
+    BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+class TFBertForMaskedLM(TFBertPreTrainedModel):
+    r"""
+        **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Masked language modeling loss.
+        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFBertForMaskedLM.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, masked_lm_labels=input_ids)
+        loss, prediction_scores = outputs[:2]
+
+    """
+    def __init__(self, config):
+        super(TFBertForMaskedLM, self).__init__(config)
+
+        self.bert = TFBertModel(config)
+        self.cls_mlm = TFBertMLMHead(config)
+
+        # self.apply(self.init_weights)
+        self.tie_weights()
+
+    def tie_weights(self):
+        """ Make sure we are sharing the input and output embeddings.
+        """
+        pass  # TODO add weights tying
+
+    def call(self, input_ids, token_type_ids=None, attention_mask=None,
+                position_ids=None, head_mask=None):
+        outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                            attention_mask=attention_mask, head_mask=head_mask)
+
+        sequence_output = outputs[0]
+        prediction_scores = self.cls_mlm(sequence_output)
+
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+        # if masked_lm_labels is not None:
+        #     loss_fct = CrossEntropyLoss(ignore_index=-1)
+        #     masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+        #     outputs = (masked_lm_loss,) + outputs
+        # TODO example with losses
+
+        return outputs  # prediction_scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""Bert Model with a `next sentence prediction (classification)` head on top. """,
+    BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
+    r"""
+        **next_sentence_label**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
+            Indices should be in ``[0, 1]``.
+            ``0`` indicates sequence B is a continuation of sequence A,
+            ``1`` indicates sequence B is a random sequence.
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``next_sentence_label`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Next sequence prediction (classification) loss.
+        **seq_relationship_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, 2)``
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        seq_relationship_scores = outputs[0]
+
+    """
+    def __init__(self, config):
+        super(TFBertForNextSentencePrediction, self).__init__(config)
+
+        self.bert = TFBertModel(config)
+        self.cls_nsp = TFBertNSPHead(config)
+
+        # self.apply(self.init_weights)
+
+    def call(self, input_ids, token_type_ids=None, attention_mask=None,
+                position_ids=None, head_mask=None):
+        outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                            attention_mask=attention_mask, head_mask=head_mask)
+        pooled_output = outputs[1]
+
+        seq_relationship_score = self.cls_nsp(pooled_output)
+
+        outputs = (seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
+        # if next_sentence_label is not None:
+        #     loss_fct = CrossEntropyLoss(ignore_index=-1)
+        #     next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+        #     outputs = (next_sentence_loss,) + outputs
+
+        return outputs  # seq_relationship_score, (hidden_states), (attentions)
