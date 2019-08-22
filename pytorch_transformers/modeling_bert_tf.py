@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model. """
+"""TF 2.0 BERT model. """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -24,9 +24,7 @@ import os
 import sys
 from io import open
 
-import torch
-from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+import tensorflow as tf
 
 from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
                              prune_linear_layer, add_start_docstrings)
@@ -224,7 +222,7 @@ try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
 except (ImportError, AttributeError) as e:
     logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    class BertLayerNorm(nn.Module):
+    class BertLayerNorm(tf.keras.layers.Layer):
         def __init__(self, hidden_size, eps=1e-12):
             """Construct a layernorm module in the TF style (epsilon inside the square root).
             """
@@ -239,14 +237,14 @@ except (ImportError, AttributeError) as e:
             x = (x - u) / torch.sqrt(s + self.variance_epsilon)
             return self.weight * x + self.bias
 
-class BertEmbeddings(nn.Module):
+class BertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings.
     """
     def __init__(self, config):
         super(BertEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = tf.keras.layers.Embedding(config.vocab_size, config.hidden_size)
+        self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = tf.keras.layers.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -271,7 +269,7 @@ class BertEmbeddings(nn.Module):
         return embeddings
 
 
-class BertSelfAttention(nn.Module):
+class BertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertSelfAttention, self).__init__()
         if config.hidden_size % config.num_attention_heads != 0:
@@ -331,7 +329,7 @@ class BertSelfAttention(nn.Module):
         return outputs
 
 
-class BertSelfOutput(nn.Module):
+class BertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertSelfOutput, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -345,7 +343,7 @@ class BertSelfOutput(nn.Module):
         return hidden_states
 
 
-class BertAttention(nn.Module):
+class BertAttention(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertAttention, self).__init__()
         self.self = BertSelfAttention(config)
@@ -375,7 +373,7 @@ class BertAttention(nn.Module):
         return outputs
 
 
-class BertIntermediate(nn.Module):
+class BertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertIntermediate, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -390,7 +388,7 @@ class BertIntermediate(nn.Module):
         return hidden_states
 
 
-class BertOutput(nn.Module):
+class BertOutput(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertOutput, self).__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -404,7 +402,7 @@ class BertOutput(nn.Module):
         return hidden_states
 
 
-class BertLayer(nn.Module):
+class BertLayer(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertLayer, self).__init__()
         self.attention = BertAttention(config)
@@ -420,7 +418,7 @@ class BertLayer(nn.Module):
         return outputs
 
 
-class BertEncoder(nn.Module):
+class BertEncoder(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertEncoder, self).__init__()
         self.output_attentions = config.output_attentions
@@ -452,7 +450,7 @@ class BertEncoder(nn.Module):
         return outputs  # outputs, (hidden states), (attentions)
 
 
-class BertPooler(nn.Module):
+class BertPooler(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertPooler, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -467,7 +465,7 @@ class BertPooler(nn.Module):
         return pooled_output
 
 
-class BertPredictionHeadTransform(nn.Module):
+class BertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertPredictionHeadTransform, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -484,7 +482,7 @@ class BertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-class BertLMPredictionHead(nn.Module):
+class BertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertLMPredictionHead, self).__init__()
         self.transform = BertPredictionHeadTransform(config)
@@ -503,7 +501,7 @@ class BertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class BertOnlyMLMHead(nn.Module):
+class BertOnlyMLMHead(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertOnlyMLMHead, self).__init__()
         self.predictions = BertLMPredictionHead(config)
@@ -513,7 +511,7 @@ class BertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-class BertOnlyNSPHead(nn.Module):
+class BertOnlyNSPHead(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertOnlyNSPHead, self).__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
@@ -523,7 +521,7 @@ class BertOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-class BertPreTrainingHeads(nn.Module):
+class BertPreTrainingHeads(tf.keras.layers.Layer):
     def __init__(self, config):
         super(BertPreTrainingHeads, self).__init__()
         self.predictions = BertLMPredictionHead(config)
@@ -567,13 +565,13 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
     pre-trained using a combination of masked language modeling objective and next sentence prediction
     on a large corpus comprising the Toronto Book Corpus and Wikipedia.
 
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
+    This model is a PyTorch `torch.tf.keras.layers.Layer`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     .. _`BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`:
         https://arxiv.org/abs/1810.04805
 
-    .. _`torch.nn.Module`:
+    .. _`torch.tf.keras.layers.Layer`:
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
