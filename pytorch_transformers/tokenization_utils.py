@@ -193,6 +193,13 @@ class PreTrainedTokenizer(object):
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
 
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the vocabulary files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
             inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
 
             kwargs: (`optional`) keyword arguments: will be passed to the Tokenizer ``__init__`` method. Can be used to set special tokens like ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``. See parameters in the doc string of :class:`~pytorch_transformers.PreTrainedTokenizer` for details.
@@ -223,6 +230,8 @@ class PreTrainedTokenizer(object):
     @classmethod
     def _from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         cache_dir = kwargs.pop('cache_dir', None)
+        force_download = kwargs.pop('force_download', False)
+        proxies = kwargs.pop('proxies', None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -283,7 +292,7 @@ class PreTrainedTokenizer(object):
                 if file_path is None:
                     resolved_vocab_files[file_id] = None
                 else:
-                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir)
+                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
         except EnvironmentError:
             if pretrained_model_name_or_path in s3_models:
                 logger.error("Couldn't reach server to download vocabulary.")
@@ -477,15 +486,45 @@ class PreTrainedTokenizer(object):
 
             Take care of added tokens.
         """
+        def split_on_token(tok, text):
+            result = []
+            split_text = text.split(tok)
+            for i, sub_text in enumerate(split_text):
+                sub_text = sub_text.strip()
+                if i == 0 and not sub_text:
+                    result += [tok]
+                elif i == len(split_text) - 1:
+                    if sub_text:
+                        result += [sub_text]
+                    else:
+                        pass
+                else:
+                    if sub_text:
+                        result += [sub_text]
+                    result += [tok]
+            return result
+
         def split_on_tokens(tok_list, text):
             if not text:
                 return []
             if not tok_list:
                 return self._tokenize(text, **kwargs)
-            tok = tok_list[0]
-            split_text = text.split(tok)
-            return sum((split_on_tokens(tok_list[1:], sub_text.strip()) + [tok] \
-                        for sub_text in split_text), [])[:-1]
+
+            tokenized_text = []
+            text_list = [text]
+            for tok in tok_list:
+                tokenized_text = []
+                for sub_text in text_list:
+                    if sub_text not in self.added_tokens_encoder \
+                            and sub_text not in self.all_special_tokens:
+                        tokenized_text += split_on_token(tok, sub_text)
+                    else:
+                        tokenized_text += [sub_text]
+                text_list = tokenized_text
+
+            return sum((self._tokenize(token, **kwargs) if token not \
+                    in self.added_tokens_encoder and token not in self.all_special_tokens \
+                    else [token] for token in tokenized_text), [])
 
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)

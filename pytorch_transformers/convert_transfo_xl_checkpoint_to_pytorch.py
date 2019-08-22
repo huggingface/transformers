@@ -75,7 +75,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(tf_checkpoint_path,
         if transfo_xl_config_file == "":
             config = TransfoXLConfig()
         else:
-            config = TransfoXLConfig(transfo_xl_config_file)
+            config = TransfoXLConfig.from_json_file(transfo_xl_config_file)
         print("Building PyTorch model from configuration: {}".format(str(config)))
         model = TransfoXLLMHeadModel(config)
 
