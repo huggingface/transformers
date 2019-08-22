@@ -453,6 +453,12 @@ class GPT2Model(GPT2PreTrainedModel):
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
+        if hasattr(config, "pruned_heads"):
+            pruned_heads = config.pruned_heads.copy().items()
+            for layer, heads in pruned_heads:
+                if self.h[int(layer)].attn.n_head == config.n_head:
+                    self.prune_heads({int(layer): list(map(int, heads))})
+
         self.apply(self.init_weights)
 
     def _resize_token_embeddings(self, new_num_tokens):
