@@ -381,8 +381,9 @@ class PreTrainedModel(nn.Module):
                         self.config.pruned_heads[int(layer)].append(head)
                         to_be_pruned[int(layer)].append(head)
                     else:
-                        logger.warning(f"Tried to remove head {head} of layer {layer} but it was already removed. "
-                                       f"The removed heads are {heads_to_prune}")
+                        logger.warning("Tried to remove head " + head +
+                                       " of layer " + layer +
+                                       " but it was already removed. The current removed heads are " + heads_to_prune)
 
         base_model._prune_heads(to_be_pruned)
 
