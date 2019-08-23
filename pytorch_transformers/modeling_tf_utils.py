@@ -55,7 +55,7 @@ class TFPreTrainedModel(tf.keras.Model):
     """
     config_class = None
     pretrained_model_archive_map = {}
-    load_tf_weights = lambda model, config, path: None
+    load_pt_weights = lambda model, config, path: None
     base_model_prefix = ""
 
     def __init__(self, config, *inputs, **kwargs):
@@ -138,7 +138,7 @@ class TFPreTrainedModel(tf.keras.Model):
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                - a path or url to a `PyTorch state_dict save file` (e.g. `./pt_model/pytorch_model.bin`). In this case, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in a TensorFlow model using the provided conversion scripts and loading the TensorFlow model afterwards.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -150,10 +150,8 @@ class TFPreTrainedModel(tf.keras.Model):
                 - the model was saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
-            state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
-                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and :func:`~pytorch_transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+            from_pt: (`optional`) boolean, default False:
+                Load the model weights from a PyTorch state_dict save file (see docstring of pretrained_model_name_or_path argument).
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
@@ -183,7 +181,80 @@ class TFPreTrainedModel(tf.keras.Model):
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
-            model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_pt=True, config=config)
 
         """
-        raise NotImplementedError
+        config = kwargs.pop('config', None)
+        cache_dir = kwargs.pop('cache_dir', None)
+        from_pt = kwargs.pop('from_pt', False)
+        force_download = kwargs.pop('force_download', False)
+        proxies = kwargs.pop('proxies', None)
+        output_loading_info = kwargs.pop('output_loading_info', False)
+
+        # Load config
+        if config is None:
+            config, model_kwargs = cls.config_class.from_pretrained(
+                pretrained_model_name_or_path, *model_args,
+                cache_dir=cache_dir, return_unused_kwargs=True,
+                force_download=force_download,
+                **kwargs
+            )
+        else:
+            model_kwargs = kwargs
+
+        # Load model
+        if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
+            archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
+        elif os.path.isdir(pretrained_model_name_or_path):
+            if from_pt:
+                # Load from a PyTorch checkpoint
+                archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+            else:
+                archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME)
+        else:
+            archive_file = pretrained_model_name_or_path
+        # redirect to the cache, if necessary
+        try:
+            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+        except EnvironmentError:
+            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
+                logger.error(
+                    "Couldn't reach server at '{}' to download pretrained weights.".format(
+                        archive_file))
+            else:
+                logger.error(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url but couldn't find any file "
+                    "associated to this path or url.".format(
+                        pretrained_model_name_or_path,
+                        ', '.join(cls.pretrained_model_archive_map.keys()),
+                        archive_file))
+            return None
+        if resolved_archive_file == archive_file:
+            logger.info("loading weights file {}".format(archive_file))
+        else:
+            logger.info("loading weights file {} from cache at {}".format(
+                archive_file, resolved_archive_file))
+
+        # Instantiate model.
+        model = cls(config, *model_args, **model_kwargs)
+
+        if from_pt:
+            # Load from a PyTorch checkpoint
+            return cls.load_pt_weights(model, config, resolved_archive_file)
+
+        inputs = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+        ret = model(inputs, training=False)  # build the network with dummy inputs
+
+        model.load_weights(resolved_archive_file)
+
+        ret = model(inputs, training=False)  # Make sure restore ops are run
+
+        # if hasattr(model, 'tie_weights'):
+        #     model.tie_weights()  # TODO make sure word embedding weights are still tied
+
+        if output_loading_info:
+            loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys, "error_msgs": error_msgs}
+            return model, loading_info
+
+        return model

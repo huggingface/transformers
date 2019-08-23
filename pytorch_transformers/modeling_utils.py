@@ -214,6 +214,9 @@ class PreTrainedModel(nn.Module):
                 - the model was saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
+            from_tf: (`optional`) boolean, default False:
+                Load the model weights from a Tensorflow index checkpoint file (see docstring of pretrained_model_name_or_path argument).
+
             state_dict: (`optional`) dict:
                 an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
