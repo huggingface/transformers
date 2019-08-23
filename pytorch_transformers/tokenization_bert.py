@@ -140,6 +140,14 @@ class BertTokenizer(PreTrainedTokenizer):
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
     @property
+    def max_len_single_sentence(self):
+        return self.max_len - 2  # take into account special tokens
+
+    @property
+    def max_len_sentences_pair(self):
+        return self.max_len - 3  # take into account special tokens
+
+    @property
     def vocab_size(self):
         return len(self.vocab)
 
