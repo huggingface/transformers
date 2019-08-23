@@ -488,7 +488,7 @@ class SnliProcessor(DataProcessor):
         return examples
 
 
-class Expl2LabelProcessor(DataProcessor):
+class Expl2LabelsProcessor(DataProcessor):
     """Processor for the ESNLI data set, but predict label only based on explanation (GLUE)"""
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -762,6 +762,8 @@ def compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "snli":
         return {"acc": simple_accuracy(preds, labels)}
+    elif task_name == "expl2labels":
+        return {"acc": simple_accuracy(preds, labels)}
     else:
         raise KeyError(task_name)
 
@@ -778,6 +780,7 @@ processors = {
     "wnli": WnliProcessor,
     "esnli": EsnliProcessor,
     "snli": SnliProcessor,
+    "expl2labels": Expl2LabelsProcessor,
 }
 
 output_modes = {
@@ -793,6 +796,7 @@ output_modes = {
     "wnli": "classification",
     "esnli": "classification",
     "snli": "classification",
+    "expl2labels": "classification",
 }
 
 GLUE_TASKS_NUM_LABELS = {
@@ -807,4 +811,5 @@ GLUE_TASKS_NUM_LABELS = {
     "wnli": 2,
     "esnli": 3,
     "snli": 3,
+    "expl2labels": 3,
 }
