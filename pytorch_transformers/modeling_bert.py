@@ -136,12 +136,20 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
 
 
 def gelu(x):
-    """Implementation of the gelu activation function.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+    """ Implementation of the gelu activation function.
+        Originaly Bert used this version of GELU:
+        x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+        For information: OpenAI GPT's gelu was slightly different (and gives slightly different results):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         Also see https://arxiv.org/abs/1606.08415
+
+        Later the original Bert code base switched to OpenAI GPT version when introducing TF-Hub support:
+        https://github.com/google-research/bert/commit/bee6030e31e42a9394ac567da170a89a98d2062f#diff-96e597a501ef9ac4d4d532c577565861
+
+        We are following this update here as well.
     """
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 
 def swish(x):

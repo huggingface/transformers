@@ -198,7 +198,7 @@ class PreTrainedModel(nn.Module):
         The warning ``Weights from XXX not used in YYY`` means that the layer XXX is not used by YYY, therefore those weights are discarded.
 
         Parameters:
-            pretrained_model_name_or_path: either:
+            pretrained_model_name_or_path: (`optional`) either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.

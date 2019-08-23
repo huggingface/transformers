@@ -73,6 +73,7 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
     try:
         import re
         import torch
+        import numpy
         from tensorflow.python.keras import backend as K
     except ImportError:
         logger.error("Loading a PyTorch model in TensorFlow, requires PyTorch to be installed. Please see "
@@ -84,8 +85,9 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
     # Load pytorch model
     state_dict = torch.load(pt_path, map_location='cpu')
 
-    inputs = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-    ret = tf_model(inputs, training=False)  # build the network
+    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
+    tf_inputs = tf.constant(inputs_list)
+    tfo = tf_model(tf_inputs, training=False)  # build the network
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     weight_value_tuples = []
@@ -106,7 +108,7 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
         array = state_dict[name].numpy()
 
         if transpose:
-            array = np.transpose(array)
+            array = numpy.transpose(array)
 
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
@@ -120,7 +122,44 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
 
     K.batch_set_value(weight_value_tuples)
 
-    ret = tf_model(inputs, training=False)  # Make sure restore ops are run
+    tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+
+    from .modeling_bert import BertForPreTraining
+    pt_model = BertForPreTraining.from_pretrained('bert-base-uncased', config=config, state_dict=state_dict)
+
+    pt_inputs = torch.tensor(inputs_list)
+    with torch.no_grad():
+        pto = pt_model(pt_inputs)
+
+        t = tf_model.bert.embeddings([tf_inputs, None, None], training=False)
+        nt = t.numpy()
+        p = pt_model.bert.embeddings(pt_inputs, None, None)
+        np = p.numpy()
+
+        t1 = tf_model.bert.encoder.layer[0].attention.self_attention.query(t)
+        nt1 = t1.numpy()
+        p1 = pt_model.bert.encoder.layer[0].attention.self.query(p)
+        np1 = p1.numpy()
+
+        numpy.amax(numpy.abs(nt - np))
+        numpy.amax(numpy.abs(nt1 - np1))
+
+        t2 = tf_model.bert.encoder.layer[0].attention([t, 0.0, None], training=False)
+        nt2 = t2[0].numpy()
+        p2 = pt_model.bert.encoder.layer[0].attention(p, 0, None)
+        np2 = p2[0].numpy()
+
+        numpy.amax(numpy.abs(nt2 - np2))
+        numpy.amax(numpy.abs(nt - np))
+
+        t3 = tf_model.bert.encoder.layer[0].intermediate(t2[0])
+        nt3 = t3.numpy()
+        p3 = pt_model.bert.encoder.layer[0].intermediate(p2[0])
+        np3 = p3.numpy()
+
+        numpy.amax(numpy.abs(nt3 - np3))
+        numpy.amax(numpy.abs(nt - np))
+
     return tf_model
 
 
