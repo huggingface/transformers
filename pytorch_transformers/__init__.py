@@ -3,6 +3,7 @@ __version__ = "1.1.0"
 from .configuration_utils import PretrainedConfig, CONFIG_NAME
 from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, cached_path)
 
+
 # Tokenizers
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
@@ -13,6 +14,7 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_utils import (PreTrainedTokenizer)
+
 
 # PyTorch
 from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
@@ -50,6 +52,7 @@ from .modeling_roberta import (RobertaConfig, RobertaForMaskedLM, RobertaModel, 
 from .modeling_utils import (WEIGHTS_NAME, TF_WEIGHTS_NAME,
                              PreTrainedModel, prune_layer, Conv1D)
 
+
 # TensorFlow
 from .modeling_tf_utils import (TFPreTrainedModel)
-from .modeling_tf_bert import TFBertModel
+from .modeling_tf_bert import TFBertModel, TFBertForPreTraining, load_pt_weights_in_bert
