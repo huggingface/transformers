@@ -71,7 +71,9 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
         (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
     """
     try:
+        import re
         import torch
+        from tensorflow.python.keras import backend as K
     except ImportError:
         logger.error("Loading a PyTorch model in TensorFlow, requires PyTorch to be installed. Please see "
             "https://pytorch.org/ for installation instructions.")
@@ -83,50 +85,43 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
     state_dict = torch.load(pt_path, map_location='cpu')
 
     inputs = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-    ret = tf_model(inputs, training=False)
+    ret = tf_model(inputs, training=False)  # build the network
 
-    for name, array in state_dict.items():
+    symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
+    weight_value_tuples = []
+    for symbolic_weight in symbolic_weights:
+        name = symbolic_weight.name
+        name = name.replace('_bis', '')
+        name = name.replace(':0', '')
+        name = name.replace('layer_', 'layer/')
         name = name.split('/')
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(n in ["adam_v", "adam_m", "global_step"] for n in name):
-            logger.info("Skipping {}".format("/".join(name)))
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r'[A-Za-z]+_\d+', m_name):
-                l = re.split(r'_(\d+)', m_name)
-            else:
-                l = [m_name]
-            if l[0] == 'kernel' or l[0] == 'gamma':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'output_bias' or l[0] == 'beta':
-                pointer = getattr(pointer, 'bias')
-            elif l[0] == 'output_weights':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'squad':
-                pointer = getattr(pointer, 'classifier')
-            else:
-                try:
-                    pointer = getattr(pointer, l[0])
-                except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
-                    continue
-            if len(l) >= 2:
-                num = int(l[1])
-                pointer = pointer[num]
-        if m_name[-11:] == '_embeddings':
-            pointer = getattr(pointer, 'weight')
-        elif m_name == 'kernel':
+        name = name[1:]
+
+        transpose = bool(name[-1] == 'kernel')
+        if name[-1] == 'kernel' or name[-1] == 'embeddings':
+            name[-1] = 'weight'
+
+        name = '.'.join(name)
+        assert name in state_dict
+        array = state_dict[name].numpy()
+
+        if transpose:
             array = np.transpose(array)
+
         try:
-            assert pointer.shape == array.shape
+            assert list(symbolic_weight.shape) == list(array.shape)
         except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info("Initialize PyTorch weight {}".format(name))
-        pointer.data = torch.from_numpy(array)
-    return model
+            e.args += (symbolic_weight.shape, array.shape)
+            raise e
+
+        logger.info("Initialize TF weight {}".format(symbolic_weight.name))
+
+        weight_value_tuples.append((symbolic_weight, array))
+
+    K.batch_set_value(weight_value_tuples)
+
+    ret = tf_model(inputs, training=False)  # Make sure restore ops are run
+    return tf_model
 
 
 def is_scalar(tensor):
@@ -483,7 +478,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = tf.keras.layers.Dense(config.vocab_size, name='decoder')
+        self.decoder = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name='decoder')
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,),
