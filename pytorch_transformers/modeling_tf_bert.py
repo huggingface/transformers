@@ -236,7 +236,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         input_ids, position_ids, token_type_ids = inputs
 
         seq_length = tf.shape(input_ids)[1]
@@ -280,7 +280,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
         batch_size = tf.shape(hidden_states)[0]
@@ -328,7 +328,7 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         hidden_states, input_tensor = inputs
 
         hidden_states = self.dense(hidden_states)
@@ -347,7 +347,7 @@ class TFBertAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         input_tensor, attention_mask, head_mask = inputs
 
         self_outputs = self.self_attention([input_tensor, attention_mask, head_mask], training=training)
@@ -378,7 +378,7 @@ class TFBertOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         hidden_states, input_tensor = inputs
 
         hidden_states = self.dense(hidden_states)
@@ -395,7 +395,7 @@ class TFBertLayer(tf.keras.layers.Layer):
         self.intermediate = TFBertIntermediate(config, name='intermediate')
         self.bert_output = TFBertOutput(config, name='output')
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
         attention_outputs = self.attention([hidden_states, attention_mask, head_mask], training=training)
@@ -413,7 +413,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.layer = [TFBertLayer(config, name='layer_{}'.format(i)) for i in range(config.num_hidden_layers)]
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
         all_hidden_states = ()
@@ -533,7 +533,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs
             attention_mask, head_mask, position_ids, token_type_ids = None, None, None, None
