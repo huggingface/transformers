@@ -68,14 +68,6 @@ class PreTrainedTokenizer(object):
                                  "additional_special_tokens"]
 
     @property
-    def max_len_single_sentence(self):
-        return self.max_len  # Default to max_len but can be smaller in specific tokenizers to take into account special tokens
-
-    @property
-    def max_len_sentences_pair(self):
-        return self.max_len  # Default to max_len but can be smaller in specific tokenizers to take into account special tokens
-
-    @property
     def bos_token(self):
         """ Beginning of sentence token (string). Log an error if used while not having been set. """
         if self._bos_token is None:
@@ -174,6 +166,9 @@ class PreTrainedTokenizer(object):
         self._additional_special_tokens = []
 
         self.max_len = max_len if max_len is not None else int(1e12)
+        self.max_len_single_sentence = self.max_len
+        self.max_len_sentences_pair = self.max_len
+
         self.added_tokens_encoder = {}
         self.added_tokens_decoder = {}
 

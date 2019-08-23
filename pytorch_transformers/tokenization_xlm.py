@@ -122,6 +122,10 @@ class XLMTokenizer(PreTrainedTokenizer):
                                            cls_token=cls_token, mask_token=mask_token,
                                            additional_special_tokens=additional_special_tokens,
                                            **kwargs)
+
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+
         try:
             import ftfy
             from spacy.lang.en import English
@@ -214,14 +218,6 @@ class XLMTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
         return out_string
-
-    @property
-    def max_len_single_sentence(self):
-        return self.max_len - 2  # take into account special tokens
-
-    @property
-    def max_len_sentences_pair(self):
-        return self.max_len - 3  # take into account special tokens
 
     def add_special_tokens_single_sentence(self, token_ids):
         """
