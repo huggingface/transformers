@@ -488,6 +488,36 @@ class SnliProcessor(DataProcessor):
         return examples
 
 
+class Expl2LabelProcessor(DataProcessor):
+    """Processor for the ESNLI data set, but predict label only based on explanation (GLUE)"""
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "train.csv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_csv(os.path.join(data_dir, "dev.csv")), "dev")
+
+    def get_labels(self):
+        """See base class."""
+        return ["contradiction", "entailment", "neutral"]
+    
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, line[0])
+            label = line[1]
+            expl = line[4]
+            examples.append(
+                InputExample(guid=guid, text_a=expl, text_b=None, label=label))
+        return examples
+
+    
 def convert_examples_to_features(examples, label_list, max_seq_length,
                                  tokenizer, output_mode,
                                  cls_token_at_end=False, pad_on_left=False,
