@@ -94,38 +94,18 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
 
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ['bias', 'LayerNorm.weight']
-    '''
     optimizer_grouped_parameters = [
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
-    '''
-    encoder = model.encoder
-    enc_optimizer_grouped_parameters = [
-        {'params': [p for n, p in encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
-        {'params': [p for n, p in encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-    enc_optimizer = AdamW(enc_optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    enc_scheduler = WarmupLinearSchedule(enc_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
-    
-    decoder = model.decoder
-    dec_optimizer_grouped_parameters = [
-        {'params': [p for n, p in decoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
-        {'params': [p for n, p in decoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.001}
-        ]
-    dec_optimizer = AdamW(dec_optimizer_grouped_parameters, lr=0.001, eps=args.adam_epsilon)
-    dec_scheduler = WarmupLinearSchedule(dec_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
-    
     if args.fp16:
         try:
             from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        #model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
-        encoder, enc_optimizer = amp.initialize(encoder, enc_optimizer, opt_level=args.fp16_opt_level)
-        decoder, dec_optimizer = amp.initialize(decoder, dec_optimizer, opt_level=args.fp16_opt_level)
+        model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
@@ -161,80 +141,27 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                       'attention_mask': batch[1],
                       'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM don't use segment_ids
                       'labels':         batch[3]}
-            if args.expl:
-                inputs['input_ids2'] = batch[4]
-                inputs['attention_mask2'] = batch[5]
-                inputs['token_type_ids2'] = batch[6]
-                inputs['expl_idx'] = batch[7]
-                inputs['all_expl'] = all_expl
-                inputs['mode'] = 'teacher'
             outputs = model(**inputs)
-            
-            if args.expl:
-                result_sentence = ""
-                outputs_expl = []
-                for probs in outputs:
-                    max_idx = torch.argmax(probs, 0, keepdim=True)
-                    one_hot = torch.FloatTensor(probs.shape).to('cuda')
-                    one_hot.zero_()
-                    one_hot.scatter_(0, max_idx, 1)
-                    max_idx = int(max_idx[0])
-                    result_sentence = result_sentence + " " + tokenizer._convert_id_to_token(max_idx) 
-                    outputs_expl.append(probs.to('cuda'))
-                #print('generated expl:', result_sentence)
+            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
-                from torch.nn import CrossEntropyLoss, MSELoss
-                loss_fct = CrossEntropyLoss(ignore_index=-1)
-
-                index = batch[7]
-                expl_sentence = all_expl[index] #assume batch size = 1
-                expl_sentence_t = expl_sentence.rstrip()
-                true_expl = []
-                for i in range(len(outputs)):
-                    word = expl_sentence_t[i]
-                    true_index = tokenizer._convert_token_to_id(word)
-                    true_expl.append(true_index)
-
-                outputs_expl = torch.stack(outputs_expl)
-                true_expl = torch.LongTensor(true_expl)
-                
-                #outputs_expl = outputs_expl.view(outputs_expl.size(0) * outputs_expl.size(1), -1)
-                
-                outputs_expl = outputs_expl.to('cuda')
-                true_expl = true_expl.to('cuda')
-                
-                #print('outputs: ',outputs_expl.size()) # 10 * vocab_size
-                #print('true expl: ',true_expl.size()) # 10
-                
-                loss = loss_fct(outputs_expl, true_expl)
-                
-            else:
-                loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
-            
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
             if args.fp16:
-                with amp.scale_loss(loss, enc_optimizer) as scaled_loss:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(enc_optimizer), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
             else:
                 loss.backward()
-                #torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.max_grad_norm)
-                torch.nn.utils.clip_grad_norm_(decoder.parameters(), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
-            
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                enc_scheduler.step()  # Update learning rate schedule
-                enc_optimizer.step() #causing problem: predicting UNK only
-                encoder.zero_grad()
-                dec_scheduler.step()  
-                dec_optimizer.step() #causing problem: predicting UNK only b/c learning rate is too high
-                decoder.zero_grad()
+                scheduler.step()  # Update learning rate schedule
+                optimizer.step()
+                model.zero_grad()
                 global_step += 1
 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
@@ -243,11 +170,9 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                    tb_writer.add_scalar('lr', enc_scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar('lr', dec_scheduler.get_lr()[0], global_step)
+                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
-                    
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
