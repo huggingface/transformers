@@ -177,6 +177,14 @@ class XLNetTokenizer(PreTrainedTokenizer):
         out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
         return out_string
 
+    @property
+    def max_len_single_sentence(self):
+        return self.max_len - 2  # take into account special tokens
+
+    @property
+    def max_len_sentences_pair(self):
+        return self.max_len - 3  # take into account special tokens
+
     def add_special_tokens_single_sentence(self, token_ids):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
