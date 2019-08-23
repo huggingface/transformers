@@ -125,6 +125,9 @@ class BertTokenizer(PreTrainedTokenizer):
         super(BertTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
                                             pad_token=pad_token, cls_token=cls_token,
                                             mask_token=mask_token, **kwargs)
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
@@ -138,14 +141,6 @@ class BertTokenizer(PreTrainedTokenizer):
                                                   never_split=never_split,
                                                   tokenize_chinese_chars=tokenize_chinese_chars)
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
-
-    @property
-    def max_len_single_sentence(self):
-        return self.max_len - 2  # take into account special tokens
-
-    @property
-    def max_len_sentences_pair(self):
-        return self.max_len - 3  # take into account special tokens
 
     @property
     def vocab_size(self):
