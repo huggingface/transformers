@@ -397,11 +397,15 @@ OPENAI_GPT_START_DOCSTRING = r"""    OpenAI GPT model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
+            GPT is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
             Indices can be obtained using :class:`pytorch_transformers.BPT2Tokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -602,7 +606,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 @add_start_docstrings("""OpenAI GPT Model transformer with a language modeling and a multiple-choice classification
 head on top e.g. for RocStories/SWAG tasks. The two heads are two linear layers.
 The language modeling head has its weights tied to the input embeddings,
-the classification head takes as input the input of a specified classification token index in the intput sequence).
+the classification head takes as input the input of a specified classification token index in the input sequence).
 """, OPENAI_GPT_START_DOCSTRING)
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     r"""    Inputs:

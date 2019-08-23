@@ -90,7 +90,8 @@ ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.RobertaConfig`): Model configuration class with all the parameters of the 
-            model.
+            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 ROBERTA_INPUTS_DOCSTRING = r"""
@@ -109,6 +110,10 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
             Fully encoded sequences or sequence pairs can be obtained using the RobertaTokenizer.encode function with 
             the ``add_special_tokens`` parameter set to ``True``.
+
+            RoBERTa is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
