@@ -72,6 +72,9 @@ from .modeling_utils import PreTrainedModel, prune_layer, Conv1D
 
 
 # TensorFlow
-from .modeling_tf_utils import TFPreTrainedModel
-from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertModel, TFBertForPreTraining,
-                               TFBertForMaskedLM, TFBertForNextSentencePrediction, load_pt_weights_in_bert)
+try:
+    from .modeling_tf_utils import TFPreTrainedModel
+    from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertModel, TFBertForPreTraining,
+                                TFBertForMaskedLM, TFBertForNextSentencePrediction, load_pt_weights_in_bert)
+except:
+    pass
