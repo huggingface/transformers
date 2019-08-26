@@ -574,7 +574,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         tokens = tokens_a + [sep_token]
         segment_ids = [sequence_a_segment_id] * len(tokens)
 
-        if tokens_b and not expl:
+        if tokens_b:
             tokens += tokens_b + [sep_token]
             segment_ids += [sequence_b_segment_id] * (len(tokens_b) + 1)
 
@@ -613,84 +613,22 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         else:
             raise KeyError(output_mode)
         
-        if expl and tokens_b:
-            #get tokens2, input_ids2, input_mask2, segment_ids2
-            
-            tokens2 = tokens_b + [sep_token]
-            segment_ids2 = [sequence_a_segment_id] * len(tokens2)
+        if ex_index < 5:
+            logger.info("*** Example ***")
+            logger.info("guid: %s" % (example.guid))
+            logger.info("tokens: %s" % " ".join(
+                    [str(x) for x in tokens]))
+            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+            logger.info("label: %s (id = %d)" % (example.label, label_id))
 
-            if cls_token_at_end:
-                tokens2 = tokens2 + [cls_token]
-                segment_ids2 = segment_ids2 + [cls_token_segment_id]
-            else:
-                tokens2 = [cls_token] + tokens2
-                segment_ids2 = [cls_token_segment_id] + segment_ids2
-
-            input_ids2 = tokenizer.convert_tokens_to_ids(tokens2)
-            
-            # The mask has 1 for real tokens and 0 for padding tokens. Only real
-            # tokens are attended to.
-            input_mask2 = [1 if mask_padding_with_zero else 0] * len(input_ids2)
-
-            # Zero-pad up to the sequence length.
-            padding_length2 = max_seq_length - len(input_ids2)
-            if pad_on_left:
-                input_ids2 = ([pad_token] * padding_length2) + input_ids2
-                input_mask2 = ([0 if mask_padding_with_zero else 1] * padding_length2) + input_mask2
-                segment_ids2 = ([pad_token_segment_id] * padding_length2) + segment_ids2
-            else:
-                input_ids2 = input_ids2 + ([pad_token] * padding_length2)
-                input_mask2 = input_mask2 + ([0 if mask_padding_with_zero else 1] * padding_length2)
-                segment_ids2 = segment_ids2 + ([pad_token_segment_id] * padding_length2)
-
-            assert len(input_ids2) == max_seq_length
-            assert len(input_mask2) == max_seq_length
-            assert len(segment_ids2) == max_seq_length
-            
-            if ex_index < 5:
-                logger.info("*** Example ***")
-                logger.info("guid: %s" % (example.guid))
-                logger.info("tokens: %s" % " ".join(
-                        [str(x) for x in tokens]))
-                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-                logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-                logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-                
-                logger.info("tokens2: %s" % " ".join(
-                        [str(x) for x in tokens2]))
-                logger.info("input_ids2: %s" % " ".join([str(x) for x in input_ids2]))
-                logger.info("input_mask2: %s" % " ".join([str(x) for x in input_mask2]))
-                logger.info("segment_ids2: %s" % " ".join([str(x) for x in segment_ids2]))
-                
-                logger.info("label: %s (id = %d)" % (example.label, label_id))
-                logger.info("expl: %s" % example.expl)
-                
-            features.append(
-                    InputFeatures(input_ids=input_ids,
-                                  input_mask=input_mask,
-                                  segment_ids=segment_ids,
-                                  input_ids2=input_ids2,
-                                  input_mask2=input_mask2,
-                                  segment_ids2=segment_ids2,
-                                  label_id=label_id,
-                                  expl=example.expl))
-            
-        else:
-            if ex_index < 5:
-                logger.info("*** Example ***")
-                logger.info("guid: %s" % (example.guid))
-                logger.info("tokens: %s" % " ".join(
-                        [str(x) for x in tokens]))
-                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-                logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-                logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-                logger.info("label: %s (id = %d)" % (example.label, label_id))
-                
-            features.append(
-                    InputFeatures(input_ids=input_ids,
-                                  input_mask=input_mask,
-                                  segment_ids=segment_ids,
-                                  label_id=label_id))
+        features.append(
+                InputFeatures(input_ids=input_ids,
+                              input_mask=input_mask,
+                              segment_ids=segment_ids,
+                              label_id=label_id,
+                              expl=example.expl))
       
     return features
 
@@ -813,3 +751,48 @@ GLUE_TASKS_NUM_LABELS = {
     "snli": 3,
     "expl2labels": 3,
 }
+
+
+CLS_token = 0 # in decoder language
+SEP_token = 1 # in decoder language
+MAX_LENGTH = 128
+class Lang:
+    def __init__(self):
+       #initialize containers to hold the words and corresponding index
+        self.word2index = {}
+        self.word2count = {}
+        self.index2word = {0: "CLS", 1: "SEP"}
+        self.n_words = 2  # Count CLS and SEP
+
+    #split a sentence into words and add it to the container
+    def addSentence(self, sentence):
+        for word in sentence.split(' '):
+            self.addWord(word)
+
+    #If the word is not in the container, the word will be added to it, 
+    #else, update the word counter
+    def addWord(self, word):
+        if word not in self.word2index:
+            self.word2index[word] = self.n_words
+            self.word2count[word] = 1
+            self.index2word[self.n_words] = word
+            self.n_words += 1
+        else:
+            self.word2count[word] += 1
+            
+            
+def normalize_sentence(sentence):
+    sentence = sentence.lower()
+    sentence = sentence.str.replace('[^A-Za-z\s]+', '')
+    sentence = sentence.str.normalize('NFD')
+    sentence = sentence.str.encode('ascii', errors='ignore').str.decode('utf-8')
+    return sentence
+
+def indexesFromSentence(lang, sentence):
+    return [lang.word2index[word] for word in sentence.split(' ')]
+
+def tensorFromSentence(lang, sentence):
+    indexes = indexesFromSentence(lang, sentence)
+    indexes.append(EOS_token)
+    return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
+

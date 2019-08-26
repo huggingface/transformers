@@ -42,7 +42,7 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
 from utils_glue import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors)
+                        output_modes, processors, Lang, normalize_sentence, tensorFromSentence)
 
 import sys
 import time
@@ -135,12 +135,17 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
+            print('train loss: %s' % tr_loss)
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
                       'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM don't use segment_ids
                       'labels':         batch[3]}
+            if args.expl:
+                inputs['expl_idx'] = batch[4]
+                inputs['all_expl'] = all_expl
+                inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
@@ -308,13 +313,10 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
         
     if args.expl:
-        all_input_ids2 = torch.tensor([f.input_ids2 for f in features], dtype=torch.long)
-        all_input_mask2 = torch.tensor([f.input_mask2 for f in features], dtype=torch.long)
-        all_segment_ids2 = torch.tensor([f.segment_ids2 for f in features], dtype=torch.long)
         all_expl = [f.expl for f in features]
         all_expl_idx = torch.tensor([idx for idx in range(len(features))], dtype=torch.long)
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids,
-                                all_input_ids2, all_input_mask2, all_segment_ids2, all_expl_idx)
+                                all_expl_idx)
         return dataset, all_expl
     else:
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
@@ -425,7 +427,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         #device = torch.device("cuda:1") #TODO: get rid of this line once 0 is available
-        args.n_gpu = torch.cuda.device_count() - 3 #TODO: get rid of -3 once want to using one is working
+        args.n_gpu = torch.cuda.device_count() #- 3 #TODO: get rid of -1 once want to using one is working
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
