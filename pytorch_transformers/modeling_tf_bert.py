@@ -512,7 +512,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
         a simple interface for dowloading and loading pretrained models.
     """
     config_class = BertConfig
-    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    pretrained_model_archive_map = TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_pt_weights = load_pt_weights_in_bert
     base_model_prefix = "bert"
 

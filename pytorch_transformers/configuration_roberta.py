@@ -22,7 +22,7 @@ import logging
 import sys
 from io import open
 
-from .configuration_utils import PretrainedConfig
+from .configuration_bert import BertConfig
 
 logger = logging.getLogger(__name__)
 

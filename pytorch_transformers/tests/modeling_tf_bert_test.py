@@ -23,7 +23,7 @@ import pytest
 import tensorflow as tf
 
 from pytorch_transformers import (BertConfig)
-from pytorch_transformers.modeling_tf_bert import TFBertModel, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers.modeling_tf_bert import TFBertModel, TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -318,7 +318,7 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFBertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
