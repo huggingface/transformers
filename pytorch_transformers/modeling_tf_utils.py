@@ -243,6 +243,8 @@ class TFPreTrainedModel(tf.keras.Model):
         inputs = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
         ret = model(inputs, training=False)  # build the network with dummy inputs
 
+        # 'by_name' allow us to do transfer learning by skipping/adding layers
+        # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         model.load_weights(resolved_archive_file, by_name=True)
 
         ret = model(inputs, training=False)  # Make sure restore ops are run
