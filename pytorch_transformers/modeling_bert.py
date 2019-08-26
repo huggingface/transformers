@@ -1252,27 +1252,25 @@ class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size):
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
-
         self.embedding = nn.Embedding(output_size, hidden_size)
-        self.lstm = nn.LSTM(hidden_size, hidden_size, 1)
+        self.gru = nn.GRU(hidden_size, hidden_size, 1)
         self.out = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax(dim=1)
 
-    def forward(self, input1, hidden):
-        
-        #output = self.embedding(input1).view(1, 1, -1) # error: want scalar (int instead of float) type long, but got tensor.cuda.float type
-
-        output = input1#.view(1, 1, -1) # no new embedding layer
+    def forward(self, decoder_input, hidden):
+        embedded = self.embedding(decoder_input.to('cuda')) # (8,100)
+        embedded = embedded.unsqueeze(0) # (1, 8, 100)
         
         import torch.nn.functional as F
-        output = F.relu(output)
-        
-        output, hidden = self.lstm(output, (hidden, hidden))
-        output = self.softmax(self.out(output[0]))
-        return output, hidden
+        embedded = F.relu(embedded)
+        output, hidden = self.gru(embedded, hidden)
+        output = self.out(output[0]) # (8, n_vocab)
+        prediction = self.softmax(output)
+ 
+        return prediction, hidden
 
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=device)
+    #def initHidden(self):
+        #return torch.zeros(1, 1, self.hidden_size, device=device)
     
     
 class BertForESNLI(BertPreTrainedModel):
@@ -1281,40 +1279,30 @@ class BertForESNLI(BertPreTrainedModel):
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
         self.pooler = BertPooler(config)
-
         self.apply(self.init_weights)
         
-        hidden_size = 768 #to be consistent with bert
-        #hidden_size = 100 #working with small dataset
-        output_size = 128 #to be consistent with args max_seq_len
-        self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=output_size).to('cuda')
+        #hidden_size = 768 #to be consistent with bert
+        hidden_size = 100 #working with small dataset
+        self.output_size = config.vocab_size 
+        self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=self.output_size).to('cuda')
         
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.hid2vocab = nn.Linear(config.hidden_size,
-                                 config.vocab_size,
-                                 bias=False)
-        
+        self.resize = nn.Linear(768, hidden_size)
     
-    def forward(self, input_ids, input_ids2, all_expl, expl_idx, mode, labels=None, token_type_ids=None, attention_mask=None, token_type_ids2=None, attention_mask2=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, mode=None, labels=None, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
+        # processing data
         position_ids = None
-        position_ids2 = None
+        
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
-        if attention_mask2 is None:
-            attention_mask2 = torch.ones_like(input_ids2)
-        if token_type_ids2 is None:
-            token_type_ids2 = torch.zeros_like(input_ids2)
+        
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_attention_mask2 = attention_mask2.unsqueeze(1).unsqueeze(2)
+        
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        extended_attention_mask2 = extended_attention_mask2.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
-        extended_attention_mask2 = (1.0 - extended_attention_mask2) * -10000.0
-
+        
         head_mask = [None] * self.config.num_hidden_layers
         embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
         encoder_outputs = self.encoder(embedding_output,
@@ -1324,54 +1312,42 @@ class BertForESNLI(BertPreTrainedModel):
         pooled_output = self.pooler(sequence_output)
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
         
-        # for s2
-        head_mask2 = [None] * self.config.num_hidden_layers
-
-        embedding_output2 = self.embeddings(input_ids2, position_ids=position_ids2, token_type_ids=token_type_ids2)
-        encoder_outputs2 = self.encoder(embedding_output2,
-                                       extended_attention_mask2,
-                                       head_mask=head_mask2)
-        sequence_output2 = encoder_outputs2[0]
-        pooled_output2 = self.pooler(sequence_output2)
-
-        outputs2 = (sequence_output2, pooled_output2,) + encoder_outputs2[1:]
+        bert_output, bert_output_pooled = outputs[0], outputs[1] 
         
-        u, u_emb = outputs[0], outputs[1] 
-        v, v_emb = outputs2[0], outputs2[1]
-        
-        # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size(768, default)
+        # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size
         # a.k.a outputs
-        u_size = u.size() 
+        bert_output_size = bert_output.size() 
+        bert_output = self.resize(bert_output)
         
-        # <batch size per gpu> (8, args) * hidden_size(768, default)
+        # <batch size per gpu> (8, args) * hidden_size
         # a.k.a. final state
-        u_emb_size = u_emb.size() 
+        bert_output_pooled_size = bert_output_pooled.size() 
+        bert_output_pooled = self.resize(bert_output_pooled)
         
-        v_size = v.size() 
-        v_emb_size = v_emb.size()
-        assert u_size == v_size, "encoding of premise and hypothesis differ in size"
-        assert u_emb_size == v_emb_size, "pooled encoding of premise and hypothesis differ in size"
-        assert u_size[2] == 768, "encoder output differs from hidden size"
-        assert u_size[0] == len(expl_idx), "number of premises differ from number of explanations"
+        target_length = 10 
+        batch_size = 1
+        vocab_size = self.output_size
+        generated_expl = torch.zeros(target_length, batch_size, vocab_size).to('cuda')
         
-        expl = [all_expl[i] for i in expl_idx] # a list of 8 explanation texts
-        expl_token = [line.rstrip() for line in expl]
-
-        # make u (8 * 128 * 768) into (128 * 8 * 768) # for esnli decoder only
-        #u = u.permute(1, 0, 2)
-        #v = v.permute(1, 0, 2)
-        # u_emb (8 * 768) is already (8 * 768)
+        CLS_token = 0 # in decoder language
+        SEP_token = 1 # in decoder language
         
-        result = []
-        #u (8 * 128 * 768) -> take first 100 (8*128*100)
-        hidden_states = u[-1].reshape((1,128,768))
-        for i in range(10):
-            decoder_output, decoder_hidden = self.decoder(u, hidden_states) #take only premise's encoding results and produce a next sentence for now
-            #decoder_output: 128 * 128
-            #decoder_hidden[0]: 1 * 128 * 768
-            hidden_states = decoder_hidden[0]
-            probs = self.hid2vocab(hidden_states[0,-1]) 
-            #print('probs size:', probs.size()) # n_vocab
-            result.append(probs)
+        decoder_hidden = bert_output_pooled.unsqueeze(0) # (8,100) -> (1,8,100)
+        decoder_input = torch.LongTensor([CLS_token] * 8) # 8 is the batch size
         
-        return result
+        for i in range(target_length):
+            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden) #take only premise's encoding results and produce a next sentence for now
+            #decoder_output:(8, 30522) a.k.a. (bs, n_vocab)
+            #decoder_hidden[0]: (1, 8, 100) a.k.a (1, bs, hidden_size)
+            
+            generated_expl[i] = decoder_output 
+            #RuntimeError: The expanded size of the tensor (1) must match the existing size (8) at non-singleton dimension 0.  Target sizes: [1, 30522].  Tensor sizes: [8, 30522]
+            #TODO: how to work with loss and batch size?
+            
+            topv, topi = decoder_output.topk(1)
+            decoder_input = topi
+            #input = (target[t] if teacher_force else topi)
+            #if(teacher_force == False and input.item() == EOS_token):
+                #break
+        
+        return outputs # outputs[0] = loss
