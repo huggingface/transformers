@@ -21,10 +21,9 @@ from io import open
 
 import torch
 
-from pytorch_transformers.modeling_openai import (CONFIG_NAME, WEIGHTS_NAME,
-                                                     OpenAIGPTConfig,
-                                                     OpenAIGPTModel,
-                                                     load_tf_weights_in_openai_gpt)
+from pytorch_transformers import (CONFIG_NAME, WEIGHTS_NAME,
+                                  OpenAIGPTConfig, OpenAIGPTModel,
+                                  load_tf_weights_in_openai_gpt)
 
 import logging
 logging.basicConfig(level=logging.INFO)

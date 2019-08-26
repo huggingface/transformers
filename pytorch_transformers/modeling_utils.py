@@ -30,15 +30,10 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
-from .file_utils import cached_path
+from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME
 from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
-
-CONFIG_NAME = "config.json"
-WEIGHTS_NAME = "pytorch_model.bin"
-TF_WEIGHTS_NAME = 'model.ckpt'
-
 
 try:
     from torch.nn import Identity
@@ -264,7 +259,7 @@ class PreTrainedModel(nn.Module):
         # Load config
         if config is None:
             config, model_kwargs = cls.config_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args,
+                pretrained_model_name_or_path,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
                 **kwargs

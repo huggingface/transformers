@@ -27,43 +27,29 @@ from io import open
 import numpy as np
 import tensorflow as tf
 
-from .configuration_utils import CONFIG_NAME, PretrainedConfig
+from .configuration_bert import BertConfig
+from .modeling_tf_utils import TFPreTrainedModel
 from .file_utils import add_start_docstrings
-from .modeling_tf_utils import WEIGHTS_NAME, TFPreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-pytorch_model.bin",
-    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-pytorch_model.bin",
-    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin",
-    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-pytorch_model.bin",
-    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-pytorch_model.bin",
-    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-pytorch_model.bin",
-    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-pytorch_model.bin",
-    'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-pytorch_model.bin",
-    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-pytorch_model.bin",
-    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-pytorch_model.bin",
-    'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-pytorch_model.bin",
-    'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
-    'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
+
+TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tf_model.h5",
+    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-tf_model.h5",
+    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-tf_model.h5",
+    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-tf_model.h5",
+    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-tf_model.h5",
+    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-tf_model.h5",
+    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-tf_model.h5",
+    'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-tf_model.h5",
+    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-tf_model.h5",
+    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-tf_model.h5",
+    'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-tf_model.h5",
+    'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-tf_model.h5",
+    'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-tf_model.h5",
 }
 
-BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",
-    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-config.json",
-    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-config.json",
-    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-config.json",
-    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-config.json",
-    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-config.json",
-    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-config.json",
-    'bert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-config.json",
-    'bert-large-uncased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-config.json",
-    'bert-large-cased-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-config.json",
-    'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-config.json",
-    'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-config.json",
-    'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-config.json",
-}
 
 def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
     """ Load pytorch checkpoints in a TF 2.0 model and save it using HDF5 format
@@ -93,7 +79,8 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
     weight_value_tuples = []
     for symbolic_weight in symbolic_weights:
         name = symbolic_weight.name
-        name = name.replace('_bis', '')
+        name = name.replace('cls_mlm', 'cls')  # We had to split this layer in two in the TF model to be
+        name = name.replace('cls_nsp', 'cls')  # able to do transfer learning (Keras only allow to remove full layers)
         name = name.replace(':0', '')
         name = name.replace('layer_', 'layer/')
         name = name.split('/')
@@ -123,48 +110,7 @@ def load_pt_weights_in_bert(tf_model, config, pytorch_checkpoint_path):
     K.batch_set_value(weight_value_tuples)
 
     tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
-
-    from .modeling_bert import BertForPreTraining
-    pt_model = BertForPreTraining.from_pretrained('bert-base-uncased', config=config, state_dict=state_dict)
-
-    pt_inputs = torch.tensor(inputs_list)
-    with torch.no_grad():
-        pto = pt_model(pt_inputs)
-
-        t = tf_model.bert.embeddings([tf_inputs, None, None], training=False)
-        nt = t.numpy()
-        p = pt_model.bert.embeddings(pt_inputs, None, None)
-        np = p.numpy()
-
-        t1 = tf_model.bert.encoder.layer[0].attention.self_attention.query(t)
-        nt1 = t1.numpy()
-        p1 = pt_model.bert.encoder.layer[0].attention.self.query(p)
-        np1 = p1.numpy()
-
-        numpy.amax(numpy.abs(nt - np))
-        numpy.amax(numpy.abs(nt1 - np1))
-
-        t2 = tf_model.bert.encoder.layer[0].attention([t, 0.0, None], training=False)
-        nt2 = t2[0].numpy()
-        p2 = pt_model.bert.encoder.layer[0].attention(p, 0, None)
-        np2 = p2[0].numpy()
-
-        numpy.amax(numpy.abs(nt2 - np2))
-        numpy.amax(numpy.abs(nt - np))
-
-        t3 = tf_model.bert.encoder.layer[0].intermediate(t2[0])
-        nt3 = t3.numpy()
-        p3 = pt_model.bert.encoder.layer[0].intermediate(p2[0])
-        np3 = p3.numpy()
-
-        numpy.amax(numpy.abs(nt3 - np3))
-        numpy.amax(numpy.abs(nt - np))
-
     return tf_model
-
-
-def is_scalar(tensor):
-    return tf.equal(tf.rank(tensor), tf.constant(0))
 
 
 def gelu(x):
@@ -188,77 +134,6 @@ def swish(x):
 ACT2FN = {"gelu": tf.keras.layers.Activation(gelu),
           "relu": tf.keras.activations.relu,
           "swish": tf.keras.layers.Activation(swish)}
-
-
-class BertConfig(PretrainedConfig):
-    r"""
-        :class:`~pytorch_transformers.BertConfig` is the configuration class to store the configuration of a
-        `BertModel`.
-
-
-        Arguments:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `BertModel`.
-            hidden_size: Size of the encoder layers and the pooler layer.
-            num_hidden_layers: Number of hidden layers in the Transformer encoder.
-            num_attention_heads: Number of attention heads for each attention layer in
-                the Transformer encoder.
-            intermediate_size: The size of the "intermediate" (i.e., feed-call)
-                layer in the Transformer encoder.
-            hidden_act: The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-            hidden_dropout_prob: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob: The dropout ratio for the attention
-                probabilities.
-            max_position_embeddings: The maximum sequence length that this model might
-                ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048).
-            type_vocab_size: The vocabulary size of the `token_type_ids` passed into
-                `BertModel`.
-            initializer_range: The sttdev of the truncated_normal_initializer for
-                initializing all weight matrices.
-            layer_norm_eps: The epsilon used by LayerNorm.
-    """
-    pretrained_config_archive_map = BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-
-    def __init__(self,
-                 vocab_size_or_config_json_file=30522,
-                 hidden_size=768,
-                 num_hidden_layers=12,
-                 num_attention_heads=12,
-                 intermediate_size=3072,
-                 hidden_act="gelu",
-                 hidden_dropout_prob=0.1,
-                 attention_probs_dropout_prob=0.1,
-                 max_position_embeddings=512,
-                 type_vocab_size=2,
-                 initializer_range=0.02,
-                 layer_norm_eps=1e-12,
-                 **kwargs):
-        super(BertConfig, self).__init__(**kwargs)
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.vocab_size = vocab_size_or_config_json_file
-            self.hidden_size = hidden_size
-            self.num_hidden_layers = num_hidden_layers
-            self.num_attention_heads = num_attention_heads
-            self.hidden_act = hidden_act
-            self.intermediate_size = intermediate_size
-            self.hidden_dropout_prob = hidden_dropout_prob
-            self.attention_probs_dropout_prob = attention_probs_dropout_prob
-            self.max_position_embeddings = max_position_embeddings
-            self.type_vocab_size = type_vocab_size
-            self.initializer_range = initializer_range
-            self.layer_norm_eps = layer_norm_eps
-        else:
-            raise ValueError("First argument must be either a vocabulary size (int)"
-                             "or the path to a pretrained model config file (str)")
-
 
 
 class TFBertEmbeddings(tf.keras.layers.Layer):
@@ -809,8 +684,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         super(TFBertForPreTraining, self).__init__(config)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_mlm = TFBertMLMHead(config, name='cls')
-        self.cls_nsp = TFBertNSPHead(config, name='cls_bis')
+        self.cls_mlm = TFBertMLMHead(config, name='cls_mlm')
+        self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
 
         # self.apply(self.init_weights)  # TODO check added weights initialization
         self.tie_weights()
@@ -876,7 +751,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         super(TFBertForMaskedLM, self).__init__(config)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_mlm = TFBertMLMHead(config, name='cls')
+        self.cls_mlm = TFBertMLMHead(config, name='cls_mlm')
 
         # self.apply(self.init_weights)
         self.tie_weights()
@@ -938,7 +813,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         super(TFBertForNextSentencePrediction, self).__init__(config)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_nsp = TFBertNSPHead(config, name='cls')
+        self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
 
         # self.apply(self.init_weights)
 

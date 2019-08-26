@@ -28,12 +28,9 @@ import six
 import tensorflow as tf
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path
+from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME
 
 logger = logging.getLogger(__name__)
-
-CONFIG_NAME = "config.json"
-WEIGHTS_NAME = "tf_model.bin"
 
 
 class TFPreTrainedModel(tf.keras.Model):
@@ -246,7 +243,7 @@ class TFPreTrainedModel(tf.keras.Model):
         inputs = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
         ret = model(inputs, training=False)  # build the network with dummy inputs
 
-        model.load_weights(resolved_archive_file)
+        model.load_weights(resolved_archive_file, by_name=True)
 
         ret = model(inputs, training=False)  # Make sure restore ops are run
 
