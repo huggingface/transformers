@@ -163,14 +163,14 @@ class RobertaTokenizer(PreTrainedTokenizer):
     def add_special_tokens_single_sentence(self, token_ids):
         """
         Adds special tokens to a sequence for sequence classification tasks.
-        A RoBERTa sequence has the following format: [CLS] X [SEP]
+        A RoBERTa sequence has the following format: <s> X </s>
         """
         return [self._convert_token_to_id(self.cls_token)] + token_ids + [self._convert_token_to_id(self.sep_token)]
 
     def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
-        A RoBERTa sequence pair has the following format: [CLS] A [SEP][SEP] B [SEP]
+        A RoBERTa sequence pair has the following format: <s> A </s></s> B </s>
         """
         sep = [self._convert_token_to_id(self.sep_token)]
         cls = [self._convert_token_to_id(self.cls_token)]
