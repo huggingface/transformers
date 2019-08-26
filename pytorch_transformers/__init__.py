@@ -10,7 +10,8 @@ from .tokenization_roberta import RobertaTokenizer
 
 from .tokenization_utils import (PreTrainedTokenizer)
 
-from .modeling_auto import (AutoConfig, AutoModel)
+from .modeling_auto import (AutoConfig, AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
+                            AutoModelWithLMHead)
 
 from .modeling_bert import (BertConfig, BertPreTrainedModel, BertModel, BertForPreTraining,
                             BertForMaskedLM, BertForNextSentencePrediction,
