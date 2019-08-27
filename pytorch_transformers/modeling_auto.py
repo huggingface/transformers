@@ -31,7 +31,7 @@ from .modeling_xlnet import XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForS
 from .modeling_xlm import XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering
 from .modeling_roberta import RobertaConfig, RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification
 
-from .modeling_utils import PreTrainedModel, SequenceSummary
+from .modeling_utils import PreTrainedModel, SequenceSummary, add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
@@ -76,26 +76,32 @@ class AutoConfig(object):
             - contains `roberta`: RobertaConfig (RoBERTa model)
 
         Params:
-            **pretrained_model_name_or_path**: either:
-                - a string with the `shortcut name` of a pre-trained model configuration to load from cache
-                    or download and cache if not already stored in cache (e.g. 'bert-base-uncased').
-                - a path to a `directory` containing a configuration file saved
-                    using the `save_pretrained(save_directory)` method.
-                - a path or url to a saved configuration `file`.
-            **cache_dir**: (`optional`) string:
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model configuration to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing a configuration file saved using the :func:`~pytorch_transformers.PretrainedConfig.save_pretrained` method, e.g.: ``./my_model_directory/``.
+                - a path or url to a saved configuration JSON `file`, e.g.: ``./my_model_directory/configuration.json``.
+
+            cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
                 configuration should be cached if the standard cache should not be used.
-            **return_unused_kwargs**: (`optional`) bool:
+
+            kwargs: (`optional`) dict: key/value pairs with which to update the configuration object after loading.
+
+                - The values in kwargs of any keys which are configuration attributes will be used to override the loaded values.
+                - Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled by the `return_unused_kwargs` keyword parameter.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            return_unused_kwargs: (`optional`) bool:
+
                 - If False, then this function returns just the final configuration object.
-                - If True, then this functions returns a tuple `(config, unused_kwargs)` where `unused_kwargs`
-                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes:
-                ie the part of kwargs which has not been used to update `config` and is otherwise ignored.
-            **kwargs**: (`optional`) dict:
-                Dictionary of key/value pairs with which to update the configuration object after loading.
-                - The values in kwargs of any keys which are configuration attributes will be used
-                to override the loaded values.
-                - Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
-                by the `return_unused_kwargs` keyword parameter.
+                - If True, then this functions returns a tuple `(config, unused_kwargs)` where `unused_kwargs` is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: ie the part of kwargs which has not been used to update `config` and is otherwise ignored.
 
         Examples::
 
@@ -161,7 +167,7 @@ class AutoModel(object):
         r""" Instantiates one of the base model classes of the library
         from a pre-trained model configuration.
 
-        The base model class to instantiate is selected as the first pattern matching
+        The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `roberta`: RobertaModel (RoBERTa model)
             - contains `bert`: BertModel (Bert model)
@@ -175,44 +181,46 @@ class AutoModel(object):
             To train the model, you should first set it back in training mode with `model.train()`
 
         Params:
-            **pretrained_model_name_or_path**: either:
-                - a string with the `shortcut name` of a pre-trained model to load from cache
-                    or download and cache if not already stored in cache (e.g. 'bert-base-uncased').
-                - a path to a `directory` containing a configuration file saved
-                    using the `save_pretrained(save_directory)` method.
-                - a path or url to a tensorflow index checkpoint `file` (e.g. `./tf_model/model.ckpt.index`).
-                    In this case, ``from_tf`` should be set to True and a configuration object should be
-                    provided as `config` argument. This loading option is slower than converting the TensorFlow
-                    checkpoint in a PyTorch model using the provided conversion scripts and loading
-                    the PyTorch model afterwards.
-            **model_args**: (`optional`) Sequence:
-                All remaining positional arguments will be passed to the underlying model's __init__ function
-            **config**: an optional configuration for the model to use instead of an automatically loaded configuration.
-                Configuration can be automatically loaded when:
-                - the model is a model provided by the library (loaded with a `shortcut name` of a pre-trained model), or
-                - the model was saved using the `save_pretrained(save_directory)` (loaded by supplying the save directory).
-            **state_dict**: an optional state dictionary for the model to use instead of a state dictionary loaded
-                from saved weights file.
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~pytorch_transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using `save_pretrained(dir)` and `from_pretrained(save_directory)` is not
-                a simpler option.
-            **cache_dir**: (`optional`) string:
+                In this case though, you should check if using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and :func:`~pytorch_transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
                 configuration should be cached if the standard cache should not be used.
-            **output_loading_info**: (`optional`) boolean:
-                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
-            **kwargs**: (`optional`) dict:
-                Dictionary of key, values to update the configuration object after loading.
-                Can be used to override selected configuration parameters. E.g. ``output_attention=True``.
 
-               - If a configuration is provided with `config`, **kwargs will be directly passed
-                 to the underlying model's __init__ method.
-               - If a configuration is not provided, **kwargs will be first passed to the pretrained
-                 model configuration class loading function (`PretrainedConfig.from_pretrained`).
-                 Each key of **kwargs that corresponds to a configuration attribute
-                 will be used to override said attribute with the supplied **kwargs value.
-                 Remaining keys that do not correspond to any configuration attribute will
-                 be passed to the underlying model's __init__ function.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~pytorch_transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
 
         Examples::
 
@@ -294,44 +302,46 @@ class AutoModelWithLMHead(object):
         To train the model, you should first set it back in training mode with `model.train()`
 
         Params:
-            **pretrained_model_name_or_path**: either:
-                - a string with the `shortcut name` of a pre-trained model to load from cache
-                    or download and cache if not already stored in cache (e.g. 'bert-base-uncased').
-                - a path to a `directory` containing a configuration file saved
-                    using the `save_pretrained(save_directory)` method.
-                - a path or url to a tensorflow index checkpoint `file` (e.g. `./tf_model/model.ckpt.index`).
-                    In this case, ``from_tf`` should be set to True and a configuration object should be
-                    provided as `config` argument. This loading option is slower than converting the TensorFlow
-                    checkpoint in a PyTorch model using the provided conversion scripts and loading
-                    the PyTorch model afterwards.
-            **model_args**: (`optional`) Sequence:
-                All remaining positional arguments will be passed to the underlying model's __init__ function
-            **config**: an optional configuration for the model to use instead of an automatically loaded configuration.
-                Configuration can be automatically loaded when:
-                - the model is a model provided by the library (loaded with a `shortcut name` of a pre-trained model), or
-                - the model was saved using the `save_pretrained(save_directory)` (loaded by supplying the save directory).
-            **state_dict**: an optional state dictionary for the model to use instead of a state dictionary loaded
-                from saved weights file.
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~pytorch_transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using `save_pretrained(dir)` and `from_pretrained(save_directory)` is not
-                a simpler option.
-            **cache_dir**: (`optional`) string:
+                In this case though, you should check if using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and :func:`~pytorch_transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
                 configuration should be cached if the standard cache should not be used.
-            **output_loading_info**: (`optional`) boolean:
-                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
-            **kwargs**: (`optional`) dict:
-                Dictionary of key, values to update the configuration object after loading.
-                Can be used to override selected configuration parameters. E.g. ``output_attention=True``.
 
-               - If a configuration is provided with `config`, **kwargs will be directly passed
-                 to the underlying model's __init__ method.
-               - If a configuration is not provided, **kwargs will be first passed to the pretrained
-                 model configuration class loading function (`PretrainedConfig.from_pretrained`).
-                 Each key of **kwargs that corresponds to a configuration attribute
-                 will be used to override said attribute with the supplied **kwargs value.
-                 Remaining keys that do not correspond to any configuration attribute will
-                 be passed to the underlying model's __init__ function.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~pytorch_transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
 
         Examples::
 
@@ -406,44 +416,46 @@ class AutoModelForSequenceClassification(object):
         To train the model, you should first set it back in training mode with `model.train()`
 
         Params:
-            **pretrained_model_name_or_path**: either:
-                - a string with the `shortcut name` of a pre-trained model to load from cache
-                    or download and cache if not already stored in cache (e.g. 'bert-base-uncased').
-                - a path to a `directory` containing a configuration file saved
-                    using the `save_pretrained(save_directory)` method.
-                - a path or url to a tensorflow index checkpoint `file` (e.g. `./tf_model/model.ckpt.index`).
-                    In this case, ``from_tf`` should be set to True and a configuration object should be
-                    provided as `config` argument. This loading option is slower than converting the TensorFlow
-                    checkpoint in a PyTorch model using the provided conversion scripts and loading
-                    the PyTorch model afterwards.
-            **model_args**: (`optional`) Sequence:
-                All remaining positional arguments will be passed to the underlying model's __init__ function
-            **config**: an optional configuration for the model to use instead of an automatically loaded configuration.
-                Configuration can be automatically loaded when:
-                - the model is a model provided by the library (loaded with a `shortcut name` of a pre-trained model), or
-                - the model was saved using the `save_pretrained(save_directory)` (loaded by supplying the save directory).
-            **state_dict**: an optional state dictionary for the model to use instead of a state dictionary loaded
-                from saved weights file.
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~pytorch_transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using `save_pretrained(dir)` and `from_pretrained(save_directory)` is not
-                a simpler option.
-            **cache_dir**: (`optional`) string:
+                In this case though, you should check if using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and :func:`~pytorch_transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
                 configuration should be cached if the standard cache should not be used.
-            **output_loading_info**: (`optional`) boolean:
-                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
-            **kwargs**: (`optional`) dict:
-                Dictionary of key, values to update the configuration object after loading.
-                Can be used to override selected configuration parameters. E.g. ``output_attention=True``.
 
-               - If a configuration is provided with `config`, **kwargs will be directly passed
-                 to the underlying model's __init__ method.
-               - If a configuration is not provided, **kwargs will be first passed to the pretrained
-                 model configuration class loading function (`PretrainedConfig.from_pretrained`).
-                 Each key of **kwargs that corresponds to a configuration attribute
-                 will be used to override said attribute with the supplied **kwargs value.
-                 Remaining keys that do not correspond to any configuration attribute will
-                 be passed to the underlying model's __init__ function.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~pytorch_transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
 
         Examples::
 
@@ -509,44 +521,46 @@ class AutoModelForQuestionAnswering(object):
         To train the model, you should first set it back in training mode with `model.train()`
 
         Params:
-            **pretrained_model_name_or_path**: either:
-                - a string with the `shortcut name` of a pre-trained model to load from cache
-                    or download and cache if not already stored in cache (e.g. 'bert-base-uncased').
-                - a path to a `directory` containing a configuration file saved
-                    using the `save_pretrained(save_directory)` method.
-                - a path or url to a tensorflow index checkpoint `file` (e.g. `./tf_model/model.ckpt.index`).
-                    In this case, ``from_tf`` should be set to True and a configuration object should be
-                    provided as `config` argument. This loading option is slower than converting the TensorFlow
-                    checkpoint in a PyTorch model using the provided conversion scripts and loading
-                    the PyTorch model afterwards.
-            **model_args**: (`optional`) Sequence:
-                All remaining positional arguments will be passed to the underlying model's __init__ function
-            **config**: an optional configuration for the model to use instead of an automatically loaded configuration.
-                Configuration can be automatically loaded when:
-                - the model is a model provided by the library (loaded with a `shortcut name` of a pre-trained model), or
-                - the model was saved using the `save_pretrained(save_directory)` (loaded by supplying the save directory).
-            **state_dict**: an optional state dictionary for the model to use instead of a state dictionary loaded
-                from saved weights file.
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~pytorch_transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using `save_pretrained(dir)` and `from_pretrained(save_directory)` is not
-                a simpler option.
-            **cache_dir**: (`optional`) string:
+                In this case though, you should check if using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained` and :func:`~pytorch_transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
                 configuration should be cached if the standard cache should not be used.
-            **output_loading_info**: (`optional`) boolean:
-                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
-            **kwargs**: (`optional`) dict:
-                Dictionary of key, values to update the configuration object after loading.
-                Can be used to override selected configuration parameters. E.g. ``output_attention=True``.
 
-               - If a configuration is provided with `config`, **kwargs will be directly passed
-                 to the underlying model's __init__ method.
-               - If a configuration is not provided, **kwargs will be first passed to the pretrained
-                 model configuration class loading function (`PretrainedConfig.from_pretrained`).
-                 Each key of **kwargs that corresponds to a configuration attribute
-                 will be used to override said attribute with the supplied **kwargs value.
-                 Remaining keys that do not correspond to any configuration attribute will
-                 be passed to the underlying model's __init__ function.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~pytorch_transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
 
         Examples::
 
