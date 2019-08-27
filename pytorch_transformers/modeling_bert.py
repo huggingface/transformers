@@ -1247,6 +1247,11 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
+    
+CLS_token = 0 # in decoder language
+SEP_token = 1 # in decoder language
+MAX_LENGTH = 128
+            
 
 class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size):
@@ -1281,14 +1286,19 @@ class BertForESNLI(BertPreTrainedModel):
         self.pooler = BertPooler(config)
         self.apply(self.init_weights)
         
-        #hidden_size = 768 #to be consistent with bert
-        hidden_size = 100 #working with small dataset
-        self.output_size = config.vocab_size 
-        self.decoder = DecoderRNN(hidden_size=hidden_size, output_size=self.output_size).to('cuda')
+        #self.hidden_size = 768 #to be consistent with bert
+        self.hidden_size = 100 #working with small dataset
+        self.encoder_vocab_size = config.vocab_size 
+        self.decoder_vocab_size = 0
+        self.decoder = None
         
-        self.resize = nn.Linear(768, hidden_size)
+        self.resize = nn.Linear(768, self.hidden_size)
+        
+    def setOutputVocab(self, decoder_lang):
+        self.decoder = DecoderRNN(hidden_size=self.hidden_size, output_size=decoder_lang.n_words).to('cuda')
+        self.decoder_vocab_size = decoder_lang.n_words
     
-    def forward(self, input_ids, mode=None, labels=None, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, expl_idx, all_expl, decoder_lang, mode=None, labels=None, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
         #mode = 'teacher' for training or 'forloop' for eval
         # processing data
         position_ids = None
@@ -1324,13 +1334,18 @@ class BertForESNLI(BertPreTrainedModel):
         bert_output_pooled_size = bert_output_pooled.size() 
         bert_output_pooled = self.resize(bert_output_pooled)
         
-        target_length = 10 
-        batch_size = 1
-        vocab_size = self.output_size
+        target_length = 30
+        batch_size = 8
+        vocab_size = self.decoder_vocab_size
         generated_expl = torch.zeros(target_length, batch_size, vocab_size).to('cuda')
         
-        CLS_token = 0 # in decoder language
-        SEP_token = 1 # in decoder language
+        sys.path.append('/data/rosa/pytorch-transformers/examples')
+        from utils_glue import tensorFromSentence, normalize_sentence
+        target_expl = [all_expl[i] for i in expl_idx]
+        target_expl_index = []
+        for line in target_expl:
+            sentence = normalize_sentence(line)
+            target_expl_index.append(tensorFromSentence(decoder_lang, sentence))
         
         decoder_hidden = bert_output_pooled.unsqueeze(0) # (8,100) -> (1,8,100)
         decoder_input = torch.LongTensor([CLS_token] * 8) # 8 is the batch size
@@ -1339,15 +1354,17 @@ class BertForESNLI(BertPreTrainedModel):
             decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden) #take only premise's encoding results and produce a next sentence for now
             #decoder_output:(8, 30522) a.k.a. (bs, n_vocab)
             #decoder_hidden[0]: (1, 8, 100) a.k.a (1, bs, hidden_size)
-            
-            generated_expl[i] = decoder_output 
-            #RuntimeError: The expanded size of the tensor (1) must match the existing size (8) at non-singleton dimension 0.  Target sizes: [1, 30522].  Tensor sizes: [8, 30522]
-            #TODO: how to work with loss and batch size?
-            
-            topv, topi = decoder_output.topk(1)
-            decoder_input = topi
-            #input = (target[t] if teacher_force else topi)
+          
+            generated_expl[i] = decoder_output   
+            topv, topi = decoder_output.topk(1) 
+            decoder_input = topi.squeeze(1)
+            #input = (target[t] if teacher_force else topi) # what is target here =_=?
             #if(teacher_force == False and input.item() == EOS_token):
                 #break
         
+        loss_fct = CrossEntropyLoss() # this is nn.CrossEntropyLoss
+        print('generated_expl: ', generated_expl.size()) # (10, 8, xxx) a.k.a. (output_seq_len, bs, decode_lang_vocab_size)
+        print('target_expl_index: ', target_expl_index[0].size()) # want: (10, 8), where each value is an int between 0 and decode_lang_vocab_size
+        loss = loss_fct(generated_expl, target_expl_index)
+        outputs = (loss,) + generated_expl
         return outputs # outputs[0] = loss

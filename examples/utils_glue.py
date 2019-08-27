@@ -753,6 +753,7 @@ GLUE_TASKS_NUM_LABELS = {
 }
 
 
+import torch
 CLS_token = 0 # in decoder language
 SEP_token = 1 # in decoder language
 MAX_LENGTH = 128
@@ -779,13 +780,11 @@ class Lang:
             self.n_words += 1
         else:
             self.word2count[word] += 1
-            
-            
+
+    
 def normalize_sentence(sentence):
     sentence = sentence.lower()
-    sentence = sentence.str.replace('[^A-Za-z\s]+', '')
-    sentence = sentence.str.normalize('NFD')
-    sentence = sentence.str.encode('ascii', errors='ignore').str.decode('utf-8')
+    sentence = sentence.replace('[^A-Za-z\s]+', '')
     return sentence
 
 def indexesFromSentence(lang, sentence):
@@ -793,6 +792,6 @@ def indexesFromSentence(lang, sentence):
 
 def tensorFromSentence(lang, sentence):
     indexes = indexesFromSentence(lang, sentence)
-    indexes.append(EOS_token)
-    return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
+    indexes.append(SEP_token)
+    return torch.tensor(indexes, dtype=torch.long, device='cuda').view(-1, 1)
 

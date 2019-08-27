@@ -92,6 +92,14 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
+    if args.expl:
+        # prepare decoder word2index
+        decoder_lang = Lang()
+        for sentence in all_expl:
+            sentence = normalize_sentence(sentence)
+            decoder_lang.addSentence(sentence)
+        model.setOutputVocab(decoder_lang)
+    
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
@@ -145,9 +153,12 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
             if args.expl:
                 inputs['expl_idx'] = batch[4]
                 inputs['all_expl'] = all_expl
+                inputs['decoder_lang'] = decoder_lang
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            print('type of loss: ', loss.type())
+            print('size of loss: ', loss.size())
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
