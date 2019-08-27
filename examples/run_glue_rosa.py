@@ -157,9 +157,8 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
                 inputs['mode'] = 'teacher'
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
-            print('type of loss: ', loss.type())
             print('loss: ', loss)
-            print('average loss: ', tr_loss/(global_step+1))
+            if global_step!=0: print('average loss: ', tr_loss/global_step)
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -422,7 +421,7 @@ def main():
     
     if args.expl:
         args.model_type = 'bert_expl'
-    #args.do_train = False #TODO: remove after eval esnli model on snli dev set
+        args.do_eval = False #TODO: remove after change evaluate for BertForESNLI
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
