@@ -158,7 +158,8 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
             print('type of loss: ', loss.type())
-            print('size of loss: ', loss.size())
+            print('loss: ', loss)
+            print('average loss: ', tr_loss/(global_step+1))
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -438,7 +439,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         #device = torch.device("cuda:1") #TODO: get rid of this line once 0 is available
-        args.n_gpu = torch.cuda.device_count() #- 3 #TODO: get rid of -1 once want to using one is working
+        args.n_gpu = torch.cuda.device_count() - 1 #TODO: get rid of -1 once want to using one is working
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)

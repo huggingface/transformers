@@ -1250,6 +1250,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     
 CLS_token = 0 # in decoder language
 SEP_token = 1 # in decoder language
+PAD_token = 2 # in decoder language
 MAX_LENGTH = 128
             
 
@@ -1320,7 +1321,7 @@ class BertForESNLI(BertPreTrainedModel):
                                        head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  #add hidden_states and attentions if they exist
         
         bert_output, bert_output_pooled = outputs[0], outputs[1] 
         
@@ -1334,24 +1335,32 @@ class BertForESNLI(BertPreTrainedModel):
         bert_output_pooled_size = bert_output_pooled.size() 
         bert_output_pooled = self.resize(bert_output_pooled)
         
-        target_length = 30
-        batch_size = 8
+        target_length = 60
+        batch_size = len(expl_idx)
         vocab_size = self.decoder_vocab_size
         generated_expl = torch.zeros(target_length, batch_size, vocab_size).to('cuda')
         
         sys.path.append('/data/rosa/pytorch-transformers/examples')
-        from utils_glue import tensorFromSentence, normalize_sentence
+        from utils_glue import tensorFromSentence, normalize_sentence, pad_seq, indexesFromSentence
         target_expl = [all_expl[i] for i in expl_idx]
         target_expl_index = []
         for line in target_expl:
             sentence = normalize_sentence(line)
-            target_expl_index.append(tensorFromSentence(decoder_lang, sentence))
+            indexes = indexesFromSentence(decoder_lang, sentence)
+            indexes_padded = pad_seq(indexes, target_length)
+            #target_var = torch.LongTensor(indexes_padded)#.transpose(0, 1)
+            #print('target_var: ', target_var.size())
+            target_expl_index.append(indexes_padded)
         
-        decoder_hidden = bert_output_pooled.unsqueeze(0) # (8,100) -> (1,8,100)
-        decoder_input = torch.LongTensor([CLS_token] * 8) # 8 is the batch size
+        target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
+        #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
+        
+        decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
+        decoder_input = torch.LongTensor([CLS_token] * batch_size) 
         
         for i in range(target_length):
-            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden) #take only premise's encoding results and produce a next sentence for now
+            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden) 
+            #take only premise's encoding results and produce a next sentence for now
             #decoder_output:(8, 30522) a.k.a. (bs, n_vocab)
             #decoder_hidden[0]: (1, 8, 100) a.k.a (1, bs, hidden_size)
           
@@ -1363,8 +1372,7 @@ class BertForESNLI(BertPreTrainedModel):
                 #break
         
         loss_fct = CrossEntropyLoss() # this is nn.CrossEntropyLoss
-        print('generated_expl: ', generated_expl.size()) # (10, 8, xxx) a.k.a. (output_seq_len, bs, decode_lang_vocab_size)
-        print('target_expl_index: ', target_expl_index[0].size()) # want: (10, 8), where each value is an int between 0 and decode_lang_vocab_size
+        generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
         loss = loss_fct(generated_expl, target_expl_index)
-        outputs = (loss,) + generated_expl
+        outputs = (loss)
         return outputs # outputs[0] = loss

@@ -756,14 +756,15 @@ GLUE_TASKS_NUM_LABELS = {
 import torch
 CLS_token = 0 # in decoder language
 SEP_token = 1 # in decoder language
+PAD_token = 2
 MAX_LENGTH = 128
 class Lang:
     def __init__(self):
        #initialize containers to hold the words and corresponding index
         self.word2index = {}
         self.word2count = {}
-        self.index2word = {0: "CLS", 1: "SEP"}
-        self.n_words = 2  # Count CLS and SEP
+        self.index2word = {0: "CLS", 1: "SEP", 2: "PAD"}
+        self.n_words = 3  # Count CLS, SEP, and PAD
 
     #split a sentence into words and add it to the container
     def addSentence(self, sentence):
@@ -794,4 +795,8 @@ def tensorFromSentence(lang, sentence):
     indexes = indexesFromSentence(lang, sentence)
     indexes.append(SEP_token)
     return torch.tensor(indexes, dtype=torch.long, device='cuda').view(-1, 1)
+
+def pad_seq(seq, max_length):
+    seq += [PAD_token for i in range(max_length - len(seq))]
+    return seq
 
