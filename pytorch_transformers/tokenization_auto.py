@@ -69,15 +69,25 @@ class AutoTokenizer(object):
             - contains `roberta`: RobertaTokenizer (XLM model)
 
         Params:
-            **pretrained_model_name_or_path**: either:
-                - a string with the `shortcut name` of a pre-trained model configuration to load from cache
-                    or download and cache if not already stored in cache (e.g. 'bert-base-uncased').
-                - a path to a `directory` containing a configuration file saved
-                    using the `save_pretrained(save_directory)` method.
-                - a path or url to a saved configuration `file`.
-            **cache_dir**: (`optional`) string:
-                Path to a directory in which a downloaded pre-trained model
-                configuration should be cached if the standard cache should not be used.
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~pytorch_transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
+                - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
+
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the vocabulary files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
+
+            kwargs: (`optional`) keyword arguments: will be passed to the Tokenizer ``__init__`` method. Can be used to set special tokens like ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``. See parameters in the doc string of :class:`~pytorch_transformers.PreTrainedTokenizer` for details.
 
         Examples::
 
