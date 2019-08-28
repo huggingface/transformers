@@ -61,6 +61,8 @@ class DilBertConfig(PretrainedConfig):
                  activation='gelu',
                  initializer_range=0.02,
                  tie_weights_=True,
+                 qa_dropout=0.1,
+                 seq_classif_dropout=0.2,
                  **kwargs):
         super(DilBertConfig, self).__init__(**kwargs)
 
@@ -83,6 +85,8 @@ class DilBertConfig(PretrainedConfig):
             self.activation = activation
             self.initializer_range = initializer_range
             self.tie_weights_ = tie_weights_
+            self.qa_dropout = qa_dropout
+            self.seq_classif_dropout = seq_classif_dropout
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              " or the path to a pretrained model config file (str)")
