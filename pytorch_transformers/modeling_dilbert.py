@@ -37,11 +37,13 @@ logger = logging.getLogger(__name__)
 
 
 DILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-pytorch_model.bin"
+    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-pytorch_model.bin",
+    'dilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-distilled-squad-pytorch_model.bin"
 }
 
 DILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-config.json"
+    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-config.json",
+    'dilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-distilled-squad-config.json"
 }
 
 
@@ -378,7 +380,7 @@ class DilBertPreTrainedModel(PreTrainedModel):
 DILBERT_START_DOCSTRING = r"""
     Smaller, faster, cheaper, lighter: DilBERT
 
-    For more information on DilBERT, you should check TODO(Victor): Link to Medium
+    For more information on DilBERT, you should check TODO(Link): Link to Medium
 
     Parameters:
         config (:class:`~pytorch_transformers.DilBertConfig`): Model configuration class with all the parameters of the model. 
