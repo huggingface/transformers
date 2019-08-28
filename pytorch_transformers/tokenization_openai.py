@@ -87,6 +87,9 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         super(OpenAIGPTTokenizer, self).__init__(unk_token=unk_token, **kwargs)
 
+        self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
+        self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
+
         try:
             import ftfy
             from spacy.lang.en import English
