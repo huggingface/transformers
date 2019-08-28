@@ -433,7 +433,7 @@ DISTILBERT_START_DOCSTRING = r"""
 
     Here are the differences between the interface of Bert and DistilBert:
 
-    - DistilBert doesn't have `token_type_ids`, you don't need to indicate which token belong to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`)
+    - DistilBert doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`)
     - DistilBert doesn't have options to select the input positions (`position_ids` input). This could be added if necessary though, just let's us know if you need this option.
 
     For more information on DistilBERT, please refer to our
@@ -450,9 +450,9 @@ DISTILBERT_START_DOCSTRING = r"""
 
 DISTILBERT_INPUTS_DOCSTRING = r"""
     Inputs:
-        **input_ids**L ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices oof input sequence tokens in the vocabulary.
-            The input sequences should start with `[CLS]` and `[SEP]` tokens.
+        **input_ids** ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            The input sequences should start with `[CLS]` and end with `[SEP]` tokens.
             
             For now, ONLY BertTokenizer(`bert-base-uncased`) is supported and you should use this tokenizer when using DistilBERT.
         **attention_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
