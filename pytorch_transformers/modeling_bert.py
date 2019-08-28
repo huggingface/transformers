@@ -1262,26 +1262,31 @@ class DecoderRNN(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size, 1)
         self.out = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax(dim=1)
+        self.resize = nn.Linear(768, self.hidden_size)
 
     def forward(self, decoder_input, hidden):
-        embedded = self.embedding(decoder_input.to('cuda')) # (8,100)
-        embedded = embedded.unsqueeze(0) # (1, 8, 100)
+        if hidden.size(2) != self.hidden_size:
+            hidden = self.resize(hidden)
+        embedded = self.embedding(decoder_input.to('cuda')) # (bs, hidden_size)
+        embedded = embedded.unsqueeze(0) # (1, bs, hidden_size)
         
         import torch.nn.functional as F
         embedded = F.relu(embedded)
         output, hidden = self.gru(embedded, hidden)
-        output = self.out(output[0]) # (8, n_vocab)
+        output = self.out(output[0]) # (bs, n_vocab)
         prediction = self.softmax(output)
  
         return prediction, hidden
-
-    #def initHidden(self):
-        #return torch.zeros(1, 1, self.hidden_size, device=device)
     
     
 class BertForESNLI(BertPreTrainedModel):
+    '''
+    encoder is BertModel
+    decoder is DecoderRNN
+    '''
     def __init__(self,config):
         super(BertForESNLI, self).__init__(config)
+        #things in BertModel
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
         self.pooler = BertPooler(config)
@@ -1293,6 +1298,7 @@ class BertForESNLI(BertPreTrainedModel):
         self.decoder_vocab_size = 0
         self.decoder = None
         
+        #convert encoder output to decoder input size
         self.resize = nn.Linear(768, self.hidden_size)
         
     def setOutputVocab(self, decoder_lang):
@@ -1325,12 +1331,12 @@ class BertForESNLI(BertPreTrainedModel):
         
         bert_output, bert_output_pooled = outputs[0], outputs[1] 
         
-        # <batch size per gpu> (8, args) * max_seq_len(128, args) * hidden_size
+        # <batch size per gpu> (args) * max_seq_len(args) * hidden_size
         # a.k.a outputs
         bert_output_size = bert_output.size() 
         bert_output = self.resize(bert_output)
         
-        # <batch size per gpu> (8, args) * hidden_size
+        # <batch size per gpu> (args) * hidden_size
         # a.k.a. final state
         bert_output_pooled_size = bert_output_pooled.size() 
         bert_output_pooled = self.resize(bert_output_pooled)
@@ -1348,8 +1354,6 @@ class BertForESNLI(BertPreTrainedModel):
             sentence = normalize_sentence(line)
             indexes = indexesFromSentence(decoder_lang, sentence)
             indexes_padded = pad_seq(indexes, target_length)
-            #target_var = torch.LongTensor(indexes_padded)#.transpose(0, 1)
-            #print('target_var: ', target_var.size())
             target_expl_index.append(indexes_padded)
         
         target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
@@ -1367,8 +1371,8 @@ class BertForESNLI(BertPreTrainedModel):
             generated_expl[i] = decoder_output   
             topv, topi = decoder_output.topk(1) 
             decoder_input = topi.squeeze(1)
-            #input = (target[t] if teacher_force else topi) # what is target here =_=?
-            #if(teacher_force == False and input.item() == EOS_token):
+            #input = (target[t] if teacher_force else topi) # what is `target` here =_=?
+            #if(teacher_force == False and input.item() == EOS_token): # what is input here =_=?
                 #break
         
         loss_fct = CrossEntropyLoss() # this is nn.CrossEntropyLoss

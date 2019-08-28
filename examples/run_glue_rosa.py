@@ -33,7 +33,7 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
-                                  BertForESNLI,
+                                  BertForESNLI, DecoderRNN, BertModel,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
@@ -42,7 +42,10 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
 from utils_glue import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors, Lang, normalize_sentence, tensorFromSentence)
+                        output_modes, processors, 
+                        Lang, normalize_sentence,
+                        tensorFromSentence, pad_seq, 
+                        indexesFromSentence)
 
 import sys
 import time
@@ -65,7 +68,8 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
-    'bert_expl': (BertConfig, BertForESNLI, BertTokenizer)
+    'bert_expl': (BertConfig, BertForESNLI, BertTokenizer),
+    'bert_expl_encoder': (BertConfig, BertModel, BertTokenizer)
 }
 
 
@@ -75,6 +79,226 @@ def set_seed(args):
     torch.manual_seed(args.seed)
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
+
+
+def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
+    '''
+    train the encoder and decoder separately
+    initialize: 
+    - optimizer, scheduler for encoder DONE
+    - optimizer, scheduler for decoder DONE
+    for each epoch:
+        - mark training mode for encoder and decoder DONE
+        - call encoder and decoder and get loss TODO
+        - loss.backward DONE
+        - clip_grad_norm_ DONE
+        - if hit accumulation step: encoder_optimizer.zero_grad(), decoder_optimizer.zero_grad(), and step() DONE
+    '''
+    if args.local_rank in [-1, 0]:
+        tb_writer = SummaryWriter()
+    
+    # batched data
+    args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+    
+    if args.max_steps > 0:
+        t_total = args.max_steps
+        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+    else:
+        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+
+    # prepare decoder word2index
+    decoder_lang = Lang()
+    for sentence in all_expl:
+        sentence = normalize_sentence(sentence)
+        decoder_lang.addSentence(sentence)
+    
+    CLS_token = 0 # in decoder language
+    SEP_token = 1 # in decoder language
+    PAD_token = 2 # in decoder language
+    MAX_LENGTH = 128
+    hidden_size = 100 # change to 768 and get rid of resize once working on the whole dataset
+    target_length = 60
+    decoder_vocab_size = decoder_lang.n_words
+
+    # initialize decoder
+    decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to('cuda') #initialize decoder
+    
+    # prepare optimizers
+    no_decay = ['bias', 'LayerNorm.weight']
+    encoder_grouped_params = [
+        {'params': [p for n, p in encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
+        {'params': [p for n, p in encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+    encoder_optimizer = AdamW(encoder_grouped_params, lr=args.learning_rate, eps=args.adam_epsilon)
+    decoder_optimizer = AdamW(decoder.parameters(), lr=0.001, eps=args.adam_epsilon)
+    
+    encoder_scheduler = WarmupLinearSchedule(encoder_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    decoder_scheduler = WarmupLinearSchedule(decoder_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    
+    if args.fp16:
+        try:
+            from apex import amp
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        encoder, encoder_optimizer = amp.initialize(encoder, encoder_optimizer, opt_level=args.fp16_opt_level)
+        decoder, decoder_optimizer = amp.initialize(decoder, decoder_optimizer, opt_level=args.fp16_opt_level)
+
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1:
+        encoder = torch.nn.DataParallel(encoder)
+        decoder = torch.nn.DataParallel(decoder)
+
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        encoder = torch.nn.parallel.DistributedDataParallel(encoder, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            find_unused_parameters=True)
+        decoder = torch.nn.parallel.DistributedDataParallel(decoder, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            find_unused_parameters=True)
+        
+    # Train!
+    logger.info("***** Running training *****")
+    logger.info("  Num examples = %d", len(train_dataset))
+    logger.info("  Num Epochs = %d", args.num_train_epochs)
+    logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
+    logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
+                   args.train_batch_size * args.gradient_accumulation_steps * (torch.distributed.get_world_size() if args.local_rank != -1 else 1))
+    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+    logger.info("  Total optimization steps = %d", t_total)
+
+    global_step = 0
+    tr_loss, logging_loss = 0.0, 0.0
+    encoder.zero_grad()
+    decoder.zero_grad()
+    train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
+    set_seed(args)  # Added here for reproductibility 
+    for _ in train_iterator:
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        for step, batch in enumerate(epoch_iterator):
+            encoder.train()
+            decoder.train()
+            batch = tuple(t.to(args.device) for t in batch)
+            inputs = {'input_ids':      batch[0],
+                      'attention_mask': batch[1],
+                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None}
+            expl_idx = batch[4]
+            all_expl = all_expl
+            decoder_lang = decoder_lang
+            mode = 'teacher'
+            batch_size = len(expl_idx)
+            #print('batch_size: ', batch_size)
+            
+            encoder_outputs = encoder(**inputs)
+            bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
+            #bert_output_pooled = decoder.resize(bert_output_pooled)
+            
+            generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
+        
+            target_expl = [all_expl[i] for i in expl_idx]
+            target_expl_index = []
+            for line in target_expl:
+                sentence = normalize_sentence(line)
+                indexes = indexesFromSentence(decoder_lang, sentence)
+                indexes_padded = pad_seq(indexes, target_length)
+                target_expl_index.append(indexes_padded)
+
+            target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
+            #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
+
+            decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
+            decoder_input = torch.LongTensor([CLS_token] * batch_size) 
+
+            for i in range(target_length):
+                #print('decoder_input: ', decoder_input.size())
+                #print('decoder_hidden: ', decoder_hidden.size())
+                
+                decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                #take only premise's encoding results and produce a next sentence for now
+                #decoder_output: (bs, n_vocab)
+                #decoder_hidden[0]: (1, 8, 100) a.k.a (1, bs, hidden_size)
+
+                generated_expl[i] = decoder_output   
+                topv, topi = decoder_output.topk(1) 
+                decoder_input = topi.squeeze(1)
+                #input = (target[t] if teacher_force else topi) # what is `target` here =_=?
+                #if(teacher_force == False and input.item() == EOS_token): # what is input here =_=?
+                    #break
+
+            loss_fct = torch.nn.CrossEntropyLoss()
+            generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
+            loss = loss_fct(generated_expl, target_expl_index)
+            print('loss: ', loss)
+            
+            if global_step!=0: print('average loss: ', tr_loss/global_step)
+
+            if args.n_gpu > 1:
+                loss = loss.mean() # mean() to average on multi-gpu parallel training
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
+            if args.fp16:
+                with amp.scale_loss(loss, encoder_optimizer) as scaled_loss:
+                    scaled_loss.backward()
+                torch.nn.utils.clip_grad_norm_(amp.master_params(encoder_optimizer), args.max_grad_norm)
+                #TODO: check if loss get modified already
+                with amp.scale_loss(loss, decoder_optimizer) as scaled_loss:
+                    scaled_loss.backward()
+                torch.nn.utils.clip_grad_norm_(amp.master_params(decoder_optimizer), args.max_grad_norm)
+            else:
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(decoder.parameters(), args.max_grad_norm)
+
+            tr_loss += loss.item() #TODO: figure out what loss.item() do
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                encoder_scheduler.step()  # Update learning rate schedule
+                decoder_scheduler.step()
+                encoder_optimizer.step()
+                decoder_optimizer.step()
+                encoder.zero_grad()
+                decoder.zero_grad()
+                global_step += 1
+                
+                '''
+                # TODO: figure out why eval during training is needed
+                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                    # Log metrics
+                    if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
+                        results = evaluate(args, model, tokenizer)
+                        for key, value in results.items():
+                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
+                    tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
+                    logging_loss = tr_loss
+                    '''
+                
+                '''
+                # save model at checkpoint
+                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                    # Save model checkpoint
+                    output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+                    model_to_save.save_pretrained(output_dir)
+                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+                    logger.info("Saving model checkpoint to %s", output_dir)
+                    '''
+
+            if args.max_steps > 0 and global_step > args.max_steps:
+                epoch_iterator.close()
+                break
+        if args.max_steps > 0 and global_step > args.max_steps:
+            train_iterator.close()
+            break
+
+    if args.local_rank in [-1, 0]:
+        tb_writer.close()
+
+    return global_step, tr_loss / global_step # global steps, average training loss
 
 
 def train(args, train_dataset, model, tokenizer, all_expl=None):
@@ -420,7 +644,7 @@ def main():
     args = parser.parse_args()
     
     if args.expl:
-        args.model_type = 'bert_expl'
+        args.model_type = 'bert_expl_encoder'
         args.do_eval = False #TODO: remove after change evaluate for BertForESNLI
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -437,8 +661,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        #device = torch.device("cuda:1") #TODO: get rid of this line once 0 is available
-        args.n_gpu = torch.cuda.device_count() - 1 #TODO: get rid of -1 once want to using one is working
+        args.n_gpu = torch.cuda.device_count() - 3 #TODO: get rid of -3 once the other gpu are available 
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
@@ -490,7 +713,7 @@ def main():
             train_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         else:
             train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer, all_expl=all_expl)
+        global_step, tr_loss = train_enc_dec(args, train_dataset, model, tokenizer, all_expl=all_expl)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
