@@ -449,7 +449,7 @@ class BertEncoder(nn.Module):
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
-        return outputs  # outputs, (hidden states), (attentions)
+        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
 class BertPooler(nn.Module):
