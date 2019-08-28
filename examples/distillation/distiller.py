@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2019-present, the HuggingFace Inc. team.
+# Copyright 2019-present, the HuggingFace Inc. team and Facebook, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-The distiller to distil DistilBERT.
+""" The distiller to distil DistilBERT
+    adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
 import os
 import math
