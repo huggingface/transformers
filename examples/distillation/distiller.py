@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The distiller to distil DilBERT.
+The distiller to distil DistilBERT.
 """
 import os
 import math

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for DilBERT."""
+"""Tokenization classes for DistilBERT."""
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -31,21 +31,21 @@ VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
-        'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        'dilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'dilbert-base-uncased': 512,
-    'dilbert-base-uncased-distilled-squad': 512,
+    'distilbert-base-uncased': 512,
+    'distilbert-base-uncased-distilled-squad': 512,
 }
 
 
-class DilBertTokenizer(BertTokenizer):
+class DistilBertTokenizer(BertTokenizer):
     r"""
-    Constructs a DilBertTokenizer.
-    :class:`~pytorch_transformers.DilBertTokenizer` is identical to BertTokenizer and runs end-to-end tokenization: punctuation splitting + wordpiece
+    Constructs a DistilBertTokenizer.
+    :class:`~pytorch_transformers.DistilBertTokenizer` is identical to BertTokenizer and runs end-to-end tokenization: punctuation splitting + wordpiece
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
