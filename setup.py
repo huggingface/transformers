@@ -56,11 +56,7 @@ setup(
                       'tqdm',
                       'regex',
                       'sentencepiece',
-                      'sacremoses',
-                      'pythainlp',
-                      'kytea',
-                      'nltk',
-                      'jieba'],
+                      'sacremoses'],
     entry_points={
       'console_scripts': [
         "pytorch_transformers=pytorch_transformers.__main__:main",

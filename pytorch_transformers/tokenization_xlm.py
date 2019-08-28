@@ -20,14 +20,11 @@ import json
 import logging
 import os
 import re
+import sys
 import unicodedata
 from io import open
 
-import jieba
-import Mykytea
 import sacremoses as sm
-from nltk.tokenize.stanford_segmenter import StanfordSegmenter
-from pythainlp.tokenize import word_tokenize as th_word_tokenize
 
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_bert import BasicTokenizer
@@ -93,6 +90,7 @@ def lowercase_and_remove_accent(text):
     Lowercase and strips accents from a piece of text based on
     https://github.com/facebookresearch/XLM/blob/master/tools/lowercase_and_remove_accent.py
     """
+    text = ' '.join(text)
     text = text.lower()
     text = unicodedata.normalize("NFD", text)
     output = []
@@ -101,7 +99,7 @@ def lowercase_and_remove_accent(text):
         if cat == "Mn":
             continue
         output.append(char)
-    return "".join(output).lower()
+    return "".join(output).lower().split(' ')
 
 
 def replace_unicode_punct(text):
@@ -176,13 +174,13 @@ def romanian_preprocessing(text):
 
 class XLMTokenizer(PreTrainedTokenizer):
     """
-    BPE tokenizer for XLM, adapted from OpenAI BPE tokenizer. Peculiarities:
+    BPE tokenizer for XLM
 
-        - lower case all inputs
+        - Moses preprocessing & tokenization for most supported languages
 
-        - uses `SpaCy tokenizer <https://spacy.io/api/tokenizer/>`_ and \
-        `ftfy <https://ftfy.readthedocs.io/en/latest/>`_ for pre-BPE tokenization if they are installed, \
-        fallback to BERT's BasicTokenizer if not.
+        - Language specific tokenization for Chinese (Jieba), Japanese (KyTea) and Thai (PyThaiNLP)
+
+        - (optionally) lower case & normalize all inputs text
 
         - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
         (ex: "__classify__") to a vocabulary.
@@ -244,29 +242,17 @@ class XLMTokenizer(PreTrainedTokenizer):
     def ja_tokenize(self, text):
         if self.ja_word_tokenizer is None:
             try:
+                import Mykytea
                 self.ja_word_tokenizer = Mykytea.Mykytea('-model %s/local/share/kytea/model.bin' % os.path.expanduser('~'))
-            except RuntimeError:
-                logger.error("Make sure you install KyTea (https://github.com/neubig/kytea) with the following steps")
+            except:
+                logger.error("Make sure you install KyTea (https://github.com/neubig/kytea) and it's python wrapper (https://github.com/chezou/Mykytea-python) with the following steps")
                 logger.error("1. git clone git@github.com:neubig/kytea.git && cd kytea")
                 logger.error("2. autoreconf -i")
                 logger.error("3. ./configure --prefix=$HOME/local")
                 logger.error("4. make && make install")
+                logger.error("5. pip install kytea")
                 import sys; sys.exit()
         return list(self.ja_word_tokenizer.getWS(text))
-
-    def zh_tokenize(self, text):
-        if self.zh_word_tokenizer is None:
-            try:
-                self.zh_word_tokenizer = StanfordSegmenter()
-                self.zh_word_tokenizer.default_config('zh')
-            except LookupError:
-                logger.error("Make sure you download stanford-segmenter (https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip) with the following steps")
-                logger.error("1. wget https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip -O /path/to/stanford-segmenter-2018-10-16.zip")
-                logger.error("2. cd /path/to && unzip stanford-segmenter-2018-10-16.zip")
-                logger.error("3. cd stanford-segmenter-2018-10-16 && cp stanford-segmenter-3.9.2.jar stanford-segmenter.jar")
-                logger.error("4. set env variable STANFORD_SEGMENTER=/path/to/stanford-segmenter-2018-10-16")
-                import sys; sys.exit()
-        return self.zh_word_tokenizer.segment(text)
 
     @property
     def vocab_size(self):
@@ -315,11 +301,44 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text, lang='en'):
-        """ Tokenize a string. """
-        if self.do_lowercase_and_remove_accent:
-            text = lowercase_and_remove_accent(text)
-        if lang not in self.lang_with_custom_tokenizer:
+    def _tokenize(self, text, lang='en', bypass_tokenizer=False):
+        """
+        Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific tokenizerself. Otherwise, we use Moses.
+
+        Details of tokenization:
+        - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
+            - Install with `pip install sacremoses`
+        - [pythainlp](https://github.com/PyThaiNLP/pythainlp): Thai tokenizer
+            - Install with `pip install pythainlp`
+        - [kytea](https://github.com/chezou/Mykytea-python): Japanese tokenizer, wrapper of [KyTea](https://github.com/neubig/kytea)
+            - Install with the following steps:
+            ```
+            git clone git@github.com:neubig/kytea.git && cd kytea
+            autoreconf -i
+            ./configure --prefix=$HOME/local
+            make && make install
+            pip install kytea
+            ```
+        - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer *
+            - Install with `pip install jieba`
+
+        \* The original XLM used [Stanford Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip).
+        However, the wrapper (`nltk.tokenize.stanford_segmenter`) is slow due to JVM overhead, and it will be deprecated.
+        Jieba is a lot faster and pip-installable. Note there is some mismatch with the Stanford Segmenter. It should be fine
+        if you fine-tune the model with Chinese supervisionself. If you want the same exact behaviour, use the original XLM
+        [preprocessing script](https://github.com/facebookresearch/XLM/tree/master/tools) to tokenize the sentence externally,
+        and set `bypass_tokenizer=True` to bypass the tokenizer.
+
+        Args:
+            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported languages. However, we don't enforce it.
+            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)  (bool). If True, we only apply BPE.
+
+        Returns:
+            List of tokens.
+        """
+        if bypass_tokenizer:
+            text = text.split()
+        elif lang not in self.lang_with_custom_tokenizer:
             text = self.moses_pipeline(text, lang=lang)
             # TODO: make sure we are using `xlm-mlm-enro-1024`, since XLM-100 doesn't have this step
             if lang == 'ro':
@@ -327,9 +346,22 @@ class XLMTokenizer(PreTrainedTokenizer):
             text = self.moses_tokenize(text, lang=lang)
         elif lang == 'th':
             text = self.moses_pipeline(text, lang=lang)
+            try:
+                if 'pythainlp' not in sys.modules:
+                    from pythainlp.tokenize import word_tokenize as th_word_tokenize
+            except:
+                logger.error("Make sure you install PyThaiNLP (https://github.com/PyThaiNLP/pythainlp) with the following steps")
+                logger.error("1. pip install pythainlp")
+                import sys; sys.exit()
             text = th_word_tokenize(text)
         elif lang == 'zh':
-            # text = self.zh_tokenize(text)
+            try:
+                if 'jieba' not in sys.modules:
+                    import jieba
+            except:
+                logger.error("Make sure you install Jieba (https://github.com/fxsjy/jieba) with the following steps")
+                logger.error("1. pip install jieba")
+                import sys; sys.exit()
             text = ' '.join(jieba.cut(text))
             text = self.moses_pipeline(text, lang=lang)
             text = text.split()
@@ -339,9 +371,13 @@ class XLMTokenizer(PreTrainedTokenizer):
         else:
             raise ValueError('It should not reach here')
 
+        if self.do_lowercase_and_remove_accent and not bypass_tokenizer:
+            text = lowercase_and_remove_accent(text)
+
         split_tokens = []
         for token in text:
-            split_tokens.extend([t for t in self.bpe(token).split(' ')])
+            if token:
+                split_tokens.extend([t for t in self.bpe(token).split(' ')])
 
         return split_tokens
 

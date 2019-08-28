@@ -12,7 +12,3 @@ regex
 sentencepiece
 # For XLM
 sacremoses
-pythainlp
-kytea
-nltk
-jieba
