@@ -329,7 +329,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             if example.question.find("_") != -1:
                 tokens_b = tokenizer.tokenize(example.question.replace("_", ending))
             else:
-                tokens_b = tokenizer.tokenize(example.question + " " + ending)
+                tokens_b = tokenizer.tokenize(example.question)
+                tokens_b += [sep_token]
+                if sep_token_extra:
+                    tokens_b += [sep_token]
+                tokens_b += tokenizer.tokenize(ending)
+
             special_tokens_count = 4 if sep_token_extra else 3
             _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - special_tokens_count)
 
@@ -425,10 +430,11 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
         total_length = len(tokens_a) + len(tokens_b)
         if total_length <= max_length:
             break
-        if len(tokens_a) > len(tokens_b):
-            tokens_a.pop()
-        else:
-            tokens_b.pop()
+        # if len(tokens_a) > len(tokens_b):
+        #     tokens_a.pop()
+        # else:
+        #     tokens_b.pop()
+        tokens_a.pop()
 
 
 processors = {
