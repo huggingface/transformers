@@ -440,7 +440,7 @@ DISTILBERT_START_DOCSTRING = r"""
     `detailed blog post`_
     
     .. _`detailed blog post`:
-        https://medium.com/huggingface/smaller-faster-cheaper-lighter-introducing-distilbert-a-distilled-version-of-bert-8cf3380435b5
+        https://medium.com/huggingface/distilbert-8cf3380435b5
 
     Parameters:
         config (:class:`~pytorch_transformers.DistilBertConfig`): Model configuration class with all the parameters of the model. 
