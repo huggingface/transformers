@@ -112,7 +112,7 @@ class AutoConfig(object):
 
         """
         if 'dilbert' in pretrained_model_name_or_path:
-            return DilBertconfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return DilBertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
