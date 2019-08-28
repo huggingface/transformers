@@ -248,7 +248,8 @@ class ArcProcessor(DataProcessor):
             elif truth in "1234":
                 return int(truth) - 1
             else:
-                logger.info("truth ERROR!")
+                logger.info("truth ERROR! %s", str(truth))
+                return None
 
         examples = []
         three_choice = 0
