@@ -166,6 +166,9 @@ class PreTrainedTokenizer(object):
         self._additional_special_tokens = []
 
         self.max_len = max_len if max_len is not None else int(1e12)
+        self.max_len_single_sentence = self.max_len
+        self.max_len_sentences_pair = self.max_len
+
         self.added_tokens_encoder = {}
         self.added_tokens_decoder = {}
 
@@ -590,10 +593,12 @@ class PreTrainedTokenizer(object):
             return first_sentence_tokens, second_sentence_tokens
 
     def add_special_tokens_single_sentence(self, token_ids):
-        raise NotImplementedError
+        logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
+        return token_ids
 
     def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
-        raise NotImplementedError
+        logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
+        return token_ids_0 + token_ids_1
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         """ Converts a single index or a sequence of indices (integers) in a token "
