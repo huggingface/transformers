@@ -95,7 +95,7 @@ class DistilBertConfig(PretrainedConfig):
                              " or the path to a pretrained model config file (str)")
     @property
     def hidden_size(self):
-        return self.hidden_dim
+        return self.dim
 
     @property
     def num_attention_heads(self):
