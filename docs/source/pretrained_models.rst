@@ -111,5 +111,13 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | | ``roberta-large`` fine-tuned on `MNLI <http://www.nyu.edu/projects/bowman/multinli/>`__.                                            |
 |                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`__)                                                   |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| DistilBERT        | ``distilbert-base-uncased``                                | | 6-layer, 768-hidden, 12-heads, 66M parameters                                                                                       |
+|                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-uncased` checkpoint                                                   |
+|                   |                                                            | (see `details <https://medium.com/@victorsanh/8cf3380435b5>`__)                                                                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``distilbert-base-uncased-distilled-squad``                | | 6-layer, 768-hidden, 12-heads, 66M parameters                                                                                       |
+|                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-uncased` checkpoint, with an additional linear layer.                 |
+|                   |                                                            | (see `details <https://medium.com/@victorsanh/8cf3380435b5>`__)                                                                       |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 .. <https://huggingface.co/pytorch-transformers/examples.html>`__
