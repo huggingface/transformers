@@ -48,3 +48,4 @@ The library currently contains PyTorch implementations, pre-trained model weight
     model_doc/xlm
     model_doc/xlnet
     model_doc/roberta
+    model_doc/distilbert

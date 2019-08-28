@@ -285,7 +285,7 @@ class TransfoXLConfig(PretrainedConfig):
             self.init_std = init_std
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
-                             "or the path to a pretrained model config file (str)")
+                             " or the path to a pretrained model config file (str)")
 
     @property
     def max_position_embeddings(self):
