@@ -249,6 +249,7 @@ class ArcProcessor(DataProcessor):
                 return int(truth) - 1
             else:
                 logger.info("truth ERROR!")
+
         examples = []
         three_choice = 0
         four_choice = 0
@@ -267,6 +268,7 @@ class ArcProcessor(DataProcessor):
                 continue
             four_choice += 1
             truth = str(normalize(data_raw["answerKey"]))
+            assert truth is not None
             question_choices = data_raw["question"]
             question = question_choices["stem"]
             id = data_raw["id"]
