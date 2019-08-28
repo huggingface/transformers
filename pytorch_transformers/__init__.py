@@ -7,6 +7,7 @@ from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
+from .tokenization_dilbert import DilBertTokenizer
 
 from .tokenization_utils import (PreTrainedTokenizer)
 
@@ -41,8 +42,8 @@ from .modeling_xlm import (XLMConfig, XLMPreTrainedModel , XLMModel,
 from .modeling_roberta import (RobertaConfig, RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
                                ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_dilbert import (DilBertConfig, DilBertForMaskedLM, DilBertModel,
-                              DilBertForSequenceClassification, DilBertForQuestionAnswering,
-                              DILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+                               DilBertForSequenceClassification, DilBertForQuestionAnswering,
+                               DILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, TF_WEIGHTS_NAME,
                           PretrainedConfig, PreTrainedModel, prune_layer, Conv1D)
 
