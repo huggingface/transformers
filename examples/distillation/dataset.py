@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Dataloaders to train DilBERT.
+Dataloaders to train DistilBERT.
 """
 from typing import List
 import math

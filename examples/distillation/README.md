@@ -1,33 +1,33 @@
-# DilBERT
+# DistilBERT
 
-This folder contains the original code used to train DilBERT as well as examples showcasing how to use DilBERT.
+This folder contains the original code used to train DistilBERT as well as examples showcasing how to use DistilBERT.
 
-## What is DilBERT
+## What is DistilBERT
 
-DilBERT stands for Distillated-BERT. DilBERT is a small, fast, cheap and light Transformer model based on Bert architecture. It has 40% less parameters than `bert-base-uncased`, runs 60% faster while preserving over 95% of Bert's performances as measured on the GLUE language understanding benchmark. DilBERT is trained using knowledge distillation, a technique to compress a large model called the teacher into a smaller model called the student. By distillating Bert, we obtain a smaller Transformer model that bears a lot of similarities with the original BERT model while being lighter, smaller and faster to run. DilBERT is thus an interesting option to put large-scaled trained Transformer model into production.
+DistilBERT stands for Distillated-BERT. DistilBERT is a small, fast, cheap and light Transformer model based on Bert architecture. It has 40% less parameters than `bert-base-uncased`, runs 60% faster while preserving over 95% of Bert's performances as measured on the GLUE language understanding benchmark. DistilBERT is trained using knowledge distillation, a technique to compress a large model called the teacher into a smaller model called the student. By distillating Bert, we obtain a smaller Transformer model that bears a lot of similarities with the original BERT model while being lighter, smaller and faster to run. DistilBERT is thus an interesting option to put large-scaled trained Transformer model into production.
 
-For more information on DilBERT, please refer to our [detailed blog post](https://medium.com/huggingface/smaller-faster-cheaper-lighter-introducing-dilbert-a-distilled-version-of-bert-8cf3380435b5
+For more information on DistilBERT, please refer to our [detailed blog post](https://medium.com/huggingface/smaller-faster-cheaper-lighter-introducing-distilbert-a-distilled-version-of-bert-8cf3380435b5
 ).
 
-## How to use DilBERT
+## How to use DistilBERT
 
-PyTorch-Transformers includes two pre-trained DilBERT models, currently only provided for English (we are investigating the possibility to train and release a multilingual version of DilBERT):
+PyTorch-Transformers includes two pre-trained DistilBERT models, currently only provided for English (we are investigating the possibility to train and release a multilingual version of DistilBERT):
 
-- `dilbert-base-uncased`: DilBERT English language model pretrained on the same data used to pretrain Bert (concatenation of the Toronto Book Corpus and full English Wikipedia) using distillation with the supervision of the `bert-base-uncased` version of Bert. The model has 6 layers, 768 dimension and 12 heads, totalizing 66M parameters.
-- `dilbert-base-uncased-distilled-squad`: A finetuned version of `dilbert-base-uncased` finetuned using (a second step of) knwoledge distillation on SQuAD 1.0. This model reaches a F1 score of 86.2 on the dev set (for comparison, Bert `bert-base-uncased` version reaches a 88.5 F1 score).
+- `distilbert-base-uncased`: DistilBERT English language model pretrained on the same data used to pretrain Bert (concatenation of the Toronto Book Corpus and full English Wikipedia) using distillation with the supervision of the `bert-base-uncased` version of Bert. The model has 6 layers, 768 dimension and 12 heads, totalizing 66M parameters.
+- `distilbert-base-uncased-distilled-squad`: A finetuned version of `distilbert-base-uncased` finetuned using (a second step of) knwoledge distillation on SQuAD 1.0. This model reaches a F1 score of 86.2 on the dev set (for comparison, Bert `bert-base-uncased` version reaches a 88.5 F1 score).
 
-Using DilBERT is very similar to using BERT. DilBERT share the same tokenizer as BERT's `bert-base-uncased` even though we provide a link to this tokenizer under the `DilBertTokenizer` name to have a consistent naming between the library models.
+Using DistilBERT is very similar to using BERT. DistilBERT share the same tokenizer as BERT's `bert-base-uncased` even though we provide a link to this tokenizer under the `DistilBertTokenizer` name to have a consistent naming between the library models.
 
 ```python
-tokenizer = DilBertTokenizer.from_pretrained('dilbert-base-uncased')
-model = DilBertModel.from_pretrained('dilbert-base-uncased')
+tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+model = DistilBertModel.from_pretrained('distilbert-base-uncased')
 
 input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)
 outputs = model(input_ids)
 last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 ```
 
-## How to train DilBERT
+## How to train DistilBERT
 
 In the following, we will explain how you can train your own compressed model.
 
@@ -68,7 +68,7 @@ python train.py \
 
 By default, this will launch a training on a single GPU (even if more are available on the cluster). Other parameters are available in the command line, please look in `train.py` or run `python train.py --help` to list them.
 
-We highly encourage you to distributed training for training DilBert as the training corpus is quite large. Here's an example that runs a distributed training on a single node having 4 GPUs:
+We highly encourage you to distributed training for training DistilBert as the training corpus is quite large. Here's an example that runs a distributed training on a single node having 4 GPUs:
 
 ```bash
 export NODE_RANK=0

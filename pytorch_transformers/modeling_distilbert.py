@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-PyTorch DilBERT model.
+PyTorch DistilBERT model.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -36,19 +36,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-DILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-pytorch_model.bin",
-    'dilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-distilled-squad-pytorch_model.bin"
+DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-pytorch_model.bin",
+    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-pytorch_model.bin"
 }
 
-DILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-config.json",
-    'dilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-distilled-squad-config.json"
+DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-config.json",
+    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-config.json"
 }
 
 
-class DilBertConfig(PretrainedConfig):
-    pretrained_config_archive_map = DILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+class DistilBertConfig(PretrainedConfig):
+    pretrained_config_archive_map = DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
                  vocab_size_or_config_json_file=30522,
@@ -66,7 +66,7 @@ class DilBertConfig(PretrainedConfig):
                  qa_dropout=0.1,
                  seq_classif_dropout=0.2,
                  **kwargs):
-        super(DilBertConfig, self).__init__(**kwargs)
+        super(DistilBertConfig, self).__init__(**kwargs)
 
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
                         and isinstance(vocab_size_or_config_json_file, unicode)):
@@ -398,17 +398,17 @@ class Transformer(nn.Module):
 
 
 ### INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL ###
-class DilBertPreTrainedModel(PreTrainedModel):
+class DistilBertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pretrained models.
     """
-    config_class = DilBertConfig
-    pretrained_model_archive_map = DILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    config_class = DistilBertConfig
+    pretrained_model_archive_map = DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = None
-    base_model_prefix = "dilbert"
+    base_model_prefix = "distilbert"
 
     def __init__(self, *inputs, **kwargs):
-        super(DilBertPreTrainedModel, self).__init__(*inputs, **kwargs)
+        super(DistilBertPreTrainedModel, self).__init__(*inputs, **kwargs)
     
     def init_weights(self, module):
         """ Initialize the weights.
@@ -425,36 +425,36 @@ class DilBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-DILBERT_START_DOCSTRING = r"""
-    DilBERT is a small, fast, cheap and light Transformer model
+DISTILBERT_START_DOCSTRING = r"""
+    DistilBERT is a small, fast, cheap and light Transformer model
     trained by distilling Bert base. It has 40% less parameters than
     `bert-base-uncased`, runs 60% faster while preserving over 95% of
     Bert's performances as measured on the GLUE language understanding benchmark.
 
-    Here are the differences between the interface of Bert and DilBert:
+    Here are the differences between the interface of Bert and DistilBert:
 
-    - DilBert doesn't have `token_type_ids`, you don't need to indicate which token belong to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`)
-    - DilBert doesn't have options to select the input positions (`position_ids` input). This could be added if necessary though, just let's us know if you need this option.
+    - DistilBert doesn't have `token_type_ids`, you don't need to indicate which token belong to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`)
+    - DistilBert doesn't have options to select the input positions (`position_ids` input). This could be added if necessary though, just let's us know if you need this option.
 
-    For more information on DilBERT, please refer to our
+    For more information on DistilBERT, please refer to our
     `detailed blog post`_
     
     .. _`detailed blog post`:
-        https://medium.com/huggingface/smaller-faster-cheaper-lighter-introducing-dilbert-a-distilled-version-of-bert-8cf3380435b5
+        https://medium.com/huggingface/smaller-faster-cheaper-lighter-introducing-distilbert-a-distilled-version-of-bert-8cf3380435b5
 
     Parameters:
-        config (:class:`~pytorch_transformers.DilBertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~pytorch_transformers.DistilBertConfig`): Model configuration class with all the parameters of the model. 
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-DILBERT_INPUTS_DOCSTRING = r"""
+DISTILBERT_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**L ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices oof input sequence tokens in the vocabulary.
             The input sequences should start with `[CLS]` and `[SEP]` tokens.
             
-            For now, ONLY BertTokenizer(`bert-base-uncased`) is supported and you should use this tokenizer when using DilBERT.
+            For now, ONLY BertTokenizer(`bert-base-uncased`) is supported and you should use this tokenizer when using DistilBERT.
         **attention_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -465,9 +465,9 @@ DILBERT_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare DilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
-                      DILBERT_START_DOCSTRING, DILBERT_INPUTS_DOCSTRING)
-class DilBertModel(DilBertPreTrainedModel):
+@add_start_docstrings("The bare DistilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
+                      DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
+class DistilBertModel(DistilBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
@@ -482,15 +482,15 @@ class DilBertModel(DilBertPreTrainedModel):
 
     Examples::
 
-        tokenizer = DilBertTokenizer.from_pretrained('dilbert-base-uncased')
-        model = DilBertModel.from_pretrained('dilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertModel.from_pretrained('distilbert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
-        super(DilBertModel, self).__init__(config)
+        super(DistilBertModel, self).__init__(config)
 
         self.embeddings = Embeddings(config)   # Embeddings
         self.transformer = Transformer(config) # Encoder
@@ -543,9 +543,9 @@ class DilBertModel(DilBertPreTrainedModel):
         return output # last-layer hidden-state, (all hidden_states), (all attentions)
 
 
-@add_start_docstrings("""DilBert Model with a `masked language modeling` head on top. """,
-                      DILBERT_START_DOCSTRING, DILBERT_INPUTS_DOCSTRING)
-class DilBertForMaskedLM(DilBertPreTrainedModel):
+@add_start_docstrings("""DistilBert Model with a `masked language modeling` head on top. """,
+                      DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
+class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
@@ -568,19 +568,19 @@ class DilBertForMaskedLM(DilBertPreTrainedModel):
 
     Examples::
 
-        tokenizer = DilBertTokenizer.from_pretrained('dilbert-base-uncased')
-        model = DilBertForMaskedLM.from_pretrained('dilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
     """
     def __init__(self, config):
-        super(DilBertForMaskedLM, self).__init__(config)
+        super(DistilBertForMaskedLM, self).__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.dilbert = DilBertModel(config)
+        self.distilbert = DistilBertModel(config)
         self.vocab_transform = nn.Linear(config.dim, config.dim)
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
@@ -595,14 +595,14 @@ class DilBertForMaskedLM(DilBertPreTrainedModel):
             Export to TorchScript can't handle parameter sharing so we are cloning them instead.
         """
         self._tie_or_clone_weights(self.vocab_projector,
-                                   self.dilbert.embeddings.word_embeddings)
+                                   self.distilbert.embeddings.word_embeddings)
 
     def forward(self,
                 input_ids: torch.tensor,
                 attention_mask: torch.tensor = None,
                 masked_lm_labels: torch.tensor = None,
                 head_mask: torch.tensor = None):
-        dlbrt_output = self.dilbert(input_ids=input_ids,
+        dlbrt_output = self.distilbert(input_ids=input_ids,
                                     attention_mask=attention_mask,
                                     head_mask=head_mask)
         hidden_states = dlbrt_output[0]                              # (bs, seq_length, dim)
@@ -620,10 +620,10 @@ class DilBertForMaskedLM(DilBertPreTrainedModel):
         return outputs # (mlm_loss), prediction_logits, (all hidden_states), (all attentions)
 
 
-@add_start_docstrings("""DilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+@add_start_docstrings("""DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
                          the pooled output) e.g. for GLUE tasks. """,
-                      DILBERT_START_DOCSTRING, DILBERT_INPUTS_DOCSTRING)
-class DilBertForSequenceClassification(DilBertPreTrainedModel):
+                      DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
+class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the sequence classification/regression loss.
@@ -646,8 +646,8 @@ class DilBertForSequenceClassification(DilBertPreTrainedModel):
 
     Examples::
 
-        tokenizer = DilBertTokenizer.from_pretrained('dilbert-base-uncased')
-        model = DilBertForSequenceClassification.from_pretrained('dilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -655,10 +655,10 @@ class DilBertForSequenceClassification(DilBertPreTrainedModel):
 
     """
     def __init__(self, config):
-        super(DilBertForSequenceClassification, self).__init__(config)
+        super(DistilBertForSequenceClassification, self).__init__(config)
         self.num_labels = config.num_labels
 
-        self.dilbert = DilBertModel(config)
+        self.distilbert = DistilBertModel(config)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
         self.classifier = nn.Linear(config.dim, config.num_labels)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
@@ -670,17 +670,17 @@ class DilBertForSequenceClassification(DilBertPreTrainedModel):
                 attention_mask: torch.tensor = None,
                 labels: torch.tensor = None,
                 head_mask: torch.tensor = None):
-        dilbert_output = self.dilbert(input_ids=input_ids,
+        distilbert_output = self.distilbert(input_ids=input_ids,
                                       attention_mask=attention_mask,
                                       head_mask=head_mask)
-        hidden_state = dilbert_output[0]                    # (bs, seq_len, dim)
+        hidden_state = distilbert_output[0]                    # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]                    # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)   # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)             # (bs, dim)
         pooled_output = self.dropout(pooled_output)         # (bs, dim)
         logits = self.classifier(pooled_output)              # (bs, dim)
 
-        outputs = (logits,) + dilbert_output[1:]
+        outputs = (logits,) + distilbert_output[1:]
         if labels is not None:
             if self.num_labels == 1:
                 loss_fct = nn.MSELoss()
@@ -693,10 +693,10 @@ class DilBertForSequenceClassification(DilBertPreTrainedModel):
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
-@add_start_docstrings("""DilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings("""DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
                          the hidden-states output to compute `span start logits` and `span end logits`). """,
-                      DILBERT_START_DOCSTRING, DILBERT_INPUTS_DOCSTRING)
-class DilBertForQuestionAnswering(DilBertPreTrainedModel):
+                      DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
+class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     r"""
         **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -724,8 +724,8 @@ class DilBertForQuestionAnswering(DilBertPreTrainedModel):
 
     Examples::
 
-        tokenizer = DilBertTokenizer.from_pretrained('dilbert-base-uncased')
-        model = DilBertForQuestionAnswering.from_pretrained('dilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
@@ -734,9 +734,9 @@ class DilBertForQuestionAnswering(DilBertPreTrainedModel):
 
     """
     def __init__(self, config):
-        super(DilBertForQuestionAnswering, self).__init__(config)
+        super(DistilBertForQuestionAnswering, self).__init__(config)
 
-        self.dilbert = DilBertModel(config)
+        self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         assert config.num_labels == 2
         self.dropout = nn.Dropout(config.qa_dropout)
@@ -749,10 +749,10 @@ class DilBertForQuestionAnswering(DilBertPreTrainedModel):
                 start_positions: torch.tensor = None,
                 end_positions: torch.tensor = None,
                 head_mask: torch.tensor = None):
-        dilbert_output = self.dilbert(input_ids=input_ids,
+        distilbert_output = self.distilbert(input_ids=input_ids,
                                       attention_mask=attention_mask,
                                       head_mask=head_mask)
-        hidden_states = dilbert_output[0]                                 # (bs, max_query_len, dim)
+        hidden_states = distilbert_output[0]                                 # (bs, max_query_len, dim)
 
         hidden_states = self.dropout(hidden_states)                       # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)                           # (bs, max_query_len, 2)
@@ -760,7 +760,7 @@ class DilBertForQuestionAnswering(DilBertPreTrainedModel):
         start_logits = start_logits.squeeze(-1)                           # (bs, max_query_len)
         end_logits = end_logits.squeeze(-1)                               # (bs, max_query_len)
 
-        outputs = (start_logits, end_logits,) + dilbert_output[1:]
+        outputs = (start_logits, end_logits,) + distilbert_output[1:]
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:

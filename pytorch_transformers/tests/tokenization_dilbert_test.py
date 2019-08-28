@@ -18,20 +18,20 @@ import os
 import unittest
 from io import open
 
-from pytorch_transformers.tokenization_dilbert import (DilBertTokenizer)
+from pytorch_transformers.tokenization_distilbert import (DistilBertTokenizer)
 
 from .tokenization_tests_commons import CommonTestCases
 from .tokenization_bert_test import BertTokenizationTest
 
-class DilBertTokenizationTest(BertTokenizationTest):
+class DistilBertTokenizationTest(BertTokenizationTest):
 
-    tokenizer_class = DilBertTokenizer
+    tokenizer_class = DistilBertTokenizer
 
     def get_tokenizer(self):
-        return DilBertTokenizer.from_pretrained(self.tmpdirname)
+        return DistilBertTokenizer.from_pretrained(self.tmpdirname)
 
     def test_sequence_builders(self):
-        tokenizer = DilBertTokenizer.from_pretrained("dilbert-base-uncased")
+        tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
         text = tokenizer.encode("sequence builders")
         text_2 = tokenizer.encode("multi-sequence build")
