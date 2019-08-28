@@ -37,11 +37,11 @@ logger = logging.getLogger(__name__)
 
 
 DILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'dilbert-base-uncased': None, # TODO(Victor)
+    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-pytorch_model.bin"
 }
 
 DILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'dilbert-base-uncased': None, #TODO(Victor)
+    'dilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/dilbert-base-uncased-config.json"
 }
 
 
@@ -85,7 +85,7 @@ class DilBertConfig(PretrainedConfig):
             self.tie_weights_ = tie_weights_
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
-                             "or the path to a pretrained model config file (str)")
+                             " or the path to a pretrained model config file (str)")
 
 
 ### UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE ###
