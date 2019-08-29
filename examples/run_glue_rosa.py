@@ -180,7 +180,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     for _ in train_iterator:
         num_epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        print('average loss last epoch: ', epoch_loss/50)
+        print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
         epoch_loss = 0 #init as a huge number lol
         if global_step!=0: print('average loss: ', tr_loss/global_step)
         for step, batch in enumerate(epoch_iterator):
@@ -294,18 +294,23 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                     logging_loss = tr_loss
                     '''
                 
-                '''
+                
                 # save model at checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(output_dir)
-                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
-                    logger.info("Saving model checkpoint to %s", output_dir)
-                    '''
+                    encoder_to_save = encoder.module if hasattr(encoder, 'module') else encoder  # Take care of distributed/parallel training
+                    encoder_to_save.save_pretrained(output_dir)
+                    torch.save(args, os.path.join(output_dir, 'encoder_training_args.bin'))
+                    logger.info("Saving encoder checkpoint to %s", output_dir)
+                    
+                    decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder  # Take care of distributed/parallel training
+                    decoder_to_save.save_pretrained(output_dir)
+                    torch.save(args, os.path.join(output_dir, 'decoder_training_args.bin'))
+                    logger.info("Saving decoder checkpoint to %s", output_dir)
+                    
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -317,7 +322,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
-    return global_step, tr_loss / global_step # global steps, average training loss
+    return global_step, tr_loss / global_step, decoder # global steps, average training loss, decoder
 
 
 def train(args, train_dataset, model, tokenizer, all_expl=None):
@@ -734,7 +739,7 @@ def main():
             train_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         else:
             train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss = train_enc_dec(args, train_dataset, model, tokenizer, all_expl=all_expl)
+        global_step, tr_loss, decoder = train_enc_dec(args, train_dataset, model, tokenizer, all_expl=all_expl)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
@@ -758,6 +763,22 @@ def main():
         model = model_class.from_pretrained(args.output_dir)
         tokenizer = tokenizer_class.from_pretrained(args.output_dir)
         model.to(args.device)
+        
+        # do the same for decoder
+        if args.expl:
+            decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder # Take care of distributed/parallel training
+            torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
+            #decoder_to_save.save_pretrained(args.output_dir)
+            
+            #output_config_file = os.path.join(args.output_dir, 'decoder_config')
+            ##decoder_to_save.to_json_file(output_config_file)
+            #with open(output_config_file, "w", encoding='utf-8') as writer:
+                #writer.write(decoder_to_save.to_json_string())
+            
+            #torch.save(args, os.path.join(args.output_dir, 'decoder_training_args.bin'))
+            #decoder = decoder_class.from_pretrained(args.output_dir) 
+            decoder = decoder_to_save
+            decoder.to(args.device)
 
 
     # Evaluation
