@@ -176,13 +176,17 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility 
     epoch_loss = 0 #init as a huge number lol
+    num_epoch = 0
     for _ in train_iterator:
+        num_epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         print('average loss last epoch: ', epoch_loss/50)
         epoch_loss = 0 #init as a huge number lol
         if global_step!=0: print('average loss: ', tr_loss/global_step)
         for step, batch in enumerate(epoch_iterator):
-            encoder.train()
+            if num_epoch <= 3 and args.freeze:
+                encoder.train()
+                
             decoder.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
@@ -193,11 +197,9 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             decoder_lang = decoder_lang
             mode = 'teacher'
             batch_size = len(expl_idx)
-            #print('batch_size: ', batch_size)
             
             encoder_outputs = encoder(**inputs)
             bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
-            #bert_output_pooled = decoder.resize(bert_output_pooled)
             
             generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
         
@@ -222,11 +224,12 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
                 #take only premise's encoding results and produce a next sentence for now
                 #decoder_output: (bs, n_vocab)
-                #decoder_hidden[0]: (1, 8, 100) a.k.a (1, bs, hidden_size)
+                #decoder_hidden[0]: (1, bs, hidden_size)
 
                 generated_expl[i] = decoder_output   
                 topv, topi = decoder_output.topk(1) 
                 decoder_input = topi.squeeze(1)
+                #TODO: teacher forcing
                 #input = (target[t] if teacher_force else topi) # what is `target` here =_=?
                 #if(teacher_force == False and input.item() == EOS_token): # what is input here =_=?
                     #break
@@ -237,8 +240,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             
             # sanity check on generated explanations
             generated_expl_index = get_index(generated_expl) 
-            print(get_text(decoder_lang, generated_expl_index)) 
-            print(get_text(decoder_lang, target_expl_index)) 
+            #print(get_text(decoder_lang, generated_expl_index)) 
+            #print(get_text(decoder_lang, target_expl_index)) 
 
             epoch_loss += loss.item()
             
@@ -257,9 +260,10 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 torch.nn.utils.clip_grad_norm_(amp.master_params(decoder_optimizer), args.max_grad_norm)
                 # check if loss get modified already
                 print('loss: ', loss, ' not supposed to change!!!')
-                with amp.scale_loss(loss, encoder_optimizer) as scaled_loss:
-                    scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(encoder_optimizer), args.max_grad_norm)
+                if num_epoch <= 3 and args.freeze:
+                    with amp.scale_loss(loss, encoder_optimizer) as scaled_loss:
+                        scaled_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(encoder_optimizer), args.max_grad_norm)
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.max_grad_norm)
@@ -267,11 +271,13 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                encoder_scheduler.step()  # Update learning rate schedule
+                if num_epoch <= 3 and args.freeze:
+                    encoder_scheduler.step()  # Update learning rate schedule
+                    encoder_optimizer.step()
+                    encoder.zero_grad()
+                    
                 decoder_scheduler.step()
-                encoder_optimizer.step()
                 decoder_optimizer.step()
-                encoder.zero_grad()
                 decoder.zero_grad()
                 global_step += 1
                 
@@ -653,6 +659,8 @@ def main():
     
     parser.add_argument('--expl', type=bool, default=False, const = True,nargs = '?', \
                         help = 'whether to generate expl with esnli decoder, and separately encode premises and hypothesis')
+    parser.add_argument('--freeze', type=bool, default=False, const = True,nargs = '?', \
+                        help = 'whether freeze encoder training after 3 epoches')
     
     args = parser.parse_args()
     
