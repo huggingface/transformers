@@ -45,7 +45,7 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
                         output_modes, processors, 
                         Lang, normalize_sentence,
                         tensorFromSentence, pad_seq, 
-                        indexesFromSentence)
+                        indexesFromSentence, get_text, get_index)
 
 import sys
 import time
@@ -175,8 +175,12 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     decoder.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility 
+    epoch_loss = 0 #init as a huge number lol
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+        print('average loss last epoch: ', epoch_loss/50)
+        epoch_loss = 0 #init as a huge number lol
+        if global_step!=0: print('average loss: ', tr_loss/global_step)
         for step, batch in enumerate(epoch_iterator):
             encoder.train()
             decoder.train()
@@ -230,9 +234,15 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             loss_fct = torch.nn.CrossEntropyLoss()
             generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
             loss = loss_fct(generated_expl, target_expl_index)
-            print('loss: ', loss)
             
-            if global_step!=0: print('average loss: ', tr_loss/global_step)
+            # sanity check on generated explanations
+            generated_expl_index = get_index(generated_expl) 
+            print(get_text(decoder_lang, generated_expl_index)) 
+            print(get_text(decoder_lang, target_expl_index)) 
+
+            epoch_loss += loss.item()
+            
+            #if global_step!=0: print('average loss: ', tr_loss/global_step)
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -240,19 +250,22 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 loss = loss / args.gradient_accumulation_steps
 
             if args.fp16:
-                with amp.scale_loss(loss, encoder_optimizer) as scaled_loss:
-                    scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(encoder_optimizer), args.max_grad_norm)
-                #TODO: check if loss get modified already
+                # seems args.fp16 is False anyways.
+                print('loss: ', loss)
                 with amp.scale_loss(loss, decoder_optimizer) as scaled_loss:
                     scaled_loss.backward()
                 torch.nn.utils.clip_grad_norm_(amp.master_params(decoder_optimizer), args.max_grad_norm)
+                # check if loss get modified already
+                print('loss: ', loss, ' not supposed to change!!!')
+                with amp.scale_loss(loss, encoder_optimizer) as scaled_loss:
+                    scaled_loss.backward()
+                torch.nn.utils.clip_grad_norm_(amp.master_params(encoder_optimizer), args.max_grad_norm)
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.max_grad_norm)
                 torch.nn.utils.clip_grad_norm_(decoder.parameters(), args.max_grad_norm)
 
-            tr_loss += loss.item() #TODO: figure out what loss.item() do
+            tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 encoder_scheduler.step()  # Update learning rate schedule
                 decoder_scheduler.step()
@@ -263,7 +276,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 global_step += 1
                 
                 '''
-                # TODO: figure out why eval during training is needed
+                # TODO: write eval first ...
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well

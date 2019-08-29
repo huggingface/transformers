@@ -800,3 +800,27 @@ def pad_seq(seq, max_length):
     seq += [PAD_token for i in range(max_length - len(seq))]
     return seq
 
+def get_index(softmax_tensor):
+    '''
+    :param: softmax_tensor has size (seq_len, n_vocab, bs)
+    return a indexed_tensor of size (seq_len, bs), the index with largest probability
+    '''
+    return softmax_tensor.max(1)[1]
+    
+def get_text(lang, indexed_tensor):
+    '''
+    :param: indexed_tensor has size (seq_len, bs), where each value is an index between 0 and decode_lang_vocab_size
+    return a list (batch-sized) of strings that the indexed_tensor represent
+    '''
+    result = []
+    transposed = indexed_tensor.transpose(0,1) # transposed: bs * seq_len
+    for sentence_vector in transposed:
+        sentence = ''
+        for word_index in sentence_vector:
+            index = int(word_index.data)
+            if index != 2:
+                sentence = sentence + lang.index2word[index]
+                sentence = sentence + ' '
+        result.append(sentence)
+    return result
+
