@@ -77,6 +77,9 @@ class RobertaTokenizer(PreTrainedTokenizer):
                                                sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
                                                mask_token=mask_token, **kwargs)
 
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
+
         self.encoder = json.load(open(vocab_file, encoding="utf-8"))
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding

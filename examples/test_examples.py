@@ -81,7 +81,7 @@ class ExamplesTests(unittest.TestCase):
                     "--do_train",
                     "--do_eval",
                     "--version_2_with_negative",
-                    "--learning_rate=1e-4",
+                    "--learning_rate=2e-4",
                     "--per_gpu_train_batch_size=2",
                     "--per_gpu_eval_batch_size=1",
                     "--overwrite_output_dir",
