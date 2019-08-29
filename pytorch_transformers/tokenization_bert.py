@@ -119,7 +119,7 @@ class BertTokenizer(PreTrainedTokenizer):
         """Constructs a BertTokenizer.
 
         Args:
-            **vocab*: Instance of BertTokenizerVocab
+            **vocab_or_filepath**: BertTokenizerVocab or str pointing to a one-wordpiece-per-line vocabulary file
             **do_lower_case**: (`optional`) boolean (default True)
                 Whether to lower case the input
                 Only has an effect when do_basic_tokenize=True
