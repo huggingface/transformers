@@ -461,6 +461,117 @@ def train(args, train_dataset, model, tokenizer, all_expl=None):
     return global_step, tr_loss / global_step
 
 
+def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tokenizer, prefix=""):
+    # Loop to handle MNLI double evaluation (matched, mis-matched)
+    eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
+    eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
+
+    results = {}
+    for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
+        eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        
+        if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
+            os.makedirs(eval_output_dir)
+
+        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+        # Note that DistributedSampler samples randomly
+        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+        # Eval!
+        logger.info("***** Running evaluation {} *****".format(prefix))
+        logger.info("  Num examples = %d", len(eval_dataset))
+        logger.info("  Batch size = %d", args.eval_batch_size)
+        eval_loss = 0.0
+        nb_eval_steps = 0
+        preds = None
+        out_label_ids = None
+        for batch in tqdm(eval_dataloader, desc="Evaluating"):
+            #encoder.eval()
+            #decoder.eval()
+            #expl2label_model.eval()
+            batch = tuple(t.to(args.device) for t in batch)
+
+            with torch.no_grad():
+                inputs = {'input_ids':      batch[0],
+                          'attention_mask': batch[1],
+                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None}
+                print('input_ids: ', type(batch[0]))
+                #print(type(batch[1]))
+                #print(type(batch[2]))
+                labels = batch[3]
+                expl_idx = batch[4]
+                all_expl = all_expl
+                decoder_lang = decoder_lang
+                batch_size = len(expl_idx)
+                
+                encoder_outputs = encoder(**inputs)
+                bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
+
+                generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
+                target_expl = [all_expl[i] for i in expl_idx]
+                target_expl_index = []
+                for line in target_expl:
+                    sentence = normalize_sentence(line)
+                    indexes = indexesFromSentence(decoder_lang, sentence)
+                    indexes_padded = pad_seq(indexes, target_length)
+                    target_expl_index.append(indexes_padded)
+
+                target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
+                decoder_hidden = bert_output_pooled.unsqueeze(0) 
+                decoder_input = torch.LongTensor([CLS_token] * batch_size) 
+                
+                for i in range(target_length):
+                    decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                    generated_expl[i] = decoder_output   
+                    topv, topi = decoder_output.topk(1) 
+                    decoder_input = topi.squeeze(1)
+                    #TODO: teacher forcing
+                    #input = (target[t] if teacher_force else topi) # what is `target` here =_=?
+                    #if(teacher_force == False and input.item() == EOS_token): # what is input here =_=?
+                        #break
+
+                loss_fct = torch.nn.CrossEntropyLoss()
+                generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
+                tmp_eval_loss = loss_fct(generated_expl, target_expl_index)
+                
+                eval_loss += tmp_eval_loss.mean().item()
+                
+            nb_eval_steps += 1
+            #TODO: figure out input to expl2label model from the output of attention model
+            expl2label_inputs = {'input_ids':      batch[0], #?
+                                 'attention_mask': batch[1], #?
+                                 'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,#?
+                                'labels': labels}#?
+            expl2label_outputs = expl2label_model(**expl2label_inputs)
+            expl2label_loss, logits = outputs[:2]
+            print('expl2label_loss: ', expl2label_loss.item())
+            
+            if preds is None:
+                preds = logits.detach().cpu().numpy()
+                out_label_ids = inputs['labels'].detach().cpu().numpy()
+            else:
+                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+                out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
+
+        eval_loss = eval_loss / nb_eval_steps
+        if args.output_mode == "classification":
+            preds = np.argmax(preds, axis=1)
+        elif args.output_mode == "regression":
+            preds = np.squeeze(preds)
+        result = compute_metrics(eval_task, preds, out_label_ids)
+        results.update(result)
+
+        output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+        with open(output_eval_file, "w") as writer:
+            logger.info("***** Eval results {} *****".format(prefix))
+            for key in sorted(result.keys()):
+                logger.info("  %s = %s", key, str(result[key]))
+                writer.write("%s = %s\n" % (key, str(result[key])))
+
+    return results
+
+
 def evaluate(args, model, tokenizer, prefix=""):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
@@ -671,7 +782,8 @@ def main():
     
     if args.expl:
         args.model_type = 'bert_expl_encoder'
-        args.do_eval = False #TODO: remove after change evaluate for BertForESNLI
+        args.do_train = False #TODO: change once eval works
+        args.do_eval = True
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
@@ -780,10 +892,9 @@ def main():
             decoder = decoder_to_save
             decoder.to(args.device)
 
-
     # Evaluation
     results = {}
-    if args.do_eval and args.local_rank in [-1, 0]:
+    if (not args.expl) and args.do_eval and args.local_rank in [-1, 0]:
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
@@ -796,6 +907,18 @@ def main():
             result = evaluate(args, model, tokenizer, prefix=global_step)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
+            
+    if args.expl and args.do_eval:
+        encoder = None #?
+        decoder = None #? # TODO: load state dict
+        expl2label_model = None#?
+        decoder_lang = None #? # TODO: save decoder_lang
+        #encoder.to(args.device)
+        #decoder.to(args.device)
+        #expl2label_model.to(args.device)
+        result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tokenizer, prefix="")
+        result = dict((k + '_{}'.format(""), v) for k, v in result.items())
+        results.update(result)
 
     return results
 
