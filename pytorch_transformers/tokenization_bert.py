@@ -86,9 +86,8 @@ def whitespace_tokenize(text):
 
 class BertTokenizerVocab(object):
     """Constructs a BertTokenizerVocab from a wordpiece vocab dictionary"""
-    def __init__(self, vocab):
-        super().__init__()
 
+    def __init__(self, vocab):
         self.vocab = vocab
 
     @classmethod
