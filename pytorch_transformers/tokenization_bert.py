@@ -115,7 +115,7 @@ class BertTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_or_filepath, do_lower_case=True, do_basic_tokenize=True, never_split=None,
+    def __init__(self, vocab_file, do_lower_case=True, do_basic_tokenize=True, never_split=None,
                  unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
                  mask_token="[MASK]", tokenize_chinese_chars=True, **kwargs):
         """Constructs a BertTokenizer.
@@ -141,16 +141,16 @@ class BertTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
-        if not isinstance(vocab_or_filepath, BertTokenizerVocab):
-            if isinstance(vocab_or_filepath, str) or (six.PY2 and isinstance(vocab_or_filepath, unicode)):
-                self.vocab = BertTokenizerVocab.from_pretrained(vocab_or_filepath)
+        if not isinstance(vocab_file, BertTokenizerVocab):
+            if isinstance(vocab_file, str) or (six.PY2 and isinstance(vocab_file, unicode)):
+                self.vocab = BertTokenizerVocab.from_pretrained(vocab_file)
             else:
                 raise ValueError(
                     "vocab_or_filepath should be instance of BertTokenizerVocab "
-                    "or str (got: {})".format(type(vocab_or_filepath).__name__)
+                    "or str (got: {})".format(type(vocab_file).__name__)
                 )
         else:
-            self.vocab = vocab_or_filepath
+            self.vocab = vocab_file
 
         self.ids_to_tokens = collections.OrderedDict(
             [(ids, tok) for tok, ids in self.vocab.vocab.items()])
