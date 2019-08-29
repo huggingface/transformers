@@ -19,6 +19,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import collections
 import logging
 import os
+
+import six
 import unicodedata
 from io import open
 
@@ -140,7 +142,7 @@ class BertTokenizer(PreTrainedTokenizer):
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
         if not isinstance(vocab_or_filepath, BertTokenizerVocab):
-            if isinstance(vocab_or_filepath, str):
+            if isinstance(vocab_or_filepath, str) or (six.PY2 and isinstance(vocab_or_filepath, unicode)):
                 self.vocab = BertTokenizerVocab.from_pretrained(vocab_or_filepath)
             else:
                 raise ValueError(
