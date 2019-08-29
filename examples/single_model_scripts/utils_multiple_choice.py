@@ -269,7 +269,7 @@ class ArcProcessor(DataProcessor):
                 continue
             four_choice += 1
             truth = str(normalize(data_raw["answerKey"]))
-            assert truth is not None
+            assert truth != "None"
             question_choices = data_raw["question"]
             question = question_choices["stem"]
             id = data_raw["id"]
