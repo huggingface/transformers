@@ -71,6 +71,10 @@ class PretrainedConfig(object):
     r""" Base class for all configuration classes.
         Handles a few parameters common to all models' configurations as well as methods for loading/downloading/saving configurations.
 
+        Note:
+            A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to initialize a model does **not** load the model weights.
+            It only affects the model's configuration.
+
         Class attributes (overridden by derived classes):
             - ``pretrained_config_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
 
@@ -121,6 +125,13 @@ class PretrainedConfig(object):
                 - The values in kwargs of any keys which are configuration attributes will be used to override the loaded values.
                 - Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled by the `return_unused_kwargs` keyword parameter.
 
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
             return_unused_kwargs: (`optional`) bool:
 
                 - If False, then this function returns just the final configuration object.
@@ -142,6 +153,8 @@ class PretrainedConfig(object):
 
         """
         cache_dir = kwargs.pop('cache_dir', None)
+        force_download = kwargs.pop('force_download', False)
+        proxies = kwargs.pop('proxies', None)
         return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
 
         if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
@@ -152,8 +165,8 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         # redirect to the cache, if necessary
         try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir)
-        except EnvironmentError:
+            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+        except EnvironmentError as e:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
                 logger.error(
                     "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
@@ -166,7 +179,7 @@ class PretrainedConfig(object):
                         pretrained_model_name_or_path,
                         ', '.join(cls.pretrained_config_archive_map.keys()),
                         config_file))
-            return None
+            raise e
         if resolved_config_file == config_file:
             logger.info("loading configuration file {}".format(config_file))
         else:
@@ -396,6 +409,13 @@ class PreTrainedModel(nn.Module):
                 Path to a directory in which a downloaded pre-trained model
                 configuration should be cached if the standard cache should not be used.
 
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
             output_loading_info: (`optional`) boolean:
                 Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
@@ -420,6 +440,8 @@ class PreTrainedModel(nn.Module):
         state_dict = kwargs.pop('state_dict', None)
         cache_dir = kwargs.pop('cache_dir', None)
         from_tf = kwargs.pop('from_tf', False)
+        force_download = kwargs.pop('force_download', False)
+        proxies = kwargs.pop('proxies', None)
         output_loading_info = kwargs.pop('output_loading_info', False)
 
         # Load config
@@ -427,6 +449,7 @@ class PreTrainedModel(nn.Module):
             config, model_kwargs = cls.config_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
+                force_download=force_download,
                 **kwargs
             )
         else:
@@ -449,8 +472,8 @@ class PreTrainedModel(nn.Module):
                 archive_file = pretrained_model_name_or_path
         # redirect to the cache, if necessary
         try:
-            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
-        except EnvironmentError:
+            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+        except EnvironmentError as e:
             if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                 logger.error(
                     "Couldn't reach server at '{}' to download pretrained weights.".format(
@@ -463,7 +486,7 @@ class PreTrainedModel(nn.Module):
                         pretrained_model_name_or_path,
                         ', '.join(cls.pretrained_model_archive_map.keys()),
                         archive_file))
-            return None
+            raise e
         if resolved_archive_file == archive_file:
             logger.info("loading weights file {}".format(archive_file))
         else:

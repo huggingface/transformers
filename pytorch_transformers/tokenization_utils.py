@@ -166,6 +166,9 @@ class PreTrainedTokenizer(object):
         self._additional_special_tokens = []
 
         self.max_len = max_len if max_len is not None else int(1e12)
+        self.max_len_single_sentence = self.max_len
+        self.max_len_sentences_pair = self.max_len
+
         self.added_tokens_encoder = {}
         self.added_tokens_decoder = {}
 
@@ -192,6 +195,13 @@ class PreTrainedTokenizer(object):
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the vocabulary files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
 
             inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
 
@@ -223,6 +233,8 @@ class PreTrainedTokenizer(object):
     @classmethod
     def _from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
         cache_dir = kwargs.pop('cache_dir', None)
+        force_download = kwargs.pop('force_download', False)
+        proxies = kwargs.pop('proxies', None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -283,8 +295,8 @@ class PreTrainedTokenizer(object):
                 if file_path is None:
                     resolved_vocab_files[file_id] = None
                 else:
-                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir)
-        except EnvironmentError:
+                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+        except EnvironmentError as e:
             if pretrained_model_name_or_path in s3_models:
                 logger.error("Couldn't reach server to download vocabulary.")
             else:
@@ -294,7 +306,7 @@ class PreTrainedTokenizer(object):
                     "at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
                         pretrained_model_name_or_path, str(vocab_files.keys())))
-            return None
+            raise e
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:
@@ -477,15 +489,45 @@ class PreTrainedTokenizer(object):
 
             Take care of added tokens.
         """
+        def split_on_token(tok, text):
+            result = []
+            split_text = text.split(tok)
+            for i, sub_text in enumerate(split_text):
+                sub_text = sub_text.strip()
+                if i == 0 and not sub_text:
+                    result += [tok]
+                elif i == len(split_text) - 1:
+                    if sub_text:
+                        result += [sub_text]
+                    else:
+                        pass
+                else:
+                    if sub_text:
+                        result += [sub_text]
+                    result += [tok]
+            return result
+
         def split_on_tokens(tok_list, text):
             if not text:
                 return []
             if not tok_list:
                 return self._tokenize(text, **kwargs)
-            tok = tok_list[0]
-            split_text = text.split(tok)
-            return sum((split_on_tokens(tok_list[1:], sub_text.strip()) + [tok] \
-                        for sub_text in split_text), [])[:-1]
+
+            tokenized_text = []
+            text_list = [text]
+            for tok in tok_list:
+                tokenized_text = []
+                for sub_text in text_list:
+                    if sub_text not in self.added_tokens_encoder \
+                            and sub_text not in self.all_special_tokens:
+                        tokenized_text += split_on_token(tok, sub_text)
+                    else:
+                        tokenized_text += [sub_text]
+                text_list = tokenized_text
+
+            return sum((self._tokenize(token, **kwargs) if token not \
+                    in self.added_tokens_encoder and token not in self.all_special_tokens \
+                    else [token] for token in tokenized_text), [])
 
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
@@ -551,10 +593,12 @@ class PreTrainedTokenizer(object):
             return first_sentence_tokens, second_sentence_tokens
 
     def add_special_tokens_single_sentence(self, token_ids):
-        raise NotImplementedError
+        logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
+        return token_ids
 
     def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
-        raise NotImplementedError
+        logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
+        return token_ids_0 + token_ids_1
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         """ Converts a single index or a sequence of indices (integers) in a token "
@@ -597,9 +641,9 @@ class PreTrainedTokenizer(object):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         text = self.convert_tokens_to_string(filtered_tokens)
 
-        if self.sep_token is not None and self.sep_token in text:
-            text = text.replace(self.cls_token, self.sep_token)
-            split_text = list(filter(lambda sentence: len(sentence) > 0, text.split(self.sep_token)))
+        if self._sep_token is not None and self._sep_token in text:
+            text = text.replace(self._cls_token, self._sep_token)
+            split_text = list(filter(lambda sentence: len(sentence) > 0, text.split(self._sep_token)))
             if clean_up_tokenization_spaces:
                 clean_text = [self.clean_up_tokenization(text) for text in split_text]
                 return clean_text

@@ -90,25 +90,30 @@ ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.RobertaConfig`): Model configuration class with all the parameters of the 
-            model.
+            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 ROBERTA_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
-            To match pre-training, RoBERTa input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            To match pre-training, RoBERTa input sequence should be formatted with <s> and </s> tokens as follows:
 
             (a) For sequence pairs:
 
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP][SEP] no it is not . [SEP]``
+                ``tokens:         <s> Is this Jacksonville ? </s> </s> No it is not . </s>``
 
             (b) For single sequences:
 
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
+                ``tokens:         <s> the dog is hairy . </s>``
 
             Fully encoded sequences or sequence pairs can be obtained using the RobertaTokenizer.encode function with 
             the ``add_special_tokens`` parameter set to ``True``.
+
+            RoBERTa is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:

@@ -87,10 +87,14 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         super(OpenAIGPTTokenizer, self).__init__(unk_token=unk_token, **kwargs)
 
+        self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
+        self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
+
         try:
             import ftfy
-            import spacy
-            self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
+            from spacy.lang.en import English
+            _nlp = English()
+            self.nlp = _nlp.Defaults.create_tokenizer(_nlp)
             self.fix_text = ftfy.fix_text
         except ImportError:
             logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")
