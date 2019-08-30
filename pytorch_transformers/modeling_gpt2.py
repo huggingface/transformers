@@ -679,13 +679,16 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     Examples::
 
+        import torch
+        from pytorch_transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
+        
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
         model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings to the new vocabulary size (add a vector at the end)
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        mc_token_ids = torch.tensor([input_ids.size(-1), input_ids.size(-1)]).unsqueeze(0)  # Batch size 1
+        mc_token_ids = torch.tensor([input_ids.size(-1)])  # Batch size 1
         outputs = model(input_ids, mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
