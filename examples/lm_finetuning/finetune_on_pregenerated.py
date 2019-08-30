@@ -314,15 +314,16 @@ def main():
                 mean_loss = tr_loss * args.gradient_accumulation_steps / nb_tr_steps
                 pbar.set_postfix_str(f"Loss: {mean_loss:.5f}")
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    scheduler.step()  # Update learning rate schedule
                     optimizer.step()
+                    scheduler.step()  # Update learning rate schedule
                     optimizer.zero_grad()
                     global_step += 1
 
     # Save a trained model
-    if  n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1 :
+    if args.local_rank == -1 or torch.distributed.get_rank() == 0:
         logging.info("** ** * Saving fine-tuned model ** ** * ")
-        model.save_pretrained(args.output_dir)
+        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+        model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
 
 

@@ -11,6 +11,7 @@ The library currently contains PyTorch implementations, pre-trained model weight
 4. `Transformer-XL <https://github.com/kimiyoung/transformer-xl>`_ (from Google/CMU) released with the paper `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_ by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
 5. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 6. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
+7. `DistilBERT <https://huggingface.co/pytorch-transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together with the blog post `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`_ by Victor Sanh, Lysandre Debut and Thomas Wolf.
 
 .. toctree::
     :maxdepth: 2
@@ -21,20 +22,31 @@ The library currently contains PyTorch implementations, pre-trained model weight
     pretrained_models
     examples
     notebooks
+    serialization
     converting_tensorflow_models
     migration
     bertology
     torchscript
 
+.. toctree::
+    :maxdepth: 2
+    :caption: Main classes
+
+    main_classes/configuration
+    main_classes/model
+    main_classes/tokenizer
+    main_classes/optimizer_schedules
 
 .. toctree::
     :maxdepth: 2
     :caption: Package Reference
 
-    model_doc/overview
+    model_doc/auto
     model_doc/bert
     model_doc/gpt
     model_doc/transformerxl
     model_doc/gpt2
     model_doc/xlm
     model_doc/xlnet
+    model_doc/roberta
+    model_doc/distilbert

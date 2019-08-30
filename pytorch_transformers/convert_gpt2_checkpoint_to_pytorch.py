@@ -35,7 +35,7 @@ def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, p
     if gpt2_config_file == "":
         config = GPT2Config()
     else:
-        config = GPT2Config(gpt2_config_file)
+        config = GPT2Config.from_json_file(gpt2_config_file)
     model = GPT2Model(config)
 
     # Load weights from numpy
@@ -58,7 +58,7 @@ if __name__ == "__main__":
                         default = None,
                         type = str,
                         required = True,
-                        help = "Path the TensorFlow checkpoint path.")
+                        help = "Path to the TensorFlow checkpoint path.")
     parser.add_argument("--pytorch_dump_folder_path",
                         default = None,
                         type = str,

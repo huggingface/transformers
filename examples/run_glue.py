@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet)."""
+""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
 
 from __future__ import absolute_import, division, print_function
 
@@ -33,6 +33,9 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
+                                  RobertaConfig,
+                                  RobertaForSequenceClassification,
+                                  RobertaTokenizer,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
@@ -45,12 +48,13 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
+    'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
 }
 
 
@@ -92,6 +96,16 @@ def train(args, train_dataset, model, tokenizer):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
+                                                          output_device=args.local_rank,
+                                                          find_unused_parameters=True)
+
     # Train!
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", len(train_dataset))
@@ -114,10 +128,10 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM don't use segment_ids
+                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
                       'labels':         batch[3]}
-            ouputs = model(**inputs)
-            loss = ouputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            outputs = model(**inputs)
+            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -204,7 +218,7 @@ def evaluate(args, model, tokenizer, prefix=""):
             with torch.no_grad():
                 inputs = {'input_ids':      batch[0],
                           'attention_mask': batch[1],
-                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM don't use segment_ids
+                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
                           'labels':         batch[3]}
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
@@ -237,6 +251,9 @@ def evaluate(args, model, tokenizer, prefix=""):
 
 
 def load_and_cache_examples(args, task, tokenizer, evaluate=False):
+    if args.local_rank not in [-1, 0] and not evaluate:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
     processor = processors[task]()
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
@@ -251,17 +268,26 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
+        if task in ['mnli', 'mnli-mm'] and args.model_type in ['roberta']:
+            # HACK(label indices are swapped in RoBERTa pretrained model)
+            label_list[1], label_list[2] = label_list[2], label_list[1] 
         examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
             cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
             cls_token=tokenizer.cls_token,
+            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
             sep_token=tokenizer.sep_token,
-            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 1,
+            sep_token_extra=bool(args.model_type in ['roberta']),           # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0)
+            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+        )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
+
+    if args.local_rank == 0 and not evaluate:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -411,14 +437,7 @@ def main():
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
-    # Distributed and parallel training
     model.to(args.device)
-    if args.local_rank != -1:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
-                                                          output_device=args.local_rank,
-                                                          find_unused_parameters=True)
-    elif args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
 
     logger.info("Training/evaluation parameters %s", args)
 
@@ -448,6 +467,7 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = model_class.from_pretrained(args.output_dir)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         model.to(args.device)
 
 

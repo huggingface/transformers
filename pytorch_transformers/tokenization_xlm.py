@@ -122,10 +122,15 @@ class XLMTokenizer(PreTrainedTokenizer):
                                            cls_token=cls_token, mask_token=mask_token,
                                            additional_special_tokens=additional_special_tokens,
                                            **kwargs)
+
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+
         try:
             import ftfy
-            import spacy
-            self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
+            from spacy.lang.en import English
+            _nlp = English()
+            self.nlp = _nlp.Defaults.create_tokenizer(_nlp)
             self.fix_text = ftfy.fix_text
         except ImportError:
             logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")
@@ -213,6 +218,22 @@ class XLMTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
         return out_string
+
+    def add_special_tokens_single_sentence(self, token_ids):
+        """
+        Adds special tokens to a sequence for sequence classification tasks.
+        An XLM sequence has the following format: [CLS] X [SEP]
+        """
+        return [self._convert_token_to_id(self.cls_token)] + token_ids + [self._convert_token_to_id(self.sep_token)]
+
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+        """
+        Adds special tokens to a sequence pair for sequence classification tasks.
+        An XLM sequence pair has the following format: [CLS] A [SEP] B [SEP]
+        """
+        sep = [self._convert_token_to_id(self.sep_token)]
+        cls = [self._convert_token_to_id(self.cls_token)]
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""
