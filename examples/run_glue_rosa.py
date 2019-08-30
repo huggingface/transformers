@@ -76,6 +76,7 @@ MODEL_CLASSES = {
 CLS_token = 0 # in decoder language
 SEP_token = 1 # in decoder language
 PAD_token = 2 # in decoder language
+hidden_size = 100 # the hidden_size for decoder. change to 768 and get rid of resize once working on the whole dataset
 
 
 def set_seed(args):
@@ -119,9 +120,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
         sentence = normalize_sentence(sentence)
         decoder_lang.addSentence(sentence)
     
-    MAX_LENGTH = 128
-    hidden_size = 100 # change to 768 and get rid of resize once working on the whole dataset
-    target_length = MAX_LENGTH
+    MAX_LENGTH = args.max_seq_length
+    target_length = args.max_seq_length
     decoder_vocab_size = decoder_lang.n_words
 
     # initialize decoder
@@ -799,7 +799,7 @@ def main():
     
     if args.expl:
         args.model_type = 'bert_expl_encoder'
-        args.do_train = True #TODO: change once eval works
+        #args.do_train = True #TODO: change once eval works
         args.do_eval = True
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -934,16 +934,19 @@ def main():
         dir2 = None
         
         encoder = BertModel.from_pretrained(dir1)
-        decoder = None # TODO: load state dict
-        
-        expl2label_model = None #BertForESNLI.from_pretrained(dir2) #store in a different dir from encoder dir
         
         # use pickle to load decoder_lang
         filehandler = open(dir1+'decoder_lang.obj', 'rb') 
         decoder_lang = pickle.load(filehandler)
         
+        decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
+        decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
+        #decoder = None # TODO: load state dict
+        
+        expl2label_model = None #BertForESNLI.from_pretrained(dir2) #store in a different dir from encoder dir
+        
         encoder.to(args.device)
-        #decoder.to(args.device)
+        decoder.to(args.device)
         #expl2label_model.to(args.device)
         result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tokenizer, prefix="")
         result = dict((k + '_{}'.format(""), v) for k, v in result.items())
