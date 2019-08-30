@@ -55,13 +55,13 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     def test_full_tokenizer(self):
         tokenizer = RobertaTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower"
-        bpe_tokens = ["\u0120low", "er"]
+        text = "lower newer"
+        bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 19]
+        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
