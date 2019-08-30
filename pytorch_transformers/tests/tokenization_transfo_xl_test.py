@@ -37,8 +37,9 @@ class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
         with open(self.vocab_file, "w", encoding='utf-8') as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_tokenizer(self):
-        return TransfoXLTokenizer.from_pretrained(self.tmpdirname, lower_case=True)
+    def get_tokenizer(self, **kwargs):
+        kwargs['lower_case'] = True
+        return TransfoXLTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
         input_text = u"<unk> UNwanted , running"

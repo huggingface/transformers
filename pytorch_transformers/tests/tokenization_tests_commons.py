@@ -49,23 +49,32 @@ class CommonTestCases:
         def tearDown(self):
             shutil.rmtree(self.tmpdirname)
 
-        def get_tokenizer(self):
+        def get_tokenizer(self, **kwargs):
             raise NotImplementedError
 
         def get_input_output_texts(self):
             raise NotImplementedError
 
         def test_save_and_load_tokenizer(self):
+            # safety check on max_len default value so we are sure the test works
             tokenizer = self.get_tokenizer()
+            self.assertNotEqual(tokenizer.max_len, 42)
+
+            # Now let's start the test
+            tokenizer = self.get_tokenizer(max_len=42)
 
             before_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
 
             with TemporaryDirectory() as tmpdirname:
                 tokenizer.save_pretrained(tmpdirname)
-                tokenizer = tokenizer.from_pretrained(tmpdirname)
+                tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
 
-            after_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
-            self.assertListEqual(before_tokens, after_tokens)
+                after_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
+                self.assertListEqual(before_tokens, after_tokens)
+
+                self.assertEqual(tokenizer.max_len, 42)
+                tokenizer = self.tokenizer_class.from_pretrained(tmpdirname, max_len=43)
+                self.assertEqual(tokenizer.max_len, 43)
 
         def test_pickle_tokenizer(self):
             tokenizer = self.get_tokenizer()
