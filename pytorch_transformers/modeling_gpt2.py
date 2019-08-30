@@ -657,9 +657,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
 
-            `multiple_choice_labels`: optional multiple choice labels: ``torch.LongTensor`` of shape [batch_size]
-                with indices selected in [0, ..., num_choices].
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **lm_loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Language modeling loss.

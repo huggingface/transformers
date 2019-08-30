@@ -13,7 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
+"""
+Fine-tuning the library models for language modeling on WikiText-2 (GPT, GPT-2, BERT, RoBERTa).
+GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
+using a masked language modeling (MLM) loss.
+"""
 
 from __future__ import absolute_import, division, print_function
 
@@ -21,41 +25,74 @@ import argparse
 import glob
 import logging
 import os
+import pickle
 import random
 
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
 
-from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
-                                  BertForSequenceClassification, BertTokenizer,
-                                  RobertaConfig,
-                                  RobertaForSequenceClassification,
-                                  RobertaTokenizer,
-                                  XLMConfig, XLMForSequenceClassification,
-                                  XLMTokenizer, XLNetConfig,
-                                  XLNetForSequenceClassification,
-                                  XLNetTokenizer)
+from pytorch_transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
+                                  BertConfig, BertForMaskedLM, BertTokenizer,
+                                  GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
+                                  OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
+                                  RobertaConfig, RobertaForMaskedLM, RobertaTokenizer)
 
-from pytorch_transformers import AdamW, WarmupLinearSchedule
-
-from utils_glue import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors)
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig)), ())
 
 MODEL_CLASSES = {
-    'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
-    'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
-    'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
-    'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
+    'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
+    'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
+    'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
+    'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer)
 }
+
+
+class TextDataset(Dataset):
+    def __init__(self, tokenizer, file_path='train', block_size=512):
+        assert os.path.isfile(file_path)
+        directory, filename = os.path.split(file_path)
+        cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{filename}')
+
+        if os.path.exists(cached_features_file):
+            logger.info("Loading features from cached file %s", cached_features_file)
+            with open(cached_features_file, 'rb') as handle:
+                self.examples = pickle.load(handle)
+        else:
+            logger.info("Creating features from dataset file at %s", directory)
+
+            self.examples = []
+            with open(file_path, encoding="utf-8") as f:
+                text = f.read()
+
+            tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
+
+            while len(tokenized_text) >= block_size:  # Truncate in block of block_size
+                self.examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[:block_size]))
+                tokenized_text = tokenized_text[block_size:]
+            # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
+            # If your dataset is small, first you should loook for a bigger one :-) and second you
+            # can change this behavior by adding (model specific) padding.
+
+            logger.info("Saving features into cached file %s", cached_features_file)
+            with open(cached_features_file, 'wb') as handle:
+                pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, item):
+        return torch.tensor(self.examples[item])
+
+
+def load_and_cache_examples(args, tokenizer, evaluate=False):
+    dataset = TextDataset(tokenizer, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size)
+    return dataset
 
 
 def set_seed(args):
@@ -64,6 +101,26 @@ def set_seed(args):
     torch.manual_seed(args.seed)
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
+
+
+def mask_tokens(inputs, tokenizer, args):
+    """ Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. """
+    labels = inputs.clone()
+    # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+    masked_indices = torch.bernoulli(torch.full(labels.shape, args.mlm_probability)).bool()
+    labels[~masked_indices] = -1  # We only compute loss on masked tokens
+
+    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
+
+    # 10% of the time, we replace masked input tokens with random word
+    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
+    inputs[indices_random] = random_words[indices_random]
+
+    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+    return inputs, labels
 
 
 def train(args, train_dataset, model, tokenizer):
@@ -120,36 +177,36 @@ def train(args, train_dataset, model, tokenizer):
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
-    set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+    set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
+            inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
+            inputs = inputs.to(args.device)
+            labels = labels.to(args.device)
             model.train()
-            batch = tuple(t.to(args.device) for t in batch)
-            inputs = {'input_ids':      batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
-                      'labels':         batch[3]}
-            outputs = model(**inputs)
+            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
             if args.n_gpu > 1:
-                loss = loss.mean() # mean() to average on multi-gpu parallel training
+                loss = loss.mean()  # mean() to average on multi-gpu parallel training
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
             if args.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                scheduler.step()  # Update learning rate schedule
+                if args.fp16:
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 optimizer.step()
+                scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
                 global_step += 1
 
@@ -188,157 +245,98 @@ def train(args, train_dataset, model, tokenizer):
 
 def evaluate(args, model, tokenizer, prefix=""):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
-    eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
-    eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
+    eval_output_dir = args.output_dir
 
     results = {}
-    for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
+    eval_dataset = load_and_cache_examples(args, tokenizer, evaluate=True)
 
-        if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
-            os.makedirs(eval_output_dir)
+    if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(eval_output_dir)
 
-        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-        # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
-        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+    # Note that DistributedSampler samples randomly
+    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
-        # Eval!
-        logger.info("***** Running evaluation {} *****".format(prefix))
-        logger.info("  Num examples = %d", len(eval_dataset))
-        logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_loss = 0.0
-        nb_eval_steps = 0
-        preds = None
-        out_label_ids = None
-        for batch in tqdm(eval_dataloader, desc="Evaluating"):
-            model.eval()
-            batch = tuple(t.to(args.device) for t in batch)
+    # Eval!
+    logger.info("***** Running evaluation {} *****".format(prefix))
+    logger.info("  Num examples = %d", len(eval_dataset))
+    logger.info("  Batch size = %d", args.eval_batch_size)
+    eval_loss = 0.0
+    nb_eval_steps = 0
+    model.eval()
 
-            with torch.no_grad():
-                inputs = {'input_ids':      batch[0],
-                          'attention_mask': batch[1],
-                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
-                          'labels':         batch[3]}
-                outputs = model(**inputs)
-                tmp_eval_loss, logits = outputs[:2]
+    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+        batch = batch.to(args.device)
 
-                eval_loss += tmp_eval_loss.mean().item()
-            nb_eval_steps += 1
-            if preds is None:
-                preds = logits.detach().cpu().numpy()
-                out_label_ids = inputs['labels'].detach().cpu().numpy()
-            else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
+        with torch.no_grad():
+            outputs = model(batch, masked_lm_labels=batch) if args.mlm else model(batch, labels=batch)
+            lm_loss = outputs[0]
+            eval_loss += lm_loss.mean().item()
+        nb_eval_steps += 1
 
-        eval_loss = eval_loss / nb_eval_steps
-        if args.output_mode == "classification":
-            preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
-        result = compute_metrics(eval_task, preds, out_label_ids)
-        results.update(result)
+    eval_loss = eval_loss / nb_eval_steps
+    perplexity = torch.exp(torch.tensor(eval_loss))
 
-        output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results {} *****".format(prefix))
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+    result = {
+        "perplexity": perplexity
+    }
+
+    output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+    with open(output_eval_file, "w") as writer:
+        logger.info("***** Eval results {} *****".format(prefix))
+        for key in sorted(result.keys()):
+            logger.info("  %s = %s", key, str(result[key]))
+            writer.write("%s = %s\n" % (key, str(result[key])))
 
     return results
-
-
-def load_and_cache_examples(args, task, tokenizer, evaluate=False):
-    if args.local_rank not in [-1, 0] and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    processor = processors[task]()
-    output_mode = output_modes[task]
-    # Load data features from cache or dataset file
-    cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}'.format(
-        'dev' if evaluate else 'train',
-        list(filter(None, args.model_name_or_path.split('/'))).pop(),
-        str(args.max_seq_length),
-        str(task)))
-    if os.path.exists(cached_features_file):
-        logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
-    else:
-        logger.info("Creating features from dataset file at %s", args.data_dir)
-        label_list = processor.get_labels()
-        if task in ['mnli', 'mnli-mm'] and args.model_type in ['roberta']:
-            # HACK(label indices are swapped in RoBERTa pretrained model)
-            label_list[1], label_list[2] = label_list[2], label_list[1] 
-        examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
-            cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
-            cls_token=tokenizer.cls_token,
-            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
-            sep_token=tokenizer.sep_token,
-            sep_token_extra=bool(args.model_type in ['roberta']),           # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-            pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
-        )
-        if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
-
-    if args.local_rank == 0 and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Convert to Tensors and build dataset
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    if output_mode == "classification":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
-    elif output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
-
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-    return dataset
 
 
 def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--data_dir", default=None, type=str, required=True,
-                        help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--model_type", default=None, type=str, required=True,
-                        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
-    parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
-    parser.add_argument("--task_name", default=None, type=str, required=True,
-                        help="The name of the task to train selected in the list: " + ", ".join(processors.keys()))
+    parser.add_argument("--train_data_file", default=None, type=str, required=True,
+                        help="The input training data file (a text file).")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
     ## Other parameters
+    parser.add_argument("--eval_data_file", default=None, type=str,
+                        help="An optional input evaluation data file to evaluate the perplexity on (a text file).")
+
+    parser.add_argument("--model_type", default="bert", type=str,
+                        help="The model architecture to be fine-tuned.")
+    parser.add_argument("--model_name_or_path", default="bert-base-cased", type=str,
+                        help="The model checkpoint for weights initialization.")
+
+    parser.add_argument("--mlm", action='store_true',
+                        help="Train with masked-language modeling loss instead of language modeling.")
+    parser.add_argument("--mlm_probability", type=float, default=0.15,
+                        help="Ratio of tokens to mask for masked language modeling loss")
+
     parser.add_argument("--config_name", default="", type=str,
-                        help="Pretrained config name or path if not the same as model_name")
+                        help="Optional pretrained config name or path if not the same as model_name_or_path")
     parser.add_argument("--tokenizer_name", default="", type=str,
-                        help="Pretrained tokenizer name or path if not the same as model_name")
+                        help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
     parser.add_argument("--cache_dir", default="", type=str,
-                        help="Where do you want to store the pre-trained models downloaded from s3")
-    parser.add_argument("--max_seq_length", default=128, type=int,
-                        help="The maximum total input sequence length after tokenization. Sequences longer "
-                             "than this will be truncated, sequences shorter will be padded.")
+                        help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
+    parser.add_argument("--block_size", default=-1, type=int,
+                        help="Optional input sequence length after tokenization."
+                             "The training dataset will be truncated in block of this size for training."
+                             "Default to the model max input length for single sentence inputs (take into account special tokens).")
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
     parser.add_argument("--do_eval", action='store_true',
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--evaluate_during_training", action='store_true',
-                        help="Rul evaluation during training at each logging step.")
+                        help="Run evaluation during training at each logging step.")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
-    parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
+    parser.add_argument("--per_gpu_train_batch_size", default=4, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
+    parser.add_argument("--per_gpu_eval_batch_size", default=4, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -350,7 +348,7 @@ def main():
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
-    parser.add_argument("--num_train_epochs", default=3.0, type=float,
+    parser.add_argument("--num_train_epochs", default=1.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--max_steps", default=-1, type=int,
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
@@ -362,7 +360,7 @@ def main():
     parser.add_argument('--save_steps', type=int, default=50,
                         help="Save checkpoint every X updates steps.")
     parser.add_argument("--eval_all_checkpoints", action='store_true',
-                        help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
+                        help="Evaluate all checkpoints starting with the same prefix as model_name_or_path ending and ending with step number")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Avoid using CUDA when available")
     parser.add_argument('--overwrite_output_dir', action='store_true',
@@ -382,6 +380,13 @@ def main():
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
+
+    if args.model_type in ["bert", "roberta"] and not args.mlm:
+        raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
+                         "flag (masked language modeling).")
+    if args.eval_data_file is None and args.do_eval:
+        raise ValueError("Cannot do evaluation without an evaluation data file. Either supply a file to --eval_data_file "
+                         "or remove the --do_eval argument.")
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
@@ -415,41 +420,39 @@ def main():
     # Set seed
     set_seed(args)
 
-    # Prepare GLUE task
-    args.task_name = args.task_name.lower()
-    if args.task_name not in processors:
-        raise ValueError("Task not found: %s" % (args.task_name))
-    processor = processors[args.task_name]()
-    args.output_mode = output_modes[args.task_name]
-    label_list = processor.get_labels()
-    num_labels = len(label_list)
-
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
 
-    args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
+    if args.block_size <= 0:
+        args.block_size = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
+    args.block_size = min(args.block_size, tokenizer.max_len_single_sentence)
     model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+    model.to(args.device)
 
     if args.local_rank == 0:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
-
-    model.to(args.device)
+        torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
 
     logger.info("Training/evaluation parameters %s", args)
 
-
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        if args.local_rank not in [-1, 0]:
+            torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+        train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False)
+
+        if args.local_rank == 0:
+            torch.distributed.barrier()
+
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
-    # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
+    # Saving best-practices: if you use save_pretrained for the model and tokenizer, you can reload them using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         # Create output directory if needed
         if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:

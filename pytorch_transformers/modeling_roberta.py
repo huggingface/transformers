@@ -98,15 +98,15 @@ ROBERTA_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
-            To match pre-training, RoBERTa input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            To match pre-training, RoBERTa input sequence should be formatted with <s> and </s> tokens as follows:
 
             (a) For sequence pairs:
 
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP][SEP] no it is not . [SEP]``
+                ``tokens:         <s> Is this Jacksonville ? </s> </s> No it is not . </s>``
 
             (b) For single sequences:
 
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
+                ``tokens:         <s> the dog is hairy . </s>``
 
             Fully encoded sequences or sequence pairs can be obtained using the RobertaTokenizer.encode function with 
             the ``add_special_tokens`` parameter set to ``True``.
