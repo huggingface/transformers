@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
+from io import open
 
 from pytorch_transformers.tokenization_gpt2 import GPT2Tokenizer, VOCAB_FILES_NAMES
 
@@ -55,8 +56,8 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     def test_full_tokenizer(self):
         tokenizer = GPT2Tokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower"
-        bpe_tokens = ["\u0120low", "er"]
+        text = "lower newer"
+        bpe_tokens = ["\u0120low", "er", "\u0120newer"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
