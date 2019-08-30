@@ -10,3 +10,5 @@ requests
 regex
 # For XLNet
 sentencepiece
+# For XLM
+sacremoses

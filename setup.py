@@ -55,7 +55,8 @@ setup(
                       'requests',
                       'tqdm',
                       'regex',
-                      'sentencepiece'],
+                      'sentencepiece',
+                      'sacremoses'],
     entry_points={
       'console_scripts': [
         "pytorch_transformers=pytorch_transformers.__main__:main",

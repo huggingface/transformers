@@ -44,8 +44,9 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
         with open(self.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self):
-        return GPT2Tokenizer.from_pretrained(self.tmpdirname, **self.special_tokens_map)
+    def get_tokenizer(self, **kwargs):
+        kwargs.update(self.special_tokens_map)
+        return GPT2Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
         input_text = u"lower newer"

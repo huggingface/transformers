@@ -20,6 +20,7 @@ import logging
 import os
 import json
 import six
+import copy
 from io import open
 
 from .file_utils import cached_path
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 SPECIAL_TOKENS_MAP_FILE = 'special_tokens_map.json'
 ADDED_TOKENS_FILE = 'added_tokens.json'
+TOKENIZER_CONFIG_FILE = 'tokenizer_config.json'
 
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
@@ -40,6 +42,7 @@ class PreTrainedTokenizer(object):
         - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file required by the model, and as associated values, the filename for saving the associated file (string).
         - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the associated pretrained vocabulary file.
         - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained models, and as associated values, the maximum length of the sequence inputs of this model, or None if the model has no maximum input size.
+        - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained models, and as associated values, a dictionnary of specific arguments to pass to the ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the ``from_pretrained()`` method.
 
     Parameters:
 
@@ -61,6 +64,7 @@ class PreTrainedTokenizer(object):
     """
     vocab_files_names = {}
     pretrained_vocab_files_map = {}
+    pretrained_init_configuration = {}
     max_model_input_sizes = {}
 
     SPECIAL_TOKENS_ATTRIBUTES = ["bos_token", "eos_token", "unk_token", "sep_token",
@@ -166,11 +170,14 @@ class PreTrainedTokenizer(object):
         self._additional_special_tokens = []
 
         self.max_len = max_len if max_len is not None else int(1e12)
-        self.max_len_single_sentence = self.max_len
-        self.max_len_sentences_pair = self.max_len
 
+        # Added tokens
         self.added_tokens_encoder = {}
         self.added_tokens_decoder = {}
+
+        # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
+        self.init_inputs = ()
+        self.init_kwargs = {}
 
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -231,17 +238,20 @@ class PreTrainedTokenizer(object):
 
 
     @classmethod
-    def _from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def _from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
         cache_dir = kwargs.pop('cache_dir', None)
         force_download = kwargs.pop('force_download', False)
         proxies = kwargs.pop('proxies', None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
+        init_configuration = {}
         if pretrained_model_name_or_path in s3_models:
             # Get the vocabulary from AWS S3 bucket
             for file_id, map_list in cls.pretrained_vocab_files_map.items():
                 vocab_files[file_id] = map_list[pretrained_model_name_or_path]
+            if cls.pretrained_init_configuration and pretrained_model_name_or_path in cls.pretrained_init_configuration:
+                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path]
         else:
             # Get the vocabulary from local files
             logger.info(
@@ -264,15 +274,17 @@ class PreTrainedTokenizer(object):
                 vocab_files[file_id] = full_file_name
 
             # Look for the additional tokens files
-            all_vocab_files_names = {'added_tokens_file': ADDED_TOKENS_FILE,
-                                     'special_tokens_map_file': SPECIAL_TOKENS_MAP_FILE}
+            additional_files_names = {'added_tokens_file': ADDED_TOKENS_FILE,
+                                      'special_tokens_map_file': SPECIAL_TOKENS_MAP_FILE,
+                                      'tokenizer_config_file': TOKENIZER_CONFIG_FILE,
+                                      }
 
             # If a path to a file was provided, get the parent directory
             saved_directory = pretrained_model_name_or_path
             if os.path.exists(saved_directory) and not os.path.isdir(saved_directory):
                 saved_directory = os.path.dirname(saved_directory)
 
-            for file_id, file_name in all_vocab_files_names.items():
+            for file_id, file_name in additional_files_names.items():
                 full_file_name = os.path.join(saved_directory, file_name)
                 if not os.path.exists(full_file_name):
                     logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
@@ -315,28 +327,46 @@ class PreTrainedTokenizer(object):
                 logger.info("loading file {} from cache at {}".format(
                     file_path, resolved_vocab_files[file_id]))
 
+        # Prepare tokenizer initialization kwargs
+        # Did we saved some inputs and kwargs to reload ?
+        tokenizer_config_file = resolved_vocab_files.pop('tokenizer_config_file', None)
+        if tokenizer_config_file is not None:
+            init_kwargs = json.load(open(tokenizer_config_file, encoding="utf-8"))
+            saved_init_inputs = init_kwargs.pop('init_inputs', ())
+            if not init_inputs:
+                init_inputs = saved_init_inputs
+        else:
+            init_kwargs = init_configuration
+
+        # Update with newly provided kwargs
+        init_kwargs.update(kwargs)
+
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
             # wont index sequences longer than the number of positional embeddings
             max_len = cls.max_model_input_sizes[pretrained_model_name_or_path]
             if max_len is not None and isinstance(max_len, (int, float)):
-                kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
+                init_kwargs['max_len'] = min(init_kwargs.get('max_len', int(1e12)), max_len)
 
-        # Merge resolved_vocab_files arguments in kwargs.
+        # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop('added_tokens_file', None)
         special_tokens_map_file = resolved_vocab_files.pop('special_tokens_map_file', None)
         for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in kwargs:
-                kwargs[args_name] = file_path
+            if args_name not in init_kwargs:
+                init_kwargs[args_name] = file_path
         if special_tokens_map_file is not None:
             special_tokens_map = json.load(open(special_tokens_map_file, encoding="utf-8"))
             for key, value in special_tokens_map.items():
-                if key not in kwargs:
-                    kwargs[key] = value
+                if key not in init_kwargs:
+                    init_kwargs[key] = value
 
         # Instantiate tokenizer.
-        tokenizer = cls(*inputs, **kwargs)
+        tokenizer = cls(*init_inputs, **init_kwargs)
+
+        # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
+        tokenizer.init_inputs = init_inputs
+        tokenizer.init_kwargs = init_kwargs
 
         # Add supplementary tokens.
         if added_tokens_file is not None:
@@ -349,8 +379,13 @@ class PreTrainedTokenizer(object):
 
 
     def save_pretrained(self, save_directory):
-        """ Save the tokenizer vocabulary files (with added tokens) and the
-            special-tokens-to-class-attributes-mapping to a directory.
+        """ Save the tokenizer vocabulary files together with:
+                - added tokens,
+                - special-tokens-to-class-attributes-mapping,
+                - tokenizer instantiation positional and keywords inputs (e.g. do_lower_case for Bert).
+
+            This won't save modifications other than (added tokens and special token mapping) you may have
+            applied to the tokenizer after the instantion (e.g. modifying tokenizer.do_lower_case after creation).
 
             This method make sure the full tokenizer can then be re-loaded using the :func:`~pytorch_transformers.PreTrainedTokenizer.from_pretrained` class method.
         """
@@ -360,6 +395,15 @@ class PreTrainedTokenizer(object):
 
         special_tokens_map_file = os.path.join(save_directory, SPECIAL_TOKENS_MAP_FILE)
         added_tokens_file = os.path.join(save_directory, ADDED_TOKENS_FILE)
+        tokenizer_config_file = os.path.join(save_directory, TOKENIZER_CONFIG_FILE)
+
+        tokenizer_config = copy.deepcopy(self.init_kwargs)
+        tokenizer_config['init_inputs'] = copy.deepcopy(self.init_inputs)
+        for file_id in self.vocab_files_names.keys():
+            tokenizer_config.pop(file_id, None)
+
+        with open(tokenizer_config_file, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(tokenizer_config, ensure_ascii=False))
 
         with open(special_tokens_map_file, 'w', encoding='utf-8') as f:
             f.write(json.dumps(self.special_tokens_map, ensure_ascii=False))
@@ -566,7 +610,7 @@ class PreTrainedTokenizer(object):
     def _convert_token_to_id(self, token):
         raise NotImplementedError
 
-    def encode(self, text, text_pair=None, add_special_tokens=False):
+    def encode(self, text, text_pair=None, add_special_tokens=False, **kwargs):
         """
         Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
         
@@ -577,15 +621,16 @@ class PreTrainedTokenizer(object):
             text_pair: Optional second sequence to be encoded.
             add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
                 to their model.
+            **kwargs: passed to the `self.tokenize()` method
         """
         if text_pair is None:
             if add_special_tokens:
-                return self.add_special_tokens_single_sentence(self.convert_tokens_to_ids(self.tokenize(text)))
+                return self.add_special_tokens_single_sentence(self.convert_tokens_to_ids(self.tokenize(text, **kwargs)))
             else:
-                return self.convert_tokens_to_ids(self.tokenize(text))
+                return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
 
-        first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text)]
-        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair)]
+        first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text, **kwargs)]
+        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)]
 
         if add_special_tokens:
             return self.add_special_tokens_sentences_pair(first_sentence_tokens, second_sentence_tokens)
