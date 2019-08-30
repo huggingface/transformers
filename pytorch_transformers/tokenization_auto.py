@@ -25,7 +25,7 @@ from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
-from.tokenization_distilbert import DistilBertTokenizer
+from .tokenization_distilbert import DistilBertTokenizer
 
 logger = logging.getLogger(__name__)
 
