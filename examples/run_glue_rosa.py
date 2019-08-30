@@ -119,7 +119,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     PAD_token = 2 # in decoder language
     MAX_LENGTH = 128
     hidden_size = 100 # change to 768 and get rid of resize once working on the whole dataset
-    target_length = 60
+    target_length = MAX_LENGTH
     decoder_vocab_size = decoder_lang.n_words
 
     # initialize decoder
@@ -487,7 +487,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
         preds = None
         out_label_ids = None
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
-            #encoder.eval()
+            encoder.eval()
             #decoder.eval()
             #expl2label_model.eval()
             batch = tuple(t.to(args.device) for t in batch)
@@ -506,7 +506,10 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 encoder_outputs = encoder(**inputs)
                 bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
 
+                target_length = args.max_seq_length
+                decoder_vocab_size = decoder_lang.n_vocab
                 generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
+                
                 target_expl = [all_expl[i] for i in expl_idx]
                 target_expl_index = []
                 for line in target_expl:
@@ -921,11 +924,13 @@ def main():
             results.update(result)
             
     if args.expl and args.do_eval:
-        encoder = None #?
-        decoder = None #? # TODO: load state dict
-        expl2label_model = None#?
-        decoder_lang = None #? # TODO: save decoder_lang
-        #encoder.to(args.device)
+        dir1 = "/tmp/esnli_debug"
+        dir2 = None
+        encoder = BertModel.from_pretrained(dir1)
+        decoder = None # TODO: load state dict
+        expl2label_model = None #BertForESNLI.from_pretrained(dir2) #store in a different dir from encoder dir
+        decoder_lang = None # TODO: save decoder_lang
+        encoder.to(args.device)
         #decoder.to(args.device)
         #expl2label_model.to(args.device)
         result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tokenizer, prefix="")
