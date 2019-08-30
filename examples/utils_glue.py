@@ -824,3 +824,63 @@ def get_text(lang, indexed_tensor):
         result.append(sentence)
     return result
 
+def expl_to_expl2label_input(expl_batch, max_seq_length, tokenizer,
+                             cls_token_at_end=False, pad_on_left=False,
+                             cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
+                             sequence_a_segment_id=0, sequence_b_segment_id=1,
+                             cls_token_segment_id=1, pad_token_segment_id=0,
+                             mask_padding_with_zero=True):
+    """ 
+    takes a batch of explanations, each explanation a string not containing SEP, PAD, or CLS
+    """
+    # initialize place holders
+    input_ids_batch = []
+    input_mask_batch = []
+    segment_ids_batch = []
+    
+    for expl_st in expl_batched: # expl_st: expl sentence
+        tokens = tokenizer.tokenize(expl_st)
+        # Account for [CLS] and [SEP] with "- 2"
+        if len(tokens) > max_seq_length - 2:
+            tokens = tokens[:(max_seq_length - 2)]
+
+        tokens = tokens + [sep_token]
+        segment_ids = [sequence_a_segment_id] * len(tokens)
+
+        if cls_token_at_end:
+            tokens = tokens + [cls_token]
+            segment_ids = segment_ids + [cls_token_segment_id]
+        else:
+            tokens = [cls_token] + tokens
+            segment_ids = [cls_token_segment_id] + segment_ids
+
+        input_ids = tokenizer.convert_tokens_to_ids(tokens)
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
+
+        # Zero-pad up to the sequence length.
+        padding_length = max_seq_length - len(input_ids)
+        if pad_on_left:
+            input_ids = ([pad_token] * padding_length) + input_ids
+            input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
+            segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
+        else:
+            input_ids = input_ids + ([pad_token] * padding_length)
+            input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+            segment_ids = segment_ids + ([pad_token_segment_id] * padding_length)
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+        assert len(segment_ids) == max_seq_length
+        
+        input_ids_batch.append(input_ids)
+        input_mask_batch.append(input_mask)
+        segment_ids_batch.append(segment_ids)
+        
+    input_ids_batch = torch.tensor([a for a in input_ids_batch], dtype=torch.long)
+    input_mask_batch = torch.tensor([a for a in input_mask_batch], dtype=torch.long)
+    segment_ids_batch = torch.tensor([a for a in segment_ids_batch], dtype=torch.long)
+
+    return input_ids_batch, input_mask_batch, segment_ids_batch

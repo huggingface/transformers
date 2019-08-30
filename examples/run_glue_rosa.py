@@ -239,7 +239,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             loss = loss_fct(generated_expl, target_expl_index)
             
             # sanity check on generated explanations
-            generated_expl_index = get_index(generated_expl) 
+            #generated_expl_index = get_index(generated_expl) 
             #print(get_text(decoder_lang, generated_expl_index)) 
             #print(get_text(decoder_lang, target_expl_index)) 
 
@@ -493,12 +493,10 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
             batch = tuple(t.to(args.device) for t in batch)
 
             with torch.no_grad():
-                inputs = {'input_ids':      batch[0],
-                          'attention_mask': batch[1],
-                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None}
-                print('input_ids: ', type(batch[0]))
-                #print(type(batch[1]))
-                #print(type(batch[2]))
+                inputs = {'input_ids':      batch[0], #(args.per_gpu_eval_bs, args.max_seq_len) LongTensor
+                          'attention_mask': batch[1], #(args.per_gpu_eval_bs, args.max_seq_len) LongTensor
+                          'token_type_ids': batch[2]  #(args.per_gpu_eval_bs, args.max_seq_len) LongTensor
+                         } 
                 labels = batch[3]
                 expl_idx = batch[4]
                 all_expl = all_expl
@@ -537,12 +535,26 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 
                 eval_loss += tmp_eval_loss.mean().item()
                 
+            generated_expl_index = get_index(generated_expl) #(seq_len, bs) 
+            generated_expl_text = get_text(decoder_lang, generated_expl_index) # a list (size = bs) of explanation texts
+            
             nb_eval_steps += 1
-            #TODO: figure out input to expl2label model from the output of attention model
-            expl2label_inputs = {'input_ids':      batch[0], #?
-                                 'attention_mask': batch[1], #?
-                                 'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,#?
-                                'labels': labels}#?
+            
+            #TODO: check if there is CLS, SEP or PAD in generated_expl_text, if so, delete those
+            
+            expl2label_inputs_data = expl_to_expl2label_input(generated_expl_text, args.max_seq_length, tokenizer,
+                                                              cls_token_at_end=False,           
+                                                              cls_token=tokenizer.cls_token,
+                                                              sep_token=tokenizer.sep_token,
+                                                              cls_token_segment_id=0,
+                                                              pad_on_left=False,                 
+                                                              pad_token_segment_id=0)
+            
+            expl2label_inputs = {'input_ids':      expl2label_inputs_data[0], # (bs, seq_len) based on generated_expl_index
+                                 'attention_mask': expl2label_inputs_data[1], # (bs, seq_len) based on generated_expl_index
+                                 'token_type_ids': expl2label_inputs_data[2], # (bs, seq_len) based on generated_expl_index
+                                 'labels': labels}
+            
             expl2label_outputs = expl2label_model(**expl2label_inputs)
             expl2label_loss, logits = outputs[:2]
             print('expl2label_loss: ', expl2label_loss.item())
