@@ -49,6 +49,7 @@ class CommonTestCases:
         test_torchscript = True
         test_pruning = True
         test_resize_embeddings = True
+        test_head_masking = True
 
         def test_initialization(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -159,6 +160,9 @@ class CommonTestCases:
 
 
         def test_headmasking(self):
+            if not self.test_head_masking:
+                return
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             config.output_attentions = True
@@ -285,6 +289,9 @@ class CommonTestCases:
                 self.assertTrue(models_equal)
 
         def test_tie_model_weights(self):
+            if not self.test_torchscript:
+                return
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             def check_same_values(layer_1, layer_2):

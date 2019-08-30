@@ -71,6 +71,10 @@ class XLNetTokenizer(PreTrainedTokenizer):
                                              pad_token=pad_token, cls_token=cls_token,
                                              mask_token=mask_token, additional_special_tokens=
                                              additional_special_tokens, **kwargs)
+
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+
         try:
             import sentencepiece as spm
         except ImportError:
