@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
+from io import open
 
 from pytorch_transformers.tokenization_gpt2 import GPT2Tokenizer, VOCAB_FILES_NAMES
 
@@ -31,17 +32,18 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n",
-                 "lo", "low", "er",
-                 "low", "lowest", "newer", "wider", "<unk>"]
+                 "\u0120", "\u0120l", "\u0120n",
+                 "\u0120lo", "\u0120low", "er",
+                 "\u0120lowest", "\u0120newer", "\u0120wider", "<unk>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "l o", "lo w", "e r", ""]
+        merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['merges_file'])
-        with open(self.vocab_file, "w") as fp:
-            fp.write(json.dumps(vocab_tokens))
-        with open(self.merges_file, "w") as fp:
+        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+            fp.write(json.dumps(vocab_tokens) + "\n")
+        with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
     def get_tokenizer(self, **kwargs):
@@ -50,18 +52,18 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     def get_input_output_texts(self):
         input_text = u"lower newer"
-        output_text = u"lower<unk>newer"
+        output_text = u" lower newer"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = GPT2Tokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower"
-        bpe_tokens = ["low", "er"]
+        text = "lower newer"
+        bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [13, 12, 17]
+        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 

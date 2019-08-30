@@ -46,21 +46,21 @@ class PreTrainedTokenizer(object):
 
     Parameters:
 
-        - ``bos_token``: (`Optional`) string: a beginning of sentence token. Will be associated to ``self.bos_token``
+        - ``bos_token``: (`Optional`) string: a beginning of sentence token. Will be associated to ``self.bos_token`` and ``self.bos_token_id``
 
-        - ``eos_token``: (`Optional`) string: an end of sentence token. Will be associated to ``self.eos_token``
+        - ``eos_token``: (`Optional`) string: an end of sentence token. Will be associated to ``self.eos_token`` and ``self.eos_token_id``
 
-        - ``unk_token``: (`Optional`) string: an unknown token. Will be associated to ``self.unk_token``
+        - ``unk_token``: (`Optional`) string: an unknown token. Will be associated to ``self.unk_token`` and ``self.unk_token_id``
 
-        - ``sep_token``: (`Optional`) string: a separation token (e.g. to separate context and query in an input sequence). Will be associated to ``self.sep_token``
+        - ``sep_token``: (`Optional`) string: a separation token (e.g. to separate context and query in an input sequence). Will be associated to ``self.sep_token`` and ``self.sep_token_id``
 
-        - ``pad_token``: (`Optional`) string: a padding token. Will be associated to ``self.pad_token``
+        - ``pad_token``: (`Optional`) string: a padding token. Will be associated to ``self.pad_token`` and ``self.pad_token_id``
 
-        - ``cls_token``: (`Optional`) string: a classification token (e.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model). Will be associated to ``self.cls_token``
+        - ``cls_token``: (`Optional`) string: a classification token (e.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model). Will be associated to ``self.cls_token`` and ``self.cls_token_id``
 
-        - ``mask_token``: (`Optional`) string: a masking token (e.g. when training a model with masked-language modeling). Will be associated to ``self.mask_token``
+        - ``mask_token``: (`Optional`) string: a masking token (e.g. when training a model with masked-language modeling). Will be associated to ``self.mask_token`` and ``self.mask_token_id``
 
-        - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens. Adding all special tokens here ensure they won't be split by the tokenization process. Will be associated to ``self.additional_special_tokens``
+        - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens. Adding all special tokens here ensure they won't be split by the tokenization process. Will be associated to ``self.additional_special_tokens`` and ``self.additional_special_tokens_ids``
     """
     vocab_files_names = {}
     pretrained_vocab_files_map = {}
@@ -158,6 +158,62 @@ class PreTrainedTokenizer(object):
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
+
+    @property
+    def bos_token_id(self):
+        """ Id of the beginning of sentence token in the vocabulary. Log an error if used while not having been set. """
+        if self._bos_token is None:
+            logger.error("Using bos_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._bos_token)
+
+    @property
+    def eos_token_id(self):
+        """ Id of the end of sentence token in the vocabulary. Log an error if used while not having been set. """
+        if self._eos_token is None:
+            logger.error("Using eos_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._eos_token)
+
+    @property
+    def unk_token_is(self):
+        """ Id of the unknown token in the vocabulary. Log an error if used while not having been set. """
+        if self._unk_token is None:
+            logger.error("Using unk_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._unk_token)
+
+    @property
+    def sep_token_id(self):
+        """ Id of the separation token in the vocabulary. E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
+        if self._sep_token is None:
+            logger.error("Using sep_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._sep_token)
+
+    @property
+    def pad_token_id(self):
+        """ Id of the padding token in the vocabulary. Log an error if used while not having been set. """
+        if self._pad_token is None:
+            logger.error("Using pad_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._pad_token)
+
+    @property
+    def cls_token_id(self):
+        """ Id of the classification token in the vocabulary. E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
+        if self._cls_token is None:
+            logger.error("Using cls_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._cls_token)
+
+    @property
+    def mask_token_id(self):
+        """ Id of the mask token in the vocabulary. E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
+        if self._mask_token is None:
+            logger.error("Using mask_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._mask_token)
+
+    @property
+    def additional_special_tokens_ids(self):
+        """ Ids of all the additional special tokens in the vocabulary (list of integers). Log an error if used while not having been set. """
+        if self._additional_special_tokens is None:
+            logger.error("Using additional_special_tokens, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._additional_special_tokens)
 
     def __init__(self, max_len=None, **kwargs):
         self._bos_token = None
@@ -484,6 +540,13 @@ class PreTrainedTokenizer(object):
         Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
         to class attributes. If special tokens are NOT in the vocabulary, they are added
         to it (indexed starting from the last index of the current vocabulary).
+
+        Using `add_special_tokens` will ensure your special tokens can be used in several ways:
+
+        - special tokens are carefully handled by the tokenizer (they are never split)
+        - you can easily refer to special tokens using tokenizer class attributes like `tokenizer.cls_token`. This makes it easy to develop model-agnostic training and fine-tuning scripts.
+
+        When possible, special tokens are already registered for provided pretrained models (ex: BertTokenizer cls_token is already registered to be '[CLS]' and XLM's one is also registered to be '</s>')
 
         Args:
             special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes:
