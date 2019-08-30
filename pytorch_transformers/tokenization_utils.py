@@ -784,7 +784,7 @@ class PreTrainedTokenizer(object):
         all_toks = []
         set_attr = self.special_tokens_map
         for attr_value in set_attr.values():
-            all_toks = all_toks + (attr_value if isinstance(attr_value, (list, tuple)) else [attr_value])
+            all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
         all_toks = list(set(all_toks))
         return all_toks
 
