@@ -68,7 +68,7 @@ python train.py \
 
 By default, this will launch a training on a single GPU (even if more are available on the cluster). Other parameters are available in the command line, please look in `train.py` or run `python train.py --help` to list them.
 
-We highly encourage you to distributed training for training DistilBert as the training corpus is quite large. Here's an example that runs a distributed training on a single node having 4 GPUs:
+We highly encourage you to use distributed training for training DistilBert as the training corpus is quite large. Here's an example that runs a distributed training on a single node having 4 GPUs:
 
 ```bash
 export NODE_RANK=0
@@ -90,11 +90,11 @@ python -m torch.distributed.launch \
     train.py \
         --force \
         --n_gpu $WORLD_SIZE \
-        --data_file data/dump_concat_wiki_toronto_bk.bert-base-uncased.pickle \
-        --token_counts data/token_counts_concat_wiki_toronto_bk.bert-base-uncased.pickle \
-        --dump_path serialization_dir/with_transform/last_word
+        --data_file data/binarized_text.bert-base-uncased.pickle \
+        --token_counts data/token_counts.bert-base-uncased.pickle \
+        --dump_path serialization_dir/my_first_distillation
 ```
 
-**Tips** Starting distillated training with good initialization of the model weights is crucial to reach decent performance. In our experiments, we initialized our model from a few layers of the teacher (Bert) itself! Please refer to `scripts/extract_for_distil.py` to create a valid initialization checkpoint and use `--from_pretrained_weights` and `--from_pretrained_config` arguments to use this initialization for the distilled training!
+**Tips:** Starting distillated training with good initialization of the model weights is crucial to reach decent performance. In our experiments, we initialized our model from a few layers of the teacher (Bert) itself! Please refer to `scripts/extract_for_distil.py` to create a valid initialization checkpoint and use `--from_pretrained_weights` and `--from_pretrained_config` arguments to use this initialization for the distilled training!
 
 Happy distillation!
