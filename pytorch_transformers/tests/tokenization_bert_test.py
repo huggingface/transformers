@@ -41,8 +41,8 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         with open(self.vocab_file, "w", encoding='utf-8') as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_tokenizer(self):
-        return BertTokenizer.from_pretrained(self.tmpdirname)
+    def get_tokenizer(self, **kwargs):
+        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
         input_text = u"UNwant\u00E9d,running"

@@ -332,7 +332,7 @@ class PreTrainedTokenizer(object):
         tokenizer_config_file = resolved_vocab_files.pop('tokenizer_config_file', None)
         if tokenizer_config_file is not None:
             init_kwargs = json.load(open(tokenizer_config_file, encoding="utf-8"))
-            saved_init_inputs = init_kwargs.pop('init_inputs', [])
+            saved_init_inputs = init_kwargs.pop('init_inputs', ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
@@ -399,6 +399,8 @@ class PreTrainedTokenizer(object):
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
         tokenizer_config['init_inputs'] = copy.deepcopy(self.init_inputs)
+        for file_id in self.vocab_files_names.keys():
+            tokenizer_config.pop(file_id, None)
 
         with open(tokenizer_config_file, 'w', encoding='utf-8') as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
