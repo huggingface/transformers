@@ -113,6 +113,7 @@ def autoModel(*args, **kwargs):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `distilbert`: DistilBertModel (DistilBERT model)
             - contains `roberta`: RobertaModel (RoBERTa model)
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
@@ -190,6 +191,7 @@ def autoModelWithLMHead(*args, **kwargs):
 
     The model class to instantiate is selected as the first pattern matching
     in the `pretrained_model_name_or_path` string (in the following order):
+        - contains `distilbert`: DistilBertModelForMaskedLM (DistilBERT model)
         - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
         - contains `bert`: BertForMaskedLM (Bert model)
         - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
@@ -266,6 +268,7 @@ def autoModelForSequenceClassification(*args, **kwargs):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `distilbert`: DistilBertModelForSequenceClassification (DistilBERT model)
             - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: BertForSequenceClassification (Bert model)
             - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
@@ -340,6 +343,7 @@ def autoModelForQuestionAnswering(*args, **kwargs):
 
     The model class to instantiate is selected as the first pattern matching
     in the `pretrained_model_name_or_path` string (in the following order):
+        - contains `distilbert`: DistilBertModelForQuestionAnswering (DistilBERT model)
         - contains `bert`: BertForQuestionAnswering (Bert model)
         - contains `xlnet`: XLNetForQuestionAnswering (XLNet model)
         - contains `xlm`: XLMForQuestionAnswering (XLM model)
