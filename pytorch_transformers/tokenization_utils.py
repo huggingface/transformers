@@ -43,21 +43,21 @@ class PreTrainedTokenizer(object):
 
     Parameters:
 
-        - ``bos_token``: (`Optional`) string: a beginning of sentence token. Will be associated to ``self.bos_token``
+        - ``bos_token``: (`Optional`) string: a beginning of sentence token. Will be associated to ``self.bos_token`` and ``self.bos_token_id``
 
-        - ``eos_token``: (`Optional`) string: an end of sentence token. Will be associated to ``self.eos_token``
+        - ``eos_token``: (`Optional`) string: an end of sentence token. Will be associated to ``self.eos_token`` and ``self.eos_token_id``
 
-        - ``unk_token``: (`Optional`) string: an unknown token. Will be associated to ``self.unk_token``
+        - ``unk_token``: (`Optional`) string: an unknown token. Will be associated to ``self.unk_token`` and ``self.unk_token_id``
 
-        - ``sep_token``: (`Optional`) string: a separation token (e.g. to separate context and query in an input sequence). Will be associated to ``self.sep_token``
+        - ``sep_token``: (`Optional`) string: a separation token (e.g. to separate context and query in an input sequence). Will be associated to ``self.sep_token`` and ``self.sep_token_id``
 
-        - ``pad_token``: (`Optional`) string: a padding token. Will be associated to ``self.pad_token``
+        - ``pad_token``: (`Optional`) string: a padding token. Will be associated to ``self.pad_token`` and ``self.pad_token_id``
 
-        - ``cls_token``: (`Optional`) string: a classification token (e.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model). Will be associated to ``self.cls_token``
+        - ``cls_token``: (`Optional`) string: a classification token (e.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model). Will be associated to ``self.cls_token`` and ``self.cls_token_id``
 
-        - ``mask_token``: (`Optional`) string: a masking token (e.g. when training a model with masked-language modeling). Will be associated to ``self.mask_token``
+        - ``mask_token``: (`Optional`) string: a masking token (e.g. when training a model with masked-language modeling). Will be associated to ``self.mask_token`` and ``self.mask_token_id``
 
-        - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens. Adding all special tokens here ensure they won't be split by the tokenization process. Will be associated to ``self.additional_special_tokens``
+        - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens. Adding all special tokens here ensure they won't be split by the tokenization process. Will be associated to ``self.additional_special_tokens`` and ``self.additional_special_tokens_ids``
     """
     vocab_files_names = {}
     pretrained_vocab_files_map = {}
@@ -493,6 +493,13 @@ class PreTrainedTokenizer(object):
         Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
         to class attributes. If special tokens are NOT in the vocabulary, they are added
         to it (indexed starting from the last index of the current vocabulary).
+
+        Using `add_special_tokens` will ensure your special tokens can be used in several ways:
+
+        - special tokens are carefully handled by the tokenizer (they are never split)
+        - you can easily refer to special tokens using tokenizer class attributes like `tokenizer.cls_token`. This makes it easy to develop model-agnostic training and fine-tuning scripts.
+
+        When possible, special tokens are already registered for provided pretrained models (ex: BertTokenizer cls_token is already registered to be '[CLS]' and XLM's one is also registered to be '</s>')
 
         Args:
             special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes:
