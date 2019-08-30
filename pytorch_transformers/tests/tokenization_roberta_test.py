@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import json
 import unittest
+from io import open
 
 from pytorch_transformers.tokenization_roberta import RobertaTokenizer, VOCAB_FILES_NAMES
 from .tokenization_tests_commons import CommonTestCases
