@@ -1,10 +1,10 @@
-dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex']
+dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex', 'sentencepiece', 'sacremoses']
 
 from hubconfs.automodels_hubconf import (
-    autoConfig,
-    autoModel,
-    autoModelForQuestionAnswering,
-    autoModelForSequenceClassification,
-    autoModelWithLMHead,
-    autoTokenizer,
+    config,
+    model,
+    modelForQuestionAnswering,
+    modelForSequenceClassification,
+    modelWithLMHead,
+    tokenizer,
 )
