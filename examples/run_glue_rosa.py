@@ -218,7 +218,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
 
             decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
-            decoder_input = torch.LongTensor([CLS_token] * batch_size) 
+            decoder_input = torch.LongTensor([CLS_token] * batch_size) # (bs)
 
             for i in range(target_length):
                 #print('decoder_input: ', decoder_input.size())
@@ -231,11 +231,11 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
 
                 generated_expl[i] = decoder_output   
                 topv, topi = decoder_output.topk(1) 
-                decoder_input = topi.squeeze(1)
-                #TODO: teacher forcing
-                #input = (target[t] if teacher_force else topi) # what is `target` here =_=?
-                #if(teacher_force == False and input.item() == EOS_token): # what is input here =_=?
-                    #break
+                #decoder_input = topi.squeeze(1)
+                #teacher forcing
+                decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
+                if args.teacher_force == False and decoder_input.item() == EOS_token: 
+                    break
 
             loss_fct = torch.nn.CrossEntropyLoss()
             generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
@@ -534,11 +534,12 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                     decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
                     generated_expl[i] = decoder_output   
                     topv, topi = decoder_output.topk(1) 
-                    decoder_input = topi.squeeze(1)
-                    #TODO: teacher forcing
-                    #input = (target[t] if teacher_force else topi) # what is `target` here =_=?
-                    #if(teacher_force == False and input.item() == EOS_token): # what is input here =_=?
-                        #break
+                    #decoder_input = topi.squeeze(1)
+                    #teacher forcing
+                    decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
+                    if args.teacher_force == False and decoder_input.item() == EOS_token: 
+                        break
+                        
 
                 loss_fct = torch.nn.CrossEntropyLoss()
                 generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
@@ -806,6 +807,8 @@ def main():
                         help = 'whether to generate expl with esnli decoder, and separately encode premises and hypothesis')
     parser.add_argument('--freeze', type=bool, default=False, const = True,nargs = '?', \
                         help = 'whether freeze encoder training after 3 epoches')
+    parser.add_argument('--teacher_force', type=bool, default=False, const = True,nargs = '?', \
+                        help = 'whether to use teacher forcing in train and eval')
     
     args = parser.parse_args()
     
