@@ -418,7 +418,10 @@ class XLNetRelativeAttention(nn.Module):
         attn_score = (ac + bd + ef) * self.scale
         if attn_mask is not None:
             # attn_score = attn_score * (1 - attn_mask) - 1e30 * attn_mask
-            attn_score = attn_score - 1e30 * attn_mask
+            if attn_mask.dtype == torch.float16:
+                attn_score = attn_score - 65500 * attn_mask
+            else:
+                attn_score = attn_score - 1e30 * attn_mask
 
         # attention probability
         attn_prob = F.softmax(attn_score, dim=1)
