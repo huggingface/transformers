@@ -155,6 +155,62 @@ class PreTrainedTokenizer(object):
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
 
+    @property
+    def bos_token_id(self):
+        """ Id of the beginning of sentence token in the vocabulary. Log an error if used while not having been set. """
+        if self._bos_token is None:
+            logger.error("Using bos_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._bos_token)
+
+    @property
+    def eos_token_id(self):
+        """ Id of the end of sentence token in the vocabulary. Log an error if used while not having been set. """
+        if self._eos_token is None:
+            logger.error("Using eos_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._eos_token)
+
+    @property
+    def unk_token_is(self):
+        """ Id of the unknown token in the vocabulary. Log an error if used while not having been set. """
+        if self._unk_token is None:
+            logger.error("Using unk_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._unk_token)
+
+    @property
+    def sep_token_id(self):
+        """ Id of the separation token in the vocabulary. E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
+        if self._sep_token is None:
+            logger.error("Using sep_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._sep_token)
+
+    @property
+    def pad_token_id(self):
+        """ Id of the padding token in the vocabulary. Log an error if used while not having been set. """
+        if self._pad_token is None:
+            logger.error("Using pad_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._pad_token)
+
+    @property
+    def cls_token_id(self):
+        """ Id of the classification token in the vocabulary. E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
+        if self._cls_token is None:
+            logger.error("Using cls_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._cls_token)
+
+    @property
+    def mask_token_id(self):
+        """ Id of the mask token in the vocabulary. E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
+        if self._mask_token is None:
+            logger.error("Using mask_token, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._mask_token)
+
+    @property
+    def additional_special_tokens_ids(self):
+        """ Ids of all the additional special tokens in the vocabulary (list of integers). Log an error if used while not having been set. """
+        if self._additional_special_tokens is None:
+            logger.error("Using additional_special_tokens, but it is not set yet.")
+        return self.convert_tokens_to_ids(self._additional_special_tokens)
+
     def __init__(self, max_len=None, **kwargs):
         self._bos_token = None
         self._eos_token = None
