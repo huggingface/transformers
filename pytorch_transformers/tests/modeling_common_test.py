@@ -21,6 +21,7 @@ import os
 import shutil
 import json
 import random
+import uuid
 
 import unittest
 import logging
@@ -48,6 +49,7 @@ class CommonTestCases:
         test_torchscript = True
         test_pruning = True
         test_resize_embeddings = True
+        test_head_masking = True
 
         def test_initialization(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -158,6 +160,9 @@ class CommonTestCases:
 
 
         def test_headmasking(self):
+            if not self.test_head_masking:
+                return
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             config.output_attentions = True
@@ -281,6 +286,9 @@ class CommonTestCases:
                 self.assertTrue(models_equal)
 
         def test_tie_model_weights(self):
+            if not self.test_torchscript:
+                return
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             def check_same_values(layer_1, layer_2):
@@ -527,7 +535,7 @@ class ConfigTester(object):
 
     def create_and_test_config_to_json_file(self):
         config_first = self.config_class(**self.inputs_dict)
-        json_file_path = "/tmp/config.json"
+        json_file_path = os.path.join(os.getcwd(), "config_" + str(uuid.uuid4()) + ".json")
         config_first.to_json_file(json_file_path)
         config_second = self.config_class.from_json_file(json_file_path)
         os.remove(json_file_path)

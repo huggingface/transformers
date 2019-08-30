@@ -22,7 +22,7 @@ import os
 import unicodedata
 from io import open
 
-from .tokenization_utils import PreTrainedTokenizer, clean_up_tokenization
+from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,10 @@ def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as reader:
-        tokens = reader.read().splitlines()
+        tokens = reader.readlines()
     for index, token in enumerate(tokens):
+        token = token.rstrip('\n')
         vocab[token] = index
-        index += 1
     return vocab
 
 
@@ -86,7 +86,7 @@ def whitespace_tokenize(text):
 class BertTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a BertTokenizer.
-    :class:`~pytorch_pretrained_bert.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
+    :class:`~pytorch_transformers.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
@@ -119,12 +119,15 @@ class BertTokenizer(PreTrainedTokenizer):
                 Only has an effect when do_basic_tokenize=True
             **tokenize_chinese_chars**: (`optional`) boolean (default True)
                 Whether to tokenize Chinese characters.
-                This should likely be desactivated for Japanese:
+                This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
         super(BertTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
                                             pad_token=pad_token, cls_token=cls_token,
                                             mask_token=mask_token, **kwargs)
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
@@ -166,11 +169,29 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
+    def add_special_tokens_single_sentence(self, token_ids):
+        """
+        Adds special tokens to the a sequence for sequence classification tasks.
+        A BERT sequence has the following format: [CLS] X [SEP]
+        """
+        return [self._convert_token_to_id(self.cls_token)] + token_ids + [self._convert_token_to_id(self.sep_token)]
+
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+        """
+        Adds special tokens to a sequence pair for sequence classification tasks.
+        A BERT sequence pair has the following format: [CLS] A [SEP] B [SEP]
+        """
+        sep = [self._convert_token_to_id(self.sep_token)]
+        cls = [self._convert_token_to_id(self.cls_token)]
+        return cls + token_ids_0 + sep + token_ids_1 + sep
+
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
         if os.path.isdir(vocab_path):
             vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
+        else:
+            vocab_file = vocab_path
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
@@ -214,7 +235,7 @@ class BasicTokenizer(object):
                 List of token not to split.
             **tokenize_chinese_chars**: (`optional`) boolean (default True)
                 Whether to tokenize Chinese characters.
-                This should likely be desactivated for Japanese:
+                This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
         if never_split is None:

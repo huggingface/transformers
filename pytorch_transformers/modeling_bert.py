@@ -74,7 +74,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        logger.error("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+        logger.error("Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
             "https://www.tensorflow.org/install/ for installation instructions.")
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
@@ -216,28 +216,15 @@ class BertConfig(PretrainedConfig):
             self.layer_norm_eps = layer_norm_eps
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
-                             "or the path to a pretrained model config file (str)")
+                             " or the path to a pretrained model config file (str)")
 
 
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
-except ImportError:
+except (ImportError, AttributeError) as e:
     logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    class BertLayerNorm(nn.Module):
-        def __init__(self, hidden_size, eps=1e-12):
-            """Construct a layernorm module in the TF style (epsilon inside the square root).
-            """
-            super(BertLayerNorm, self).__init__()
-            self.weight = nn.Parameter(torch.ones(hidden_size))
-            self.bias = nn.Parameter(torch.zeros(hidden_size))
-            self.variance_epsilon = eps
-
-        def forward(self, x):
-            u = x.mean(-1, keepdim=True)
-            s = (x - u).pow(2).mean(-1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.variance_epsilon)
-            return self.weight * x + self.bias
+    BertLayerNorm = torch.nn.LayerNorm
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
@@ -449,7 +436,7 @@ class BertEncoder(nn.Module):
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
-        return outputs  # outputs, (hidden states), (attentions)
+        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
 class BertPooler(nn.Module):
@@ -577,7 +564,9 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~pytorch_transformers.BertConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~pytorch_transformers.BertConfig`): Model configuration class with all the parameters of the model. 
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 BERT_INPUTS_DOCSTRING = r"""
@@ -597,23 +586,26 @@ BERT_INPUTS_DOCSTRING = r"""
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
                 
                 ``token_type_ids:   0   0   0   0  0     0   0``
-    
+
+            Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
             Indices can be obtained using :class:`pytorch_transformers.BertTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1[``.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
             (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -643,12 +635,11 @@ class BertModel(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = BertModel(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertModel.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config):
@@ -754,13 +745,11 @@ class BertForPreTraining(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForPreTraining(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForPreTraining.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        prediction_scores, seq_relationship_scores = outputs[:2]
 
     """
     def __init__(self, config):
@@ -824,13 +813,11 @@ class BertForMaskedLM(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForMaskedLM(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, masked_lm_labels=input_ids)
-        >>> loss, prediction_scores = outputs[:2]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForMaskedLM.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, masked_lm_labels=input_ids)
+        loss, prediction_scores = outputs[:2]
 
     """
     def __init__(self, config):
@@ -857,7 +844,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
 
-        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention is they are here
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
         if masked_lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
@@ -891,13 +878,11 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForNextSentencePrediction(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
-        >>> seq_relationship_scores = outputs[0]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        seq_relationship_scores = outputs[0]
 
     """
     def __init__(self, config):
@@ -932,7 +917,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels]``.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
@@ -951,14 +936,12 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForSequenceClassification(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=labels)
-        >>> loss, logits = outputs[:2]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
     """
     def __init__(self, config):
@@ -1027,12 +1010,12 @@ class BertForMultipleChoice(BertPreTrainedModel):
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
             (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, num_choices, sequence_length)``:
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             The second dimension of the input (`num_choices`) indicates the number of choices to score.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -1057,15 +1040,13 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForMultipleChoice(config)
-        >>> choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        >>> labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=labels)
-        >>> loss, classification_scores = outputs[:2]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForMultipleChoice.from_pretrained('bert-base-uncased')
+        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
+        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, classification_scores = outputs[:2]
 
     """
     def __init__(self, config):
@@ -1110,7 +1091,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels]``.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
@@ -1127,14 +1108,12 @@ class BertForTokenClassification(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForTokenClassification(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids, labels=labels)
-        >>> loss, scores = outputs[:2]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForTokenClassification.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
 
     """
     def __init__(self, config):
@@ -1203,15 +1182,13 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
     Examples::
 
-        >>> config = BertConfig.from_pretrained('bert-base-uncased')
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> 
-        >>> model = BertForQuestionAnswering(config)
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
-        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        >>> loss, start_scores, end_scores = outputs[:2]
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForQuestionAnswering.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        start_positions = torch.tensor([1])
+        end_positions = torch.tensor([3])
+        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        loss, start_scores, end_scores = outputs[:2]
 
     """
     def __init__(self, config):

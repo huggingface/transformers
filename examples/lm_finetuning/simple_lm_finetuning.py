@@ -507,7 +507,7 @@ def main():
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-    if not os.path.exists(args.output_dir) and ( n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1 ):
+    if not os.path.exists(args.output_dir) and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         os.makedirs(args.output_dir)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
@@ -602,15 +602,16 @@ def main():
                 nb_tr_examples += input_ids.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
-                    scheduler.step()  # Update learning rate schedule
                     optimizer.step()
+                    scheduler.step()  # Update learning rate schedule
                     optimizer.zero_grad()
                     global_step += 1
 
         # Save a trained model
-        if args.do_train and ( n_gpu > 1 and torch.distributed.get_rank() == 0  or n_gpu <=1):
+        if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
             logger.info("** ** * Saving fine - tuned model ** ** * ")
-            model.save_pretrained(args.output_dir)
+            model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+            model_to_save.save_pretrained(args.output_dir)
             tokenizer.save_pretrained(args.output_dir)
 
 
