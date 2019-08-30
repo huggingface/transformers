@@ -49,6 +49,7 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
 
 import sys
 import time
+import pickle 
 
 file_handler = logging.FileHandler(filename='glue_'+time.strftime("%d:%m") + "_" + time.strftime("%H:%M:%S")+'.log')
 stdout_handler = logging.StreamHandler(sys.stdout)
@@ -71,6 +72,10 @@ MODEL_CLASSES = {
     'bert_expl': (BertConfig, BertForESNLI, BertTokenizer),
     'bert_expl_encoder': (BertConfig, BertModel, BertTokenizer)
 }
+
+CLS_token = 0 # in decoder language
+SEP_token = 1 # in decoder language
+PAD_token = 2 # in decoder language
 
 
 def set_seed(args):
@@ -114,9 +119,6 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
         sentence = normalize_sentence(sentence)
         decoder_lang.addSentence(sentence)
     
-    CLS_token = 0 # in decoder language
-    SEP_token = 1 # in decoder language
-    PAD_token = 2 # in decoder language
     MAX_LENGTH = 128
     hidden_size = 100 # change to 768 and get rid of resize once working on the whole dataset
     target_length = MAX_LENGTH
@@ -322,7 +324,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
-    return global_step, tr_loss / global_step, decoder # global steps, average training loss, decoder
+    return global_step, tr_loss / global_step, decoder, decoder_lang # global steps, average training loss, decoder
 
 
 def train(args, train_dataset, model, tokenizer, all_expl=None):
@@ -507,7 +509,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
 
                 target_length = args.max_seq_length
-                decoder_vocab_size = decoder_lang.n_vocab
+                decoder_vocab_size = decoder_lang.n_words
                 generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
                 
                 target_expl = [all_expl[i] for i in expl_idx]
@@ -797,7 +799,7 @@ def main():
     
     if args.expl:
         args.model_type = 'bert_expl_encoder'
-        args.do_train = False #TODO: change once eval works
+        args.do_train = True #TODO: change once eval works
         args.do_eval = True
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -866,7 +868,7 @@ def main():
             train_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         else:
             train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss, decoder = train_enc_dec(args, train_dataset, model, tokenizer, all_expl=all_expl)
+        global_step, tr_loss, decoder, decoder_lang = train_enc_dec(args, train_dataset, model, tokenizer, all_expl=all_expl)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
@@ -906,6 +908,10 @@ def main():
             #decoder = decoder_class.from_pretrained(args.output_dir) 
             decoder = decoder_to_save
             decoder.to(args.device)
+            
+            # save decoder_lang using pickle
+            filehandler = open(args.output_dir+'decoder_lang.obj', 'wb') 
+            pickle.dump(decoder_lang, filehandler)
 
     # Evaluation
     results = {}
@@ -924,12 +930,18 @@ def main():
             results.update(result)
             
     if args.expl and args.do_eval:
-        dir1 = "/tmp/esnli_debug"
+        dir1 = "/tmp/esnli_debug/"
         dir2 = None
+        
         encoder = BertModel.from_pretrained(dir1)
         decoder = None # TODO: load state dict
+        
         expl2label_model = None #BertForESNLI.from_pretrained(dir2) #store in a different dir from encoder dir
-        decoder_lang = None # TODO: save decoder_lang
+        
+        # use pickle to load decoder_lang
+        filehandler = open(dir1+'decoder_lang.obj', 'rb') 
+        decoder_lang = pickle.load(filehandler)
+        
         encoder.to(args.device)
         #decoder.to(args.device)
         #expl2label_model.to(args.device)
