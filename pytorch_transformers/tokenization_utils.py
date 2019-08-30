@@ -638,10 +638,12 @@ class PreTrainedTokenizer(object):
             return first_sentence_tokens, second_sentence_tokens
 
     def add_special_tokens_single_sentence(self, token_ids):
-        raise NotImplementedError
+        logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
+        return token_ids
 
     def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
-        raise NotImplementedError
+        logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
+        return token_ids_0 + token_ids_1
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         """ Converts a single index or a sequence of indices (integers) in a token "
@@ -684,9 +686,9 @@ class PreTrainedTokenizer(object):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         text = self.convert_tokens_to_string(filtered_tokens)
 
-        if self.sep_token is not None and self.sep_token in text:
-            text = text.replace(self.cls_token, self.sep_token)
-            split_text = list(filter(lambda sentence: len(sentence) > 0, text.split(self.sep_token)))
+        if self._sep_token is not None and self._sep_token in text:
+            text = text.replace(self._cls_token, self._sep_token)
+            split_text = list(filter(lambda sentence: len(sentence) > 0, text.split(self._sep_token)))
             if clean_up_tokenization_spaces:
                 clean_text = [self.clean_up_tokenization(text) for text in split_text]
                 return clean_text
