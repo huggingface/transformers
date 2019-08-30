@@ -18,11 +18,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-import torch
-import torch.nn as nn
-from torch.nn import CrossEntropyLoss, MSELoss
-from torch.nn.parameter import Parameter
-
 from .modeling_bert import BertConfig, BertModel, BertForMaskedLM, BertForSequenceClassification, BertForQuestionAnswering
 from .modeling_openai import OpenAIGPTConfig, OpenAIGPTModel, OpenAIGPTLMHeadModel
 from .modeling_gpt2 import GPT2Config, GPT2Model, GPT2LMHeadModel
