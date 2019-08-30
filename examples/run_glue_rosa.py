@@ -309,10 +309,15 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                     torch.save(args, os.path.join(output_dir, 'encoder_training_args.bin'))
                     logger.info("Saving encoder checkpoint to %s", output_dir)
                     
-                    decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder  # Take care of distributed/parallel training
-                    decoder_to_save.save_pretrained(output_dir)
-                    torch.save(args, os.path.join(output_dir, 'decoder_training_args.bin'))
+                    decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder # Take care of distributed/parallel training
+                    torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
+                    decoder = decoder_to_save
+                    decoder.to(args.device)
                     logger.info("Saving decoder checkpoint to %s", output_dir)
+                    # save decoder_lang using pickle
+                    filehandler = open(args.output_dir+'decoder_lang.obj', 'wb') 
+                    pickle.dump(decoder_lang, filehandler)
+                    logger.info("Saving decoder_lang checkpoint to %s", output_dir)
                     
 
             if args.max_steps > 0 and global_step > args.max_steps:
@@ -543,10 +548,9 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 
             generated_expl_index = get_index(generated_expl) #(seq_len, bs) 
             generated_expl_text = get_text(decoder_lang, generated_expl_index) # a list (size = bs) of explanation texts
+            #target_expl_text = get_text(decoder_lang, target_expl_index)
             
             nb_eval_steps += 1
-            
-            #TODO: check if there is CLS, SEP or PAD in generated_expl_text, if so, delete those
             
             expl2label_inputs_data = expl_to_expl2label_input(generated_expl_text, args.max_seq_length, tokenizer,
                                                               cls_token_at_end=False,           
@@ -807,8 +811,8 @@ def main():
     
     if args.expl:
         args.model_type = 'bert_expl_encoder'
-        args.do_train = False #TODO: change once eval works
-        args.do_eval = True
+        #args.do_train = True 
+        #args.do_eval = True
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
@@ -824,7 +828,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count() - 3 #TODO: get rid of -3 once the other gpu are available 
+        args.n_gpu = torch.cuda.device_count() -3 #TODO: get rid of -3 once the other gpu are available 
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
@@ -907,7 +911,6 @@ def main():
             torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
             decoder = decoder_to_save
             decoder.to(args.device)
-            
             # save decoder_lang using pickle
             filehandler = open(args.output_dir+'decoder_lang.obj', 'wb') 
             pickle.dump(decoder_lang, filehandler)
