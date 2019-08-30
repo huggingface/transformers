@@ -45,17 +45,20 @@ PRETRAINED_VOCAB_FILES_MAP = {
     {
         'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
         'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
+        'gpt2-large': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-vocab.json",
     },
     'merges_file':
     {
         'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
         'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
+        'gpt2-large': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'gpt2': 1024,
     'gpt2-medium': 1024,
+    'gpt2-large': 1024,
 }
 
 @lru_cache()
@@ -105,6 +108,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file, merges_file, errors='replace', unk_token="<|endoftext|>",
                  bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs):
         super(GPT2Tokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
+        self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
+        self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
 
         self.encoder = json.load(open(vocab_file))
         self.decoder = {v:k for k,v in self.encoder.items()}

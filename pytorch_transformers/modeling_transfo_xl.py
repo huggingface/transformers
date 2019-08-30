@@ -285,7 +285,7 @@ class TransfoXLConfig(PretrainedConfig):
             self.init_std = init_std
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
-                             "or the path to a pretrained model config file (str)")
+                             " or the path to a pretrained model config file (str)")
 
     @property
     def max_position_embeddings(self):
@@ -928,12 +928,16 @@ TRANSFO_XL_START_DOCSTRING = r"""    The Transformer-XL model was proposed in
 
     Parameters:
         config (:class:`~pytorch_transformers.TransfoXLConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 TRANSFO_XL_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
+            Transformer-XL is a model with relative position embeddings so you can either pad the inputs on
+            the right or on the left.
             Indices can be obtained using :class:`pytorch_transformers.TransfoXLTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -1138,10 +1142,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             else:
                 mask_shift_len = qlen
             dec_attn_mask = (torch.triu(all_ones, 1+mlen)
-                    + torch.tril(all_ones, -mask_shift_len)).byte()[:, :, None] # -1
+                    + torch.tril(all_ones, -mask_shift_len)).bool()[:, :, None] # -1
         else:
             dec_attn_mask = torch.triu(
-                word_emb.new_ones(qlen, klen), diagonal=1+mlen).byte()[:,:,None]
+                word_emb.new_ones(qlen, klen), diagonal=1+mlen).bool()[:,:,None]
 
         hids = []
         attentions = []

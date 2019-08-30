@@ -12,8 +12,8 @@ Examples
      - How to use gradient-accumulation, multi-gpu training, distributed training, optimize on CPU and 16-bits training to train Bert models
    * - `Fine-tuning with BERT: running the examples <#fine-tuning-bert-examples>`_
      - Running the examples in `examples <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples>`_\ : ``extract_classif.py``\ , ``run_bert_classifier.py``\ , ``run_bert_squad.py`` and ``run_lm_finetuning.py``
-   * - `Fine-tuning with OpenAI GPT, Transformer-XL and GPT-2 <#fine-tuning>`_
-     - Running the examples in `examples <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples>`_\ : ``run_openai_gpt.py``\ , ``run_transfo_xl.py`` and ``run_gpt2.py``
+   * - `Fine-tuning with OpenAI GPT, Transformer-XL, GPT-2 as well as BERT and RoBERTa <#fine-tuning>`_
+     - Running the examples in `examples <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples>`_\ : ``run_openai_gpt.py``\ , ``run_transfo_xl.py``, ``run_gpt2.py`` and ``run_lm_finetuning.py``
    * - `Fine-tuning BERT-large on GPUs <#fine-tuning-bert-large>`_
      - How to fine tune ``BERT large``
 
@@ -68,7 +68,9 @@ GLUE results on dev set
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 We get the following results on the dev set of GLUE benchmark with an uncased BERT base
-model. All experiments were run on a P100 GPU with a batch size of 32.
+model (`bert-base-uncased`). All experiments ran on 8 V100 GPUs with a total train batch size of 24. Some of 
+these tasks have a small dataset and training can lead to high variance in the results between different runs.
+We report the median on 5 runs (with different seeds) for each of the metrics.
 
 .. list-table::
    :header-rows: 1
@@ -78,31 +80,31 @@ model. All experiments were run on a P100 GPU with a batch size of 32.
      - Result
    * - CoLA
      - Matthew's corr.
-     - 57.29
+     - 55.75
    * - SST-2
      - accuracy
-     - 93.00
+     - 92.09
    * - MRPC
      - F1/accuracy
-     - 88.85/83.82
+     - 90.48/86.27
    * - STS-B
      - Pearson/Spearman corr.
-     - 89.70/89.37
+     - 89.03/88.64
    * - QQP
      - accuracy/F1
-     - 90.72/87.41
+     - 90.92/87.72
    * - MNLI
      - matched acc./mismatched acc.
-     - 83.95/84.39
+     - 83.74/84.06
    * - QNLI
      - accuracy
-     - 89.04
+     - 91.07
    * - RTE
      - accuracy
-     - 61.01
+     - 68.59
    * - WNLI
      - accuracy
-     - 53.52
+     - 43.66
 
 
 Some of these results are significantly different from the ones reported on the test set
@@ -382,7 +384,7 @@ Training with the previous hyper-parameters on a single GPU gave us the followin
 LM Fine-tuning
 ~~~~~~~~~~~~~~
 
-The data should be a text file in the same format as `sample_text.txt <./samples/sample_text.txt>`_  (one sentence per line, docs separated by empty line).
+The data should be a text file in the same format as `sample_text.txt <./pytorch_transformers/tests/fixtures/sample_text.txt/sample_text.txt>`_  (one sentence per line, docs separated by empty line).
 You can download an `exemplary training corpus <https://ext-bert-sample.obs.eu-de.otc.t-systems.com/small_wiki_sentence_corpus.txt>`_ generated from wikipedia articles and split into ~500k sentences with spaCy.
 Training one epoch on this corpus takes about 1:20h on 4 x NVIDIA Tesla P100 with ``train_batch_size=200`` and ``max_seq_length=128``\ :
 
@@ -393,12 +395,13 @@ Thank to the work of @Rocketknight1 and @tholor there are now **several scripts*
 OpenAI GPT, Transformer-XL and GPT-2: running the examples
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-We provide three examples of scripts for OpenAI GPT, Transformer-XL and OpenAI GPT-2 based on (and extended from) the respective original implementations:
+We provide three examples of scripts for OpenAI GPT, Transformer-XL, OpenAI GPT-2, BERT and RoBERTa based on (and extended from) the respective original implementations:
 
 
 * fine-tuning OpenAI GPT on the ROCStories dataset
 * evaluating Transformer-XL on Wikitext 103
 * unconditional and conditional generation from a pre-trained OpenAI GPT-2 model
+* fine-tuning GPT/GPT-2 on a causal language modeling task and BERT/RoBERTa on a masked language modeling task
 
 Fine-tuning OpenAI GPT on the RocStories dataset
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -452,7 +455,47 @@ Unconditional generation:
 
    python run_gpt2.py --unconditional
 
-The same option as in the original scripts are provided, please refere to the code of the example and the original repository of OpenAI.
+The same option as in the original scripts are provided, please refer to the code of the example and the original repository of OpenAI.
+
+
+Causal LM fine-tuning on GPT/GPT-2, Masked LM fine-tuning on BERT/RoBERTa
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before running the following examples you should download the `WikiText-2 dataset <https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/>`__ and unpack it to some directory `$WIKITEXT_2_DATASET`
+The following results were obtained using the `raw` WikiText-2 (no tokens were replaced before the tokenization).
+
+This example fine-tunes GPT-2 on the WikiText-2 dataset. The loss function is a causal language modeling loss (perplexity).
+
+.. code-block:: bash
+    export WIKITEXT_2_DATASET=/path/to/wikitext_dataset
+
+    python run_lm_finetuning.py
+        --output_dir=output
+        --model_type=gpt2
+        --model_name_or_path=gpt2
+        --do_train
+        --train_data_file=$WIKITEXT_2_DATASET/wiki.train.raw
+        --do_eval
+        --eval_data_file=$WIKITEXT_2_DATASET/wiki.test.raw
+
+This takes about half an hour to train on a single K80 GPU and about one minute for the evaluation to run.
+It reaches a score of about 20 perplexity once fine-tuned on the dataset.
+
+This example fine-tunes RoBERTa on the WikiText-2 dataset. The loss function is a masked language modeling loss (masked perplexity).
+The `--mlm` flag is necessary to fine-tune BERT/RoBERTa on masked language modeling.
+
+.. code-block:: bash
+    export WIKITEXT_2_DATASET=/path/to/wikitext_dataset
+
+    python run_lm_finetuning.py
+        --output_dir=output
+        --model_type=roberta
+        --model_name_or_path=roberta-base
+        --do_train
+        --train_data_file=$WIKITEXT_2_DATASET/wiki.train.raw
+        --do_eval
+        --eval_data_file=$WIKITEXT_2_DATASET/wiki.test.raw
+        --mlm
 
 .. _fine-tuning-BERT-large:
 
