@@ -838,7 +838,7 @@ def expl_to_expl2label_input(expl_batch, max_seq_length, tokenizer,
     input_mask_batch = []
     segment_ids_batch = []
     
-    for expl_st in expl_batched: # expl_st: expl sentence
+    for expl_st in expl_batch: # expl_st: expl sentence
         tokens = tokenizer.tokenize(expl_st)
         # Account for [CLS] and [SEP] with "- 2"
         if len(tokens) > max_seq_length - 2:

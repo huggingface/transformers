@@ -45,7 +45,8 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
                         output_modes, processors, 
                         Lang, normalize_sentence,
                         tensorFromSentence, pad_seq, 
-                        indexesFromSentence, get_text, get_index)
+                        indexesFromSentence, get_text, 
+                        get_index, expl_to_expl2label_input)
 
 import sys
 import time
@@ -490,8 +491,8 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
         out_label_ids = None
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             encoder.eval()
-            #decoder.eval()
-            #expl2label_model.eval()
+            decoder.eval()
+            expl2label_model.eval()
             batch = tuple(t.to(args.device) for t in batch)
 
             with torch.no_grad():
@@ -555,21 +556,28 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                                                               pad_on_left=False,                 
                                                               pad_token_segment_id=0)
             
-            expl2label_inputs = {'input_ids':      expl2label_inputs_data[0], # (bs, seq_len) based on generated_expl_index
-                                 'attention_mask': expl2label_inputs_data[1], # (bs, seq_len) based on generated_expl_index
-                                 'token_type_ids': expl2label_inputs_data[2], # (bs, seq_len) based on generated_expl_index
+            input_ids = expl2label_inputs_data[0].cuda()
+            attention_mask = expl2label_inputs_data[1].cuda()
+            token_type_ids = expl2label_inputs_data[2].cuda()
+            
+            expl2label_inputs = {'input_ids':      input_ids, # (bs, seq_len) based on generated_expl_index
+                                 'attention_mask': attention_mask, # (bs, seq_len) based on generated_expl_index
+                                 'token_type_ids': token_type_ids, # (bs, seq_len) based on generated_expl_index
                                  'labels': labels}
+            #expl2label_inputs['expl_idx'] = None
+            #expl2label_inputs['all_expl'] = None
+            #expl2label_inputs['decoder_lang'] = None
             
             expl2label_outputs = expl2label_model(**expl2label_inputs)
-            expl2label_loss, logits = outputs[:2]
+            expl2label_loss, logits = expl2label_outputs[:2]
             print('expl2label_loss: ', expl2label_loss.item())
             
             if preds is None:
                 preds = logits.detach().cpu().numpy()
-                out_label_ids = inputs['labels'].detach().cpu().numpy()
+                out_label_ids = expl2label_inputs['labels'].detach().cpu().numpy()
             else:
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
+                out_label_ids = np.append(out_label_ids, expl2label_inputs['labels'].detach().cpu().numpy(), axis=0)
 
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
@@ -799,7 +807,7 @@ def main():
     
     if args.expl:
         args.model_type = 'bert_expl_encoder'
-        #args.do_train = True #TODO: change once eval works
+        args.do_train = False #TODO: change once eval works
         args.do_eval = True
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
@@ -897,15 +905,6 @@ def main():
         if args.expl:
             decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder # Take care of distributed/parallel training
             torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
-            #decoder_to_save.save_pretrained(args.output_dir)
-            
-            #output_config_file = os.path.join(args.output_dir, 'decoder_config')
-            ##decoder_to_save.to_json_file(output_config_file)
-            #with open(output_config_file, "w", encoding='utf-8') as writer:
-                #writer.write(decoder_to_save.to_json_string())
-            
-            #torch.save(args, os.path.join(args.output_dir, 'decoder_training_args.bin'))
-            #decoder = decoder_class.from_pretrained(args.output_dir) 
             decoder = decoder_to_save
             decoder.to(args.device)
             
@@ -930,24 +929,21 @@ def main():
             results.update(result)
             
     if args.expl and args.do_eval:
-        dir1 = "/tmp/esnli_debug/"
-        dir2 = None
+        dir1 = args.output_dir
+        dir2 = '/tmp/ESNLI_expl_to_labels/'
         
         encoder = BertModel.from_pretrained(dir1)
-        
         # use pickle to load decoder_lang
         filehandler = open(dir1+'decoder_lang.obj', 'rb') 
         decoder_lang = pickle.load(filehandler)
-        
         decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
         decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
-        #decoder = None # TODO: load state dict
         
-        expl2label_model = None #BertForESNLI.from_pretrained(dir2) #store in a different dir from encoder dir
+        expl2label_model = BertForSequenceClassification.from_pretrained(dir2) #store in a different dir from encoder dir
         
         encoder.to(args.device)
         decoder.to(args.device)
-        #expl2label_model.to(args.device)
+        expl2label_model.to(args.device)
         result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tokenizer, prefix="")
         result = dict((k + '_{}'.format(""), v) for k, v in result.items())
         results.update(result)
