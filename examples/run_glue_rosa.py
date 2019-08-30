@@ -534,11 +534,11 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                     decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
                     generated_expl[i] = decoder_output   
                     topv, topi = decoder_output.topk(1) 
-                    #decoder_input = topi.squeeze(1)
+                    decoder_input = topi.squeeze(1)
                     #teacher forcing
-                    decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
-                    if args.teacher_force == False and decoder_input.item() == EOS_token: 
-                        break
+                    #decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
+                    #if args.teacher_force == False and decoder_input.item() == EOS_token: 
+                        #break
                         
 
                 loss_fct = torch.nn.CrossEntropyLoss()
