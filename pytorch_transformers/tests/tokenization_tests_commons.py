@@ -67,13 +67,13 @@ class CommonTestCases:
 
             with TemporaryDirectory() as tmpdirname:
                 tokenizer.save_pretrained(tmpdirname)
-                tokenizer = tokenizer.from_pretrained(tmpdirname)
+                tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
 
                 after_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
                 self.assertListEqual(before_tokens, after_tokens)
 
                 self.assertEqual(tokenizer.max_len, 42)
-                tokenizer = tokenizer.from_pretrained(tmpdirname, max_len=43)
+                tokenizer = self.tokenizer_class.from_pretrained(tmpdirname, max_len=43)
                 self.assertEqual(tokenizer.max_len, 43)
 
         def test_pickle_tokenizer(self):
