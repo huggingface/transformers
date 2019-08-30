@@ -40,6 +40,7 @@ class PreTrainedTokenizer(object):
         - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file required by the model, and as associated values, the filename for saving the associated file (string).
         - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the associated pretrained vocabulary file.
         - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained models, and as associated values, the maximum length of the sequence inputs of this model, or None if the model has no maximum input size.
+        - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained models, and as associated values, a dictionnary of specific arguments to pass to the ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the ``from_pretrained()`` method.
 
     Parameters:
 
@@ -61,6 +62,7 @@ class PreTrainedTokenizer(object):
     """
     vocab_files_names = {}
     pretrained_vocab_files_map = {}
+    pretrained_init_configuration = {}
     max_model_input_sizes = {}
 
     SPECIAL_TOKENS_ATTRIBUTES = ["bos_token", "eos_token", "unk_token", "sep_token",
@@ -235,10 +237,13 @@ class PreTrainedTokenizer(object):
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
+        init_configuration = {}
         if pretrained_model_name_or_path in s3_models:
             # Get the vocabulary from AWS S3 bucket
             for file_id, map_list in cls.pretrained_vocab_files_map.items():
                 vocab_files[file_id] = map_list[pretrained_model_name_or_path]
+            if cls.pretrained_init_configuration and pretrained_model_name_or_path in cls.pretrained_init_configuration:
+                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path]
         else:
             # Get the vocabulary from local files
             logger.info(
@@ -312,28 +317,32 @@ class PreTrainedTokenizer(object):
                 logger.info("loading file {} from cache at {}".format(
                     file_path, resolved_vocab_files[file_id]))
 
+        # Prepare initialization kwargs
+        init_kwargs = init_configuration
+        init_kwargs.update(kwargs)
+
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
             # wont index sequences longer than the number of positional embeddings
             max_len = cls.max_model_input_sizes[pretrained_model_name_or_path]
             if max_len is not None and isinstance(max_len, (int, float)):
-                kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
+                init_kwargs['max_len'] = min(init_kwargs.get('max_len', int(1e12)), max_len)
 
-        # Merge resolved_vocab_files arguments in kwargs.
+        # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop('added_tokens_file', None)
         special_tokens_map_file = resolved_vocab_files.pop('special_tokens_map_file', None)
         for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in kwargs:
-                kwargs[args_name] = file_path
+            if args_name not in init_kwargs:
+                init_kwargs[args_name] = file_path
         if special_tokens_map_file is not None:
             special_tokens_map = json.load(open(special_tokens_map_file, encoding="utf-8"))
             for key, value in special_tokens_map.items():
-                if key not in kwargs:
-                    kwargs[key] = value
+                if key not in init_kwargs:
+                    init_kwargs[key] = value
 
         # Instantiate tokenizer.
-        tokenizer = cls(*inputs, **kwargs)
+        tokenizer = cls(*inputs, **init_kwargs)
 
         # Add supplementary tokens.
         if added_tokens_file is not None:
