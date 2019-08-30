@@ -111,7 +111,7 @@ class CommonTestCases:
             self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
 
             new_toks_2 = {'eos_token': ">>>>|||<||<<|<<",
-                        'pad_token': "<<<<<|||>|>>>>|>"}
+                          'pad_token': "<<<<<|||>|>>>>|>"}
             added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
             vocab_size_3 = tokenizer.vocab_size
             all_size_3 = len(tokenizer)
@@ -129,7 +129,7 @@ class CommonTestCases:
             self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
             self.assertGreater(tokens[-2], tokens[-3])
             self.assertEqual(tokens[0], tokenizer.eos_token_id)
-            self.assertEqual(tokens[-2], tokenizer.eos_token_id)
+            self.assertEqual(tokens[-2], tokenizer.pad_token_id)
 
 
         def test_required_methods_tokenizer(self):
