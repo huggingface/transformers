@@ -1,5 +1,10 @@
 dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex']
 
-from pytorch_transformers import (
-    AutoTokenizer, AutoModel, AutoModelWithLMHead, AutoModelForSequenceClassification, AutoModelForQuestionAnswering
+from hubconfs.automodels_hubconf import (
+    autoConfig,
+    autoModel,
+    autoModelForQuestionAnswering,
+    autoModelForSequenceClassification,
+    autoModelWithLMHead,
+    autoTokenizer,
 )
