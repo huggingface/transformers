@@ -24,7 +24,7 @@ from utils import logger
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Token Counts for smoothing the masking probabilities in MLM (cf XLM/word2vec)")
     parser.add_argument("--data_file", type=str, default="data/dump.bert-base-uncased.pickle",
-                        help="The binarized dataset."
+                        help="The binarized dataset.")
     parser.add_argument("--token_counts_dump", type=str, default="data/token_counts.bert-base-uncased.pickle",
                         help="The dump file.")
     parser.add_argument("--vocab_size", default=30522, type=int)
