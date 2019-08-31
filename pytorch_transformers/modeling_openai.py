@@ -249,14 +249,15 @@ class Attention(nn.Module):
         self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
-        self.pruned_heads = []
+        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
         mask = torch.ones(self.n_head, self.split_size // self.n_head)
+        heads = set(heads) - self.pruned_heads
         for head in heads:
-            head -= len(list(filter(lambda h: h < head, self.pruned_heads)))
+            head -= sum(1 if h < head else 0 for h in self.pruned_heads)
             mask[head] = 0
         mask = mask.view(-1).contiguous().eq(1)
         index = torch.arange(len(mask))[mask].long()
@@ -267,7 +268,7 @@ class Attention(nn.Module):
         # Update hyper params
         self.split_size = (self.split_size // self.n_head) * (self.n_head - len(heads))
         self.n_head = self.n_head - len(heads)
-        self.pruned_heads.extend(heads)
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, q, k, v, head_mask=None):
         w = torch.matmul(q, k)
@@ -366,10 +367,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
 
-    def __init__(self, *inputs, **kwargs):
-        super(OpenAIGPTPreTrainedModel, self).__init__(*inputs, **kwargs)
-
-    def init_weights(self, module):
+    def _init_weights(self, module):
         """ Initialize the weights.
         """
         if isinstance(module, (nn.Linear, nn.Embedding, Conv1D)):
@@ -459,14 +457,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
 
-        if hasattr(config, "pruned_heads"):
-            pruned_heads = config.pruned_heads.copy().items()
-            config.pruned_heads = {}
-            for layer, heads in pruned_heads:
-                if self.h[int(layer)].attn.n_head == config.n_head:
-                    self.prune_heads({int(layer): list(map(int, heads))})
-
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def _resize_token_embeddings(self, new_num_tokens):
         self.tokens_embed = self._get_resized_embeddings(self.tokens_embed, new_num_tokens)
@@ -579,7 +570,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         self.transformer = OpenAIGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-        self.apply(self.init_weights)
+        self.init_weights()
         self.tie_weights()
 
     def tie_weights(self):
@@ -686,7 +677,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
-        self.apply(self.init_weights)
+        self.init_weights()
         self.tie_weights()
 
     def tie_weights(self):

@@ -853,9 +853,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 
-    def __init__(self, *inputs, **kwargs):
-        super(TransfoXLPreTrainedModel, self).__init__(*inputs, **kwargs)
-
     def _init_weight(self, weight):
         if self.config.init == 'uniform':
             nn.init.uniform_(weight, -self.config.init_range, self.config.init_range)
@@ -865,7 +862,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     def _init_bias(self, bias):
         nn.init.constant_(bias, 0.0)
 
-    def init_weights(self, m):
+    def _init_weights(self, m):
         """ Initialize the weights.
         """
         classname = m.__class__.__name__
@@ -1059,7 +1056,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             self.r_emb = nn.Parameter(torch.FloatTensor(
                     self.n_layer, self.max_klen, self.n_head, self.d_head))
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def _resize_token_embeddings(self, new_num_tokens):
         return self.word_emb
@@ -1306,7 +1303,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model, 
                                                     config.cutoffs, div_val=config.div_val)
-        self.apply(self.init_weights)
+        self.init_weights()
         self.tie_weights()
 
     def tie_weights(self):

@@ -586,10 +586,7 @@ class XLNetPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_xlnet
     base_model_prefix = "transformer"
 
-    def __init__(self, *inputs, **kwargs):
-        super(XLNetPreTrainedModel, self).__init__(*inputs, **kwargs)
-
-    def init_weights(self, module):
+    def _init_weights(self, module):
         """ Initialize the weights.
         """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -736,7 +733,7 @@ class XLNetModel(XLNetPreTrainedModel):
         self.layer = nn.ModuleList([XLNetLayer(config) for _ in range(config.n_layer)])
         self.dropout = nn.Dropout(config.dropout)
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def _resize_token_embeddings(self, new_num_tokens):
         self.word_embedding = self._get_resized_embeddings(self.word_embedding, new_num_tokens)
@@ -1037,7 +1034,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         self.transformer = XLNetModel(config)
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
 
-        self.apply(self.init_weights)
+        self.init_weights()
         self.tie_weights()
 
     def tie_weights(self):
@@ -1114,7 +1111,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, config.num_labels)
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
@@ -1216,7 +1213,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         self.end_logits = PoolerEndLogits(config)
         self.answer_class = PoolerAnswerClass(config)
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
