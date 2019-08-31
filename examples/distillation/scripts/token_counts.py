@@ -19,7 +19,7 @@ from collections import Counter
 import argparse
 import pickle
 
-from utils import logger
+from examples.distillation.utils import logger
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Token Counts for smoothing the masking probabilities in MLM (cf XLM/word2vec)")
