@@ -327,7 +327,7 @@ class PreTrainedModel(nn.Module):
         else:
             first_module.weight = second_module.weight
 
-        if hasattr(first_module, 'bias'):
+        if hasattr(first_module, 'bias') and first_module.bias is not None:
             first_module.bias.data = torch.nn.functional.pad(
                 first_module.bias.data,
                 (0, first_module.weight.shape[0] - first_module.bias.shape[0]),
