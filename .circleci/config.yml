@@ -5,7 +5,7 @@ jobs:
         docker:
             - image: circleci/python:3.5
         resource_class: large
-        parallelism: 4
+        parallelism: 1
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
@@ -17,7 +17,7 @@ jobs:
     build_py2:
         working_directory: ~/pytorch-transformers
         resource_class: large
-        parallelism: 4
+        parallelism: 1
         docker:
             - image: circleci/python:2.7
         steps:
