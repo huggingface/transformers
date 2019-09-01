@@ -104,6 +104,7 @@ class PretrainedConfig(object):
         self.output_attentions = kwargs.pop('output_attentions', False)
         self.output_hidden_states = kwargs.pop('output_hidden_states', False)
         self.torchscript = kwargs.pop('torchscript', False)
+        self.pruned_heads = kwargs.pop('pruned_heads', {})
 
     def save_pretrained(self, save_directory):
         """ Save a configuration object to the directory `save_directory`, so that it
@@ -199,6 +200,9 @@ class PretrainedConfig(object):
 
         # Load config
         config = cls.from_json_file(resolved_config_file)
+
+        if hasattr(config, 'pruned_heads'):
+            config.pruned_heads = dict((int(key), set(value)) for key, value in config.pruned_heads.items())
 
         # Update config with kwargs if needed
         to_remove = []
@@ -311,7 +315,7 @@ class PreTrainedModel(nn.Module):
         new_embeddings.to(old_embeddings.weight.device)
 
         # initialize all new embeddings (in particular added tokens)
-        self.init_weights(new_embeddings)
+        self._init_weights(new_embeddings)
 
         # Copy word embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
@@ -355,14 +359,30 @@ class PreTrainedModel(nn.Module):
 
         return model_embeds
 
+    def init_weights(self):
+        """ Initialize and prunes weights if needed. """
+        # Initialize weights
+        self.apply(self._init_weights)
+
+        # Prune heads if needed
+        if self.config.pruned_heads:
+            self.prune_heads(self.config.pruned_heads)
+
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
 
             Arguments:
 
                 heads_to_prune: dict with keys being selected layer indices (`int`) and associated values being the list of heads to prune in said layer (list of `int`).
+                E.g. {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         """
         base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
+
+        # save new sets of pruned heads as union of previously stored pruned heads and newly pruned heads
+        for layer, heads in heads_to_prune.items():
+            union_heads = set(self.config.pruned_heads.get(layer, [])) | set(heads)
+            self.config.pruned_heads[layer] = list(union_heads)  # Unfortunately we have to store it as list for JSON
+
         base_model._prune_heads(heads_to_prune)
 
     def save_pretrained(self, save_directory):
