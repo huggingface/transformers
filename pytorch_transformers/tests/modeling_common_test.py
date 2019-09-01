@@ -163,6 +163,7 @@ class CommonTestCases:
             if not self.test_head_masking:
                 return
 
+            torch.manual_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             config.output_attentions = True
@@ -213,6 +214,9 @@ class CommonTestCases:
                 return
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            if "head_mask" in inputs_dict:
+                del inputs_dict["head_mask"]
 
             for model_class in self.all_model_classes:
                 config.output_attentions = True
