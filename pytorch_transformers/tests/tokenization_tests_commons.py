@@ -186,3 +186,15 @@ class CommonTestCases:
 
             for weights_list_2 in weights_lists_2:
                 self.assertListEqual(weights_list, weights_list_2)
+
+        def test_mask_output(self):
+            if sys.version_info <= (3, 0):
+                return
+
+            tokenizer = self.get_tokenizer()
+
+            if tokenizer.add_special_tokens_sentences_pair.__qualname__.split('.')[0] != "PreTrainedTokenizer":
+                seq_0 = "Test this method."
+                seq_1 = "With these inputs."
+                sequences, mask = tokenizer.encode(seq_0, seq_1, add_special_tokens=True, output_mask=True)
+                assert len(sequences) == len(mask)
