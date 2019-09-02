@@ -190,14 +190,21 @@ class XLNetTokenizer(PreTrainedTokenizer):
         cls = [self.cls_token_id]
         return token_ids + sep + cls
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1, output_mask=False):
         """
         Adds special tokens to a sequence for sequence classification tasks.
         An XLNet sequence has the following format: X [SEP][CLS]
         """
+
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-        return token_ids_0 + sep + token_ids_1 + sep + cls
+        if output_mask:
+            return (
+                token_ids_0 + sep + token_ids_1 + sep + cls,
+                [0] * len(token_ids_0 + sep) + [1] * len(token_ids_1 + sep + cls)
+            )
+        else:
+            return token_ids_0 + sep + token_ids_1 + sep + cls
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file

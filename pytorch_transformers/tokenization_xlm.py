@@ -761,14 +761,21 @@ class XLMTokenizer(PreTrainedTokenizer):
         """
         return [self.cls_token_id] + token_ids + [self.sep_token_id]
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1, output_mask=False):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
         An XLM sequence pair has the following format: [CLS] A [SEP] B [SEP]
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+
+        if output_mask:
+            return (
+                cls + token_ids_0 + sep + token_ids_1 + sep,
+                [0] * len(cls + token_ids_0 + sep) + [1] * len(token_ids_1 + sep)
+            )
+        else:
+            return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""
