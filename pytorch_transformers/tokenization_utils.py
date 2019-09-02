@@ -18,6 +18,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import logging
 import os
+import re
 import json
 import six
 import copy
@@ -598,7 +599,7 @@ class PreTrainedTokenizer(object):
         """
         def split_on_token(tok, text):
             result = []
-            split_text = text.split(tok)
+            split_text = re.split(r'\b%s\b' %tok, text)
             for i, sub_text in enumerate(split_text):
                 sub_text = sub_text.strip()
                 if i == 0 and not sub_text:
