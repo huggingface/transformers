@@ -4,7 +4,7 @@ jobs:
         working_directory: ~/pytorch-transformers
         docker:
             - image: circleci/python:3.5
-        resource_class: large
+        resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
