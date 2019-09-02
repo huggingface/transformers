@@ -104,7 +104,7 @@ class CommonTestCases:
             self.assertNotEqual(vocab_size, 0)
             self.assertEqual(vocab_size, all_size)
 
-            new_toks = ["aaaaabbbbbb", "cccccccccdddddddd"]
+            new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd"]
             added_toks = tokenizer.add_tokens(new_toks)
             vocab_size_2 = tokenizer.vocab_size
             all_size_2 = len(tokenizer)
@@ -114,7 +114,9 @@ class CommonTestCases:
             self.assertEqual(added_toks, len(new_toks))
             self.assertEqual(all_size_2, all_size + len(new_toks))
 
-            tokens = tokenizer.encode("aaaaabbbbbb low cccccccccdddddddd l")
+            tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l")
+            out_string = tokenizer.decode(tokens)
+
             self.assertGreaterEqual(len(tokens), 4)
             self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
             self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
@@ -131,6 +133,7 @@ class CommonTestCases:
             self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
             tokens = tokenizer.encode(">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l")
+            out_string = tokenizer.decode(tokens)
 
             self.assertGreaterEqual(len(tokens), 6)
             self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
