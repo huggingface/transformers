@@ -216,7 +216,7 @@ class PreTrainedTokenizer(object):
             logger.error("Using additional_special_tokens, but it is not set yet.")
         return self.convert_tokens_to_ids(self._additional_special_tokens)
 
-    def __init__(self, max_len=None, **kwargs):
+    def __init__(self, max_len=None, split_added_on_word_boundary=False, **kwargs):
         self._bos_token = None
         self._eos_token = None
         self._unk_token = None
@@ -227,7 +227,8 @@ class PreTrainedTokenizer(object):
         self._additional_special_tokens = []
 
         self.max_len = max_len if max_len is not None else int(1e12)
-
+        self.split_added_on_word_boundary = split_added_on_word_boundary
+        
         # Added tokens
         self.added_tokens_encoder = {}
         self.added_tokens_decoder = {}
@@ -599,7 +600,11 @@ class PreTrainedTokenizer(object):
         """
         def split_on_token(tok, text):
             result = []
-            split_text = re.split(r'\b%s\b' %tok, text)
+            if self.split_added_on_word_boundary:
+                split_text = re.split(r'\b%s\b' %tok, text)
+            else:
+                split_text = text.split(tok)
+                
             for i, sub_text in enumerate(split_text):
                 sub_text = sub_text.strip()
                 if i == 0 and not sub_text:
