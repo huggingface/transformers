@@ -459,7 +459,7 @@ The same option as in the original scripts are provided, please refer to the cod
 
 
 Causal LM fine-tuning on GPT/GPT-2, Masked LM fine-tuning on BERT/RoBERTa
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Before running the following examples you should download the `WikiText-2 dataset <https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/>`__ and unpack it to some directory `$WIKITEXT_2_DATASET`
 The following results were obtained using the `raw` WikiText-2 (no tokens were replaced before the tokenization).
@@ -467,6 +467,8 @@ The following results were obtained using the `raw` WikiText-2 (no tokens were r
 This example fine-tunes GPT-2 on the WikiText-2 dataset. The loss function is a causal language modeling loss (perplexity).
 
 .. code-block:: bash
+
+
     export WIKITEXT_2_DATASET=/path/to/wikitext_dataset
 
     python run_lm_finetuning.py
@@ -485,6 +487,8 @@ This example fine-tunes RoBERTa on the WikiText-2 dataset. The loss function is 
 The `--mlm` flag is necessary to fine-tune BERT/RoBERTa on masked language modeling.
 
 .. code-block:: bash
+
+
     export WIKITEXT_2_DATASET=/path/to/wikitext_dataset
 
     python run_lm_finetuning.py
