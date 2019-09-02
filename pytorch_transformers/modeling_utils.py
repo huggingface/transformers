@@ -331,6 +331,14 @@ class PreTrainedModel(nn.Module):
         else:
             first_module.weight = second_module.weight
 
+        if hasattr(first_module, 'bias') and first_module.bias is not None:
+            first_module.bias.data = torch.nn.functional.pad(
+                first_module.bias.data,
+                (0, first_module.weight.shape[0] - first_module.bias.shape[0]),
+                'constant',
+                0
+            )
+
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
