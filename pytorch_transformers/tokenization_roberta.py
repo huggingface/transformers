@@ -98,7 +98,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         if output_mask:
             return (
                 cls + token_ids_0 + sep + sep + token_ids_1 + sep,
-                [0] * len(cls + token_ids_0 + sep) + [1] * len(sep + token_ids_1 + sep)
+                [0] * len(cls + token_ids_0 + sep + sep) + [1] * len(token_ids_1 + sep)
             )
         else:
             return cls + token_ids_0 + sep + sep + token_ids_1 + sep
