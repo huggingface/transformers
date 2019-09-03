@@ -1324,18 +1324,12 @@ class AttnDecoderRNN(nn.Module):
         # Get the embedding of the current input word (last output word)
         batch_size = input_seq.size(0)
         embedded = self.embedding(input_seq.to(device))
-        #print('input_seq: ', input_seq.size())
-        #print('word_embedded: ', embedded.size())
         embedded = self.embedding_dropout(embedded.to(device))
         
         embedded = embedded.view(1, batch_size, self.hidden_size) # S=1 x B x N
         
         # Get current hidden state from input word and last hidden state
-        #print('embedded: ', embedded.size())
-        #print('last_hidden: ', last_hidden.size())
         rnn_output, hidden = self.gru(embedded, last_hidden)
-        #print('last_hidden: ', last_hidden.size())
-        #print('hidden: ', hidden.size())
 
         # Calculate attention from current RNN state and all encoder outputs;
         # apply to encoder outputs to get weighted average
@@ -1352,10 +1346,6 @@ class AttnDecoderRNN(nn.Module):
         # Finally predict next token (Luong eq. 6, without softmax)
         output = self.out(concat_output)
         prediction = self.softmax(output)
-        
-        #print('concat_input: ', concat_input.size())
-        #print('concat_output: ', concat_output.size())
-        #print('output: ', output.size())
 
         # Return final output, hidden state, and attention weights (for visualization)
         return prediction, hidden, attn_weights
