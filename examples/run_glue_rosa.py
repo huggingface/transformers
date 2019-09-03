@@ -126,8 +126,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     decoder_vocab_size = decoder_lang.n_words
 
     # initialize decoder
-    #decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
-    decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
     
     # prepare optimizers
     no_decay = ['bias', 'LayerNorm.weight']
@@ -225,9 +225,9 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
 
             for i in range(target_length):
-                #decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
                 # Q: update encoder_output_for_decoder? A: No
-                decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
+                #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                 #decoder_output: (bs, n_vocab)
                 #decoder_hidden[0]: (1, bs, hidden_size)
 
@@ -480,7 +480,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False) #TODO: make this True when not eval on training data
         
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -538,8 +538,8 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 encoder_output_for_decoder = encoder_output_for_decoder.to(args.device)                 
                 
                 for i in range(target_length):
-                    #decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
-                    decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
+                    decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                    #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                     generated_expl[i] = decoder_output   
                     topv, topi = decoder_output.topk(1) 
                     decoder_input = topi.squeeze(1)
@@ -618,7 +618,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         if args.expl:
-            eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+            eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False) #TODO: make this true when working with more complicated models or not evaluating on training data
         else:
             eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
@@ -953,8 +953,8 @@ def main():
         # use pickle to load decoder_lang
         filehandler = open(dir1+'decoder_lang.obj', 'rb') 
         decoder_lang = pickle.load(filehandler)
-        #decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
-        decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+        decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
+        #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
         decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
         
         expl2label_model = BertForSequenceClassification.from_pretrained(dir2) #store in a different dir from encoder dir
