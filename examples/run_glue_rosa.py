@@ -126,8 +126,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     decoder_vocab_size = decoder_lang.n_words
 
     # initialize decoder
-    decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
-    #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    #decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
     
     # prepare optimizers
     no_decay = ['bias', 'LayerNorm.weight']
@@ -225,8 +225,9 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
 
             for i in range(target_length):
-                decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
-                #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
+                #decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                # Q: update encoder_output_for_decoder? A: No
+                decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                 #decoder_output: (bs, n_vocab)
                 #decoder_hidden[0]: (1, bs, hidden_size)
 
@@ -533,15 +534,15 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 decoder_hidden = bert_output_pooled.unsqueeze(0) 
                 decoder_input = torch.LongTensor([CLS_token] * batch_size) 
                 
+                encoder_output_for_decoder = bert_output.transpose(0,1) # bs * seq_len * h -> seq_len * bs * h
+                encoder_output_for_decoder = encoder_output_for_decoder.to(args.device)                 
+                
                 for i in range(target_length):
-                    decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                    #decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
+                    decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                     generated_expl[i] = decoder_output   
                     topv, topi = decoder_output.topk(1) 
                     decoder_input = topi.squeeze(1)
-                    #teacher forcing
-                    #decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
-                    #if args.teacher_force == False and decoder_input.item() == EOS_token: 
-                        #break
                         
                 loss_fct = torch.nn.CrossEntropyLoss()
                 generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
@@ -952,7 +953,8 @@ def main():
         # use pickle to load decoder_lang
         filehandler = open(dir1+'decoder_lang.obj', 'rb') 
         decoder_lang = pickle.load(filehandler)
-        decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
+        #decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
+        decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
         decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
         
         expl2label_model = BertForSequenceClassification.from_pretrained(dir2) #store in a different dir from encoder dir
