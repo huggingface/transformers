@@ -946,19 +946,22 @@ def main():
             results.update(result)
             
     if args.expl and args.do_eval:
-        dir1 = args.output_dir
-        dir2 = '/tmp/esnli100_expl2label/'
-        
-        encoder = BertModel.from_pretrained(dir1)
-        # use pickle to load decoder_lang
-        filehandler = open(dir1+'decoder_lang.obj', 'rb') 
-        decoder_lang = pickle.load(filehandler)
-        decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
-        #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
-        decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
-        
+        if args.do_train:
+            encoder = model
+        else:
+            dir1 = args.output_dir
+            dir2 = '/tmp/esnli100_expl2label/'
+
+            encoder = BertModel.from_pretrained(dir1)
+            # use pickle to load decoder_lang
+            filehandler = open(dir1+'decoder_lang.obj', 'rb') 
+            decoder_lang = pickle.load(filehandler)
+            decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
+            #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+            decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
+
         expl2label_model = BertForSequenceClassification.from_pretrained(dir2) #store in a different dir from encoder dir
-        
+
         encoder.to(args.device)
         decoder.to(args.device)
         expl2label_model.to(args.device)
