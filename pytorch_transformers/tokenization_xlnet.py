@@ -198,10 +198,11 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
+        cls_segment_ids = [2]
         if output_mask:
             return (
                 token_ids_0 + sep + token_ids_1 + sep + cls,
-                [0] * len(token_ids_0 + sep) + [1] * len(token_ids_1 + sep + cls)
+                [0] * len(token_ids_0 + sep) + [1] * len(token_ids_1 + sep) + cls_segment_ids
             )
         else:
             return token_ids_0 + sep + token_ids_1 + sep + cls
