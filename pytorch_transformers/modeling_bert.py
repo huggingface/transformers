@@ -1260,7 +1260,7 @@ class Attn(nn.Module):
         self.hidden_size = hidden_size
         self.attn = nn.Linear(self.hidden_size, hidden_size)
 
-    def forward(self, hidden, encoder_outputs):
+    def forward(self, hidden, encoder_outputs, device='cuda:1'):
         #print('hidden: ', hidden.size())
         #print('encoder_outputs: ', encoder_outputs.size())
         
@@ -1268,8 +1268,9 @@ class Attn(nn.Module):
         this_batch_size = encoder_outputs.size(1)
 
         # Create variable to store attention energies
-        attn_energies = Variable(torch.zeros(this_batch_size, max_len)) # bs x max_seq_len
-        attn_energies = attn_energies.cuda()
+        #attn_energies = Variable(torch.zeros(this_batch_size, max_len)) # bs x max_seq_len
+        attn_energies = torch.zeros(this_batch_size, max_len)
+        attn_energies = attn_energies.to(device)
 
         # For each batch of encoder outputs
         for b in range(this_batch_size):
@@ -1279,7 +1280,7 @@ class Attn(nn.Module):
 
         # Normalize energies to weights in range 0 to 1, resize to 1 x bs x max_seq_len
         #print('attn_energies: ', attn_energies.size())
-        return F.softmax(attn_energies, dim = 1).unsqueeze(1)
+        return torch.nn.functional.softmax(attn_energies, dim = 1).unsqueeze(1)
     
     def score(self, hidden, encoder_output):
         energy = self.attn(encoder_output)
@@ -1305,16 +1306,27 @@ class AttnDecoderRNN(nn.Module):
         self.out = nn.Linear(hidden_size, output_size)
         
         self.attn = Attn(hidden_size)
+        
+        self.softmax = nn.LogSoftmax(dim=1)
+        self.resize1 = nn.Linear(768, self.hidden_size)
+        self.resize2 = nn.Linear(768, self.hidden_size)
 
-    def forward(self, input_seq, last_hidden, encoder_outputs):
+    def forward(self, input_seq, last_hidden, encoder_outputs, device='cuda:1'):
+        
+        if last_hidden.size(2) != self.hidden_size:
+            last_hidden = self.resize1(last_hidden)
+            
+        if encoder_outputs.size(2) != self.hidden_size:
+            encoder_outputs = self.resize2(encoder_outputs)
+            
         # Note: we run this one step at a time
 
         # Get the embedding of the current input word (last output word)
         batch_size = input_seq.size(0)
-        embedded = self.embedding(input_seq)
+        embedded = self.embedding(input_seq.to(device))
         #print('input_seq: ', input_seq.size())
         #print('word_embedded: ', embedded.size())
-        embedded = self.embedding_dropout(embedded)
+        embedded = self.embedding_dropout(embedded.to(device))
         
         embedded = embedded.view(1, batch_size, self.hidden_size) # S=1 x B x N
         
@@ -1339,13 +1351,14 @@ class AttnDecoderRNN(nn.Module):
         
         # Finally predict next token (Luong eq. 6, without softmax)
         output = self.out(concat_output)
+        prediction = self.softmax(output)
         
         #print('concat_input: ', concat_input.size())
         #print('concat_output: ', concat_output.size())
         #print('output: ', output.size())
 
         # Return final output, hidden state, and attention weights (for visualization)
-        return output, hidden, attn_weights
+        return prediction, hidden, attn_weights
             
 
 class DecoderRNN(nn.Module):
@@ -1358,10 +1371,10 @@ class DecoderRNN(nn.Module):
         self.softmax = nn.LogSoftmax(dim=1)
         self.resize = nn.Linear(768, self.hidden_size)
 
-    def forward(self, decoder_input, hidden):
+    def forward(self, decoder_input, hidden, device='cuda:1'):
         if hidden.size(2) != self.hidden_size:
             hidden = self.resize(hidden)
-        embedded = self.embedding(decoder_input.to('cuda')) # (bs, hidden_size)
+        embedded = self.embedding(decoder_input.to(device)) # (bs, hidden_size)
         embedded = embedded.unsqueeze(0) # (1, bs, hidden_size)
         
         import torch.nn.functional as F
@@ -1395,11 +1408,11 @@ class BertForESNLI(BertPreTrainedModel):
         #convert encoder output to decoder input size
         self.resize = nn.Linear(768, self.hidden_size)
         
-    def setOutputVocab(self, decoder_lang):
-        self.decoder = DecoderRNN(hidden_size=self.hidden_size, output_size=decoder_lang.n_words).to('cuda')
+    def setOutputVocab(self, decoder_lang, device='cuda:1'):
+        self.decoder = DecoderRNN(hidden_size=self.hidden_size, output_size=decoder_lang.n_words).to(device)
         self.decoder_vocab_size = decoder_lang.n_words
     
-    def forward(self, input_ids, expl_idx, all_expl, decoder_lang, mode=None, labels=None, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, expl_idx, all_expl, decoder_lang, mode=None, labels=None, token_type_ids=None, attention_mask=None, position_ids=None, head_mask=None, device='cuda:1'):
         #mode = 'teacher' for training or 'forloop' for eval
         # processing data
         position_ids = None
@@ -1438,7 +1451,7 @@ class BertForESNLI(BertPreTrainedModel):
         target_length = 128
         batch_size = len(expl_idx)
         vocab_size = self.decoder_vocab_size
-        generated_expl = torch.zeros(target_length, batch_size, vocab_size).to('cuda')
+        generated_expl = torch.zeros(target_length, batch_size, vocab_size).to(device)
         
         sys.path.append('/data/rosa/pytorch-transformers/examples')
         from utils_glue import tensorFromSentence, normalize_sentence, pad_seq, indexesFromSentence
@@ -1450,7 +1463,7 @@ class BertForESNLI(BertPreTrainedModel):
             indexes_padded = pad_seq(indexes, target_length)
             target_expl_index.append(indexes_padded)
         
-        target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
+        target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(device) 
         #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
         
         decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)

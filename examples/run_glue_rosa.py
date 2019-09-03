@@ -33,7 +33,7 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
-                                  BertForESNLI, DecoderRNN, BertModel,
+                                  BertForESNLI, DecoderRNN, BertModel, AttnDecoderRNN,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
@@ -126,7 +126,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     decoder_vocab_size = decoder_lang.n_words
 
     # initialize decoder
-    decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to('cuda') #initialize decoder
+    decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
     
     # prepare optimizers
     no_decay = ['bias', 'LayerNorm.weight']
@@ -178,14 +179,15 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     decoder.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility 
-    epoch_loss = 0 #init as a huge number lol
+    epoch_loss = 0 
     num_epoch = 0
     for _ in train_iterator:
         num_epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
-        epoch_loss = 0 #init as a huge number lol
-        if global_step!=0: print('average loss: ', tr_loss/global_step)
+        if num_epoch % 5 == 0:
+            print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
+            if global_step!=0: print('average loss: ', tr_loss/global_step)
+        epoch_loss = 0 
         for step, batch in enumerate(epoch_iterator):
             if num_epoch <= 3 and args.freeze:
                 encoder.train()
@@ -204,7 +206,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             encoder_outputs = encoder(**inputs)
             bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
             
-            generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
+            generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to(args.device)
         
             target_expl = [all_expl[i] for i in expl_idx]
             target_expl_index = []
@@ -214,25 +216,22 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 indexes_padded = pad_seq(indexes, target_length)
                 target_expl_index.append(indexes_padded)
 
-            target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
+            target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(args.device) 
             #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
 
             decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
             decoder_input = torch.LongTensor([CLS_token] * batch_size) # (bs)
+            encoder_output_for_decoder = bert_output.transpose(0,1) # bs * seq_len * h -> seq_len * bs * h
+            encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
 
             for i in range(target_length):
-                #print('decoder_input: ', decoder_input.size())
-                #print('decoder_hidden: ', decoder_hidden.size())
-                
                 decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden) 
-                #take only premise's encoding results and produce a next sentence for now
+                #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                 #decoder_output: (bs, n_vocab)
                 #decoder_hidden[0]: (1, bs, hidden_size)
 
                 generated_expl[i] = decoder_output   
                 topv, topi = decoder_output.topk(1) 
-                #decoder_input = topi.squeeze(1)
-                #teacher forcing
                 decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
                 if args.teacher_force == False and decoder_input.item() == EOS_token: 
                     break
@@ -242,9 +241,13 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             loss = loss_fct(generated_expl, target_expl_index)
             
             # sanity check on generated explanations
-            #generated_expl_index = get_index(generated_expl) 
-            #print(get_text(decoder_lang, generated_expl_index)) 
-            #print(get_text(decoder_lang, target_expl_index)) 
+            generated_expl_index = get_index(generated_expl) 
+            if num_epoch > args.num_train_epochs-1:
+                print('generated expl', get_text(decoder_lang, generated_expl_index)) 
+                print('target expl', get_text(decoder_lang, target_expl_index)) 
+            #print('generated expl index: ',generated_expl_index)
+            #print('target expl index: ',target_expl_index)
+            
 
             epoch_loss += loss.item()
             
@@ -516,7 +519,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
 
                 target_length = args.max_seq_length
                 decoder_vocab_size = decoder_lang.n_words
-                generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to('cuda')
+                generated_expl = torch.zeros(target_length, batch_size, decoder_vocab_size).to(args.device)
                 
                 target_expl = [all_expl[i] for i in expl_idx]
                 target_expl_index = []
@@ -526,7 +529,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                     indexes_padded = pad_seq(indexes, target_length)
                     target_expl_index.append(indexes_padded)
 
-                target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to('cuda') 
+                target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(args.device) 
                 decoder_hidden = bert_output_pooled.unsqueeze(0) 
                 decoder_input = torch.LongTensor([CLS_token] * batch_size) 
                 
@@ -540,7 +543,6 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                     #if args.teacher_force == False and decoder_input.item() == EOS_token: 
                         #break
                         
-
                 loss_fct = torch.nn.CrossEntropyLoss()
                 generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
                 tmp_eval_loss = loss_fct(generated_expl, target_expl_index)
@@ -549,7 +551,12 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 
             generated_expl_index = get_index(generated_expl) #(seq_len, bs) 
             generated_expl_text = get_text(decoder_lang, generated_expl_index) # a list (size = bs) of explanation texts
-            #target_expl_text = get_text(decoder_lang, target_expl_index)
+            target_expl_text = get_text(decoder_lang, target_expl_index)
+            
+            #print('generated expl index: ',generated_expl_index)
+            #print('target expl index: ',target_expl_index)
+            print('generated expl text: ',generated_expl_text)
+            print('target expl text: ',target_expl_text)
             
             nb_eval_steps += 1
             
@@ -561,9 +568,9 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                                                               pad_on_left=False,                 
                                                               pad_token_segment_id=0)
             
-            input_ids = expl2label_inputs_data[0].cuda()
-            attention_mask = expl2label_inputs_data[1].cuda()
-            token_type_ids = expl2label_inputs_data[2].cuda()
+            input_ids = expl2label_inputs_data[0].to(args.device)
+            attention_mask = expl2label_inputs_data[1].to(args.device)
+            token_type_ids = expl2label_inputs_data[2].to(args.device)
             
             expl2label_inputs = {'input_ids':      input_ids, # (bs, seq_len) based on generated_expl_index
                                  'attention_mask': attention_mask, # (bs, seq_len) based on generated_expl_index
@@ -830,13 +837,16 @@ def main():
 
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
+        print('setting device')
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count() -3 #TODO: get rid of -3 once the other gpu are available 
-    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+        device = torch.device("cuda:1") #TODO: get rid of this line once 0 is available
+        args.n_gpu = 1 #TODO: get rid of this line once 0 is available
+        #args.n_gpu = torch.cuda.device_count() -3 #TODO: get rid of -3 once the other gpu are available 
+    '''else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend='nccl')
-        args.n_gpu = 1
+        args.n_gpu = 1'''
     args.device = device
 
     # Setup logging
@@ -936,7 +946,7 @@ def main():
             
     if args.expl and args.do_eval:
         dir1 = args.output_dir
-        dir2 = '/tmp/ESNLI_expl_to_labels/'
+        dir2 = '/tmp/esnli100_expl2label/'
         
         encoder = BertModel.from_pretrained(dir1)
         # use pickle to load decoder_lang
