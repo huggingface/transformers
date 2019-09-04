@@ -636,7 +636,7 @@ the classification head takes as input the input of a specified classification t
 """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     r"""
-        **mc_token_ids**: ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
+        **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
             Index of the classification token in each input sequence.
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -678,7 +678,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         mc_token_ids = torch.tensor([input_ids.size(-1), input_ids.size(-1)]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, mc_token_ids)
+        outputs = model(input_ids, mc_token_ids=mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
     """
@@ -700,7 +700,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
                                    self.transformer.tokens_embed)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
-                lm_labels=None, mc_labels=None):
+                mc_token_ids=None, lm_labels=None, mc_labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                token_type_ids=token_type_ids,
