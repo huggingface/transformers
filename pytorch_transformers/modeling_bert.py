@@ -1361,7 +1361,7 @@ class DecoderRNN(nn.Module):
         self.softmax = nn.LogSoftmax(dim=1)
         self.resize = nn.Linear(768, self.hidden_size)
 
-    def forward(self, decoder_input, hidden, device='cuda:1'):
+    def forward(self, decoder_input, hidden, device='cuda:1', temperature=0):
         if hidden.size(2) != self.hidden_size:
             hidden = self.resize(hidden)
         embedded = self.embedding(decoder_input.to(device)) # (bs, hidden_size)
@@ -1371,6 +1371,7 @@ class DecoderRNN(nn.Module):
         embedded = F.relu(embedded)
         output, hidden = self.gru(embedded, hidden)
         output = self.out(output[0]) # (bs, n_vocab)
+        output = output + temperature 
         prediction = self.softmax(output)
  
         return prediction, hidden
@@ -1380,6 +1381,8 @@ class BertForESNLI(BertPreTrainedModel):
     '''
     encoder is BertModel
     decoder is DecoderRNN
+    this is not really used, because we would like to train encoder and decoder separately (with
+    different learning rate)
     '''
     def __init__(self,config):
         super(BertForESNLI, self).__init__(config)

@@ -235,7 +235,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
             #encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
 
             for i in range(MAX_LENGTH):
-                decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device) 
+                decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device, temperature=args.temp) 
                 #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                 #decoder_output: (bs, n_vocab)
                 #decoder_hidden[0]: (1, bs, hidden_size)
@@ -346,7 +346,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False) #TODO: make this True when not eval on training data
+        eval_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=not args.eval_on_train) 
         
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -398,7 +398,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 #encoder_output_for_decoder = encoder_output_for_decoder.to(args.device)                 
                 
                 for i in range(args.max_seq_length):
-                    decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device) 
+                    decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device, temperature=args.temp) 
                     #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
                     generated_expl[i] = decoder_output   
                     topv, topi = decoder_output.topk(1) 
@@ -615,6 +615,10 @@ def main():
                         help = 'whether to use teacher forcing in train and eval')
     parser.add_argument('--cuda_id', type=str, default='1',\
                         help = 'cuda id if only one cuda is used')
+    parser.add_argument('--eval_on_train', type=bool, default=False, const = True,nargs = '?', \
+                        help = 'whether to eval on train')
+    parser.add_argument('--temp', type=float, default=0.5, \
+                        help = 'softmax temperature')
     
     args = parser.parse_args()
     

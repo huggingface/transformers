@@ -827,6 +827,8 @@ def get_text(lang, indexed_tensor):
         sentence = ''
         for word_index in sentence_vector:
             index = int(word_index.data)
+            if index == 1: #has reached SEP
+                break
             if index != 2:
                 sentence = sentence + lang.index2word[index]
                 sentence = sentence + ' '
