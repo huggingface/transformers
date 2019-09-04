@@ -98,6 +98,49 @@ def get_encoder_output(batch, encoder):
     return bert_output_pooled
 
 
+def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl):
+    expl_idx = batch[4]
+    batch_size = len(expl_idx)
+    generated_expl = torch.zeros(args.max_seq_length, batch_size, decoder_lang.n_words).to(args.device)
+
+    target_expl = [all_expl[i] for i in expl_idx]
+    target_expl_index = []
+    for line in target_expl:
+        sentence = normalize_sentence(line)
+        indexes = indexesFromSentence(decoder_lang, sentence)
+        indexes_padded = pad_seq(indexes, args.max_seq_length)
+        target_expl_index.append(indexes_padded)
+
+    target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(args.device) 
+    #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
+
+    decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
+    decoder_input = torch.LongTensor([CLS_token] * batch_size) # (bs)
+
+    # for attn decoder
+    #encoder_output_for_decoder = bert_output.transpose(0,1) # bs * seq_len * h -> seq_len * bs * h
+    #encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
+
+    for i in range(args.max_seq_length):
+        decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device, temperature=args.temp) 
+        #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
+        #decoder_output: (bs, n_vocab)
+        #decoder_hidden[0]: (1, bs, hidden_size)
+
+        generated_expl[i] = decoder_output   
+        topv, topi = decoder_output.topk(1) 
+        decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
+
+    return generated_expl, target_expl_index
+
+def get_loss(generated_expl, target_expl_index):
+    loss_fct = torch.nn.CrossEntropyLoss()
+    generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
+    loss = loss_fct(generated_expl, target_expl_index)
+
+    return loss, generated_expl
+
+
 def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_model=None):
     '''
     train the encoder and decoder separately
@@ -130,9 +173,6 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
     for sentence in all_expl:
         sentence = normalize_sentence(sentence)
         decoder_lang.addSentence(sentence)
-    
-    MAX_LENGTH = args.max_seq_length
-    decoder_vocab_size = decoder_lang.n_words
 
     # initialize decoder
     decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
@@ -204,56 +244,13 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
             decoder.train()
             batch = tuple(t.to(args.device) for t in batch)
             
-            inputs = {'input_ids':      batch[0],
-                      'attention_mask': batch[1],
-                      'token_type_ids': batch[2]}
-            encoder_outputs = encoder(**inputs)
-            bert_output, bert_output_pooled = encoder_outputs[0], encoder_outputs[1] 
-            #return bert_output_pooled
-            #bert_output_pooled = get_encoder_output(batch, encoder)
-            expl_idx = batch[4]
-            batch_size = len(expl_idx)
-            
-            generated_expl = torch.zeros(MAX_LENGTH, batch_size, decoder_vocab_size).to(args.device)
-        
-            target_expl = [all_expl[i] for i in expl_idx]
-            target_expl_index = []
-            for line in target_expl:
-                sentence = normalize_sentence(line)
-                indexes = indexesFromSentence(decoder_lang, sentence)
-                indexes_padded = pad_seq(indexes, MAX_LENGTH)
-                target_expl_index.append(indexes_padded)
-
-            target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(args.device) 
-            #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size
-
-            decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
-            decoder_input = torch.LongTensor([CLS_token] * batch_size) # (bs)
-            
-            # for attn decoder
-            #encoder_output_for_decoder = bert_output.transpose(0,1) # bs * seq_len * h -> seq_len * bs * h
-            #encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
-
-            for i in range(MAX_LENGTH):
-                decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device, temperature=args.temp) 
-                #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
-                #decoder_output: (bs, n_vocab)
-                #decoder_hidden[0]: (1, bs, hidden_size)
-
-                generated_expl[i] = decoder_output   
-                topv, topi = decoder_output.topk(1) 
-                #decoder_input = topi.squeeze(1)
-                decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
-                #if args.teacher_force == False: 
-                    #break
-
-            loss_fct = torch.nn.CrossEntropyLoss()
-            generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
-            loss = loss_fct(generated_expl, target_expl_index)
+            bert_output_pooled = get_encoder_output(batch, encoder)
+            generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl)
+            loss, generated_expl = get_loss(generated_expl, target_expl_index)
             
             # sanity check on generated explanations
             generated_expl_index = get_index(generated_expl) 
-            if num_epoch % print_per == 0:
+            if num_epoch % print_per == 0 or num_epoch == args.num_train_epochs:
                 print('train generated expl', get_text(decoder_lang, generated_expl_index)) 
                 print('train target expl', get_text(decoder_lang, target_expl_index)) 
 
@@ -374,48 +371,16 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
 
             with torch.no_grad():
                 bert_output_pooled = get_encoder_output(batch, encoder)
-                
                 labels = batch[3]
-                expl_idx = batch[4]
-                batch_size = len(expl_idx)
-                decoder_vocab_size = decoder_lang.n_words
-                generated_expl = torch.zeros(args.max_seq_length, batch_size, decoder_vocab_size).to(args.device)
-                
-                target_expl = [all_expl[i] for i in expl_idx]
-                target_expl_index = []
-                for line in target_expl:
-                    sentence = normalize_sentence(line)
-                    indexes = indexesFromSentence(decoder_lang, sentence)
-                    indexes_padded = pad_seq(indexes, args.max_seq_length)
-                    target_expl_index.append(indexes_padded)
-
-                target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(args.device) 
-                decoder_hidden = bert_output_pooled.unsqueeze(0) 
-                decoder_input = torch.LongTensor([CLS_token] * batch_size) 
-                
-                # for attn decoder
-                #encoder_output_for_decoder = bert_output.transpose(0,1) # bs * seq_len * h -> seq_len * bs * h
-                #encoder_output_for_decoder = encoder_output_for_decoder.to(args.device)                 
-                
-                for i in range(args.max_seq_length):
-                    decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device, temperature=args.temp) 
-                    #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
-                    generated_expl[i] = decoder_output   
-                    topv, topi = decoder_output.topk(1) 
-                    decoder_input = topi.squeeze(1)
-                        
-                loss_fct = torch.nn.CrossEntropyLoss()
-                generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
-                tmp_eval_loss = loss_fct(generated_expl, target_expl_index)
+                generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl)
+                tmp_eval_loss, generated_expl = get_loss(generated_expl, target_expl_index)
                 
                 eval_loss += tmp_eval_loss.mean().item()
                 
             generated_expl_index = get_index(generated_expl) #(seq_len, bs) 
             generated_expl_text = get_text(decoder_lang, generated_expl_index) # a list (size = bs) of explanation texts
             target_expl_text = get_text(decoder_lang, target_expl_index)
-            
-            
-            
+
             nb_eval_steps += 1
             
             expl2label_inputs_data = expl_to_expl2label_input(generated_expl_text, args.max_seq_length, tokenizer,
@@ -617,15 +582,13 @@ def main():
                         help = 'cuda id if only one cuda is used')
     parser.add_argument('--eval_on_train', type=bool, default=False, const = True,nargs = '?', \
                         help = 'whether to eval on train')
-    parser.add_argument('--temp', type=float, default=0.5, \
+    parser.add_argument('--temp', type=float, default=1, \
                         help = 'softmax temperature')
     
     args = parser.parse_args()
     
     if args.expl:
         args.model_type = 'bert_expl_encoder'
-        #args.do_train = True 
-        #args.do_eval = True
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
