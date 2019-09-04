@@ -585,10 +585,10 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self._tie_or_clone_weights(self.vocab_projector,
                                    self.distilbert.embeddings.word_embeddings)
 
-    def forward(self, input_ids, attention_mask=None, masked_lm_labels=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, head_mask=None, masked_lm_labels=None):
         dlbrt_output = self.distilbert(input_ids=input_ids,
-                                    attention_mask=attention_mask,
-                                    head_mask=head_mask)
+                                       attention_mask=attention_mask,
+                                       head_mask=head_mask)
         hidden_states = dlbrt_output[0]                              # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)      # (bs, seq_length, dim)
         prediction_logits = gelu(prediction_logits)                  # (bs, seq_length, dim)
@@ -649,10 +649,10 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids,  attention_mask=None, labels=None, head_mask=None):
+    def forward(self, input_ids,  attention_mask=None, head_mask=None, labels=None):
         distilbert_output = self.distilbert(input_ids=input_ids,
-                                      attention_mask=attention_mask,
-                                      head_mask=head_mask)
+                                            attention_mask=attention_mask,
+                                            head_mask=head_mask)
         hidden_state = distilbert_output[0]                    # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]                    # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)   # (bs, dim)
@@ -723,10 +723,10 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.init_weights()
         
-    def forward(self, input_ids, attention_mask=None, start_positions=None, end_positions=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, head_mask=None, start_positions=None, end_positions=None):
         distilbert_output = self.distilbert(input_ids=input_ids,
-                                      attention_mask=attention_mask,
-                                      head_mask=head_mask)
+                                            attention_mask=attention_mask,
+                                            head_mask=head_mask)
         hidden_states = distilbert_output[0]                                 # (bs, max_query_len, dim)
 
         hidden_states = self.dropout(hidden_states)                       # (bs, max_query_len, dim)
