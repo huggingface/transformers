@@ -705,6 +705,8 @@ class XLMTokenizer(PreTrainedTokenizer):
             try:
                 if 'pythainlp' not in sys.modules:
                     from pythainlp.tokenize import word_tokenize as th_word_tokenize
+                else:
+                    th_word_tokenize = sys.modules['pythainlp'].word_tokenize
             except (AttributeError, ImportError) as e:
                 logger.error("Make sure you install PyThaiNLP (https://github.com/PyThaiNLP/pythainlp) with the following steps")
                 logger.error("1. pip install pythainlp")
@@ -714,6 +716,8 @@ class XLMTokenizer(PreTrainedTokenizer):
             try:
                 if 'jieba' not in sys.modules:
                     import jieba
+                else:
+                    jieba = sys.modules['jieba']
             except (AttributeError, ImportError) as e:
                 logger.error("Make sure you install Jieba (https://github.com/fxsjy/jieba) with the following steps")
                 logger.error("1. pip install jieba")
