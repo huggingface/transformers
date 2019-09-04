@@ -24,7 +24,8 @@ import shutil
 from pytorch_transformers import (GPT2Config, GPT2Model, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
                                   GPT2LMHeadModel, GPT2DoubleHeadsModel)
 
-from .modeling_common_test import CommonTestCases, ConfigTester, ids_tensor
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
 class GPT2ModelTest(CommonTestCases.CommonModelTester):

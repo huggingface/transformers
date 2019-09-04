@@ -9,6 +9,7 @@ import sys
 import json
 import logging
 import os
+import six
 import shutil
 import tempfile
 import fnmatch
@@ -49,6 +50,29 @@ PYTORCH_TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+if not six.PY2:
+    def add_start_docstrings(*docstr):
+        def docstring_decorator(fn):
+            fn.__doc__ = ''.join(docstr) + fn.__doc__
+            return fn
+        return docstring_decorator
+
+    def add_end_docstrings(*docstr):
+        def docstring_decorator(fn):
+            fn.__doc__ = fn.__doc__ + ''.join(docstr)
+            return fn
+        return docstring_decorator
+else:
+    # Not possible to update class docstrings on python2
+    def add_start_docstrings(*docstr):
+        def docstring_decorator(fn):
+            return fn
+        return docstring_decorator
+
+    def add_end_docstrings(*docstr):
+        def docstring_decorator(fn):
+            return fn
+        return docstring_decorator
 
 def url_to_filename(url, etag=None):
     """
