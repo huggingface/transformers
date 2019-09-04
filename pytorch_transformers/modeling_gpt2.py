@@ -30,19 +30,15 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import (Conv1D, CONFIG_NAME, WEIGHTS_NAME, PretrainedConfig,
-                             PreTrainedModel, prune_conv1d_layer, SequenceSummary,
-                             add_start_docstrings)
-from .modeling_bert import BertLayerNorm as LayerNorm
+from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
+from .configuration_gpt2 import GPT2Config
+from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-pytorch_model.bin",
                                      "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-pytorch_model.bin",
                                      "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-pytorch_model.bin"}
-GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
-                                      "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json",
-                                      "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-config.json"}
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     """ Load tf checkpoints in a pytorch model
@@ -100,120 +96,6 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 
 def gelu(x):
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-
-
-class GPT2Config(PretrainedConfig):
-    """Configuration class to store the configuration of a `GPT2Model`.
-
-    Args:
-        vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `GPT2Model` or a configuration json file.
-        n_positions: Number of positional embeddings.
-        n_ctx: Size of the causal mask (usually same as n_positions).
-        n_embd: Dimensionality of the embeddings and hidden states.
-        n_layer: Number of hidden layers in the Transformer encoder.
-        n_head: Number of attention heads for each attention layer in
-            the Transformer encoder.
-        layer_norm_epsilon: epsilon to use in the layer norm layers
-        resid_pdrop: The dropout probabilitiy for all fully connected
-            layers in the embeddings, encoder, and pooler.
-        attn_pdrop: The dropout ratio for the attention
-            probabilities.
-        embd_pdrop: The dropout ratio for the embeddings.
-        initializer_range: The sttdev of the truncated_normal_initializer for
-            initializing all weight matrices.
-    """
-    pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
-
-    def __init__(
-        self,
-        vocab_size_or_config_json_file=50257,
-        n_positions=1024,
-        n_ctx=1024,
-        n_embd=768,
-        n_layer=12,
-        n_head=12,
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-
-        num_labels=1,
-        summary_type='cls_index',
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
-        **kwargs
-    ):
-        """Constructs GPT2Config.
-
-        Args:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `GPT2Model` or a configuration json file.
-            n_positions: Number of positional embeddings.
-            n_ctx: Size of the causal mask (usually same as n_positions).
-            n_embd: Dimensionality of the embeddings and hidden states.
-            n_layer: Number of hidden layers in the Transformer encoder.
-            n_head: Number of attention heads for each attention layer in
-                the Transformer encoder.
-            layer_norm_epsilon: epsilon to use in the layer norm layers
-            resid_pdrop: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
-            attn_pdrop: The dropout ratio for the attention
-                probabilities.
-            embd_pdrop: The dropout ratio for the embeddings.
-            initializer_range: The sttdev of the truncated_normal_initializer for
-                initializing all weight matrices.
-        """
-        super(GPT2Config, self).__init__(**kwargs)
-
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.vocab_size = vocab_size_or_config_json_file
-            self.n_ctx = n_ctx
-            self.n_positions = n_positions
-            self.n_embd = n_embd
-            self.n_layer = n_layer
-            self.n_head = n_head
-            self.resid_pdrop = resid_pdrop
-            self.embd_pdrop = embd_pdrop
-            self.attn_pdrop = attn_pdrop
-            self.layer_norm_epsilon = layer_norm_epsilon
-            self.initializer_range = initializer_range
-
-            self.num_labels = num_labels
-            self.summary_type = summary_type
-            self.summary_use_proj = summary_use_proj
-            self.summary_activation = summary_activation
-            self.summary_first_dropout = summary_first_dropout
-            self.summary_proj_to_labels = summary_proj_to_labels
-        else:
-            raise ValueError(
-                "First argument must be either a vocabulary size (int)"
-                "or the path to a pretrained model config file (str)"
-            )
-
-    @property
-    def max_position_embeddings(self):
-        return self.n_positions
-
-    @property
-    def hidden_size(self):
-        return self.n_embd
-
-    @property
-    def num_attention_heads(self):
-        return self.n_head
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layer
-
 
 
 class Attention(nn.Module):
@@ -332,9 +214,9 @@ class Block(nn.Module):
     def __init__(self, n_ctx, config, scale=False):
         super(Block, self).__init__()
         nx = config.n_embd
-        self.ln_1 = LayerNorm(nx, eps=config.layer_norm_epsilon)
+        self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.attn = Attention(nx, n_ctx, config, scale)
-        self.ln_2 = LayerNorm(nx, eps=config.layer_norm_epsilon)
+        self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
     def forward(self, x, layer_past=None, head_mask=None):
@@ -370,7 +252,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if isinstance(module, (nn.Linear, Conv1D)) and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, LayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -458,7 +340,7 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
-        self.ln_f = LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+        self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.init_weights()
 
