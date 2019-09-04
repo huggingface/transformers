@@ -123,8 +123,8 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                                            token_labels, choice_labels):
             model = RobertaModel(config=config)
             model.eval()
-            sequence_output, pooled_output = model(input_ids, token_type_ids, input_mask)
-            sequence_output, pooled_output = model(input_ids, token_type_ids)
+            sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids)
 
             result = {
@@ -140,7 +140,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                                                    token_labels, choice_labels):
             model = RobertaForMaskedLM(config=config)
             model.eval()
-            loss, prediction_scores = model(input_ids, token_type_ids, input_mask, token_labels)
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,

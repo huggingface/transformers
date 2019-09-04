@@ -549,7 +549,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(hidden_states,
-                            past=layer_past,
+                            layer_past=layer_past,
                             attention_mask=attention_mask,
                             head_mask=head_mask[i])
 
@@ -666,7 +666,7 @@ the classification head takes as input the input of a specified classification t
 """, GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     r"""
-        **mc_token_ids**: ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
+        **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
             Index of the classification token in each input sequence.
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
