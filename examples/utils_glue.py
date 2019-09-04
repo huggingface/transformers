@@ -754,17 +754,20 @@ GLUE_TASKS_NUM_LABELS = {
 
 
 import torch
-CLS_token = 0 # in decoder language
-SEP_token = 1 # in decoder language
-PAD_token = 2
+# in decoder language:
+CLS_token = 0 
+SEP_token = 1 
+PAD_token = 2 
+UNK_token = 3
+
 MAX_LENGTH = 128
 class Lang:
     def __init__(self):
        #initialize containers to hold the words and corresponding index
         self.word2index = {}
         self.word2count = {}
-        self.index2word = {0: "CLS", 1: "SEP", 2: "PAD"}
-        self.n_words = 3  # Count CLS, SEP, and PAD
+        self.index2word = {0: "[CLS]", 1: "[SEP]", 2: "[PAD]", 3: "[UNK]"}
+        self.n_words = 4  # Count CLS, SEP, and PAD
 
     #split a sentence into words and add it to the container
     def addSentence(self, sentence):
@@ -781,6 +784,12 @@ class Lang:
             self.n_words += 1
         else:
             self.word2count[word] += 1
+            
+    def getIndex(self, word):
+        if word not in self.word2index:
+            return 3 #UNK
+        else:
+            return self.word2index[word]
 
     
 def normalize_sentence(sentence):
@@ -789,7 +798,7 @@ def normalize_sentence(sentence):
     return sentence
 
 def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
+    return [lang.getIndex(word) for word in sentence.split(' ')]
 
 def tensorFromSentence(lang, sentence):
     indexes = indexesFromSentence(lang, sentence)

@@ -78,6 +78,7 @@ CLS_token = 0 # in decoder language
 SEP_token = 1 # in decoder language
 PAD_token = 2 # in decoder language
 hidden_size = 100 # the hidden_size for decoder. change to 768 and get rid of resize once working on the whole dataset
+print_per = 50
 
 
 def set_seed(args):
@@ -192,7 +193,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
     for _ in train_iterator:
         num_epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        if num_epoch % 10 == 0:
+        if num_epoch % print_per == 0:
             print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
             if global_step!=0: print('average loss: ', tr_loss/global_step)
         epoch_loss = 0 
@@ -252,7 +253,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
             
             # sanity check on generated explanations
             generated_expl_index = get_index(generated_expl) 
-            if num_epoch % 10 == 0:
+            if num_epoch % print_per == 0:
                 print('train generated expl', get_text(decoder_lang, generated_expl_index)) 
                 print('train target expl', get_text(decoder_lang, target_expl_index)) 
 
@@ -292,7 +293,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
                 decoder.zero_grad()
                 global_step += 1
                 
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and num_epoch % 10 == 0:
+                if args.local_rank in [-1, 0] and args.logging_steps > 0 and num_epoch % print_per == 0:
                     # Log metrics
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tokenizer) #TODO: param expl2label_model
