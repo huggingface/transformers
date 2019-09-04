@@ -22,14 +22,11 @@ import logging
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from pytorch_transformers.modeling_bert import (BertConfig, BertEmbeddings,
-                                                BertLayerNorm, BertModel,
-                                                BertPreTrainedModel, gelu)
-
-from pytorch_transformers.modeling_utils import add_start_docstrings
+from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
+from .configuration_roberta import RobertaConfig
+from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +35,6 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-pytorch_model.bin",
     'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-pytorch_model.bin",
 }
-
-ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-config.json",
-    'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-config.json",
-    'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-config.json",
-}
-
 
 class RobertaEmbeddings(BertEmbeddings):
     """
@@ -64,10 +54,6 @@ class RobertaEmbeddings(BertEmbeddings):
         return super(RobertaEmbeddings, self).forward(input_ids,
                                                       token_type_ids=token_type_ids,
                                                       position_ids=position_ids)
-
-
-class RobertaConfig(BertConfig):
-    pretrained_config_archive_map = ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 
 ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
