@@ -18,6 +18,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import logging
 import os
+import re
 import json
 import six
 import copy
@@ -609,12 +610,22 @@ class PreTrainedTokenizer(object):
 
         return added_tokens
 
-    def tokenize(self, text, **kwargs):
+    def tokenize(self, text, split_additional_on_word_boundaries=False, **kwargs):
         """ Converts a string in a sequence of tokens (string), using the tokenizer.
             Split in words for word-based vocabulary or sub-words for sub-word-based
             vocabularies (BPE/SentencePieces/WordPieces).
 
             Take care of added tokens.
+            
+            Args:
+                split_additional_on_word_boundaries: (`optional`) boolean, default False:
+                    When splitting text with additional tokens, try to split only at word
+                    boundaries ([^A-Za-z0-9_] in regular expression). Otherwise when an 
+                    additional token is part of a preexisting token, for example "ht" is 
+                    part of "light", then the preexisting token will be split into halves
+                    ("light" => ["lig", ""]), which is undesirable. When the language has 
+                    no or different word boundaries as above (such as Chinese or Japanese), 
+                    this argument should remain False.
         """
         def lowercase_text(t):
             # convert non-special tokens to lowercase
@@ -631,7 +642,10 @@ class PreTrainedTokenizer(object):
 
         def split_on_token(tok, text):
             result = []
-            split_text = text.split(tok)
+            if split_additional_on_word_boundaries:
+                split_text = re.split(r'\b%s\b' %tok, text)
+            else:
+                split_text = text.split(tok)
             for i, sub_text in enumerate(split_text):
                 sub_text = sub_text.strip()
                 if i == 0 and not sub_text:
