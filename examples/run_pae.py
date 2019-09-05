@@ -130,7 +130,10 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
 
     return generated_expl, target_expl_index
 
-def get_loss(generated_expl, target_expl_index):
+def get_loss(generated_expl, target_expl_index): 
+    '''
+    explanation loss
+    '''
     loss_fct = torch.nn.CrossEntropyLoss()
     generated_expl = generated_expl.transpose(1, 2) # (output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
     loss = loss_fct(generated_expl, target_expl_index)
