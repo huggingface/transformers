@@ -1,4 +1,15 @@
 __version__ = "1.2.0"
+# Work around to update TensorFlow's absl.logging threshold which alters the
+# default Python logging output behavior when present.
+# see: https://github.com/abseil/abseil-py/issues/99
+# and: https://github.com/tensorflow/tensorflow/issues/26691#issuecomment-500369493
+try:
+    import absl.logging
+    absl.logging.set_verbosity('info')
+    absl.logging.set_stderrthreshold('info')
+    absl.logging._warn_preinit_stderr = False
+except:
+    pass
 
 # Tokenizer
 from .tokenization_utils import (PreTrainedTokenizer)
