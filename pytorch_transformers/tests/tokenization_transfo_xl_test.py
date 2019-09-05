@@ -46,7 +46,8 @@ class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = TransfoXLTokenizer(vocab_file=self.vocab_file, lower_case=True)
+        tokenizer_vocab = TransfoXLTokenizer.vocab_class.from_pretrained(self.vocab_file)
+        tokenizer = TransfoXLTokenizer(tokenizer_vocab, lower_case=True)
 
         tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
@@ -55,14 +56,14 @@ class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
             tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
 
     def test_full_tokenizer_lower(self):
-        tokenizer = TransfoXLTokenizer(lower_case=True)
+        tokenizer = TransfoXLTokenizer(TransfoXLTokenizer.vocab_class.empty(), lower_case=True)
 
         self.assertListEqual(
             tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
             ["hello", "!", "how", "are", "you", "?"])
 
     def test_full_tokenizer_no_lower(self):
-        tokenizer = TransfoXLTokenizer(lower_case=False)
+        tokenizer = TransfoXLTokenizer(TransfoXLTokenizer.vocab_class.empty(), lower_case=False)
 
         self.assertListEqual(
             tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),

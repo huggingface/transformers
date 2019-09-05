@@ -104,7 +104,7 @@ class XLMTokenizerVocab(PreTrainedTokenizerVocab):
 
         return cls(
             json.load(open(vocab_file, encoding="utf-8")),
-            [tuple(merge.split()) for merge in open(merges_file, encoding='utf-8').read().split('\n')[1:-1]]
+            [tuple(merge.split()[:2]) for merge in open(merges_file, encoding='utf-8').read().split('\n')[:-1]]
         )
 
 class XLMTokenizer(PreTrainedTokenizer):

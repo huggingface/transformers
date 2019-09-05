@@ -55,7 +55,8 @@ class OpenAIGPTTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
 
     def test_full_tokenizer(self):
-        tokenizer = OpenAIGPTTokenizer(self.vocab_file, self.merges_file)
+        tokenizer_vocab = OpenAIGPTTokenizer.vocab_class.from_pretrained(self.vocab_file, self.merges_file)
+        tokenizer = OpenAIGPTTokenizer(tokenizer_vocab)
 
         text = "lower"
         bpe_tokens = ["low", "er</w>"]

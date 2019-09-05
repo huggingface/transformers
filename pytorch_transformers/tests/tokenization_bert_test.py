@@ -50,7 +50,8 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file)
+        tokenizer_vocab = self.tokenizer_class.vocab_class.from_pretrained(self.vocab_file)
+        tokenizer = self.tokenizer_class(tokenizer_vocab)
 
         tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])

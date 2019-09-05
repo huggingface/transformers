@@ -142,7 +142,7 @@ class BertTokenizer(PreTrainedTokenizer):
         if not isinstance(vocabs, BertTokenizerVocab):
             raise ValueError(
                 "vocab_or_filepath should be instance of BertTokenizerVocab "
-                "or str (got: {})".format(type(vocabs).__name__)
+                "(got: {})".format(type(vocabs).__name__)
             )
         else:
             self.vocabs = vocabs

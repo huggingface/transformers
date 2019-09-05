@@ -54,7 +54,8 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     def test_full_tokenizer(self):
         """ Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt """
-        tokenizer = XLMTokenizer(self.vocab_file, self.merges_file)
+        tokenizer_vocab = XLMTokenizer.vocab_class.from_pretrained(self.vocab_file, self.merges_file)
+        tokenizer = XLMTokenizer(tokenizer_vocab)
 
         text = "lower"
         bpe_tokens = ["low", "er</w>"]

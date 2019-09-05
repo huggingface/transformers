@@ -52,8 +52,10 @@ SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
 class XLNetTokenizerVocab(PreTrainedTokenizerVocab):
-    def __init__(self, vocabs):
+    def __init__(self, vocabs, vocab_file):
         super(XLNetTokenizerVocab, self).__init__(vocabs, None)
+
+        self.vocab_file = vocab_file
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
@@ -66,7 +68,7 @@ class XLNetTokenizerVocab(PreTrainedTokenizerVocab):
         sp_model = spm.SentencePieceProcessor()
         sp_model.Load(vocab_file)
 
-        return cls(sp_model)
+        return cls(sp_model, vocab_file)
 
 class XLNetTokenizer(PreTrainedTokenizer):
     """
@@ -108,15 +110,15 @@ class XLNetTokenizer(PreTrainedTokenizer):
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
+        state["vocabs"] = self.vocabs.vocab_file
         return state
 
     def __setstate__(self, d):
         self.__dict__ = d
 
         # TODO : Why reloading the processor here, can we share the same underlying instance ?
-        # self.vocab = XLNetTokenizerVocab.from_pretrained()
-        # self.sp_model = spm.SentencePieceProcessor()
-        # self.sp_model.Load(self.vocab_file)
+        self.vocabs = XLNetTokenizerVocab.from_pretrained(self.vocabs)
+        self.sp_model = self.vocabs.vocab
 
     def preprocess_text(self, inputs):
         if self.remove_space:
@@ -218,7 +220,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
             return
         out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES['vocab_file'])
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
+        if self.vocabs.vocab_file and os.path.abspath(self.vocabs.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocabs.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)

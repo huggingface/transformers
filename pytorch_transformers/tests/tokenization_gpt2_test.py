@@ -53,7 +53,8 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = GPT2Tokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer_vocab = GPT2Tokenizer.vocab_class.from_pretrained(self.vocab_file, self.merges_file)
+        tokenizer = GPT2Tokenizer(tokenizer_vocab, **self.special_tokens_map)
         text = "lower"
         bpe_tokens = ["low", "er"]
         tokens = tokenizer.tokenize(text)

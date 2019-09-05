@@ -32,7 +32,8 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
         super(XLNetTokenizationTest, self).setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer_vocab = XLNetTokenizer.vocab_class.from_pretrained(SAMPLE_VOCAB)
+        tokenizer = XLNetTokenizer(tokenizer_vocab, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self):
@@ -45,7 +46,8 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
 
     def test_full_tokenizer(self):
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer_vocab = XLNetTokenizer.vocab_class.from_pretrained(SAMPLE_VOCAB)
+        tokenizer = XLNetTokenizer(tokenizer_vocab, keep_accents=True)
 
         tokens = tokenizer.tokenize(u'This is a test')
         self.assertListEqual(tokens, [u'▁This', u'▁is', u'▁a', u'▁t', u'est'])
@@ -73,7 +75,8 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
                                         u'<unk>', u'.'])
 
     def test_tokenizer_lower(self):
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=True)
+        tokenizer_vocab = XLNetTokenizer.vocab_class.from_pretrained(SAMPLE_VOCAB)
+        tokenizer = XLNetTokenizer(tokenizer_vocab, do_lower_case=True)
         tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
         self.assertListEqual(tokens, [SPIECE_UNDERLINE + u'', u'i', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
                                       u'or', u'n', SPIECE_UNDERLINE + u'in', SPIECE_UNDERLINE + u'',
@@ -82,7 +85,8 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(tokenizer.tokenize(u"H\u00E9llo"), [u"▁he", u"ll", u"o"])
 
     def test_tokenizer_no_lower(self):
-        tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=False)
+        tokenizer_vocab = XLNetTokenizer.vocab_class.from_pretrained(SAMPLE_VOCAB)
+        tokenizer = XLNetTokenizer(tokenizer_vocab, do_lower_case=False)
         tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
         self.assertListEqual(tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b', u'or',
                                       u'n', SPIECE_UNDERLINE + u'in', SPIECE_UNDERLINE + u'',

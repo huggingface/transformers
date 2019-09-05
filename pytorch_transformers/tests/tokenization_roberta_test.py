@@ -52,7 +52,8 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = RobertaTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer_vocab = RobertaTokenizer.vocab_class.from_pretrained(self.vocab_file, self.merges_file)
+        tokenizer = RobertaTokenizer(tokenizer_vocab, **self.special_tokens_map)
         text = "lower"
         bpe_tokens = ["low", "er"]
         tokens = tokenizer.tokenize(text)

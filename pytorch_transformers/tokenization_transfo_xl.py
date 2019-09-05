@@ -60,9 +60,21 @@ CORPUS_NAME = 'corpus.bin'
 
 class TransfoXLTokenizerVocab(PreTrainedTokenizerVocab):
 
+    @staticmethod
+    def read_tokenizer_symbols(vocab_file):
+        with open(vocab_file, 'r', encoding='utf-8') as f:
+            return [line.strip().split()[0] for line in f]
+
     @classmethod
-    def from_pretrained(cls, vocab_file, merges_file=None):
-        pass
+    def from_pretrained(cls, vocab_file, pretrained_vocab_file=None):
+        return cls(
+            TransfoXLTokenizerVocab.read_tokenizer_symbols(vocab_file) if vocab_file else None,
+            torch.load(pretrained_vocab_file) if pretrained_vocab_file else None
+        )
+
+    @classmethod
+    def empty(cls):
+        return cls(None, None)
 
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
@@ -75,8 +87,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     vocab_class = TransfoXLTokenizerVocab
 
-    def __init__(self, special=None, min_freq=0, max_size=None, lower_case=False,
-                 delimiter=None, vocab_file=None, pretrained_vocab_file=None,
+    def __init__(self, vocabs, special=None, min_freq=0,
+                 max_size=None, lower_case=False, delimiter=None,
                  never_split=None, unk_token="<unk>", eos_token="<eos>",
                  additional_special_tokens=["<formula>"], **kwargs):
         super(TransfoXLTokenizer, self).__init__(unk_token=unk_token, eos_token=eos_token,
@@ -96,17 +108,17 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.max_size = max_size
         self.lower_case = lower_case
         self.delimiter = delimiter
-        self.vocab_file = vocab_file
+        self.vocabs = vocabs
         self.never_split = never_split
 
-        if pretrained_vocab_file is not None:
+        if vocabs.merges is not None:
             # Hack because, honestly this tokenizer was not made to be used
             # in a library like ours, at all.
-            vocab_dict = torch.load(pretrained_vocab_file)
-            for key, value in vocab_dict.items():
+            # vocab_dict = torch.load(pretrained_vocab_file)
+            for key, value in vocabs.merges.items():
                 self.__dict__[key] = value
 
-        if vocab_file is not None:
+        if vocabs.vocab is not None:
             self.build_vocab()
 
     def count_file(self, path, verbose=False, add_eos=False):
@@ -134,14 +146,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 logger.info('    line {}'.format(idx))
             self.counter.update(symbols)
 
-    def _build_from_file(self, vocab_file):
+    def _build_from_stored_vocabulary(self, vocab):
         self.idx2sym = []
         self.sym2idx = OrderedDict()
 
-        with open(vocab_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                symb = line.strip().split()[0]
-                self.add_symbol(symb)
+        for symbol in vocab:
+            self.add_symbol(symbol)
         if '<UNK>' in self.sym2idx:
             self.unk_idx = self.sym2idx['<UNK>']
         elif '<unk>' in self.sym2idx:
@@ -157,9 +167,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
     def build_vocab(self):
-        if self.vocab_file:
-            logger.info('building vocab from {}'.format(self.vocab_file))
-            self._build_from_file(self.vocab_file)
+        if self.vocabs.vocab:
+            logger.info('building vocab from saved vocabulary')
+            self._build_from_stored_vocabulary(self.vocabs.vocab)
             logger.info('final vocab size {}'.format(len(self)))
         else:
             logger.info('building vocab with min_freq={}, max_size={}'.format(
