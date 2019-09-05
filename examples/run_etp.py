@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet)."""
+""" Explain Then Predict """
 
 from __future__ import absolute_import, division, print_function
 
@@ -240,12 +240,13 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
         for step, batch in enumerate(epoch_iterator):
             if num_epoch <= 3 and args.freeze:
                 encoder.train()
-                
             decoder.train()
+            
             batch = tuple(t.to(args.device) for t in batch)
             
             bert_output_pooled = get_encoder_output(batch, encoder)
-            generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl)
+            generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, \
+                                                                   decoder_lang, all_expl)
             loss, generated_expl = get_loss(generated_expl, target_expl_index)
             
             # sanity check on generated explanations
@@ -372,7 +373,8 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
             with torch.no_grad():
                 bert_output_pooled = get_encoder_output(batch, encoder)
                 labels = batch[3]
-                generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl)
+                generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, \
+                                                                       decoder_lang, all_expl)
                 tmp_eval_loss, generated_expl = get_loss(generated_expl, target_expl_index)
                 
                 eval_loss += tmp_eval_loss.mean().item()
