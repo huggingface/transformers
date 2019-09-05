@@ -1,4 +1,5 @@
 __version__ = "1.2.0"
+
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
 # see: https://github.com/abseil/abseil-py/issues/99
@@ -10,6 +11,10 @@ try:
     absl.logging._warn_preinit_stderr = False
 except:
     pass
+
+import logging
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # Tokenizer
 from .tokenization_utils import (PreTrainedTokenizer)
@@ -36,38 +41,63 @@ from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCH
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # Modeling
-from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
-from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
-                            AutoModelWithLMHead)
+try:
+    import torch
+    torch_available = True  # pylint: disable=invalid-name
+except ImportError:
+    torch_available = False  # pylint: disable=invalid-name
 
-from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
-                            BertForMaskedLM, BertForNextSentencePrediction,
-                            BertForSequenceClassification, BertForMultipleChoice,
-                            BertForTokenClassification, BertForQuestionAnswering,
-                            load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
-                              OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
-                              load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_transfo_xl import (TransfoXLPreTrainedModel, TransfoXLModel, TransfoXLLMHeadModel,
-                                  load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_gpt2 import (GPT2PreTrainedModel, GPT2Model,
-                            GPT2LMHeadModel, GPT2DoubleHeadsModel,
-                            load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
-                             XLNetForSequenceClassification, XLNetForQuestionAnswering,
-                             load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
-                           XLMWithLMHeadModel, XLMForSequenceClassification,
-                           XLMForQuestionAnswering, XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_roberta import (RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
-                               ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
-from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
-                               DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
-                               DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+if torch_available:
+    logger.info("PyTorch version {} available.".format(torch.__version__))
 
-# Optimization
-from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
-                           WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
+    from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
+    from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
+                                AutoModelWithLMHead)
+
+    from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
+                                BertForMaskedLM, BertForNextSentencePrediction,
+                                BertForSequenceClassification, BertForMultipleChoice,
+                                BertForTokenClassification, BertForQuestionAnswering,
+                                load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
+                                OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
+                                load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_transfo_xl import (TransfoXLPreTrainedModel, TransfoXLModel, TransfoXLLMHeadModel,
+                                    load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_gpt2 import (GPT2PreTrainedModel, GPT2Model,
+                                GPT2LMHeadModel, GPT2DoubleHeadsModel,
+                                load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
+                                XLNetForSequenceClassification, XLNetForQuestionAnswering,
+                                load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
+                            XLMWithLMHeadModel, XLMForSequenceClassification,
+                            XLMForQuestionAnswering, XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_roberta import (RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
+                                ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
+                                DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
+                                DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    # Optimization
+    from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
+                               WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
+
+
+# TensorFlow
+try:
+    import tensorflow as tf
+    tf_available = True  # pylint: disable=invalid-name
+except ImportError:
+    tf_available = False  # pylint: disable=invalid-name
+
+if tf_available:
+    logger.info("TensorFlow version {} available.".format(tf.__version__))
+
+    from .modeling_tf_utils import TFPreTrainedModel
+    from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertModel, TFBertForPreTraining,
+                                TFBertForMaskedLM, TFBertForNextSentencePrediction, load_pt_weights_in_bert)
+
 
 # Files and general utilities
 from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
