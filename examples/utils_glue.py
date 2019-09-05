@@ -759,15 +759,20 @@ CLS_token = 0
 SEP_token = 1 
 PAD_token = 2 
 UNK_token = 3
+entailment_token = 4
+contradiction_token = 5
+neutral_token = 6
 
 MAX_LENGTH = 128
 class Lang:
-    def __init__(self):
+    def __init__(self, min_freq=10):
        #initialize containers to hold the words and corresponding index
         self.word2index = {}
         self.word2count = {}
-        self.index2word = {0: "[CLS]", 1: "[SEP]", 2: "[PAD]", 3: "[UNK]"}
-        self.n_words = 4  # Count CLS, SEP, and PAD
+        self.index2word = {0: "[CLS]", 1: "[SEP]", 2: "[PAD]", 3: "[UNK]", \
+                           4: "[ENTAIL]", 5: "[CONTRADICT]", 6: "[NEUTRAL]"}
+        self.n_words = 7  # Count CLS, SEP, and PAD
+        self.min_freq = min_freq
 
     #split a sentence into words and add it to the container
     def addSentence(self, sentence):
@@ -786,11 +791,26 @@ class Lang:
             self.word2count[word] += 1
             
     def getIndex(self, word):
-        if word not in self.word2index:
+        if word not in self.word2index or self.word2count[word] < self.min_freq:
             return 3 #UNK
         else:
             return self.word2index[word]
-
+    '''    
+    def rare2UNK(self, min_freq=10):
+        words = list(self.word2index.keys())
+        words = words.copy()
+        for word in words:
+            count = self.word2count[word]
+            if count < min_freq:
+                index = self.getIndex(word)
+                if index > 6:
+                    #del that word
+                    self.word2index.pop(word)
+                    self.word2count.pop(word)
+                    self.index2word.pop(index)
+                    self.n_words -= 1
+                    '''
+    
     
 def normalize_sentence(sentence):
     sentence = sentence.lower()

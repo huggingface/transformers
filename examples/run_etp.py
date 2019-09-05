@@ -169,11 +169,13 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     # prepare decoder word2index
-    decoder_lang = Lang()
+    decoder_lang = Lang(args.min_freq)
     for sentence in all_expl:
         sentence = normalize_sentence(sentence)
         decoder_lang.addSentence(sentence)
-
+        
+    #decoder_lang.rare2UNK(args.min_freq)
+    
     # initialize decoder
     decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
     #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
@@ -586,6 +588,8 @@ def main():
                         help = 'whether to eval on train')
     parser.add_argument('--temp', type=float, default=1, \
                         help = 'softmax temperature')
+    parser.add_argument('--min_freq', type=int, default=10, \
+                        help = 'min freq required for a word to be in decoder dictionary')
     
     args = parser.parse_args()
     
