@@ -17,9 +17,15 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
+import pytest
 
-from pytorch_transformers import (DistilBertConfig, DistilBertModel, DistilBertForMaskedLM,
-                                  DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
+from pytorch_transformers import is_torch_available
+
+try:
+    from pytorch_transformers import (DistilBertConfig, DistilBertModel, DistilBertForMaskedLM,
+                                    DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -28,7 +34,7 @@ from .configuration_common_test import ConfigTester
 class DistilBertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (DistilBertModel, DistilBertForMaskedLM, DistilBertForQuestionAnswering,
-                         DistilBertForSequenceClassification)
+                         DistilBertForSequenceClassification) if is_torch_available() else None
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True

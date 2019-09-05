@@ -25,12 +25,16 @@ import uuid
 
 import unittest
 import logging
+import pytest
 
-import torch
+try:
+    import torch
 
-from pytorch_transformers import (PretrainedConfig, PreTrainedModel,
-                                  BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                  GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from pytorch_transformers import (PretrainedConfig, PreTrainedModel,
+                                    BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+                                    GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 
 def _config_zero_init(config):
