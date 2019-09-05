@@ -24,7 +24,8 @@ import torch
 from pytorch_transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification)
 from pytorch_transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
 class RobertaModelTest(CommonTestCases.CommonModelTester):

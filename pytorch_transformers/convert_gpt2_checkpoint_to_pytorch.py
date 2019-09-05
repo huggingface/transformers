@@ -21,7 +21,7 @@ from io import open
 
 import torch
 
-from pytorch_transformers.modeling_gpt2 import (CONFIG_NAME, WEIGHTS_NAME,
+from pytorch_transformers import (CONFIG_NAME, WEIGHTS_NAME,
                                                      GPT2Config,
                                                      GPT2Model,
                                                      load_tf_weights_in_gpt2)

@@ -17,14 +17,12 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
-import pytest
 
 from pytorch_transformers import (DistilBertConfig, DistilBertModel, DistilBertForMaskedLM,
                                   DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
-from pytorch_transformers.modeling_distilbert import DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
 class DistilBertModelTest(CommonTestCases.CommonModelTester):
