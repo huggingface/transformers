@@ -48,6 +48,10 @@ except (AttributeError, ImportError):
 
 PYTORCH_TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward compatibility
 
+WEIGHTS_NAME = "pytorch_model.bin"
+TF_WEIGHTS_NAME = 'model.ckpt'
+CONFIG_NAME = "config.json"
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 if not six.PY2:
