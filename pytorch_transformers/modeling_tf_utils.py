@@ -170,9 +170,6 @@ class TFPreTrainedModel(tf.keras.Model):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
 
-            output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
-
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
@@ -195,7 +192,6 @@ class TFPreTrainedModel(tf.keras.Model):
         from_pt = kwargs.pop('from_pt', False)
         force_download = kwargs.pop('force_download', False)
         proxies = kwargs.pop('proxies', None)
-        output_loading_info = kwargs.pop('output_loading_info', False)
 
         # Load config
         if config is None:
@@ -257,12 +253,5 @@ class TFPreTrainedModel(tf.keras.Model):
         model.load_weights(resolved_archive_file, by_name=True)
 
         ret = model(inputs, training=False)  # Make sure restore ops are run
-
-        # if hasattr(model, 'tie_weights'):
-        #     model.tie_weights()  # TODO make sure word embedding weights are still tied
-
-        if output_loading_info:
-            loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys, "error_msgs": error_msgs}
-            return model, loading_info
 
         return model
