@@ -22,6 +22,7 @@ from io import open
 from pytorch_transformers import is_torch_available
 
 try:
+    import torch
     from pytorch_transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
 except ImportError:
     pytestmark = pytest.mark.skip("Require Torch")  # TODO: untangle Transfo-XL tokenizer from torch.load and torch.save
