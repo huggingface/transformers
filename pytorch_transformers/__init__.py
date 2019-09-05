@@ -24,7 +24,7 @@ from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 
 # Configurations
-from .configuration_utils import CONFIG_NAME, PretrainedConfig
+from .configuration_utils import PretrainedConfig
 from .configuration_auto import AutoConfig
 from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -36,7 +36,7 @@ from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCH
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # Modeling
-from .modeling_utils import (WEIGHTS_NAME, TF_WEIGHTS_NAME, PreTrainedModel, prune_layer, Conv1D)
+from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
 from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
                             AutoModelWithLMHead)
 
@@ -70,4 +70,6 @@ from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, Wa
                            WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
 
 # Files and general utilities
-from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE, cached_path, add_start_docstrings, add_end_docstrings)
+from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
+                         cached_path, add_start_docstrings, add_end_docstrings,
+                         WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME)
