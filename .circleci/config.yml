@@ -11,6 +11,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo pip install tensorflow==2.0.0-rc0
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
             - run: codecov
@@ -24,6 +25,7 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install tensorflow==2.0.0-rc0
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: codecov
     deploy_doc:
