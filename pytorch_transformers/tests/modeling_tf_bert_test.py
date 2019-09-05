@@ -287,48 +287,48 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_bert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_model(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_multiple_choice(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_next_sequence_prediction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_next_sequence_prediction(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_pretraining(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_question_answering(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_sequence_classification(*config_and_inputs)
 
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
 
     @pytest.mark.slow
-    @pytest.mark.skipif('tf' not in sys.modules, reason="requires TensorFlow")
+    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
