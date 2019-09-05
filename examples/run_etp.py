@@ -45,7 +45,7 @@ from utils_glue import (compute_metrics, convert_examples_to_features,
                         output_modes, processors, 
                         Lang, normalize_sentence,
                         tensorFromSentence, pad_seq, 
-                        indexesFromSentence, get_text, 
+                        indicesFromSentence, get_text, 
                         get_index, expl_to_expl2label_input)
 
 import sys
@@ -107,9 +107,9 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
     target_expl_index = []
     for line in target_expl:
         sentence = normalize_sentence(line)
-        indexes = indexesFromSentence(decoder_lang, sentence)
-        indexes_padded = pad_seq(indexes, args.max_seq_length)
-        target_expl_index.append(indexes_padded)
+        indices = indicesFromSentence(decoder_lang, sentence, args.max_seq_length)
+        indices_padded = pad_seq(indices, args.max_seq_length)
+        target_expl_index.append(indices_padded)
 
     target_expl_index = torch.LongTensor(target_expl_index).transpose(0, 1).to(args.device) 
     #(output_seq_len, bs), where each value is an int between 0 and decode_lang_vocab_size

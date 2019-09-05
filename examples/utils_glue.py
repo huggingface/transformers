@@ -817,8 +817,11 @@ def normalize_sentence(sentence):
     sentence = sentence.replace('[^A-Za-z\s]+', '')
     return sentence
 
-def indexesFromSentence(lang, sentence):
-    return [lang.getIndex(word) for word in sentence.split(' ')]
+def indicesFromSentence(lang, sentence, max_seq_len):
+    indices = [lang.getIndex(word) for word in sentence.split(' ')]
+    if len(indices) > max_seq_len:
+        return indices[:max_seq_len]
+    return indices
 
 def tensorFromSentence(lang, sentence):
     indexes = indexesFromSentence(lang, sentence)
