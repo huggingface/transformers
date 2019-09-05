@@ -24,11 +24,9 @@ import logging
 import os
 from io import open
 
-from .file_utils import cached_path
+from .file_utils import cached_path, CONFIG_NAME
 
 logger = logging.getLogger(__name__)
-
-CONFIG_NAME = "config.json"
 
 class PretrainedConfig(object):
     r""" Base class for all configuration classes.
