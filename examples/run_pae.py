@@ -33,7 +33,8 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
-                                  BertForESNLI, DecoderRNN, BertModel, AttnDecoderRNN,
+                                  BertForESNLI, DecoderRNN, BertModel, 
+                                  AttnDecoderRNN, LabelAndExplDecoderRNN,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
@@ -98,7 +99,8 @@ def get_encoder_output(batch, encoder):
     return bert_output_pooled
 
 
-def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl):
+def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl, mode=None):
+    labels = batch[3]
     expl_idx = batch[4]
     batch_size = len(expl_idx)
     generated_expl = torch.zeros(args.max_seq_length, batch_size, decoder_lang.n_words).to(args.device)
@@ -107,7 +109,7 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
     target_expl_index = []
     for line in target_expl:
         sentence = normalize_sentence(line)
-        indices = indicesFromSentence(decoder_lang, sentence)
+        indices = indicesFromSentence(decoder_lang, sentence, args.max_seq_length)
         indices_padded = pad_seq(indices, args.max_seq_length)
         target_expl_index.append(indices_padded)
 
@@ -117,13 +119,8 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
     decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
     decoder_input = torch.LongTensor([CLS_token] * batch_size) # (bs)
 
-    # for attn decoder
-    #encoder_output_for_decoder = bert_output.transpose(0,1) # bs * seq_len * h -> seq_len * bs * h
-    #encoder_output_for_decoder = encoder_output_for_decoder.to(args.device) 
-
     for i in range(args.max_seq_length):
-        decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, device=args.device, temperature=args.temp) 
-        #decoder_output, decoder_hidden, attn_weights = decoder(decoder_input, decoder_hidden, encoder_output_for_decoder) 
+        decoder_output, decoder_hidden, label_prediction = decoder(decoder_input, decoder_hidden, labels, mode, decoder_lang, i, device=args.device, temperature=args.temp) 
         #decoder_output: (bs, n_vocab)
         #decoder_hidden[0]: (1, bs, hidden_size)
 
@@ -177,8 +174,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
     #decoder_lang.rare2UNK(args.min_freq)
     
     # initialize decoder
-    decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
-    #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    decoder = LabelAndExplDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
     
     # prepare optimizers
     no_decay = ['bias', 'LayerNorm.weight']
@@ -248,7 +244,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl, expl2label_
             
             bert_output_pooled = get_encoder_output(batch, encoder)
             generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, \
-                                                                   decoder_lang, all_expl)
+                                                                   decoder_lang, all_expl, mode='train')
             loss, generated_expl = get_loss(generated_expl, target_expl_index)
             
             # sanity check on generated explanations
@@ -376,7 +372,7 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, expl2label_model, tok
                 bert_output_pooled = get_encoder_output(batch, encoder)
                 labels = batch[3]
                 generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, \
-                                                                       decoder_lang, all_expl)
+                                                                       decoder_lang, all_expl, mode='eval')
                 tmp_eval_loss, generated_expl = get_loss(generated_expl, target_expl_index)
                 
                 eval_loss += tmp_eval_loss.mean().item()
@@ -730,8 +726,7 @@ def main():
             # use pickle to load decoder_lang
             filehandler = open(dir1+'decoder_lang.obj', 'rb') 
             decoder_lang = pickle.load(filehandler)
-            decoder = DecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
-            #decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+            decoder = LabelAndExplDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
             decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
 
         encoder.to(args.device)

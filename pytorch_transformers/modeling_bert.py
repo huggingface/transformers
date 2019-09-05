@@ -28,7 +28,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
+from .modeling_utils import (WEIGHTS_NAME, CONFIG_NAME, PretrainedConfig, PreTrainedModel,
                              prune_linear_layer, add_start_docstrings)
 
 logger = logging.getLogger(__name__)
@@ -222,7 +222,7 @@ class BertConfig(PretrainedConfig):
 
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
-except (ImportError, AttributeError) as e:
+except ImportError:
     logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
     class BertLayerNorm(nn.Module):
         def __init__(self, hidden_size, eps=1e-12):
@@ -603,17 +603,17 @@ BERT_INPUTS_DOCSTRING = r"""
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Selected in the range ``[0, config.max_position_embeddings - 1[``.
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
             (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -850,7 +850,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
 
-        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention is they are here
         if masked_lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
@@ -1020,12 +1020,12 @@ class BertForMultipleChoice(BertPreTrainedModel):
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
             (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
+        **attention_mask**: (`optional`) ``torch.Tensor`` of shape ``(batch_size, num_choices, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             The second dimension of the input (`num_choices`) indicates the number of choices to score.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``torch.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -1103,7 +1103,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Indices should be in ``[0, ..., config.num_labels]``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
@@ -1252,6 +1252,7 @@ CLS_token = 0 # in decoder language
 SEP_token = 1 # in decoder language
 PAD_token = 2 # in decoder language
 MAX_LENGTH = 128
+LABEL_DICT = {0: 4, 1: 5, 2: 6} # corresponding indices of the labels in decoder_lang
 
 
 class Attn(nn.Module):
@@ -1375,6 +1376,66 @@ class DecoderRNN(nn.Module):
         prediction = self.softmax(output)
  
         return prediction, hidden
+
+
+class LabelAndExplDecoderRNN(nn.Module):
+    def __init__(self, hidden_size, output_size):
+        super(LabelAndExplDecoderRNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.embedding = nn.Embedding(output_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, 1)
+        self.out = nn.Linear(hidden_size, output_size)
+        self.softmax = nn.LogSoftmax(dim=1)
+        self.resize = nn.Linear(768, self.hidden_size)
+        
+        self.dpout_fc = 0 #according to esnli
+        self.inputdim = hidden_size #take bert pooled output as input
+        self.fc_dim = 512 #according to esnli
+        self.n_classes = 3
+        self.MLP = nn.Sequential(
+            nn.Dropout(p=self.dpout_fc),
+            nn.Linear(self.inputdim, self.fc_dim),
+            nn.Tanh(),
+            nn.Dropout(p=self.dpout_fc),
+            nn.Linear(self.fc_dim, self.fc_dim),
+            nn.Tanh(),
+            nn.Dropout(p=self.dpout_fc),
+            nn.Linear(self.fc_dim, self.n_classes),
+            )
+        self.proj_inp_dec = nn.Linear(self.hidden_size + self.hidden_size, self.hidden_size)
+
+    def forward(self, decoder_input, hidden, labels, mode, decoder_lang, time, device='cuda:1', temperature=0):
+        if hidden.size(2) != self.hidden_size:
+            hidden = self.resize(hidden)
+        embedded = self.embedding(decoder_input.to(device)) # (bs, hidden_size)
+        embedded = embedded.unsqueeze(0) # (1, bs, hidden_size)
+        
+        # predict label with MLP
+        out_label = self.MLP(hidden) # (1, bs, 3) 3 is num classes
+        out_label_v, out_label = out_label.max(2) # (1, bs)
+        out_label = out_label.squeeze(0) # (bs)
+        predicted_labels = [LABEL_DICT[out_one_label.item()] for out_one_label in out_label]
+        
+        if time == 0: #first time step
+            if mode == 'train': 
+                label_indices = labels # (bs)
+            elif mode == 'eval': 
+                label_indices = torch.tensor(predicted_labels, dtype=torch.long) # (bs)
+            else:
+                print('mode has to be train or eval')
+                return 
+            label_emb = self.embedding(label_indices.to(device)) # (bs, hidden_size)
+            label_emb = label_emb.unsqueeze(0) # (1, bs, hidden_size)
+            embedded = self.proj_inp_dec(torch.cat([label_emb, embedded], 2)) # (1, bs, hidden_size)
+        
+        import torch.nn.functional as F
+        embedded = F.relu(embedded)
+        output, hidden = self.gru(embedded, hidden)
+        output = self.out(output[0]) # (bs, n_vocab)
+        output = output + temperature 
+        prediction = self.softmax(output)
+ 
+        return prediction, hidden, predicted_labels
 
     
 class BertForESNLI(BertPreTrainedModel):

@@ -759,8 +759,8 @@ CLS_token = 0
 SEP_token = 1 
 PAD_token = 2 
 UNK_token = 3
-entailment_token = 4
-contradiction_token = 5
+contradiction_token = 4
+entailment_token = 5
 neutral_token = 6
 
 MAX_LENGTH = 128
@@ -770,7 +770,7 @@ class Lang:
         self.word2index = {}
         self.word2count = {}
         self.index2word = {0: "[CLS]", 1: "[SEP]", 2: "[PAD]", 3: "[UNK]", \
-                           4: "[ENTAIL]", 5: "[CONTRADICT]", 6: "[NEUTRAL]"}
+                           4: "[CONTRADICT]", 5: "[ENTAIL]", 6: "[NEUTRAL]"}
         self.n_words = 7  # Count CLS, SEP, and PAD
         self.min_freq = min_freq
 
