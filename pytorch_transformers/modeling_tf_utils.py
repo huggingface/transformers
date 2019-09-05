@@ -64,7 +64,7 @@ class TFPreTrainedModel(tf.keras.Model):
         self.config = config
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Module from a provided token Embedding Module.
+        """ Build a resized Embedding Variable from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
 
@@ -77,12 +77,25 @@ class TFPreTrainedModel(tf.keras.Model):
         Return: ``torch.nn.Embeddings``
             Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
         """
-        raise NotImplementedError
+        # if new_num_tokens is None:
+        #     return old_embeddings
 
-    def _tie_or_clone_weights(self, first_module, second_module):
-        """ Tie or clone module weights depending of weither we are using TorchScript or not
-        """
-        raise NotImplementedError
+        # old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        # if old_num_tokens == new_num_tokens:
+        #     return old_embeddings
+
+        # # Build new embeddings
+        # new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        # new_embeddings.to(old_embeddings.weight.device)
+
+        # # initialize all new embeddings (in particular added tokens)
+        # self._init_weights(new_embeddings)
+
+        # # Copy word embeddings from the previous weights
+        # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
+
+        # return new_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.

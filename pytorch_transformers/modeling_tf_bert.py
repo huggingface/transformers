@@ -141,7 +141,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
     """
     def __init__(self, config, **kwargs):
         super(TFBertEmbeddings, self).__init__(**kwargs)
-        self.word_embeddings = tf.keras.layers.Embedding(config.vocab_size, config.hidden_size, name='word_embeddings')
+        self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
+
         self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings, config.hidden_size, name='position_embeddings')
         self.token_type_embeddings = tf.keras.layers.Embedding(config.type_vocab_size, config.hidden_size, name='token_type_embeddings')
 
@@ -150,8 +152,44 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
+    def build(self, input_shape):
+        """Build shared word embedding layer """
+        with tf.name_scope("word_embeddings"):
+            # Create and initialize weights. The random normal initializer was chosen
+            # arbitrarily, and works well.
+            self.word_embeddings = self.add_weight(
+                "weight",
+                shape=[self.vocab_size, self.hidden_size],
+                initializer=tf.random_normal_initializer(
+                    mean=0., stddev=self.hidden_size**-0.5))
+        super(TFBertEmbeddings, self).build(input_shape)
+
     @tf.function
-    def call(self, inputs, training=False):
+    def call(self, inputs, mode="embedding", training=False):
+        """Get token embeddings of inputs.
+        Args:
+            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
+            mode: string, a valid value is one of "embedding" and "linear".
+        Returns:
+            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
+                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
+                linear tensor, float32 with shape [batch_size, length, vocab_size].
+        Raises:
+            ValueError: if mode is not valid.
+        
+        Shared weights logic adapted from
+            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+        if mode == "embedding":
+            return self._embedding(inputs, training=training)
+        elif mode == "linear":
+            return self._linear(inputs)
+        else:
+            raise ValueError("mode {} is not valid.".format(mode))
+
+    def _embedding(self, inputs, training=False):
+        """Applies embedding based on inputs tensor."""
+        # Create binary mask of size [batch_size, length]
         input_ids, position_ids, token_type_ids = inputs
 
         seq_length = tf.shape(input_ids)[1]
@@ -160,7 +198,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         if token_type_ids is None:
             token_type_ids = tf.fill(tf.shape(input_ids), 0)
 
-        words_embeddings = self.word_embeddings(input_ids)
+        words_embeddings = tf.gather(self.word_embeddings, input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -169,6 +207,21 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         if training:
             embeddings = self.dropout(embeddings)
         return embeddings
+
+    def _linear(self, inputs):
+        """Computes logits by running inputs through a linear layer.
+            Args:
+                inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+            Returns:
+                float32 tensor with shape [batch_size, length, vocab_size].
+        """
+        batch_size = tf.shape(inputs)[0]
+        length = tf.shape(inputs)[1]
+
+        x = tf.reshape(inputs, [-1, self.hidden_size])
+        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
+
+        return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
 class TFBertSelfAttention(tf.keras.layers.Layer):
@@ -448,8 +501,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.encoder = TFBertEncoder(config, name='encoder')
         self.pooler = TFBertPooler(config, name='pooler')
 
-        # self.apply(self.init_weights)  # TODO check weights initialization
-
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -692,22 +743,14 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         super(TFBertForPreTraining, self).__init__(config)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_mlm = TFBertMLMHead(config, name='cls_mlm')
         self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
-
-        self.tie_weights()
-
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-        """
-        pass  # TODO add weights tying
 
     @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.cls_mlm(sequence_output)
+        prediction_scores = self.bert.embeddings(sequence_output, mode="linear", training=training)
         seq_relationship_score = self.cls_nsp(pooled_output)
 
         outputs = (prediction_scores, seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
@@ -751,21 +794,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         super(TFBertForMaskedLM, self).__init__(config)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_mlm = TFBertMLMHead(config, name='cls_mlm')
-
-        self.tie_weights()
-
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-        """
-        pass  # TODO add weights tying
 
     @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls_mlm(sequence_output)
+        prediction_scores = self.bert.embeddings(sequence_output, mode="linear", training=training)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
