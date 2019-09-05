@@ -174,7 +174,7 @@ class PreTrainedTokenizer(object):
         return self.convert_tokens_to_ids(self._eos_token)
 
     @property
-    def unk_token_is(self):
+    def unk_token_id(self):
         """ Id of the unknown token in the vocabulary. Log an error if used while not having been set. """
         if self._unk_token is None:
             logger.error("Using unk_token, but it is not set yet.")
