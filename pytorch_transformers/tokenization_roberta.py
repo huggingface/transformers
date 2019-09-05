@@ -24,7 +24,7 @@ import regex as re
 from io import open
 
 from .tokenization_gpt2 import bytes_to_unicode, get_pairs
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 
 try:
     from functools import lru_cache
@@ -62,6 +62,15 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'roberta-large-mnli': 512,
 }
 
+class RobertaTokenizerVocab(PreTrainedTokenizerVocab):
+
+    @classmethod
+    def from_pretrained(cls, vocab_file, merges_file=None):
+        return cls(
+            json.load(open(vocab_file, encoding="utf-8")),
+            [tuple(merge.split()) for merge in open(merges_file, encoding='utf-8').read().split('\n')[1:-1]]
+        )
+
 
 class RobertaTokenizer(PreTrainedTokenizer):
     """
@@ -71,7 +80,9 @@ class RobertaTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, errors='replace', bos_token="<s>", eos_token="</s>", sep_token="</s>",
+    vocab_class = RobertaTokenizerVocab
+
+    def __init__(self, vocabs, errors='replace', bos_token="<s>", eos_token="</s>", sep_token="</s>",
                  cls_token="<s>", unk_token="<unk>", pad_token='<pad>', mask_token='<mask>', **kwargs):
         super(RobertaTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token,
                                                sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
@@ -80,14 +91,12 @@ class RobertaTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
-        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
+        self.encoder = vocabs.vocab
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        bpe_data = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_data]
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
+        self.bpe_ranks = dict(zip(vocabs.merges, range(len(vocabs.merges))))
         self.cache = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions

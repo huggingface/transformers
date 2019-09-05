@@ -24,11 +24,11 @@ import six
 import unicodedata
 from io import open
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
+VOCAB_FILES_NAMES = {'vocab_file_path': 'vocab.txt'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
@@ -84,16 +84,13 @@ def whitespace_tokenize(text):
     tokens = text.split()
     return tokens
 
-class BertTokenizerVocab(object):
+class BertTokenizerVocab(PreTrainedTokenizerVocab):
     """Constructs a BertTokenizerVocab from a wordpiece vocab dictionary"""
 
-    def __init__(self, vocab):
-        self.vocab = vocab
-
     @classmethod
-    def from_pretrained(cls, vocab_file_path):
+    def from_pretrained(cls, vocab_file, merges_file=None):
         """Loads the wordpiece vocab from disk"""
-        return cls(load_vocab(vocab_file_path))
+        return cls(load_vocab(vocab_file))
 
 class BertTokenizer(PreTrainedTokenizer):
     r"""
@@ -114,13 +111,15 @@ class BertTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, do_lower_case=True, do_basic_tokenize=True, never_split=None,
+    vocab_class = BertTokenizerVocab
+
+    def __init__(self, vocabs, do_lower_case=True, do_basic_tokenize=True, never_split=None,
                  unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
                  mask_token="[MASK]", tokenize_chinese_chars=True, **kwargs):
         """Constructs a BertTokenizer.
 
         Args:
-            **vocab_or_filepath**: BertTokenizerVocab or str pointing to a one-wordpiece-per-line vocabulary file
+            **vocabs**: BertTokenizerVocab holding one-wordpiece vocabulary mapping
             **do_lower_case**: (`optional`) boolean (default True)
                 Whether to lower case the input
                 Only has an effect when do_basic_tokenize=True
@@ -140,29 +139,26 @@ class BertTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
-        if not isinstance(vocab_file, BertTokenizerVocab):
-            if isinstance(vocab_file, str) or (six.PY2 and isinstance(vocab_file, unicode)):
-                self.vocab = BertTokenizerVocab.from_pretrained(vocab_file)
-            else:
-                raise ValueError(
-                    "vocab_or_filepath should be instance of BertTokenizerVocab "
-                    "or str (got: {})".format(type(vocab_file).__name__)
-                )
+        if not isinstance(vocabs, BertTokenizerVocab):
+            raise ValueError(
+                "vocab_or_filepath should be instance of BertTokenizerVocab "
+                "or str (got: {})".format(type(vocabs).__name__)
+            )
         else:
-            self.vocab = vocab_file
+            self.vocabs = vocabs
 
         self.ids_to_tokens = collections.OrderedDict(
-            [(ids, tok) for tok, ids in self.vocab.vocab.items()])
+            [(ids, tok) for tok, ids in self.vocabs.vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
                                                   never_split=never_split,
                                                   tokenize_chinese_chars=tokenize_chinese_chars)
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab.vocab, unk_token=self.unk_token)
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocabs.vocab, unk_token=self.unk_token)
 
     @property
     def vocab_size(self):
-        return len(self.vocab.vocab)
+        return len(self.vocabs.vocab)
 
     def _tokenize(self, text):
         split_tokens = []
@@ -176,7 +172,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
-        return self.vocab.vocab.get(token, self.vocab.vocab.get(self.unk_token))
+        return self.vocabs.vocab.get(token, self.vocabs.vocab.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
@@ -211,7 +207,7 @@ class BertTokenizer(PreTrainedTokenizer):
         else:
             vocab_file = vocab_path
         with open(vocab_file, "w", encoding="utf-8") as writer:
-            for token, token_index in sorted(self.vocab.vocab.items(), key=lambda kv: kv[1]):
+            for token, token_index in sorted(self.vocabs.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning("Saving vocabulary to {}: vocabulary indices are not consecutive."
                                    " Please check that the vocabulary is not corrupted!".format(vocab_file))

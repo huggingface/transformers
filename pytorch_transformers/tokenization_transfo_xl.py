@@ -30,7 +30,7 @@ import torch
 import numpy as np
 
 from .file_utils import cached_path
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -58,6 +58,13 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
 }
 CORPUS_NAME = 'corpus.bin'
 
+class TransfoXLTokenizerVocab(PreTrainedTokenizerVocab):
+
+    @classmethod
+    def from_pretrained(cls, vocab_file, merges_file=None):
+        pass
+
+
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
     Transformer-XL tokenizer adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
@@ -65,6 +72,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    vocab_class = TransfoXLTokenizerVocab
 
     def __init__(self, special=None, min_freq=0, max_size=None, lower_case=False,
                  delimiter=None, vocab_file=None, pretrained_vocab_file=None,

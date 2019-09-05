@@ -22,7 +22,7 @@ import os
 import unicodedata
 from io import open
 
-from .tokenization_bert import BertTokenizer
+from .tokenization_bert import BertTokenizer, BertTokenizerVocab
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +60,5 @@ class DistilBertTokenizer(BertTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    vocab_class = BertTokenizerVocab

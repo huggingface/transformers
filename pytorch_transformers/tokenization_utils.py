@@ -29,6 +29,21 @@ logger = logging.getLogger(__name__)
 SPECIAL_TOKENS_MAP_FILE = 'special_tokens_map.json'
 ADDED_TOKENS_FILE = 'added_tokens.json'
 
+class PreTrainedTokenizerVocab(object):
+    """ Base class storing all the required vocabulary information used by tokenizers"""
+    def __init__(self, vocab, merges=None):
+        """
+        Construct the vocabulary
+        :param vocab:
+        :param merges:
+        """
+        self.vocab = vocab
+        self.merges = merges
+
+    @classmethod
+    def from_pretrained(cls, vocab_file, merges_file=None):
+        raise NotImplementedError('PreTrainedTokenizerVocab.from_pretrained is abstract and thus cannot be called directly.')
+
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
     Handle all the shared methods for tokenization and special tokens as well as methods dowloading/caching/loading pretrained tokenizers as well as adding tokens to the vocabulary.
@@ -62,6 +77,8 @@ class PreTrainedTokenizer(object):
     vocab_files_names = {}
     pretrained_vocab_files_map = {}
     max_model_input_sizes = {}
+
+    vocab_class = None
 
     SPECIAL_TOKENS_ATTRIBUTES = ["bos_token", "eos_token", "unk_token", "sep_token",
                                  "pad_token", "cls_token", "mask_token",
@@ -326,9 +343,12 @@ class PreTrainedTokenizer(object):
         # Merge resolved_vocab_files arguments in kwargs.
         added_tokens_file = resolved_vocab_files.pop('added_tokens_file', None)
         special_tokens_map_file = resolved_vocab_files.pop('special_tokens_map_file', None)
-        for args_name, file_path in resolved_vocab_files.items():
-            if args_name not in kwargs:
-                kwargs[args_name] = file_path
+
+        # Instantiate the tokenizer's vocabulary.
+        if cls.vocab_class is None:
+            logger.error('Unable to instantiate {}\'s vocab, got None class'.format(cls.__name__))
+        kwargs['vocabs'] = cls.vocab_class.from_pretrained(**dict(resolved_vocab_files))
+
         if special_tokens_map_file is not None:
             special_tokens_map = json.load(open(special_tokens_map_file, encoding="utf-8"))
             for key, value in special_tokens_map.items():

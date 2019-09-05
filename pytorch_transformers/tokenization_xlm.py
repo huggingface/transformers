@@ -22,7 +22,7 @@ import os
 import re
 from io import open
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 from .tokenization_bert import BasicTokenizer
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,18 @@ def text_standardize(text):
     text = re.sub(r'[^\S\n]+', ' ', text)
     return text.strip()
 
+class XLMTokenizerVocab(PreTrainedTokenizerVocab):
+
+    @classmethod
+    def from_pretrained(cls, vocab_file, merges_file=None):
+        if merges_file is None:
+            raise ValueError("merges_file_path cannot be None")
+
+        return cls(
+            json.load(open(vocab_file, encoding="utf-8")),
+            [tuple(merge.split()) for merge in open(merges_file, encoding='utf-8').read().split('\n')[1:-1]]
+        )
+
 class XLMTokenizer(PreTrainedTokenizer):
     """
     BPE tokenizer for XLM, adapted from OpenAI BPE tokenizer. Peculiarities:
@@ -112,7 +124,9 @@ class XLMTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, unk_token="<unk>", bos_token="<s>",
+    vocab_class = XLMTokenizerVocab
+
+    def __init__(self,vocabs, unk_token="<unk>", bos_token="<s>",
                  sep_token="</s>", pad_token="<pad>", cls_token="</s>",
                  mask_token="<special1>", additional_special_tokens=["<special0>",
                  "<special1>", "<special2>", "<special3>", "<special4>", "<special5>",
@@ -137,11 +151,9 @@ class XLMTokenizer(PreTrainedTokenizer):
             self.nlp = BasicTokenizer(do_lower_case=True)
             self.fix_text = None
 
-        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
-        self.decoder = {v:k for k,v in self.encoder.items()}
-        merges = open(merges_file, encoding='utf-8').read().split('\n')[:-1]
-        merges = [tuple(merge.split()[:2]) for merge in merges]
-        self.bpe_ranks = dict(zip(merges, range(len(merges))))
+        self.encoder = vocabs.vocab
+        self.decoder = {v: k for k, v in self.encoder.items()}
+        self.bpe_ranks = dict(zip(vocabs.merges, range(len(vocabs.merges))))
         self.cache = {}
 
     @property

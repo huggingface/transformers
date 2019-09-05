@@ -31,7 +31,7 @@ except ImportError:
     def lru_cache():
         return lambda func: func
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,19 @@ def get_pairs(word):
         prev_char = char
     return pairs
 
+class GPT2TokenizerVocab(PreTrainedTokenizerVocab):
+
+    @classmethod
+    def from_pretrained(cls, vocab_file, merges_file=None):
+        if merges_file is None:
+            raise ValueError("merges_file_path cannot be None")
+
+        return cls(
+            json.load(open(vocab_file, encoding="utf-8")),
+            [tuple(merge.split()) for merge in open(merges_file, encoding='utf-8').read().split('\n')[1:-1]]
+        )
+
+
 class GPT2Tokenizer(PreTrainedTokenizer):
     """
     GPT-2 BPE tokenizer. Peculiarities:
@@ -105,20 +118,20 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, errors='replace', unk_token="<|endoftext|>",
+    vocab_class = GPT2TokenizerVocab
+
+    def __init__(self, vocabs, errors='replace', unk_token="<|endoftext|>",
                  bos_token="<|endoftext|>", eos_token="<|endoftext|>", **kwargs):
         super(GPT2Tokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
         self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
         self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
 
-        self.encoder = json.load(open(vocab_file))
-        self.decoder = {v:k for k,v in self.encoder.items()}
+        self.encoder = vocabs.vocab
+        self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors # how to handle errors in decoding
         self.byte_encoder = bytes_to_unicode()
-        self.byte_decoder = {v:k for k, v in self.byte_encoder.items()}
-        bpe_data = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_data]
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
+        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+        self.bpe_ranks = dict(zip(vocabs.merges, range(len(vocabs.merges))))
         self.cache = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions

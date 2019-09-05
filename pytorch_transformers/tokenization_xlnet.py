@@ -23,7 +23,7 @@ from shutil import copyfile
 import unicodedata
 import six
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,23 @@ SEG_ID_CLS = 2
 SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
+class XLNetTokenizerVocab(PreTrainedTokenizerVocab):
+    def __init__(self, vocabs):
+        super(XLNetTokenizerVocab, self).__init__(vocabs, None)
+
+    @classmethod
+    def from_pretrained(cls, vocab_file, merges_file=None):
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                           "pip install sentencepiece")
+
+        sp_model = spm.SentencePieceProcessor()
+        sp_model.Load(vocab_file)
+
+        return cls(sp_model)
+
 class XLNetTokenizer(PreTrainedTokenizer):
     """
         SentencePiece based tokenizer. Peculiarities:
@@ -61,7 +78,9 @@ class XLNetTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, max_len=None,
+    vocab_class = XLNetTokenizerVocab
+
+    def __init__(self, vocabs, max_len=None,
                  do_lower_case=False, remove_space=True, keep_accents=False,
                  bos_token="<s>", eos_token="</s>", unk_token="<unk>", sep_token="<sep>",
                  pad_token="<pad>", cls_token="<cls>", mask_token="<mask>",
@@ -75,19 +94,12 @@ class XLNetTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                           "pip install sentencepiece")
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
 
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
+        self.vocabs = vocabs
+        self.sp_model = vocabs.vocab
 
     @property
     def vocab_size(self):
@@ -100,13 +112,11 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                           "pip install sentencepiece")
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.vocab_file)
+
+        # TODO : Why reloading the processor here, can we share the same underlying instance ?
+        # self.vocab = XLNetTokenizerVocab.from_pretrained()
+        # self.sp_model = spm.SentencePieceProcessor()
+        # self.sp_model.Load(self.vocab_file)
 
     def preprocess_text(self, inputs):
         if self.remove_space:
