@@ -28,7 +28,7 @@ from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerVocab
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'vocab_file_path': 'vocab.txt'}
+VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
