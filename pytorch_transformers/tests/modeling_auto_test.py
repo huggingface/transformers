@@ -28,7 +28,8 @@ from pytorch_transformers import (AutoConfig, BertConfig,
                                   AutoModelForQuestionAnswering, BertForQuestionAnswering)
 from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (CommonTestCases, ConfigTester, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
 class AutoModelTest(unittest.TestCase):

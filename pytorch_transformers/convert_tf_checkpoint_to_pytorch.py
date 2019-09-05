@@ -21,7 +21,7 @@ from __future__ import print_function
 import argparse
 import torch
 
-from pytorch_transformers.modeling_bert import BertConfig, BertForPreTraining, load_tf_weights_in_bert
+from pytorch_transformers import BertConfig, BertForPreTraining, load_tf_weights_in_bert
 
 import logging
 logging.basicConfig(level=logging.INFO)
