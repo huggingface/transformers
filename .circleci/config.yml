@@ -10,7 +10,7 @@ jobs:
             - checkout
             - run: sudo pip install torch
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest==5.0.1 codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
@@ -25,10 +25,9 @@ jobs:
             - checkout
             - run: sudo pip install tensorflow==2.0.0-rc0
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest==5.0.1 codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
-            - run: python -m pytest -sv ./examples/
             - run: codecov
     build_py2_torch:
         working_directory: ~/pytorch-transformers
@@ -40,7 +39,7 @@ jobs:
             - checkout
             - run: sudo pip install torch
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest==5.0.1 codecov pytest-cov
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: codecov
     build_py2_tf:
@@ -53,7 +52,7 @@ jobs:
             - checkout
             - run: sudo pip install tensorflow==2.0.0-rc0
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest==5.0.1 codecov pytest-cov
             - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
             - run: codecov
     deploy_doc:

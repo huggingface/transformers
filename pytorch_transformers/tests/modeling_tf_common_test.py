@@ -30,7 +30,7 @@ try:
     from pytorch_transformers import TFPreTrainedModel
     # from pytorch_transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 except ImportError:
-    pass
+    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
 def _config_zero_init(config):
@@ -50,7 +50,6 @@ class TFCommonTestCases:
         test_pruning = True
         test_resize_embeddings = True
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_initialization(self):
             pass
             # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -64,7 +63,6 @@ class TFCommonTestCases:
             #             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
 
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_attention_outputs(self):
             pass
             # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -105,7 +103,6 @@ class TFCommonTestCases:
             #         self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
 
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_headmasking(self):
             pass
             # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -153,7 +150,6 @@ class TFCommonTestCases:
             #         attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
 
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_head_pruning(self):
             pass
             # if not self.test_pruning:
@@ -181,7 +177,6 @@ class TFCommonTestCases:
             #         attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_hidden_states_output(self):
             pass
             # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -201,7 +196,6 @@ class TFCommonTestCases:
             #         [self.model_tester.seq_length, self.model_tester.hidden_size])
 
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_resize_tokens_embeddings(self):
             pass
             # original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -238,7 +232,6 @@ class TFCommonTestCases:
             #     self.assertTrue(models_equal)
 
 
-        @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
         def test_tie_model_weights(self):
             pass
             # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

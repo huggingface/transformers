@@ -20,9 +20,13 @@ import unittest
 import pytest
 import shutil
 
+from pytorch_transformers import is_torch_available
 
-from pytorch_transformers import (GPT2Config, GPT2Model, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                  GPT2LMHeadModel, GPT2DoubleHeadsModel)
+try:
+    from pytorch_transformers import (GPT2Config, GPT2Model, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+                                    GPT2LMHeadModel, GPT2DoubleHeadsModel)
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -30,7 +34,7 @@ from .configuration_common_test import ConfigTester
 
 class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel)
+    all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
 
     class GPT2ModelTester(object):
 

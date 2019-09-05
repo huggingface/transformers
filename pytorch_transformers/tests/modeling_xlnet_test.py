@@ -23,10 +23,15 @@ import random
 import shutil
 import pytest
 
-import torch
+from pytorch_transformers import is_torch_available
 
-from pytorch_transformers import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering)
-from pytorch_transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+try:
+    import torch
+
+    from pytorch_transformers import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering)
+    from pytorch_transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -34,7 +39,7 @@ from .configuration_common_test import ConfigTester
 class XLNetModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes=(XLNetModel, XLNetLMHeadModel,
-                    XLNetForSequenceClassification, XLNetForQuestionAnswering)
+                    XLNetForSequenceClassification, XLNetForQuestionAnswering) if is_torch_available() else ()
     test_pruning = False
 
     class XLNetModelTester(object):

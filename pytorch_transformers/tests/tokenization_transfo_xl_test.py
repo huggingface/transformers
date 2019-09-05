@@ -16,15 +16,21 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
+import pytest
 from io import open
 
-from pytorch_transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
+from pytorch_transformers import is_torch_available
 
-from.tokenization_tests_commons import CommonTestCases
+try:
+    from pytorch_transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")  # TODO: untangle Transfo-XL tokenizer from torch.load and torch.save
+
+from .tokenization_tests_commons import CommonTestCases
 
 class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
-    tokenizer_class = TransfoXLTokenizer
+    tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
 
     def setUp(self):
         super(TransfoXLTokenizationTest, self).setUp()
