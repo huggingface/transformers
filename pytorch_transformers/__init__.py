@@ -96,8 +96,15 @@ if _tf_available:
     logger.info("TensorFlow version {} available.".format(tf.__version__))
 
     from .modeling_tf_utils import TFPreTrainedModel
+    from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
+                                   TFAutoModelWithLMHead)
+
     from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertModel, TFBertForPreTraining,
-                                   TFBertForMaskedLM, TFBertForNextSentencePrediction, load_bert_pt_weights_in_tf)
+                                   TFBertForMaskedLM, TFBertForNextSentencePrediction,
+                                   TFBertForSequenceClassification, TFBertForMultipleChoice,
+                                   TFBertForTokenClassification, TFBertForQuestionAnswering,
+                                   load_bert_pt_weights_in_tf,
+                                   TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 
 # Files and general utilities
