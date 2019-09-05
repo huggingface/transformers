@@ -20,21 +20,26 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
-                                     BertForNextSentencePrediction, BertForPreTraining,
-                                     BertForQuestionAnswering, BertForSequenceClassification,
-                                     BertForTokenClassification, BertForMultipleChoice)
-from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers import is_torch_available
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+
+try:
+    from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
+                                        BertForNextSentencePrediction, BertForPreTraining,
+                                        BertForQuestionAnswering, BertForSequenceClassification,
+                                        BertForTokenClassification, BertForMultipleChoice)
+    from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 
 class BertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
             BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
-            BertForTokenClassification)
+            BertForTokenClassification) if is_torch_available() else ()
 
     class BertModelTester(object):
 

@@ -19,10 +19,15 @@ from __future__ import print_function
 import unittest
 import shutil
 import pytest
-import torch
 
-from pytorch_transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification)
-from pytorch_transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers import is_torch_available
+
+try:
+    import torch
+    from pytorch_transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification)
+    from pytorch_transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -30,7 +35,7 @@ from .configuration_common_test import ConfigTester
 
 class RobertaModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (RobertaForMaskedLM, RobertaModel)
+    all_model_classes = (RobertaForMaskedLM, RobertaModel) if is_torch_available() else ()
 
     class RobertaModelTester(object):
 
