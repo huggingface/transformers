@@ -20,8 +20,14 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering, XLMForSequenceClassification)
-from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers import is_torch_available
+
+try:
+    from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
+                                      XLMForSequenceClassification)
+    from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -29,9 +35,9 @@ from .configuration_common_test import ConfigTester
 
 class XLMModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (XLMModel, XLMWithLMHeadModel,  
-                         XLMForQuestionAnswering, XLMForSequenceClassification) 
-                         # , XLMForSequenceClassification, XLMForTokenClassification),
+    all_model_classes = (XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
+                         XLMForSequenceClassification) if is_torch_available() else ()
+
 
     class XLMModelTester(object):
 

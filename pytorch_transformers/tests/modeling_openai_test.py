@@ -20,9 +20,13 @@ import unittest
 import pytest
 import shutil
 
+from pytorch_transformers import is_torch_available
 
-from pytorch_transformers import (OpenAIGPTConfig, OpenAIGPTModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                  OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
+try:
+    from pytorch_transformers import (OpenAIGPTConfig, OpenAIGPTModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+                                    OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
@@ -30,7 +34,7 @@ from .configuration_common_test import ConfigTester
 
 class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
+    all_model_classes = (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel) if is_torch_available() else ()
 
     class OpenAIGPTModelTester(object):
 

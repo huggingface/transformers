@@ -24,21 +24,27 @@ import sys
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
+from pytorch_transformers import BertConfig, is_tf_available
+
 try:
     import tensorflow as tf
-
-    from pytorch_transformers import (BertConfig)
-    from pytorch_transformers.modeling_tf_bert import TFBertModel, TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from pytorch_transformers.modeling_tf_bert import (TFBertModel, TFBertForMaskedLM,
+                                                       TFBertForNextSentencePrediction,
+                                                       TFBertForPreTraining,
+                                                       TFBertForSequenceClassification,
+                                                       TFBertForMultipleChoice,
+                                                       TFBertForTokenClassification,
+                                                       TFBertForQuestionAnswering,
+                                                       TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 except ImportError:
-    pass
+    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
 class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (TFBertModel,)
-                        # BertForMaskedLM, BertForNextSentencePrediction,
-                        # BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
-                        # BertForTokenClassification)
+    all_model_classes = (TFBertModel, TFBertForMaskedLM, TFBertForNextSentencePrediction,
+                         TFBertForPreTraining, TFBertForQuestionAnswering, TFBertForSequenceClassification,
+                         TFBertForTokenClassification) if is_tf_available() else ()
 
     class TFBertModelTester(object):
 
@@ -123,14 +129,8 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-        def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-
         def create_and_check_bert_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = TFBertModel(config=config)
-            # model.eval()
             inputs = {'input_ids': input_ids,
                       'attention_mask': input_mask,
                       'token_type_ids': token_type_ids}
@@ -152,125 +152,115 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
 
         def create_and_check_bert_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # model = BertForMaskedLM(config=config)
-            # model.eval()
-            # loss, prediction_scores = model(input_ids, token_type_ids, input_mask, token_labels)
-            # result = {
-            #     "loss": loss,
-            #     "prediction_scores": prediction_scores,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["prediction_scores"].size()),
-            #     [self.batch_size, self.seq_length, self.vocab_size])
-            # self.check_loss_output(result)
+            model = TFBertForMaskedLM(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            prediction_scores, = model(inputs)
+            result = {
+                "prediction_scores": prediction_scores.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["prediction_scores"].shape),
+                [self.batch_size, self.seq_length, self.vocab_size])
 
 
         def create_and_check_bert_for_next_sequence_prediction(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # model = BertForNextSentencePrediction(config=config)
-            # model.eval()
-            # loss, seq_relationship_score = model(input_ids, token_type_ids, input_mask, sequence_labels)
-            # result = {
-            #     "loss": loss,
-            #     "seq_relationship_score": seq_relationship_score,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["seq_relationship_score"].size()),
-            #     [self.batch_size, 2])
-            # self.check_loss_output(result)
+            model = TFBertForNextSentencePrediction(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            seq_relationship_score, = model(inputs)
+            result = {
+                "seq_relationship_score": seq_relationship_score.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["seq_relationship_score"].shape),
+                [self.batch_size, 2])
 
 
         def create_and_check_bert_for_pretraining(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # model = BertForPreTraining(config=config)
-            # model.eval()
-            # loss, prediction_scores, seq_relationship_score = model(input_ids, token_type_ids, input_mask, token_labels, sequence_labels)
-            # result = {
-            #     "loss": loss,
-            #     "prediction_scores": prediction_scores,
-            #     "seq_relationship_score": seq_relationship_score,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["prediction_scores"].size()),
-            #     [self.batch_size, self.seq_length, self.vocab_size])
-            # self.parent.assertListEqual(
-            #     list(result["seq_relationship_score"].size()),
-            #     [self.batch_size, 2])
-            # self.check_loss_output(result)
-
-
-        def create_and_check_bert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # model = BertForQuestionAnswering(config=config)
-            # model.eval()
-            # loss, start_logits, end_logits = model(input_ids, token_type_ids, input_mask, sequence_labels, sequence_labels)
-            # result = {
-            #     "loss": loss,
-            #     "start_logits": start_logits,
-            #     "end_logits": end_logits,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["start_logits"].size()),
-            #     [self.batch_size, self.seq_length])
-            # self.parent.assertListEqual(
-            #     list(result["end_logits"].size()),
-            #     [self.batch_size, self.seq_length])
-            # self.check_loss_output(result)
+            model = TFBertForPreTraining(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            prediction_scores, seq_relationship_score = model(inputs)
+            result = {
+                "prediction_scores": prediction_scores.numpy(),
+                "seq_relationship_score": seq_relationship_score.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["prediction_scores"].shape),
+                [self.batch_size, self.seq_length, self.vocab_size])
+            self.parent.assertListEqual(
+                list(result["seq_relationship_score"].shape),
+                [self.batch_size, 2])
 
 
         def create_and_check_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # config.num_labels = self.num_labels
-            # model = BertForSequenceClassification(config)
-            # model.eval()
-            # loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
-            # result = {
-            #     "loss": loss,
-            #     "logits": logits,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["logits"].size()),
-            #     [self.batch_size, self.num_labels])
-            # self.check_loss_output(result)
-
-
-        def create_and_check_bert_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # config.num_labels = self.num_labels
-            # model = BertForTokenClassification(config=config)
-            # model.eval()
-            # loss, logits = model(input_ids, token_type_ids, input_mask, token_labels)
-            # result = {
-            #     "loss": loss,
-            #     "logits": logits,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["logits"].size()),
-            #     [self.batch_size, self.seq_length, self.num_labels])
-            # self.check_loss_output(result)
+            config.num_labels = self.num_labels
+            model = TFBertForSequenceClassification(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            logits, = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
+                [self.batch_size, self.num_labels])
 
 
         def create_and_check_bert_for_multiple_choice(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            pass
-            # config.num_choices = self.num_choices
-            # model = BertForMultipleChoice(config=config)
-            # model.eval()
-            # multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            # multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            # multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-            # loss, logits = model(multiple_choice_inputs_ids,
-            #              multiple_choice_token_type_ids,
-            #              multiple_choice_input_mask,
-            #              choice_labels)
-            # result = {
-            #     "loss": loss,
-            #     "logits": logits,
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["logits"].size()),
-            #     [self.batch_size, self.num_choices])
-            # self.check_loss_output(result)
+            config.num_choices = self.num_choices
+            model = TFBertForMultipleChoice(config=config)
+            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+            inputs = {'input_ids': multiple_choice_inputs_ids,
+                      'attention_mask': multiple_choice_input_mask,
+                      'token_type_ids': multiple_choice_token_type_ids}
+            logits, = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
+                [self.batch_size, self.num_choices])
+
+
+        def create_and_check_bert_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            config.num_labels = self.num_labels
+            model = TFBertForTokenClassification(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            logits, = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
+                [self.batch_size, self.seq_length, self.num_labels])
+
+
+        def create_and_check_bert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            model = TFBertForQuestionAnswering(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            start_logits, end_logits = model(inputs)
+            result = {
+                "start_logits": start_logits.numpy(),
+                "end_logits": end_logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["start_logits"].shape),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(result["end_logits"].shape),
+                [self.batch_size, self.seq_length])
 
 
         def prepare_config_and_inputs_for_common(self):
@@ -287,48 +277,39 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_bert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_model(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_multiple_choice(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_next_sequence_prediction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_next_sequence_prediction(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_pretraining(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_question_answering(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_sequence_classification(*config_and_inputs)
 
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
 
     @pytest.mark.slow
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
         for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

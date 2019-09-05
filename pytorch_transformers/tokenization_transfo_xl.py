@@ -26,16 +26,20 @@ import sys
 from collections import Counter, OrderedDict
 from io import open
 
-import torch
 import numpy as np
 
 from .file_utils import cached_path
 from .tokenization_utils import PreTrainedTokenizer
 
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
+try:
+    import torch
+except ImportError:
+    pass
+
+# if sys.version_info[0] == 2:
+#     import cPickle as pickle
+# else:
+#     import pickle
 
 
 logger = logging.getLogger(__name__)

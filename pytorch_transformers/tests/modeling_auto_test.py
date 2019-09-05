@@ -21,15 +21,18 @@ import shutil
 import pytest
 import logging
 
-from pytorch_transformers import (AutoConfig, BertConfig,
-                                  AutoModel, BertModel,
-                                  AutoModelWithLMHead, BertForMaskedLM,
-                                  AutoModelForSequenceClassification, BertForSequenceClassification,
-                                  AutoModelForQuestionAnswering, BertForQuestionAnswering)
-from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+try:
+    from pytorch_transformers import (AutoConfig, BertConfig,
+                                    AutoModel, BertModel,
+                                    AutoModelWithLMHead, BertForMaskedLM,
+                                    AutoModelForSequenceClassification, BertForSequenceClassification,
+                                    AutoModelForQuestionAnswering, BertForQuestionAnswering)
+    from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (CommonTestCases, ids_tensor)
-from .configuration_common_test import ConfigTester
+    from .modeling_common_test import (CommonTestCases, ids_tensor)
+    from .configuration_common_test import ConfigTester
+except ImportError:
+    pytestmark = pytest.mark.skip("Require Torch")
 
 
 class AutoModelTest(unittest.TestCase):
