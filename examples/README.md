@@ -3,6 +3,13 @@
 In this section a few examples are put together. All of these examples work for several models, making use of the very
 similar API between the different models.
 
+| Section                    | Description                                                                                                                                                |
+|----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [Language Model fine-tuning](#language-model-fine-tuning) | Fine-tuning the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
+| [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
+| [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
+| [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                     |
+
 ## Language model fine-tuning
 
 Based on the script `run_lm_finetuning.py`.
