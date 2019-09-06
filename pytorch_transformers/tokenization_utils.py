@@ -691,7 +691,7 @@ class PreTrainedTokenizer(object):
             return self.add_special_tokens_sentences_pair(first_sentence_tokens, second_sentence_tokens, output_mask)
         else:
             if output_mask:
-                logger.warning("Can't output mask if no special tokens are involved. Please call the method with add_special_tokens set to True.")
+                logger.warning("Can't output mask if you're not joining two sequences.")
             return first_sentence_tokens, second_sentence_tokens
 
     def add_special_tokens_single_sentence(self, token_ids):
