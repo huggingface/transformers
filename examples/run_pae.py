@@ -131,7 +131,7 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
         topv, topi = decoder_output.topk(1) 
         decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
 
-    return generated_expl, target_expl_index, predict_label_dsn, labels
+    return generated_expl, target_expl_index, predict_label_dsn, labels, predicted_labels
 
 def get_loss(prob_dsn, correct_indices): 
     '''
@@ -236,7 +236,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     for _ in train_iterator:
         num_epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        if num_epoch % print_per == 0:
+        if num_epoch % 2 == 0:
             print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
             if global_step!=0: print('average loss: ', tr_loss/global_step)
         epoch_loss = 0 
@@ -248,7 +248,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             batch = tuple(t.to(args.device) for t in batch)
             
             bert_output_pooled = get_encoder_output(batch, encoder)
-            generated_expl, target_expl_index, predict_label_dsn, target_labels = get_decoder_output(args, batch,\
+            generated_expl, target_expl_index, predict_label_dsn, target_labels, pred_labels = get_decoder_output(args, batch,\
                                                                                                      decoder, \
                                                                                                      bert_output_pooled, \
                                                                                                      decoder_lang, \
@@ -258,13 +258,18 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             
             # sanity check on generated explanations
             generated_expl_index = get_index(generated_expl) 
-            if num_epoch % print_per == 0 or num_epoch == args.num_train_epochs:
+            if num_epoch % 20 == 0 or num_epoch == args.num_train_epochs:
                 print('train generated expl', get_text(decoder_lang, generated_expl_index)) 
                 print('train target expl', get_text(decoder_lang, target_expl_index)) 
+                print('train target_labels', target_labels) 
+                print('train pred_labels', pred_labels) 
                 
             predict_label_dsn = predict_label_dsn.squeeze(0) # (1, bs, 3) -> (bs, 3)
             label_loss = get_loss(predict_label_dsn, target_labels)
-            loss = args.alpha*label_loss + (1-args.alpha)*expl_loss.item() #will this affect the multi-gpu training loss?
+            loss = args.alpha*label_loss + (1-args.alpha)*expl_loss #will this affect the multi-gpu training loss?
+            #print('label_loss: ', label_loss)
+            #print('expl_loss: ', expl_loss)
+            #print('loss: ', loss)
             epoch_loss += loss
 
             if args.n_gpu > 1:
@@ -373,6 +378,9 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, prefix="",
         preds = None
         out_label_ids = None
         batch_num = 0
+        preds = None
+        truth = None
+        preds_uninit = True
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             batch_num += 1
             encoder.eval()
@@ -381,25 +389,36 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, prefix="",
 
             with torch.no_grad():
                 bert_output_pooled = get_encoder_output(batch, encoder)
-                labels = batch[3]
-                generated_expl, target_expl_index = get_decoder_output(args, batch, decoder, bert_output_pooled, \
-                                                                       decoder_lang, all_expl, mode='eval')
-                tmp_eval_loss, generated_expl = get_loss(generated_expl, target_expl_index)
-                
+                generated_expl, target_expl_index, predict_label_dsn, target_labels, pred_labels = \
+                        get_decoder_output(args, batch,decoder, bert_output_pooled, decoder_lang, all_expl, mode='eval')
+                generated_expl = generated_expl.transpose(1, 2) #(output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
+                expl_loss = get_loss(generated_expl, target_expl_index)
+
+                predict_label_dsn = predict_label_dsn.squeeze(0) # (1, bs, 3) -> (bs, 3)
+                label_loss = get_loss(predict_label_dsn, target_labels)
+                tmp_eval_loss = args.alpha*label_loss + (1-args.alpha)*expl_loss.item() #will this affect the multi-gpu training loss?
                 eval_loss += tmp_eval_loss.mean().item()
+                
+                if preds_uninit:
+                    preds = np.asarray(pred_labels)
+                    truth = np.asarray(target_labels.detach().cpu())
+                    preds_uninit = False
+                else:
+                    preds = np.append(preds, np.asarray(pred_labels), axis=0)
+                    truth = np.append(truth, np.asarray(target_labels.detach().cpu()), axis=0)
+                print(preds)
+                print(truth)
                 
             generated_expl_index = get_index(generated_expl) #(seq_len, bs) 
             generated_expl_text = get_text(decoder_lang, generated_expl_index) # a list (size = bs) of explanation texts
             target_expl_text = get_text(decoder_lang, target_expl_index)
+            print('generated_expl_text: ', generated_expl_text)
+            print('target_expl_text: ', target_expl_text)
 
             nb_eval_steps += 1
             
         eval_loss = eval_loss / nb_eval_steps
-        if args.output_mode == "classification":
-            preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
-        result = compute_metrics(eval_task, preds, out_label_ids)
+        result = compute_metrics(eval_task, preds, truth)
         results.update(result)
 
         output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
@@ -699,7 +718,7 @@ def main():
 
         encoder.to(args.device)
         decoder.to(args.device)
-        result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, prefix="", do_print=True)
+        result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, do_print=True)
         result = dict((k + '_{}'.format(""), v) for k, v in result.items())
         results.update(result)
 
