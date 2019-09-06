@@ -1,7 +1,7 @@
 from pytorch_transformers import (
     AutoTokenizer, AutoConfig, AutoModel, AutoModelWithLMHead, AutoModelForSequenceClassification, AutoModelForQuestionAnswering
 )
-from pytorch_transformers.modeling_utils import add_start_docstrings
+from pytorch_transformers.file_utils import add_start_docstrings
 
 dependencies = ['torch', 'tqdm', 'boto3', 'requests', 'regex', 'sentencepiece', 'sacremoses']
 
