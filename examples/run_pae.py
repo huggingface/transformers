@@ -579,7 +579,7 @@ def main():
                         help = 'softmax temperature')
     parser.add_argument('--min_freq', type=int, default=10, \
                         help = 'min freq required for a word to be in decoder dictionary')
-    parser.add_argument('--alpha', type=int, default=0.6, \
+    parser.add_argument('--alpha', type=float, default=0.6, \
                         help = 'loss = alpha*label_loss + (1-alpha)*expl_loss')
     
     args = parser.parse_args()
