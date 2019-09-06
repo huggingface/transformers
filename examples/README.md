@@ -12,7 +12,7 @@ similar API between the different models.
 
 ## Language model fine-tuning
 
-Based on the script `run_lm_finetuning.py`.
+Based on the script [`run_lm_finetuning.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_lm_finetuning.py).
 
 Fine-tuning the library models for language modeling on a text dataset for GPT, GPT-2, BERT and RoBERTa (DistilBERT 
 to be added soon). GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa 
@@ -52,8 +52,8 @@ The following example fine-tunes RoBERTa on WikiText-2. Here too, we're using th
 as BERT/RoBERTa have a bidirectional mechanism; we're therefore using the same loss that was used during their
 pre-training: masked language modeling. 
 
-In accordance to the RoBERTa paper, we use dynamic masking rather than static masking. The model may therefore converge
-slower, but over-fitting would take more epochs.
+In accordance to the RoBERTa paper, we use dynamic masking rather than static masking. The model may, therefore, converge
+slightly slower (over-fitting takes more epochs).
 
 We use the `--mlm` flag so that the script may change its loss function.
 
@@ -74,6 +74,8 @@ python run_lm_finetuning.py \
 
 ## Language generation
 
+Based on the script [`run_generation.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_generation.py).
+
 Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.
 A similar script is used for our official demo [Write With Transfomer](https://transformer.huggingface.co), where you
 can try out the different models available in the library.
@@ -87,6 +89,8 @@ python run_generation.py \
 ```
 
 ## GLUE
+
+Based on the script [`run_glue.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py).
 
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding 
 Evaluation](https://gluebenchmark.com/). This script can fine-tune the following models: BERT, XLM, XLNet and RoBERTa. 
@@ -120,13 +124,14 @@ and unpack it to some directory `$GLUE_DIR`.
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
-python run_bert_classifier.py \
+python run_glue.py \
+  --model_type bert \
+  --model_name_or_path bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
   --do_lower_case \
   --data_dir $GLUE_DIR/$TASK_NAME \
-  --bert_model bert-base-uncased \
   --max_seq_length 128 \
   --train_batch_size 32 \
   --learning_rate 2e-5 \
@@ -160,13 +165,14 @@ and unpack it to some directory `$GLUE_DIR`.
 ```bash
 export GLUE_DIR=/path/to/glue
 
-python run_bert_classifier.py \
+python run_glue.py \
+  --model_type bert \
+  --model_name_or_path bert-base-cased \
   --task_name MRPC \
   --do_train \
   --do_eval \
   --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
-  --bert_model bert-base-uncased \
   --max_seq_length 128 \
   --train_batch_size 32 \
   --learning_rate 2e-5 \
@@ -186,13 +192,14 @@ Using Apex and 16 bit precision, the fine-tuning on MRPC only takes 27 seconds. 
 ```bash
 export GLUE_DIR=/path/to/glue
 
-python run_bert_classifier.py \
+python run_glue.py \
+  --model_type bert \
+  --model_name_or_path bert-base-cased \
   --task_name MRPC \
   --do_train \
   --do_eval \
   --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
-  --bert_model bert-base-uncased \
   --max_seq_length 128 \
   --train_batch_size 32 \
   --learning_rate 2e-5 \
@@ -210,8 +217,9 @@ reaches F1 > 92 on MRPC.
 export GLUE_DIR=/path/to/glue
 
 python -m torch.distributed.launch \
-    --nproc_per_node 8 run_bert_classifier.py \
-    --bert_model bert-large-uncased-whole-word-masking \
+    --nproc_per_node 8 run_glue.py \
+    --model_type bert \
+    --model_name_or_path bert-base-cased \
     --task_name MRPC \
     --do_train \
     --do_eval \
@@ -221,7 +229,7 @@ python -m torch.distributed.launch \
     --train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
-     --output_dir /tmp/mrpc_output/
+    --output_dir /tmp/mrpc_output/
 ```
 
 Training with these hyper-parameters gave us the following results:
@@ -243,8 +251,9 @@ The following example uses the BERT-large, uncased, whole-word-masking model and
 export GLUE_DIR=/path/to/glue
 
 python -m torch.distributed.launch \
-    --nproc_per_node 8 run_bert_classifier.py \
-    --bert_model bert-large-uncased-whole-word-masking \
+    --nproc_per_node 8 run_glue.py \
+    --model_type bert \
+    --model_name_or_path bert-base-cased \
     --task_name mnli \
     --do_train \
     --do_eval \
@@ -275,6 +284,8 @@ The results  are the following:
 
 ## SQuAD
 
+Based on the script [`run_squad.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_squad.py).
+
 #### Fine-tuning on SQuAD
 
 This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) 
@@ -288,8 +299,9 @@ $SQUAD_DIR directory.
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
 
-python run_bert_squad.py \
-  --bert_model bert-base-uncased \
+python run_squad.py \
+  --model_type bert \
+  --model_name_or_path bert-base-cased \
   --do_train \
   --do_predict \
   --do_lower_case \
@@ -316,9 +328,9 @@ exact_match = 81.22
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
 ```bash
-   python -m torch.distributed.launch --nproc_per_node=8 \
-    run_bert_squad.py \
-    --bert_model bert-large-uncased-whole-word-masking  \
+python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
+    --model_type bert \
+    --model_name_or_path bert-base-cased \
     --do_train \
     --do_predict \
     --do_lower_case \
