@@ -149,9 +149,8 @@ class BertTokenizer(PreTrainedTokenizer):
                 "vocab_or_filepath should be instance of BertTokenizerVocab "
                 "(got: {})".format(type(vocabs).__name__)
             )
-        else:
-            self.vocabs = vocabs
 
+        self.vocabs = vocabs
         self.ids_to_tokens = collections.OrderedDict(
             [(ids, tok) for tok, ids in self.vocabs.vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize

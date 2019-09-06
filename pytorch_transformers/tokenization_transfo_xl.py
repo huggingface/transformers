@@ -122,6 +122,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.vocabs = vocabs
         self.never_split = never_split
 
+        if not isinstance(vocabs, TransfoXLTokenizerVocab):
+            raise ValueError(
+                "vocab should be instance of TransfoXLTokenizerVocab"
+                "(got: {})".format(type(vocabs).__name__)
+            )
+
         if vocabs.merges is not None:
             # Hack because, honestly this tokenizer was not made to be used
             # in a library like ours, at all.

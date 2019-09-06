@@ -107,6 +107,12 @@ class XLNetTokenizer(PreTrainedTokenizer):
         self.remove_space = remove_space
         self.keep_accents = keep_accents
 
+        if not isinstance(vocabs, XLNetTokenizerVocab):
+            raise ValueError(
+                "vocab should be instance of XLNetTokenizerVocab"
+                "(got: {})".format(type(vocabs).__name__)
+            )
+
         self.vocabs = vocabs
         self.sp_model = vocabs.vocab
 

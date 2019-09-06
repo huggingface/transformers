@@ -97,6 +97,12 @@ class RobertaTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
+        if not isinstance(vocabs, RobertaTokenizerVocab):
+            raise ValueError(
+                "vocab should be instance of RobertaTokenizerVocab"
+                "(got: {})".format(type(vocabs).__name__)
+            )
+
         self.encoder = vocabs.vocab
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding

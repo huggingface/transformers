@@ -132,6 +132,12 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
         self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
 
+        if not isinstance(vocabs, GPT2TokenizerVocab):
+            raise ValueError(
+                "vocab should be instance of GPT2TokenizerVocab"
+                "(got: {})".format(type(vocabs).__name__)
+            )
+
         self.encoder = vocabs.vocab
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors # how to handle errors in decoding

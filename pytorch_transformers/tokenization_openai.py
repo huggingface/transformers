@@ -122,6 +122,12 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             self.nlp = BasicTokenizer(do_lower_case=True)
             self.fix_text = None
 
+        if not isinstance(vocabs, OpenAIGPTTokenizerVocab):
+            raise ValueError(
+                "vocab should be instance of OpenAIGPTTokenizerVocab"
+                "(got: {})".format(type(vocabs).__name__)
+            )
+
         self.encoder = vocabs.vocab
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.bpe_ranks = dict(zip(vocabs.merges, range(len(vocabs.merges))))
