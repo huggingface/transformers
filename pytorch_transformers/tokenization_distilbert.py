@@ -60,3 +60,16 @@ class DistilBertTokenizer(BertTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def add_special_tokens_single_sentence(self, token_ids):
+        return token_ids
+
+    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1, output_mask=False):
+        sep = [self.sep_token_id]
+        if output_mask:
+            return (
+                token_ids_0 + sep + token_ids_1,
+                [0] * len(token_ids_0 + sep) + [1] * len(token_ids_1)
+            )
+        else:
+            return token_ids_0 + sep + token_ids_1
