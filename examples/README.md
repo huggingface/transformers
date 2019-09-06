@@ -133,7 +133,7 @@ python run_glue.py \
   --do_lower_case \
   --data_dir $GLUE_DIR/$TASK_NAME \
   --max_seq_length 128 \
-  --train_batch_size 32 \
+  --per_gpu_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/$TASK_NAME/
@@ -174,7 +174,7 @@ python run_glue.py \
   --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
-  --train_batch_size 32 \
+  --per_gpu_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/mrpc_output/
@@ -201,7 +201,7 @@ python run_glue.py \
   --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
-  --train_batch_size 32 \
+  --per_gpu_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/mrpc_output/ \
@@ -226,7 +226,7 @@ python -m torch.distributed.launch \
     --do_lower_case \
     --data_dir $GLUE_DIR/MRPC/ \
     --max_seq_length 128 \
-    --train_batch_size 8 \
+    --per_gpu_train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/mrpc_output/
@@ -260,7 +260,7 @@ python -m torch.distributed.launch \
     --do_lower_case \
     --data_dir $GLUE_DIR/MNLI/ \
     --max_seq_length 128 \
-    --train_batch_size 8 \
+    --per_gpu_train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir output_dir \
@@ -303,11 +303,11 @@ python run_squad.py \
   --model_type bert \
   --model_name_or_path bert-base-cased \
   --do_train \
-  --do_predict \
+  --do_eval \
   --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
-  --train_batch_size 12 \
+  --per_gpu_train_batch_size 12 \
   --learning_rate 3e-5 \
   --num_train_epochs 2.0 \
   --max_seq_length 384 \
@@ -332,7 +332,7 @@ python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
     --model_type bert \
     --model_name_or_path bert-base-cased \
     --do_train \
-    --do_predict \
+    --do_eval \
     --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
@@ -341,7 +341,7 @@ python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
     --max_seq_length 384 \
     --doc_stride 128 \
     --output_dir ../models/wwm_uncased_finetuned_squad/ \
-    --train_batch_size 24 \
+    --per_gpu_train_batch_size 24 \
     --gradient_accumulation_steps 12
 ```
 
