@@ -99,6 +99,12 @@ class XLMTokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
+        """
+        Creates a XLMTokenizerVocab instance from stored vocabulary files
+        :param vocab_file:
+        :param merges_file:
+        :return: XLMTokenizerVocab instance
+        """
         if merges_file is None:
             raise ValueError("merges_file_path cannot be None")
 

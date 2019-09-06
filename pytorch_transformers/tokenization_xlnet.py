@@ -52,6 +52,7 @@ SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
 class XLNetTokenizerVocab(PreTrainedTokenizerVocab):
+
     def __init__(self, vocabs, vocab_file):
         super(XLNetTokenizerVocab, self).__init__(vocabs, None)
 
@@ -59,6 +60,12 @@ class XLNetTokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
+        """
+        Creates XLNetTokenizerVocab instance from stored vocabulary files
+        :param vocab_file: (str) Path to load the sentence piece vocabulary
+        :param merges_file: Not used.
+        :return: XLNetTokenizerVocab instance
+        """
         try:
             import sentencepiece as spm
         except ImportError:

@@ -66,7 +66,14 @@ class TransfoXLTokenizerVocab(PreTrainedTokenizerVocab):
             return [line.strip().split()[0] for line in f]
 
     @classmethod
-    def from_pretrained(cls, vocab_file, pretrained_vocab_file=None):
+    def from_pretrained(cls, vocab_file=None, pretrained_vocab_file=None):
+        """
+        Creates a TransfoXLTokenizerVocab instance from stored vocabulary files.
+        In case of both arguments are None this method is equivalent to TransfoXLTokenizerVocab.empty().
+        :param vocab_file: (str) Path to load the tokenizer symbols (optional)
+        :param pretrained_vocab_file: Path to load a previously stored vocabulary (optional)
+        :return: TransfoXLTokenizerVocab instance
+        """
         return cls(
             TransfoXLTokenizerVocab.read_tokenizer_symbols(vocab_file) if vocab_file else None,
             torch.load(pretrained_vocab_file) if pretrained_vocab_file else None
@@ -74,6 +81,10 @@ class TransfoXLTokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def empty(cls):
+        """
+        Creates a TransfoXLTokenizerVocab without any predefined vocabulary.
+        :return:
+        """
         return cls(None, None)
 
 

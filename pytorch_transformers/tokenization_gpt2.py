@@ -100,6 +100,12 @@ class GPT2TokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
+        """
+        Creates a GPT2TokenizerVocab instance from stored vocabulary files
+        :param vocab_file:
+        :param merges_file:
+        :return: GPT2TokenizerVocab instance
+        """
         if merges_file is None:
             raise ValueError("merges_file_path cannot be None")
 

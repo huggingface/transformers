@@ -66,6 +66,12 @@ class RobertaTokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
+        """
+        Creates a RobertaTokenizerVocab instance from stored vocabulary files
+        :param vocab_file:
+        :param merges_file:
+        :return: RobertaTokenizerVocab instance
+        """
         return cls(
             json.load(open(vocab_file, encoding="utf-8")),
             [tuple(merge.split()) for merge in open(merges_file, encoding='utf-8').read().split('\n')[1:-1]]

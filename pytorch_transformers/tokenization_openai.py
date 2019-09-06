@@ -78,6 +78,12 @@ class OpenAIGPTTokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
+        """
+        Creates a OpenAIGPTTokenizerVocab instance from stored vocabulary files
+        :param vocab_file:
+        :param merges_file:
+        :return: OpenAIGPTTokenizerVocab instance
+        """
         if merges_file is None:
             raise ValueError("merges_file_path cannot be None")
 

@@ -89,7 +89,12 @@ class BertTokenizerVocab(PreTrainedTokenizerVocab):
 
     @classmethod
     def from_pretrained(cls, vocab_file, merges_file=None):
-        """Loads the wordpiece vocab from disk"""
+        """
+        Creates a BertTokenizerVocab instance from stored wordpiece vocab
+        :param vocab_file: Path to wordpiece vocabulary file
+        :param merges_file: Ignored.
+        :return: BertTokenizerVocab instance
+        """
         return cls(load_vocab(vocab_file))
 
 class BertTokenizer(PreTrainedTokenizer):
