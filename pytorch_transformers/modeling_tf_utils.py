@@ -263,13 +263,25 @@ class TFConv1D(tf.keras.layers.Layer):
         """
         super(TFConv1D, self).__init__()
         self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
-        self.bias = nn.Parameter(torch.zeros(nf))
+        self.nx = nx
 
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            "weight",
+            shape=[self.nx, self.nf],
+            initializer=tf.random_normal_initializer(
+                mean=0., stddev=0.02))
+        self.bias = self.add_weight(
+            "bias",
+            shape=[self.nx, self.nf],
+            initializer=tf.zeros_initializer())
+
+    @tf.function
     def call(self, x):
-        size_out = t.shape(x)[:-1] + (self.nf,)
-        x = tf.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
-        x = x.view(*size_out)
+        size_out = tf.shape(x)[:-1] + (self.nf,)
+
+        x = tf.reshape(x, [-1, tf.shape(x)[-1]])
+        x = tf.matmul(x, self.weight) + self.bias
+        x = tf.reshape(x, size_out)
+
         return x
