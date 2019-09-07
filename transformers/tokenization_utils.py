@@ -621,11 +621,12 @@ class PreTrainedTokenizer(object):
                 split_additional_on_word_boundaries: (`optional`) boolean, default False:
                     When splitting text with additional tokens, try to split only at word
                     boundaries ([^A-Za-z0-9_] in regular expression). Otherwise when an 
-                    additional token is part of a preexisting token, for example "ht" is 
-                    part of "light", then the preexisting token will be split into halves
-                    ("light" => ["lig", ""]), which is undesirable. When the language has 
-                    no or different word boundaries as above (such as Chinese or Japanese), 
-                    this argument should remain False.
+                    additional token is part of a token in the pretrained vocabulary, for 
+                    example "ht" is part of "light", then the latter token will be split 
+                    into halves ("light" => ["lig", ""]), which is undesirable. When the 
+                    language has no or different word boundaries as above (such as Chinese 
+                    or Japanese), this argument should remain False, and the old text.split()
+                    will be used.
         """
         def lowercase_text(t):
             # convert non-special tokens to lowercase
