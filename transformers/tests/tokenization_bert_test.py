@@ -99,6 +99,37 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
+        def test_add_partial_tokens_tokenizer(self):
+            tokenizer = self.get_tokenizer()
+
+            vocab_size = tokenizer.vocab_size
+            all_size = len(tokenizer)
+
+            self.assertNotEqual(vocab_size, 0)
+            self.assertEqual(vocab_size, all_size)
+
+            new_toks = ["ant", "run"]
+            added_toks = tokenizer.add_tokens(new_toks)
+            vocab_size_2 = tokenizer.vocab_size
+            all_size_2 = len(tokenizer)
+
+            self.assertNotEqual(vocab_size_2, 0)
+            self.assertEqual(vocab_size, vocab_size_2)
+            self.assertEqual(added_toks, len(new_toks))
+            self.assertEqual(all_size_2, all_size + len(new_toks))
+
+            tokens = tokenizer.encode("ant want running", split_additional_on_word_boundaries=True)
+            out_string = tokenizer.decode(tokens)
+            self.assertGreaterEqual(len(tokens), 3)
+            self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+            self.assertLess(tokens[-2], tokenizer.vocab_size - 1)
+            
+            tokens = tokenizer.encode("ant want running", split_additional_on_word_boundaries=False)
+            out_string = tokenizer.decode(tokens)
+            self.assertGreaterEqual(len(tokens), 4)
+            self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
+            self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
+
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(u" "))
         self.assertTrue(_is_whitespace(u"\t"))
