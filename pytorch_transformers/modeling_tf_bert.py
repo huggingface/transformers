@@ -684,13 +684,13 @@ class TFBertModel(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertModel.from_pretrained('bert-base-uncased')
-        input_ids = tf.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
-    def __init__(self, config):
-        super(TFBertModel, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertModel, self).__init__(config, *inputs, **kwargs)
         self.bert = TFBertMainLayer(config, name='bert')
 
     @tf.function
@@ -739,8 +739,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         prediction_scores, seq_relationship_scores = outputs[:2]
 
     """
-    def __init__(self, config):
-        super(TFBertForPreTraining, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForPreTraining, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
         self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
@@ -790,8 +790,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         loss, prediction_scores = outputs[:2]
 
     """
-    def __init__(self, config):
-        super(TFBertForMaskedLM, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForMaskedLM, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
 
@@ -839,8 +839,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         seq_relationship_scores = outputs[0]
 
     """
-    def __init__(self, config):
-        super(TFBertForNextSentencePrediction, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForNextSentencePrediction, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
         self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
@@ -891,8 +891,8 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         loss, logits = outputs[:2]
 
     """
-    def __init__(self, config):
-        super(TFBertForSequenceClassification, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, name='bert')
@@ -984,8 +984,8 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         loss, classification_scores = outputs[:2]
 
     """
-    def __init__(self, config):
-        super(TFBertForMultipleChoice, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForMultipleChoice, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -1066,8 +1066,8 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         loss, scores = outputs[:2]
 
     """
-    def __init__(self, config):
-        super(TFBertForTokenClassification, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForTokenClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, name='bert')
@@ -1128,8 +1128,8 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         loss, start_scores, end_scores = outputs[:2]
 
     """
-    def __init__(self, config):
-        super(TFBertForQuestionAnswering, self).__init__(config)
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFBertForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, name='bert')

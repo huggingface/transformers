@@ -52,7 +52,7 @@ class TFPreTrainedModel(tf.keras.Model):
     base_model_prefix = ""
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFPreTrainedModel, self).__init__()
+        super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
@@ -257,11 +257,11 @@ class TFPreTrainedModel(tf.keras.Model):
         return model
 
 class TFConv1D(tf.keras.layers.Layer):
-    def __init__(self, nf, nx):
+    def __init__(self, nf, nx, *inputs, **kwargs):
         """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
             Basically works like a Linear layer but the weights are transposed
         """
-        super(TFConv1D, self).__init__()
+        super(TFConv1D, self).__init__(*inputs, **kwargs)
         self.nf = nf
         self.nx = nx
 
