@@ -20,8 +20,6 @@ from __future__ import absolute_import, division, print_function
 import logging
 import os
 import re
-
-import pandas as pd
 import torch
 from torch.utils.data import (TensorDataset)
 
@@ -45,7 +43,6 @@ class InputFeatures(object):
         self.ent2_ids = ent2_ids
         self.ent1_ids = ent1_ids
         self.input_ids = input_ids
-
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_id = label_id
@@ -102,153 +99,6 @@ def find_entity_indices(id_list, tokenizer):
     ent2_bounding_id_list = [ent2_bounding_id_list[0], ent2_bounding_id_list[1] + 1]
     return ent1_bounding_id_list, ent2_bounding_id_list
 
-
-class DatasetBuilder():
-    def __init__(self, path_to_data, args, tokenizer):
-        self.path_to_data = path_to_data
-        self.args = args
-        self.tokenizer = tokenizer
-
-    def load_or_create_cached_features(self, evaluate=False):
-        cached_features_file = os.path.join(self.args.data_dir, 'cached_{}_{}_{}_{}_{}'.format(
-            'dev' if evaluate else 'train',
-            list(filter(None, self.args.model_name_or_path.split('/'))).pop(),
-            str(self.args.max_seq_length),
-            str(self.args.task_name),
-            os.path.basename(self.path_to_data)))
-        if os.path.exists(cached_features_file):
-            logger.info("Loading features from cached file %s", cached_features_file)
-            features = torch.load(cached_features_file)
-
-        else:
-            df = self._preprocess_dataframe()
-            features = self._dataframe_to_features(df, label_list=df['label'].unique(),
-                                                   max_seq_length=self.args.max_seq_length,
-                                                   tokenizer=self.tokenizer)
-            torch.save(features, cached_features_file)
-
-        return features
-
-    def create_dataset(self):
-        features = self.load_or_create_cached_features()
-        num_labels = self.label_count_from_features(features)
-        dataset = self.features_to_dataset(features)
-        return dataset, num_labels
-
-    def _preprocess_dataframe(self):
-        raise NotImplementedError()
-
-    @classmethod
-    def label_count_from_features(cls, features):
-        return len(set([x.label_id for x in features]))
-
-    @classmethod
-    def features_to_dataset(cls, features):
-        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
-        ent1_ids = torch.tensor([f.ent1_ids for f in features], dtype=torch.int)
-        ent2_ids = torch.tensor([f.ent2_ids for f in features], dtype=torch.int)
-        dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids)
-        return dataset
-
-    def _dataframe_to_features(self, df, label_list, max_seq_length,
-                               tokenizer,
-                               pad_token=0,
-                               mask_padding_with_zero=True):
-
-        label_map = {label: i for i, label in enumerate(label_list)}
-        features = []
-
-        for (ex_index, example) in df.iterrows():
-            if ex_index % 10000 == 0:
-                logger.info("Writing example %d of %d" % (ex_index, df.shape[1]))
-
-            input_ids = tokenizer.encode_with_relationship(example.text, example.ent1, example.ent2,
-                                                           text_pair=None, add_special_tokens=True)
-
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(input_ids) > max_seq_length - 2:
-                input_ids = input_ids[:(max_seq_length - 2)]
-
-            # The mask has 1 for real tokens and 0 for padding tokens. Only real
-            # tokens are attended to.
-            input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
-
-            # Zero-pad up to the sequence length.
-            padding_length = max_seq_length - len(input_ids)
-
-            input_ids = input_ids + ([pad_token] * padding_length)
-            input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
-
-            assert len(input_ids) == max_seq_length
-            assert len(input_mask) == max_seq_length
-
-            label_id = label_map[example.label]
-
-            ent1_bounding_id_list, ent2_bounding_id_list = find_entity_indices(input_ids, tokenizer)
-
-            features.append(
-                InputFeatures(input_ids=input_ids,
-                              input_mask=input_mask,
-                              segment_ids=[0] * len(input_ids),
-                              label_id=label_id,
-                              ent1_ids=ent1_bounding_id_list,
-                              ent2_ids=ent2_bounding_id_list
-                              ))
-        return features
-
-
-class SemEvalDatasetBuilder(DatasetBuilder):
-    def __init__(self, path_to_data, args, tokenizer):
-        super(SemEvalDatasetBuilder, self).__init__(path_to_data, args, tokenizer)
-
-    def _instance_generator(self, data):
-        for i in range(0, len(data), 4):
-            id, text = data[i].split('\t')
-            label = data[i + 1]
-            comment = data[i + 2]
-            yield (id, text, label, comment,)
-
-    def _semeval_textfile_to_dataframe(self, path):
-        with open(path, 'r') as f:
-            data = f.readlines()
-        df = pd.DataFrame.from_records(self._instance_generator(data))
-        df.columns = ['id', 'text', 'label_text', 'comment']
-        return df
-
-    def find_ents_and_modify_string(self, text):
-        def mod_text(in_text, hit):
-            before = in_text[:hit.start()]
-            during = hit.group(2)
-            after = in_text[hit.end():]
-
-            start = len(before)
-            end = len(before) + len(during)
-            return (before + during + after, [start, end],)
-
-        e1_hits = re.search("(<e1>)(.*)(</e1>)", text)
-        new_text, e1_offsets = mod_text(text, e1_hits)
-        e2_hits = re.search("(<e2>)(.*)(</e2>)", new_text)
-        new_text, e2_offsets = mod_text(new_text, e2_hits)
-
-        return new_text, e1_offsets, e2_offsets
-
-    def _preprocess_dataframe(self):
-        df = self._semeval_textfile_to_dataframe(self.path_to_data)
-        df['results'] = df['text'].apply(self.find_ents_and_modify_string)
-
-        df['text'] = df['results'].apply(lambda x: x[0])
-        df['ent1'] = df['results'].apply(lambda x: x[1])
-        df['ent2'] = df['results'].apply(lambda x: x[2])
-        df['label_text'] = df['label_text'].astype('category')
-        # for consistent label
-        df.sort_values(by=['label_text'], inplace=True)
-        df['label'] = df['label_text'].cat.codes
-        return df
-
-
 def mod_text(text, hit):
     before = text[:hit.start()]
     during = hit.group(2)
@@ -276,7 +126,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     features = []
     for (ex_index, example) in enumerate(examples):
         if ex_index % 5000 == 0:
-            logger.info("Writing example %d of %d" % (ex_index, len(examples)))
+            logger.info("Writing example %d" % (ex_index))
 
         new_text, e1_offsets, e2_offsets = find_ents_and_modify_string(example.text)
         input_ids = tokenizer.encode_with_relationship(new_text, e1_offsets, e2_offsets,

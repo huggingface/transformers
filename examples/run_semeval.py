@@ -33,11 +33,14 @@ from tqdm import tqdm, trange
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForRelationshipClassification, RBertTokenizer)
-from .utils_semeval import (SemEvalDatasetBuilder, processors, output_modes, convert_examples_to_features,
+from utils_semeval import (processors, output_modes, convert_examples_to_features,
                             convert_features_to_dataset, compute_metrics)
 
 logger = logging.getLogger(__name__)
 
+MODEL_CLASSES = {
+    'bert': (BertConfig, BertForRelationshipClassification, RBertTokenizer)
+}
 
 def set_seed(args):
     random.seed(args.seed)
@@ -233,57 +236,6 @@ def evaluate(args, model, eval_dataset, prefix=""):
     return results
 
 
-# def load_and_cache_examples(args, task, tokenizer, evaluate=False):
-#     if args.local_rank not in [-1, 0] and not evaluate:
-#         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-#
-#     processor = processors[task]()
-#     output_mode = output_modes[task]
-#     # Load data features from cache or dataset file
-#     cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}'.format(
-#         'dev' if evaluate else 'train',
-#         list(filter(None, args.model_name_or_path.split('/'))).pop(),
-#         str(args.max_seq_length),
-#         str(task)))
-#     if os.path.exists(cached_features_file):
-#         logger.info("Loading features from cached file %s", cached_features_file)
-#         features = torch.load(cached_features_file)
-#     else:
-#         logger.info("Creating features from dataset file at %s", args.data_dir)
-#         label_list = processor.get_labels()
-#         if task in ['mnli', 'mnli-mm'] and args.model_type in ['roberta']:
-#             # HACK(label indices are swapped in RoBERTa pretrained model)
-#             label_list[1], label_list[2] = label_list[2], label_list[1]
-#         examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-#         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
-#             cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
-#             cls_token=tokenizer.cls_token,
-#             cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
-#             sep_token=tokenizer.sep_token,
-#             sep_token_extra=bool(args.model_type in ['roberta']),           # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-#             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-#             pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-#             pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
-#         )
-#         if args.local_rank in [-1, 0]:
-#             logger.info("Saving features into cached file %s", cached_features_file)
-#             torch.save(features, cached_features_file)
-#
-#     if args.local_rank == 0 and not evaluate:
-#         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-#
-#     # Convert to Tensors and build dataset
-#     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-#     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-#     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-#     if output_mode == "classification":
-#         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
-#     elif output_mode == "regression":
-#         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
-#
-#     dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-#     return dataset
-
 def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
@@ -395,11 +347,8 @@ def main():
 
     args = parser.parse_args()
 
-    if os.path.exists(args.output_dir) and os.listdir(
-            args.output_dir) and args.do_train and not args.overwrite_output_dir:
-        raise ValueError(
-            "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
-                args.output_dir))
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
+        raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
@@ -421,40 +370,33 @@ def main():
     args.device = device
 
     # Setup logging
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                        datefmt='%m/%d/%Y %H:%M:%S',
-                        level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+    logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+                        datefmt = '%m/%d/%Y %H:%M:%S',
+                        level = logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                   args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
+                    args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
     # Set seed
     set_seed(args)
 
-    # Prepare  task
-
-    tokenizer = RBertTokenizer.from_pretrained("bert-base-uncased")
-    train_path = args.data_dir + '/TRAIN_FILE.txt'
-    eval_path = args.data_dir + '/TEST_FILE_FULL.txt'
-    train_dataset, train_num_labels = SemEvalDatasetBuilder(path_to_data=train_path, args=args,
-                                                            tokenizer=tokenizer).create_dataset()
-    eval_dataset, eval_num_labels = SemEvalDatasetBuilder(path_to_data=eval_path, args=args,
-                                                          tokenizer=tokenizer).create_dataset()
-
-    assert train_num_labels == eval_num_labels
-    num_labels = train_num_labels
-
-    config = BertConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
-                                        num_labels=num_labels)
-
-    model_class = BertForRelationshipClassification
-
-    model = model_class.from_pretrained(args.model_name_or_path, config=config)
-
-    args.output_mode = 'classification'
+    # Prepare GLUE task
+    args.task_name = args.task_name.lower()
+    if args.task_name not in processors:
+        raise ValueError("Task not found: %s" % (args.task_name))
+    processor = processors[args.task_name]()
+    args.output_mode = output_modes[args.task_name]
+    label_list = processor.get_labels()
+    num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+
+    args.model_type = args.model_type.lower()
+    config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
+    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -463,10 +405,13 @@ def main():
 
     logger.info("Training/evaluation parameters %s", args)
 
+
     # Training
     if args.do_train:
+        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
@@ -477,8 +422,7 @@ def main():
         logger.info("Saving model checkpoint to %s", args.output_dir)
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        model_to_save = model.module if hasattr(model,
-                                                'module') else model  # Take care of distributed/parallel training
+        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
         model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
 
@@ -487,28 +431,28 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = model_class.from_pretrained(args.output_dir)
-        tokenizer = RBertTokenizer.from_pretrained(args.output_dir)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         model.to(args.device)
+
 
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
-                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args=args, model=model, eval_dataset=eval_dataset, prefix=global_step)
+            result = evaluate(args, model, tokenizer, prefix=global_step)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
 
     return results
-
 
 if __name__ == "__main__":
     main()
