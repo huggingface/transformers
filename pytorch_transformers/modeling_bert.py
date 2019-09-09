@@ -17,20 +17,18 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import json
 import logging
 import math
 import os
 import sys
-from io import open
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings
+from .modeling_utils import PreTrainedModel, prune_linear_layer
 
 logger = logging.getLogger(__name__)
 
@@ -824,6 +822,80 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             outputs = (next_sentence_loss,) + outputs
 
         return outputs  # (next_sentence_loss), seq_relationship_score, (hidden_states), (attentions)
+
+
+"""Bert Model transformer with a sequence classification/regression head on top, making use of 
+    entity offsets for relationship classification. Note, the parameters of forward requires tensors describing the 
+    indices of each entity. See the details in the R-Bert paper https://arxiv.org/pdf/1905.08284.pdf"""
+
+
+class BertForRelationshipClassification(BertPreTrainedModel):
+    def __init__(self, config):
+        super(BertForRelationshipClassification, self).__init__(config)
+        self.num_labels = config.num_labels
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.bert = BertModel(config)
+        self.sentence_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh(),
+        )
+        self.entity_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh()
+        )
+
+        self.entity2_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh()
+        )
+
+        self.classifier = nn.Linear(config.hidden_size * 3, self.config.num_labels)
+
+        self.init_weights()
+
+    def forward(self, input_ids, ent1_ids, ent2_ids, token_type_ids=None, attention_mask=None, labels=None,
+                position_ids=None, head_mask=None):
+
+        outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                            attention_mask=attention_mask, head_mask=head_mask)
+        last_hidden_states = outputs[0]
+
+        def get_indices_tensor(start_end_tensor):
+            start_tensor = start_end_tensor[0]
+            end_tensor = start_end_tensor[1]
+            return torch.arange(start_tensor, end_tensor, device=start_end_tensor.device.type)
+
+        def average_entity_vectors(start_end_tensor):
+            batch_return_list = []
+            for hidden_states, target_tensor_indices in zip(last_hidden_states, start_end_tensor):
+                lookup_tensor = get_indices_tensor(target_tensor_indices)
+                average_of_entity_vectors = torch.index_select(hidden_states, 0, lookup_tensor).unsqueeze(0).mean(1)
+                batch_return_list.append(average_of_entity_vectors)
+            return torch.cat(batch_return_list)
+
+        cls_tensor = self.sentence_layer(last_hidden_states[:, 0])
+        ent1_tensor = self.entity_layer(average_entity_vectors(ent1_ids))
+        ent2_tensor = self.entity2_layer(average_entity_vectors(ent2_ids))
+
+        entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1)
+        logits = self.classifier(entities_and_cls_tensor)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings("""Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of

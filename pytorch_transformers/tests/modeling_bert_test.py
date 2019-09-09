@@ -16,18 +16,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import unittest
 import shutil
+import unittest
+
 import pytest
 
 from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
-                                     BertForNextSentencePrediction, BertForPreTraining,
-                                     BertForQuestionAnswering, BertForSequenceClassification,
-                                     BertForTokenClassification, BertForMultipleChoice)
+                                  BertForNextSentencePrediction, BertForPreTraining,
+                                  BertForQuestionAnswering, BertForSequenceClassification,
+                                  BertForTokenClassification, BertForMultipleChoice,
+                                  BertForRelationshipClassification)
 from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-
-from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .modeling_common_test import (CommonTestCases, ids_tensor)
 
 
 class BertModelTest(CommonTestCases.CommonModelTester):
@@ -203,6 +204,24 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
+        def create_and_check_bert_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask,
+                                                                  sequence_labels, token_labels, choice_labels):
+            import torch
+            config.num_labels = self.num_labels
+            model = BertForRelationshipClassification(config=config)
+            ent1_ids = torch.tensor([[2, 5] for _ in range(0, 13)], dtype=torch.int)
+            ent2_ids = torch.tensor([[6, 7] for _ in range(0, 13)], dtype=torch.int)
+            model.eval()
+            loss, logits = model(input_ids, ent1_ids, ent2_ids, token_type_ids, input_mask, sequence_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()),
+                [self.batch_size, self.num_labels])
+            self.check_loss_output(result)
+
 
         def create_and_check_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
@@ -296,6 +315,10 @@ class BertModelTest(CommonTestCases.CommonModelTester):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_sequence_classification(*config_and_inputs)
+
+    def test_for_relationship_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_for_relationship_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
