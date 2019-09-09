@@ -46,6 +46,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
                      use_token_type_ids=True,
                      use_input_mask=True,
                      use_labels=True,
+                     use_mc_token_ids=True,
                      vocab_size=99,
                      hidden_size=32,
                      num_hidden_layers=5,
@@ -69,6 +70,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
             self.use_token_type_ids = use_token_type_ids
             self.use_input_mask = use_input_mask
             self.use_labels = use_labels
+            self.use_mc_token_ids = use_mc_token_ids
             self.vocab_size = vocab_size
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
@@ -96,6 +98,10 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
             if self.use_token_type_ids:
                 token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
+            mc_token_ids = None
+            if self.use_mc_token_ids:
+                mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+
             sequence_labels = None
             token_labels = None
             choice_labels = None
@@ -121,7 +127,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
-            return config, input_ids, input_mask, head_mask, token_type_ids, sequence_labels, token_labels, choice_labels
+            return config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, token_labels, choice_labels
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(
@@ -163,15 +169,27 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
                 list(result["lm_logits"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
 
-        def create_and_check_double_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        def create_and_check_double_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args):
             model = GPT2DoubleHeadsModel(config)
             model.eval()
 
-            loss, lm_logits, mc_logits, _ = model(input_ids, token_type_ids=token_type_ids, lm_labels=input_ids)
+
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+
+            inputs = {'input_ids': multiple_choice_inputs_ids,
+                      'mc_token_ids': mc_token_ids,
+                      'attention_mask': multiple_choice_input_mask,
+                      'token_type_ids': multiple_choice_token_type_ids,
+                      'lm_labels': multiple_choice_inputs_ids}
+
+            loss, lm_logits, mc_logits, _ = model(**inputs)
 
             result = {
                 "loss": loss,
-                "lm_logits": lm_logits
+                "lm_logits": lm_logits,
+                "mc_logits": mc_logits
             }
 
             self.parent.assertListEqual(
@@ -179,11 +197,17 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
                 [])
             self.parent.assertListEqual(
                 list(result["lm_logits"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                [self.batch_size, self.num_choices, self.seq_length, self.vocab_size])
+            self.parent.assertListEqual(
+                list(result["mc_logits"].size()),
+                [self.batch_size, self.num_choices])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, input_mask, head_mask, token_type_ids, sequence_labels, token_labels, choice_labels) = config_and_inputs
+
+            (config, input_ids, input_mask, head_mask, token_type_ids,
+             mc_token_ids, sequence_labels, token_labels, choice_labels) = config_and_inputs
+
             inputs_dict = {
                 'input_ids': input_ids,
                 'token_type_ids': token_type_ids,

@@ -37,9 +37,9 @@ else:
 
 class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel,
-    #                      TFGPT2DoubleHeadsModel) if is_tf_available() else ()
-    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()
+    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel,
+                         TFGPT2DoubleHeadsModel) if is_tf_available() else ()
+    # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()
 
     class TFGPT2ModelTester(object):
 
@@ -51,6 +51,7 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                      use_token_type_ids=True,
                      use_input_mask=True,
                      use_labels=True,
+                     use_mc_token_ids=True,
                      vocab_size=99,
                      hidden_size=32,
                      num_hidden_layers=5,
@@ -74,6 +75,7 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
             self.use_token_type_ids = use_token_type_ids
             self.use_input_mask = use_input_mask
             self.use_labels = use_labels
+            self.use_mc_token_ids = use_mc_token_ids
             self.vocab_size = vocab_size
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
@@ -101,6 +103,10 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
             if self.use_token_type_ids:
                 token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
+            mc_token_ids = None
+            if self.use_mc_token_ids:
+                mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+
             sequence_labels = None
             token_labels = None
             choice_labels = None
@@ -126,7 +132,7 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
-            return config, input_ids, input_mask, head_mask, token_type_ids, sequence_labels, token_labels, choice_labels
+            return config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, token_labels, choice_labels
 
         def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = TFGPT2Model(config=config)
@@ -162,25 +168,34 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                 [self.batch_size, self.seq_length, self.vocab_size])
 
 
-        def create_and_check_gpt2_double_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-            pass
-            # model = TFGPT2DoubleHeadsModel(config=config)
-            # inputs = {'input_ids': input_ids,
-            #           'attention_mask': input_mask,
-            #           'token_type_ids': token_type_ids}
-            # seq_relationship_score, = model(inputs)[0]
-            # result = {
-            #     "seq_relationship_score": seq_relationship_score.numpy(),
-            # }
-            # self.parent.assertListEqual(
-            #     list(result["seq_relationship_score"].shape),
-            #     [self.batch_size, 2])
+        def create_and_check_gpt2_double_head(self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args):
+            model = TFGPT2DoubleHeadsModel(config=config)
+
+            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+
+            inputs = {'input_ids': multiple_choice_inputs_ids,
+                      'mc_token_ids': mc_token_ids,
+                      'attention_mask': multiple_choice_input_mask,
+                      'token_type_ids': multiple_choice_token_type_ids}
+            lm_logits, mc_logits = model(inputs)[:2]
+            result = {
+                "lm_logits": lm_logits.numpy(),
+                "mc_logits": mc_logits.numpy()
+            }
+            self.parent.assertListEqual(
+                list(result["lm_logits"].shape),
+                [self.batch_size, self.num_choices, self.seq_length, self.vocab_size])
+            self.parent.assertListEqual(
+                list(result["mc_logits"].shape),
+                [self.batch_size, self.num_choices])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
 
             (config, input_ids, input_mask, head_mask, token_type_ids,
-             sequence_labels, token_labels, choice_labels) = config_and_inputs
+             mc_token_ids, sequence_labels, token_labels, choice_labels) = config_and_inputs
 
             inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
             return config, inputs_dict
