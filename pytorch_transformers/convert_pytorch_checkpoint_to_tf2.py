@@ -21,22 +21,32 @@ from __future__ import print_function
 import argparse
 import tensorflow as tf
 
-from pytorch_transformers import BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf
+import pytorch_transformers
+
+from pytorch_transformers import (BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf2,
+                                  GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2)
 
 import logging
 logging.basicConfig(level=logging.INFO)
 
-def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file, tf_dump_path):
-    if model_type == 'bert':
-        # Initialise TF model
-        config = BertConfig.from_json_file(config_file)
-        print("Building TensorFlow model from configuration: {}".format(str(config)))
-        model = TFBertForPreTraining(config)
+MODEL_CLASSES = {
+    'bert': (BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf2),
+    'gpt2': (GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2),
+}
 
-        # Load weights from tf checkpoint
-        model = load_bert_pt_weights_in_tf(model, config, pytorch_checkpoint_path)
-    else:
-        raise ValueError("Unrecognized model type, should be one of ['bert'].")
+def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file, tf_dump_path):
+    if model_type not in MODEL_CLASSES:
+        raise ValueError("Unrecognized model type, should be one of {}.".format(list(MODEL_CLASSES.keys())))
+
+    config_class, model_class, loading_fct = MODEL_CLASSES[model_type]
+
+    # Initialise TF model
+    config = config_class.from_json_file(config_file)
+    print("Building TensorFlow model from configuration: {}".format(str(config)))
+    model = model_class(config)
+
+    # Load weights from tf checkpoint
+    model = loading_fct(model, config, pytorch_checkpoint_path)
 
     # Save pytorch-model
     print("Save TensorFlow model to {}".format(tf_dump_path))
@@ -50,7 +60,7 @@ if __name__ == "__main__":
                         default = None,
                         type = str,
                         required = True,
-                        help = "Model type selcted in the list of.")
+                        help = "Model type selcted in the list of {}.".format(list(MODEL_CLASSES.keys())))
     parser.add_argument("--pytorch_checkpoint_path",
                         default = None,
                         type = str,
