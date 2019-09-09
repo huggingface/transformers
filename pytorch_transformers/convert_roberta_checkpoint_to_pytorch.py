@@ -23,12 +23,12 @@ import torch
 
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
-from pytorch_transformers.modeling_bert import (BertConfig, BertEncoder,
+from pytorch_transformers import (BertConfig, BertEncoder,
                                                 BertIntermediate, BertLayer,
                                                 BertModel, BertOutput,
                                                 BertSelfAttention,
                                                 BertSelfOutput)
-from pytorch_transformers.modeling_roberta import (RobertaEmbeddings,
+from pytorch_transformers import (RobertaEmbeddings,
                                                    RobertaForMaskedLM,
                                                    RobertaForSequenceClassification,
                                                    RobertaModel)

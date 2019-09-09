@@ -28,9 +28,9 @@ import logging
 
 import torch
 
-from pytorch_transformers import PretrainedConfig, PreTrainedModel
-from pytorch_transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from pytorch_transformers.modeling_gpt2 import GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers import (PretrainedConfig, PreTrainedModel,
+                                  BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+                                  GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 
 def _config_zero_init(config):

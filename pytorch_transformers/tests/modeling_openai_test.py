@@ -24,7 +24,8 @@ import shutil
 from pytorch_transformers import (OpenAIGPTConfig, OpenAIGPTModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                   OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
 
-from .modeling_common_test import CommonTestCases, ConfigTester, ids_tensor
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 
 class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
