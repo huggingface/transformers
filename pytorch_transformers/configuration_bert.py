@@ -58,7 +58,7 @@ class BertConfig(PretrainedConfig):
             intermediate_size: The size of the "intermediate" (i.e., feed-forward)
                 layer in the Transformer encoder.
             hidden_act: The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
+                encoder and pooler. If string, "gelu", "relu", "swish" and "gelu_new" are supported.
             hidden_dropout_prob: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
             attention_probs_dropout_prob: The dropout ratio for the attention
