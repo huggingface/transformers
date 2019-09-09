@@ -23,11 +23,11 @@ import pytest
 
 from pytorch_transformers import is_torch_available
 
-try:
+if is_torch_available():
     import torch
     from pytorch_transformers import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
     from pytorch_transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)

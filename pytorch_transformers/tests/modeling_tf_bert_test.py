@@ -26,7 +26,7 @@ from .configuration_common_test import ConfigTester
 
 from pytorch_transformers import BertConfig, is_tf_available
 
-try:
+if is_tf_available():
     import tensorflow as tf
     from pytorch_transformers.modeling_tf_bert import (TFBertModel, TFBertForMaskedLM,
                                                        TFBertForNextSentencePrediction,
@@ -36,7 +36,7 @@ try:
                                                        TFBertForTokenClassification,
                                                        TFBertForQuestionAnswering,
                                                        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require TensorFlow")
 
 

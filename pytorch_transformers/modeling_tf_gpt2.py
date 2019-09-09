@@ -699,6 +699,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             head_mask = inputs.get('head_mask', None)
             assert len(inputs) <= 5, "Too many inputs."
 
+        assert len(shape_list(input_ids)) == 3, "Inputs should have 3 dimensions: batch, choices, sequence length"
         num_choices = shape_list(input_ids)[1]
         seq_length = shape_list(input_ids)[2]
 

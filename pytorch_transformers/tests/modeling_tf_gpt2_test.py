@@ -26,19 +26,20 @@ from .configuration_common_test import ConfigTester
 
 from pytorch_transformers import GPT2Config, is_tf_available
 
-try:
+if is_tf_available():
     import tensorflow as tf
     from pytorch_transformers.modeling_tf_gpt2 import (TFGPT2Model, TFGPT2LMHeadModel,
                                                        TFGPT2DoubleHeadsModel,
                                                        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
 class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel,
-                         TFGPT2DoubleHeadsModel) if is_tf_available() else ()
+    # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel,
+    #                      TFGPT2DoubleHeadsModel) if is_tf_available() else ()
+    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()
 
     class TFGPT2ModelTester(object):
 
@@ -186,7 +187,7 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
 
     def setUp(self):
         self.model_tester = TFGPT2ModelTest.TFGPT2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPT2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
