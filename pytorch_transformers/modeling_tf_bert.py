@@ -704,20 +704,7 @@ class TFBertModel(TFBertPreTrainedModel):
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForPreTraining(TFBertPreTrainedModel):
     r"""
-        **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-        **next_sentence_label**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
-            Indices should be in ``[0, 1]``.
-            ``0`` indicates sequence B is a continuation of sequence A,
-            ``1`` indicates sequence B is a random sequence.
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when both ``masked_lm_labels`` and ``next_sentence_label`` are provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **seq_relationship_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, 2)``
@@ -762,15 +749,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel):
     r"""
-        **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Masked language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -786,8 +765,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForMaskedLM.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
-        loss, prediction_scores = outputs[:2]
+        outputs = model(input_ids)
+        prediction_scores = outputs[:2]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -811,12 +790,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     r"""
-        **next_sentence_label**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
-            Indices should be in ``[0, 1]``.
-            ``0`` indicates sequence B is a continuation of sequence A,
-            ``1`` indicates sequence B is a random sequence.
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``next_sentence_label`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Next sequence prediction (classification) loss.
@@ -862,15 +835,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForSequenceClassification(TFBertPreTrainedModel):
     r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
-            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification (or regression if config.num_labels==1) loss.
         **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -886,8 +851,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
+        outputs = model(input_ids)
         loss, logits = outputs[:2]
 
     """
@@ -905,7 +869,8 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
 
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output)
+        if training:
+            pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
@@ -915,53 +880,10 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
 
 @add_start_docstrings("""Bert Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    BERT_START_DOCSTRING)
+    BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForMultipleChoice(TFBertPreTrainedModel):
     r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-            The second dimension of the input (`num_choices`) indicates the number of choices to score.
-            To match pre-training, BERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
-
-            (a) For sequence pairs:
-
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-                
-                ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
-
-            (b) For single sequences:
-
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
-                
-                ``token_type_ids:   0   0   0   0  0     0   0``
-    
-            Indices can be obtained using :class:`pytorch_transformers.BertTokenizer`.
-            See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
-            :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
-            Segment token indices to indicate first and second portions of the inputs.
-            The second dimension of the input (`num_choices`) indicates the number of choices to score.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
-            Mask to avoid performing attention on padding token indices.
-            The second dimension of the input (`num_choices`) indicates the number of choices to score.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification loss.
         **classification_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above).
             Classification scores (before SoftMax).
@@ -979,8 +901,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         model = BertForMultipleChoice.from_pretrained('bert-base-uncased')
         choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
         input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
+        outputs = model(input_ids)
         loss, classification_scores = outputs[:2]
 
     """
@@ -1025,7 +946,8 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
 
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output)
+        if training:
+            pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
@@ -1039,13 +961,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForTokenClassification(TFBertPreTrainedModel):
     r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification loss.
         **scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
             Classification scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -1061,8 +977,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = BertForTokenClassification.from_pretrained('bert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
+        outputs = model(input_ids)
         loss, scores = outputs[:2]
 
     """
@@ -1080,7 +995,8 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output)
+        if training:
+            sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
@@ -1093,18 +1009,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class TFBertForQuestionAnswering(TFBertPreTrainedModel):
     r"""
-        **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        **end_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         **start_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
             Span-start scores (before SoftMax).
         **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``

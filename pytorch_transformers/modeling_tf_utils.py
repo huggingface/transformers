@@ -273,15 +273,117 @@ class TFConv1D(tf.keras.layers.Layer):
                 mean=0., stddev=0.02))
         self.bias = self.add_weight(
             "bias",
-            shape=[self.nx, self.nf],
+            shape=[1, self.nf],
             initializer=tf.zeros_initializer())
 
     @tf.function
     def call(self, x):
-        size_out = tf.shape(x)[:-1] + (self.nf,)
+        bz, sl = shape_list(x)[:2]
 
-        x = tf.reshape(x, [-1, tf.shape(x)[-1]])
+        x = tf.reshape(x, [-1, self.nx])
         x = tf.matmul(x, self.weight) + self.bias
-        x = tf.reshape(x, size_out)
+
+        x = tf.reshape(x, [bz, sl, self.nf])
 
         return x
+
+
+class TFSequenceSummary(tf.keras.layers.Layer):
+    r""" Compute a single vector summary of a sequence hidden states according to various possibilities:
+        Args of the config class:
+            summary_type:
+                - 'last' => [default] take the last token hidden state (like XLNet)
+                - 'first' => take the first token hidden state (like Bert)
+                - 'mean' => take the mean of all tokens hidden states
+                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                - 'attn' => Not implemented now, use multi-head attention
+            summary_use_proj: Add a projection after the vector extraction
+            summary_proj_to_labels: If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
+            summary_activation: 'tanh' => add a tanh activation to the output, Other => no activation. Default
+            summary_first_dropout: Add a dropout before the projection and activation
+            summary_last_dropout: Add a dropout after the projection and activation
+    """
+    def __init__(self, config, **kwargs):
+        super(TFSequenceSummary, self).__init__(**kwargs)
+
+        self.summary_type = config.summary_type if hasattr(config, 'summary_use_proj') else 'last'
+        if self.summary_type == 'attn':
+            # We should use a standard multi-head attention module with absolute positional embedding for that.
+            # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
+            # We can probably just use the multi-head attention module of PyTorch >=1.1.0
+            raise NotImplementedError
+
+        self.summary = tf.keras.layers.Identity(name='summary')
+        if hasattr(config, 'summary_use_proj') and config.summary_use_proj:
+            if hasattr(config, 'summary_proj_to_labels') and config.summary_proj_to_labels and config.num_labels > 0:
+                num_classes = config.num_labels
+            else:
+                num_classes = config.hidden_size
+            self.summary = tf.keras.layers.Dense(num_classes, name='summary')
+
+        self.activation = None
+        if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':
+            self.activation = tf.keras.layers.Tanh()
+
+        self.first_dropout = None
+        if hasattr(config, 'summary_first_dropout') and config.summary_first_dropout > 0:
+            self.first_dropout = tf.keras.layers.Dropout(config.summary_first_dropout)
+
+        self.last_dropout = None
+        if hasattr(config, 'summary_last_dropout') and config.summary_last_dropout > 0:
+            self.last_dropout = tf.keras.layers.Dropout(config.summary_last_dropout)
+
+    @tf.function
+    def call(self, inputs, training=False):
+        """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
+            cls_index: [optional] position of the classification token if summary_type == 'cls_index',
+                shape (bsz,) or more generally (bsz, ...) where ... are optional leading dimensions of hidden_states.
+                if summary_type == 'cls_index' and cls_index is None:
+                    we take the last token of the sequence as classification token
+        """
+        if not isinstance(inputs, (dict, tuple, list)):
+            hidden_states = inputs
+            cls_index = None
+        elif isinstance(inputs, (tuple, list)):
+            hidden_states = inputs[0]
+            cls_index = inputs[1] if len(inputs) > 1 else None
+            assert len(inputs) <= 2, "Too many inputs."
+        else:
+            input_ids = inputs.get('input_ids')
+            cls_index = inputs.get('cls_index', None)
+
+        if self.summary_type == 'last':
+            output = hidden_states[:, -1]
+        elif self.summary_type == 'first':
+            output = hidden_states[:, 0]
+        elif self.summary_type == 'mean':
+            output = tf.mean(hidden_states, axis=1)
+        elif self.summary_type == 'cls_index':
+            if cls_index is None:
+                cls_index = tf.fill(tf.shape(hidden_states[..., :1, :]), hidden_states.shape[-2]-1, dtype=tf.int32)
+            else:
+                cls_index = cls_index[..., tf.newaxis, tf.newaxis]
+                cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))
+            # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
+            output = hidden_states.gather(-2, cls_index).squeeze(-2) # shape (bsz, XX, hidden_size)
+        elif self.summary_type == 'attn':
+            raise NotImplementedError
+
+        if training and self.first_dropout is not None:
+            output = self.first_dropout(output)
+
+        output = self.summary(output)
+
+        if self.activation is not None:
+            output = self.activation(output)
+
+        if training and self.last_dropout is not None:
+            output = self.last_dropout(output)
+
+        return output
+
+def shape_list(x):
+    """Deal with dynamic shape in tensorflow cleanly."""
+    static = x.shape.as_list()
+    dynamic = tf.shape(x)
+    return [dynamic[i] if s is None else s for i, s in enumerate(static)]
