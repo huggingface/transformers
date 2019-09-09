@@ -359,13 +359,18 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         elif self.summary_type == 'mean':
             output = tf.mean(hidden_states, axis=1)
         elif self.summary_type == 'cls_index':
+            hidden_shape = shape_list(hidden_states)  # e.g. [batch, num choices, seq length, hidden dims]
             if cls_index is None:
-                cls_index = tf.fill(tf.shape(hidden_states[..., :1, :]), hidden_states.shape[-2]-1, dtype=tf.int32)
-            else:
-                cls_index = cls_index[..., tf.newaxis, tf.newaxis]
-                cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))
+                cls_index = tf.fill(hidden_shape[:-2], hidden_shape[-2] - 1)  # A tensor full of shape [batch] or [batch, num choices] full of sequence length
+            cls_shape = shape_list(cls_index)
+            if len(cls_shape) <= len(hidden_shape) - 2:
+                cls_index = cls_index[..., tf.newaxis]
+            # else:
+                # cls_index = cls_index[..., tf.newaxis]
+                # cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))
             # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
-            output = hidden_states.gather(-2, cls_index).squeeze(-2) # shape (bsz, XX, hidden_size)
+            output = tf.gather(hidden_states, cls_index, batch_dims=len(hidden_shape) - 2)
+            output = tf.squeeze(output, axis=len(hidden_shape) - 2) # shape of output: (batch, num choices, hidden_size)
         elif self.summary_type == 'attn':
             raise NotImplementedError
 

@@ -314,17 +314,16 @@ class TFGPT2Embeddings(tf.keras.layers.Layer):
     def _linear(self, inputs):
         """Computes logits by running inputs through a linear layer.
             Args:
-                inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+                inputs: A float32 tensor with shape [..., hidden_size]
             Returns:
-                float32 tensor with shape [batch_size, length, vocab_size].
+                float32 tensor with shape [..., vocab_size].
         """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
+        first_dims = shape_list(inputs)[:-1]
 
         x = tf.reshape(inputs, [-1, self.hidden_size])
         logits = tf.matmul(x, self.weight, transpose_b=True)
 
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return tf.reshape(logits, first_dims + [self.vocab_size])
 
 class TFGPT2MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
@@ -679,10 +678,11 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     @tf.function
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
-            raise ValueError("Inputs should be a list or a dict with at least two elements: 'inputs_ids' and 'mc_token_ids'")
+            input_ids = inputs
+            mc_token_ids, past, attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None, None
         elif isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            mc_token_ids = inputs[1]
+            mc_token_ids = inputs[1] if len(inputs) > 1 else None
             past = inputs[2] if len(inputs) > 2 else None
             attention_mask = inputs[3] if len(inputs) > 3 else None
             token_type_ids = inputs[4] if len(inputs) > 4 else None
@@ -691,7 +691,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs.get('input_ids')
-            mc_token_ids = inputs.get('mc_token_ids')
+            mc_token_ids = inputs.get('mc_token_ids', None)
             past = inputs.get('past', None)
             attention_mask = inputs.get('attention_mask', None)
             token_type_ids = inputs.get('token_type_ids', None)
@@ -699,9 +699,9 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             head_mask = inputs.get('head_mask', None)
             assert len(inputs) <= 5, "Too many inputs."
 
-        assert len(shape_list(input_ids)) == 3, "Inputs should have 3 dimensions: batch, choices, sequence length"
-        num_choices = shape_list(input_ids)[1]
-        seq_length = shape_list(input_ids)[2]
+        input_shapes = shape_list(input_ids)
+
+        seq_length = input_shapes[-1]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length))
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
@@ -710,12 +710,15 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         flat_inputs = [flat_input_ids, past, flat_attention_mask, flat_token_type_ids, flat_position_ids, head_mask]
 
-        outputs = self.transformer(flat_inputs, training=training)
-
+        transformer_outputs = self.transformer(flat_inputs, training=training)
         hidden_states = transformer_outputs[0]
+
+        hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
 
         lm_logits = self.transformer.wte(hidden_states, mode="linear")
         mc_logits = self.multiple_choice_head([hidden_states, mc_token_ids], training=training)
+
+        mc_logits = tf.squeeze(mc_logits, axis=-1)
 
         outputs = (lm_logits, mc_logits) + transformer_outputs[1:]
 
