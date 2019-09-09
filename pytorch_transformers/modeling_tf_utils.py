@@ -277,7 +277,6 @@ class TFConv1D(tf.keras.layers.Layer):
             shape=[1, self.nf],
             initializer=tf.zeros_initializer())
 
-    @tf.function
     def call(self, x):
         bz, sl = shape_list(x)[:2]
 
@@ -334,7 +333,6 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         if hasattr(config, 'summary_last_dropout') and config.summary_last_dropout > 0:
             self.last_dropout = tf.keras.layers.Dropout(config.summary_last_dropout)
 
-    @tf.function
     def call(self, inputs, training=False):
         """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
             cls_index: [optional] position of the classification token if summary_type == 'cls_index',
