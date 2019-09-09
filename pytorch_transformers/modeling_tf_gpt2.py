@@ -100,9 +100,14 @@ def load_gpt2_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
 
         weight_value_tuples.append((symbolic_weight, array))
 
+        state_dict.pop(name)
+
     K.batch_set_value(weight_value_tuples)
 
     tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+
+    assert not state_dict, "Weights not loaded: {}".format(list(state_dict.keys()))
+
     return tf_model
 
 

@@ -77,6 +77,7 @@ def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     weight_value_tuples = []
+    all_pytorch_weights = set(list(state_dict.keys()))
     for symbolic_weight in symbolic_weights:
         name = symbolic_weight.name
         name = name.replace('cls_mlm', 'cls')  # We had to split this layer in two in the TF model to be
@@ -91,7 +92,7 @@ def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
             name[-1] = 'weight'
 
         name = '.'.join(name)
-        assert name in state_dict
+        assert name in state_dict, "{} not found in PyTorch model".format(name)
         array = state_dict[name].numpy()
 
         if transpose:
@@ -106,14 +107,28 @@ def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
         logger.info("Initialize TF weight {}".format(symbolic_weight.name))
 
         weight_value_tuples.append((symbolic_weight, array))
+        all_pytorch_weights.discard(name)
 
     K.batch_set_value(weight_value_tuples)
 
     tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+
+    logger.info("Weights not loaded: {}".format(all_pytorch_weights))
+
     return tf_model
 
 
 def gelu(x):
+    """ Gaussian Error Linear Unit.
+    Original Implementation of the gelu activation function in Google Bert repo when initialy created.
+        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+        Also see https://arxiv.org/abs/1606.08415
+    """
+    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
+    return x * cdf
+
+def gelu_new(x):
     """Gaussian Error Linear Unit.
     This is a smoother version of the RELU.
     Original paper: https://arxiv.org/abs/1606.08415
@@ -126,14 +141,14 @@ def gelu(x):
         (np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
     return x * cdf
 
-
 def swish(x):
     return x * tf.sigmoid(x)
 
 
 ACT2FN = {"gelu": tf.keras.layers.Activation(gelu),
           "relu": tf.keras.activations.relu,
-          "swish": tf.keras.layers.Activation(swish)}
+          "swish": tf.keras.layers.Activation(swish),
+          "gelu_new": tf.keras.layers.Activation(gelu_new)}
 
 
 class TFBertEmbeddings(tf.keras.layers.Layer):
@@ -263,8 +278,10 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)  # (batch size, num_heads, seq_len_q, seq_len_k)
         dk = tf.cast(tf.shape(key_layer)[-1], tf.float32) # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
-        # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-        attention_scores = attention_scores + attention_mask
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
@@ -438,31 +455,33 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
 
 
 class TFBertLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, input_embeddings, **kwargs):
         super(TFBertLMPredictionHead, self).__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.transform = TFBertPredictionHeadTransform(config, name='transform')
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name='decoder')
+        self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,),
                                     initializer='zeros',
                                     trainable=True,
                                     name='bias')
+        super(TFBertLMPredictionHead, self).build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states) + self.bias
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = hidden_states + self.bias
         return hidden_states
 
 
 class TFBertMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, input_embeddings, **kwargs):
         super(TFBertMLMHead, self).__init__(**kwargs)
-        self.predictions = TFBertLMPredictionHead(config, name='predictions')
+        self.predictions = TFBertLMPredictionHead(config, input_embeddings, name='predictions')
 
     def call(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
@@ -716,12 +735,13 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 
         self.bert = TFBertMainLayer(config, name='bert')
         self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
+        self.cls_mlm = TFBertMLMHead(config, self.bert.embeddings, name='cls_mlm')
 
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.bert.embeddings(sequence_output, mode="linear", training=training)
+        prediction_scores = self.cls_mlm(sequence_output, training=training)
         seq_relationship_score = self.cls_nsp(pooled_output)
 
         outputs = (prediction_scores, seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
@@ -757,12 +777,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         super(TFBertForMaskedLM, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
+        self.cls_mlm = TFBertMLMHead(config, self.bert.embeddings, name='cls_mlm')
 
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         sequence_output = outputs[0]
-        prediction_scores = self.bert.embeddings(sequence_output, mode="linear", training=training)
+        prediction_scores = self.cls_mlm(sequence_output, training=training)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
