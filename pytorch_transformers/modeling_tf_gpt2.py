@@ -39,7 +39,7 @@ TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models
                                      "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-tf_model.h5"}
 
 
-def load_gpt2_pt_weights_in_tf(tf_model, config, pytorch_checkpoint_path):
+def load_gpt2_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
     """ Load pytorch checkpoints in a TF 2.0 model and save it using HDF5 format
         We use HDF5 to easily do transfer learning
         (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -67,23 +67,28 @@ def load_gpt2_pt_weights_in_tf(tf_model, config, pytorch_checkpoint_path):
     weight_value_tuples = []
     for symbolic_weight in symbolic_weights:
         name = symbolic_weight.name
-        name = name.replace('cls_mlm', 'cls')  # We had to split this layer in two in the TF model to be
-        name = name.replace('cls_nsp', 'cls')  # able to do transfer learning (Keras only allow to remove full layers)
         name = name.replace(':0', '')
-        name = name.replace('layer_', 'layer/')
+        name = name.replace('h_', 'h/')
         name = name.split('/')
-        name = name[1:]
+        name = name[2:]
 
         transpose = bool(name[-1] == 'kernel')
-        if name[-1] == 'kernel' or name[-1] == 'embeddings':
+        if name[-1] == 'kernel' or name[-1] == 'embeddings' or name[-1] == 'gamma':
             name[-1] = 'weight'
+        if name[-1] == 'beta':
+            name[-1] = 'bias'
 
         name = '.'.join(name)
-        assert name in state_dict
+        assert name in state_dict, "Weight {} not in PyTorch model".format(name)
         array = state_dict[name].numpy()
 
         if transpose:
             array = numpy.transpose(array)
+
+        if len(symbolic_weight.shape) > len(array.shape):
+            array = array[None, ...]
+        if len(symbolic_weight.shape) < len(array.shape):
+            array = np.squeeze(array)
 
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
@@ -138,7 +143,7 @@ class TFAttention(tf.keras.layers.Layer):
         pass
 
     @staticmethod
-    @tf.function
+    # @tf.function
     def causal_attention_mask(nd, ns, dtype):
         """1's in the lower triangle, counting from the lower right corner.
         Same as tf.matrix_band_part(tf.ones([nd, ns]), -1, ns-nd), but doesn't produce garbage on TPUs.
@@ -148,7 +153,7 @@ class TFAttention(tf.keras.layers.Layer):
         m = i >= j - ns + nd
         return tf.cast(m, dtype)
 
-    @tf.function
+    # @tf.function
     def _attn(self, inputs, training=False):
         q, k, v, attention_mask, head_mask = inputs
         # q, k, v have shape [batch, heads, sequence, features]
@@ -180,21 +185,21 @@ class TFAttention(tf.keras.layers.Layer):
             outputs.append(w)
         return outputs
 
-    @tf.function
+    # @tf.function
     def merge_heads(self, x):
         x = tf.transpose(x, [0, 2, 1, 3])
         x_shape = shape_list(x)
         new_x_shape = x_shape[:-2] + [x_shape[-2] * x_shape[-1]]
         return tf.reshape(x, new_x_shape)
 
-    @tf.function
+    # @tf.function
     def split_heads(self, x):
         x_shape = shape_list(x)
         new_x_shape = x_shape[:-1] + [self.n_head, x_shape[-1] // self.n_head]
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         x, layer_past, attention_mask, head_mask = inputs
 
@@ -230,7 +235,7 @@ class TFMLP(tf.keras.layers.Layer):
         self.act = gelu
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
 
-    @tf.function
+    # @tf.function
     def call(self, x, training=False):
         h = self.act(self.c_fc(x))
         h2 = self.c_proj(h)
@@ -248,7 +253,7 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_2')
         self.mlp = TFMLP(4 * nx, config, name='mlp')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         x, layer_past, attention_mask, head_mask = inputs
 
@@ -284,7 +289,7 @@ class TFGPT2Embeddings(tf.keras.layers.Layer):
                 mean=0., stddev=self.hidden_size**-0.5))
         super(TFGPT2Embeddings, self).build(input_shape)
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
         Args:
@@ -349,7 +354,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs
@@ -465,7 +470,7 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     """
     config_class = GPT2Config
     pretrained_model_archive_map = TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_gpt2_pt_weights_in_tf
+    load_pt_weights = load_gpt2_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 
@@ -563,7 +568,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         super(TFGPT2Model, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name='transformer')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.transformer(inputs, training=training)
         return outputs
@@ -605,7 +610,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
         super(TFGPT2LMHeadModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name='transformer')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         transformer_outputs = self.transformer(inputs, training=training)
         hidden_states = transformer_outputs[0]
@@ -675,7 +680,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(config, name='multiple_choice_head')
 
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs

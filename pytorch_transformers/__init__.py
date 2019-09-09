@@ -99,12 +99,18 @@ if _tf_available:
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
                                    TFAutoModelWithLMHead)
 
-    from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertModel, TFBertForPreTraining,
+    from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertMainLayer, TFBertEmbeddings,
+                                   TFBertModel, TFBertForPreTraining,
                                    TFBertForMaskedLM, TFBertForNextSentencePrediction,
                                    TFBertForSequenceClassification, TFBertForMultipleChoice,
                                    TFBertForTokenClassification, TFBertForQuestionAnswering,
-                                   load_bert_pt_weights_in_tf,
+                                   load_bert_pt_weights_in_tf2,
                                    TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    from .modeling_tf_gpt2 import (TFGPT2PreTrainedModel, TFGPT2MainLayer, TFGPT2Embeddings,
+                                   TFGPT2Model, TFGPT2LMHeadModel, TFGPT2DoubleHeadsModel,
+                                   load_gpt2_pt_weights_in_tf2,
+                                   TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 
 # Files and general utilities

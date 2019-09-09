@@ -51,7 +51,7 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-def load_bert_pt_weights_in_tf(tf_model, config, pytorch_checkpoint_path):
+def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
     """ Load pytorch checkpoints in a TF 2.0 model and save it using HDF5 format
         We use HDF5 to easily do transfer learning
         (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -164,7 +164,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                     mean=0., stddev=self.hidden_size**-0.5))
         super(TFBertEmbeddings, self).build(input_shape)
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, mode="embedding", training=False):
         """Get token embeddings of inputs.
         Args:
@@ -248,7 +248,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
@@ -297,7 +297,7 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         hidden_states, input_tensor = inputs
 
@@ -317,7 +317,7 @@ class TFBertAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         input_tensor, attention_mask, head_mask = inputs
 
@@ -336,7 +336,7 @@ class TFBertIntermediate(tf.keras.layers.Layer):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    @tf.function
+    # @tf.function
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -350,7 +350,7 @@ class TFBertOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         hidden_states, input_tensor = inputs
 
@@ -368,7 +368,7 @@ class TFBertLayer(tf.keras.layers.Layer):
         self.intermediate = TFBertIntermediate(config, name='intermediate')
         self.bert_output = TFBertOutput(config, name='output')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
@@ -387,7 +387,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.layer = [TFBertLayer(config, name='layer_{}'.format(i)) for i in range(config.num_hidden_layers)]
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
@@ -420,7 +420,7 @@ class TFBertPooler(tf.keras.layers.Layer):
         super(TFBertPooler, self).__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.hidden_size, activation='tanh', name='dense')
 
-    @tf.function
+    # @tf.function
     def call(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
@@ -439,7 +439,7 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
             self.transform_act_fn = config.hidden_act
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
 
-    @tf.function
+    # @tf.function
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
@@ -463,7 +463,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
                                     trainable=True,
                                     name='bias')
 
-    @tf.function
+    # @tf.function
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states) + self.bias
@@ -475,7 +475,7 @@ class TFBertMLMHead(tf.keras.layers.Layer):
         super(TFBertMLMHead, self).__init__(**kwargs)
         self.predictions = TFBertLMPredictionHead(config, name='predictions')
 
-    @tf.function
+    # @tf.function
     def call(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
@@ -486,7 +486,7 @@ class TFBertNSPHead(tf.keras.layers.Layer):
         super(TFBertNSPHead, self).__init__(**kwargs)
         self.seq_relationship = tf.keras.layers.Dense(2, name='seq_relationship')
 
-    @tf.function
+    # @tf.function
     def call(self, pooled_output):
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
@@ -511,7 +511,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs
@@ -579,7 +579,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
     """
     config_class = BertConfig
     pretrained_model_archive_map = TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_bert_pt_weights_in_tf
+    load_pt_weights = load_bert_pt_weights_in_tf2
     base_model_prefix = "bert"
 
 
@@ -693,7 +693,7 @@ class TFBertModel(TFBertPreTrainedModel):
         super(TFBertModel, self).__init__(config, *inputs, **kwargs)
         self.bert = TFBertMainLayer(config, name='bert')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
         return outputs
@@ -732,7 +732,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
@@ -774,7 +774,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 
         self.bert = TFBertMainLayer(config, name='bert')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
@@ -818,7 +818,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
@@ -863,7 +863,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels, name='classifier')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
@@ -912,7 +912,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(1, name='classifier')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs
@@ -989,7 +989,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels, name='classifier')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
@@ -1040,7 +1040,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
 
-    @tf.function
+    # @tf.function
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
