@@ -504,8 +504,10 @@ XLNET_INPUTS_DOCSTRING = r"""
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
-            The embeddings from these tokens will be summed with the respective token embeddings.
-            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
+            The type indices in XLNet are NOT selected in the vocabulary, they can be arbitrary numbers and
+            the important thing is that they should be different for tokens which belong to different segments.
+            The model will compute relative segment differences from the given type indices:
+            0 if the segment id of two tokens are the same, 1 if not.
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
