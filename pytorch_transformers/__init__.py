@@ -89,7 +89,7 @@ try:
     import tensorflow as tf
     assert int(tf.__version__[0]) >= 2
     _tf_available = True  # pylint: disable=invalid-name
-except ImportError:
+except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
 if _tf_available:

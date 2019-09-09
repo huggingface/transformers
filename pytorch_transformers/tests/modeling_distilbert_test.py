@@ -21,10 +21,10 @@ import pytest
 
 from pytorch_transformers import is_torch_available
 
-try:
+if is_torch_available():
     from pytorch_transformers import (DistilBertConfig, DistilBertModel, DistilBertForMaskedLM,
                                     DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)

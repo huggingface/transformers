@@ -22,11 +22,11 @@ import pytest
 
 from pytorch_transformers import is_torch_available
 
-try:
+if is_torch_available():
     import torch
     from pytorch_transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification)
     from pytorch_transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)

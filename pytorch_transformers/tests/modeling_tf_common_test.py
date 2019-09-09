@@ -25,11 +25,13 @@ import uuid
 import pytest
 import sys
 
-try:
+from pytorch_transformers import is_tf_available
+
+if is_tf_available():
     import tensorflow as tf
     from pytorch_transformers import TFPreTrainedModel
     # from pytorch_transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require TensorFlow")
 
 

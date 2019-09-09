@@ -21,7 +21,9 @@ import shutil
 import pytest
 import logging
 
-try:
+from pytorch_transformers import is_torch_available
+
+if is_torch_available():
     from pytorch_transformers import (AutoConfig, BertConfig,
                                     AutoModel, BertModel,
                                     AutoModelWithLMHead, BertForMaskedLM,
@@ -31,7 +33,7 @@ try:
 
     from .modeling_common_test import (CommonTestCases, ids_tensor)
     from .configuration_common_test import ConfigTester
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 

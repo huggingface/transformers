@@ -21,7 +21,9 @@ import shutil
 import pytest
 import logging
 
-try:
+from pytorch_transformers import is_tf_available
+
+if is_tf_available():
     from pytorch_transformers import (AutoConfig, BertConfig,
                                       TFAutoModel, TFBertModel,
                                       TFAutoModelWithLMHead, TFBertForMaskedLM,
@@ -31,7 +33,7 @@ try:
 
     from .modeling_common_test import (CommonTestCases, ids_tensor)
     from .configuration_common_test import ConfigTester
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require TensorFlow")
 
 

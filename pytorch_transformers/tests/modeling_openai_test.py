@@ -22,10 +22,10 @@ import shutil
 
 from pytorch_transformers import is_torch_available
 
-try:
+if is_torch_available():
     from pytorch_transformers import (OpenAIGPTConfig, OpenAIGPTModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)

@@ -22,11 +22,11 @@ import pytest
 
 from pytorch_transformers import is_torch_available
 
-try:
+if is_torch_available():
     from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
                                       XLMForSequenceClassification)
     from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)

@@ -313,7 +313,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             # We can probably just use the multi-head attention module of PyTorch >=1.1.0
             raise NotImplementedError
 
-        self.summary = tf.keras.layers.Identity(name='summary')
+        self.summary = None
         if hasattr(config, 'summary_use_proj') and config.summary_use_proj:
             if hasattr(config, 'summary_proj_to_labels') and config.summary_proj_to_labels and config.num_labels > 0:
                 num_classes = config.num_labels
@@ -372,7 +372,8 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         if training and self.first_dropout is not None:
             output = self.first_dropout(output)
 
-        output = self.summary(output)
+        if self.summary is not None:
+            output = self.summary(output)
 
         if self.activation is not None:
             output = self.activation(output)

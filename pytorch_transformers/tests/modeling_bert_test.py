@@ -25,13 +25,13 @@ from pytorch_transformers import is_torch_available
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
-try:
+if is_torch_available():
     from pytorch_transformers import (BertConfig, BertModel, BertForMaskedLM,
                                         BertForNextSentencePrediction, BertForPreTraining,
                                         BertForQuestionAnswering, BertForSequenceClassification,
                                         BertForTokenClassification, BertForMultipleChoice)
     from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 

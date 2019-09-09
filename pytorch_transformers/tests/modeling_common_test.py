@@ -27,13 +27,15 @@ import unittest
 import logging
 import pytest
 
-try:
+from pytorch_transformers import is_torch_available
+
+if is_torch_available():
     import torch
 
     from pytorch_transformers import (PretrainedConfig, PreTrainedModel,
                                     BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 

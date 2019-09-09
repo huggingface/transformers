@@ -22,12 +22,12 @@ import pytest
 
 from pytorch_transformers import is_torch_available
 
-try:
+if is_torch_available():
     import torch
 
     from pytorch_transformers import (AdamW, ConstantLRSchedule, WarmupConstantSchedule,
                                     WarmupCosineSchedule, WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
-except ImportError:
+else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 from .tokenization_tests_commons import TemporaryDirectory
