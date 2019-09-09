@@ -146,7 +146,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_distilbert_for_question_answering(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = DistilBertForQuestionAnswering(config=config)
             model.eval()
-            loss, start_logits, end_logits = model(input_ids, input_mask, sequence_labels, sequence_labels)
+            loss, start_logits, end_logits = model(input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels)
             result = {
                 "loss": loss,
                 "start_logits": start_logits,
@@ -164,7 +164,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
             config.num_labels = self.num_labels
             model = DistilBertForSequenceClassification(config)
             model.eval()
-            loss, logits = model(input_ids, input_mask, sequence_labels)
+            loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
             result = {
                 "loss": loss,
                 "logits": logits,

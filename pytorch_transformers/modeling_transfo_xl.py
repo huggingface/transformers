@@ -1203,7 +1203,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def init_mems(self, data):
         return self.transformer.init_mems(data)
 
-    def forward(self, input_ids, labels=None, mems=None, head_mask=None):
+    def forward(self, input_ids, mems=None, head_mask=None, labels=None):
         bsz = input_ids.size(0)
         tgt_len = input_ids.size(1)
 

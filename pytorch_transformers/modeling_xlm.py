@@ -281,23 +281,23 @@ XLM_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`pytorch_transformers.XLMTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            A parallel sequence of tokens (can be used to indicate various portions of the inputs).
-            The embeddings from these tokens will be summed with the respective token embeddings.
-            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         **langs**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are languages ids which can be obtained from the language names by using two conversion mappings
             provided in the configuration of the model (only provided for multilingual models).
             More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
             the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            A parallel sequence of tokens (can be used to indicate various portions of the inputs).
+            The embeddings from these tokens will be summed with the respective token embeddings.
+            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
+        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
         **lengths**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Length of each sentence that can be used to avoid performing attention on padding token indices.
             You can also use `attention_mask` for the same result (see above), kept here for compatbility.
@@ -424,8 +424,8 @@ class XLMModel(XLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    def forward(self, input_ids, lengths=None, position_ids=None, langs=None,
-                token_type_ids=None, attention_mask=None, cache=None, head_mask=None):  # src_enc=None, src_len=None, 
+    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None):  # removed: src_enc=None, src_len=None
         if lengths is None:
             lengths = (input_ids != self.pad_index).sum(dim=1).long()
         # mask = input_ids != self.pad_index
@@ -630,11 +630,16 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         """
         self._tie_or_clone_weights(self.pred_layer.proj, self.transformer.embeddings)
 
-    def forward(self, input_ids, lengths=None, position_ids=None, langs=None, token_type_ids=None,
-                attention_mask=None, cache=None, labels=None, head_mask=None):
-        transformer_outputs = self.transformer(input_ids, lengths=lengths, position_ids=position_ids,
-                                               token_type_ids=token_type_ids, langs=langs,
-                                               attention_mask=attention_mask, cache=cache, head_mask=head_mask)
+    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, labels=None):
+        transformer_outputs = self.transformer(input_ids,
+                                               attention_mask=attention_mask,
+                                               langs=langs,
+                                               token_type_ids=token_type_ids,
+                                               position_ids=position_ids,
+                                               lengths=lengths, 
+                                               cache=cache,
+                                               head_mask=head_mask)
 
         output = transformer_outputs[0]
         outputs = self.pred_layer(output, labels)
@@ -686,11 +691,16 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, lengths=None, position_ids=None, langs=None, token_type_ids=None,
-                attention_mask=None, cache=None, labels=None, head_mask=None):
-        transformer_outputs = self.transformer(input_ids, lengths=lengths, position_ids=position_ids,
-                                               token_type_ids=token_type_ids, langs=langs,
-                                               attention_mask=attention_mask, cache=cache, head_mask=head_mask)
+    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, labels=None):
+        transformer_outputs = self.transformer(input_ids,
+                                               attention_mask=attention_mask,
+                                               langs=langs,
+                                               token_type_ids=token_type_ids,
+                                               position_ids=position_ids,
+                                               lengths=lengths, 
+                                               cache=cache,
+                                               head_mask=head_mask)
 
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
@@ -764,12 +774,17 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, lengths=None, position_ids=None, langs=None, token_type_ids=None,
-                attention_mask=None, cache=None, start_positions=None, end_positions=None,
-                cls_index=None, is_impossible=None, p_mask=None, head_mask=None):
-        transformer_outputs = self.transformer(input_ids, lengths=lengths, position_ids=position_ids,
-                                               token_type_ids=token_type_ids, langs=langs,
-                                               attention_mask=attention_mask, cache=cache, head_mask=head_mask)
+    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, start_positions=None, end_positions=None,
+                is_impossible=None, cls_index=None, p_mask=None):
+        transformer_outputs = self.transformer(input_ids,
+                                               attention_mask=attention_mask,
+                                               langs=langs,
+                                               token_type_ids=token_type_ids,
+                                               position_ids=position_ids,
+                                               lengths=lengths, 
+                                               cache=cache,
+                                               head_mask=head_mask)
 
         output = transformer_outputs[0]
 
