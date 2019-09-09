@@ -197,6 +197,7 @@ def evaluate(args, model, eval_dataset, prefix=""):
     nb_eval_steps = 0
     preds = None
     out_label_ids = None
+    out_instance_ids = None
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
@@ -206,20 +207,22 @@ def evaluate(args, model, eval_dataset, prefix=""):
                       'ent1_ids': batch[1],
                       'ent2_ids': batch[2],
                       'attention_mask': batch[3],
-                      'token_type_ids': batch[4] if args.model_type in ['bert', 'xlnet'] else None,
-                      # XLM don't use segment_ids
+                      'token_type_ids': batch[4],
                       'labels': batch[5]}
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
 
             eval_loss += tmp_eval_loss.mean().item()
         nb_eval_steps += 1
+
         if preds is None:
             preds = logits.detach().cpu().numpy()
             out_label_ids = inputs['labels'].detach().cpu().numpy()
+            out_instance_ids = inputs['input_ids'].detach().cpu().numpy()
         else:
             preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
             out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
+            out_instance_ids = np.append(out_instance_ids, inputs['input_ids'].detach().cpu().numpy(), axis=0)
 
     eval_loss = eval_loss / nb_eval_steps
     preds = np.argmax(preds, axis=1)
@@ -232,8 +235,7 @@ def evaluate(args, model, eval_dataset, prefix=""):
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
-
-    return results
+    return results, np.stack(out_instance_ids,out_label_ids,axis=1)
 
 
 def load_and_cache_examples(args, task, tokenizer, evaluate=False):
@@ -448,10 +450,15 @@ def main():
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=global_step)
+            result , instance_result_array = evaluate(args, model, tokenizer, prefix=global_step)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
-
+            # output file in the format for the official semeval script
+            output_semeval_file = os.path.join(args.output_dir , f"{global_step}_semeval_results.tsv")
+            with open(output_semeval_file, "w") as writer:
+                label_map = {str(i): label for i, label in enumerate(label_list)}
+                for x in instance_result_array:
+                    writer.write(instance_result_array[0]+'\t'+label_map[instance_result_array[1]])
     return results
 
 if __name__ == "__main__":

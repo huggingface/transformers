@@ -22,6 +22,7 @@ import os
 import re
 import torch
 from torch.utils.data import (TensorDataset)
+from sklearn.metrics import  f1_score
 
 logger = logging.getLogger(__name__)
 
@@ -182,11 +183,21 @@ def call_semeval_2010_task_8_eval_script(labels, preds):
     #     TODO
     pass
 
+def simple_accuracy(preds, labels):
+    return (preds == labels).mean()
 
+def acc_and_f1(preds, labels):
+    acc = simple_accuracy(preds, labels)
+    f1 = f1_score(y_true=labels, y_pred=preds)
+    return {
+        "acc": acc,
+        "f1": f1,
+        "acc_and_f1": (acc + f1) / 2,
+    }
 def compute_metrics(task_name, preds, labels):
     assert len(preds) == len(labels)
     if task_name == "semeval2010_task8":
-        return {"mcc": call_semeval_2010_task_8_eval_script(labels, preds)}
+        return acc_and_f1(labels, preds)
     else:
         raise KeyError(task_name)
 
