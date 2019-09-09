@@ -1,0 +1,350 @@
+# coding=utf-8
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
+
+from __future__ import absolute_import, division, print_function
+
+import logging
+import os
+import re
+
+import pandas as pd
+import torch
+from torch.utils.data import (TensorDataset)
+
+logger = logging.getLogger(__name__)
+
+
+class InputExample(object):
+    """A single SemEval 2010 Task 8 example"""
+
+    def __init__(self, id: int, text: str, label: str, comment: str):
+        self.comment = comment
+        self.label = label
+        self.text = text
+        self.id = id
+
+
+class InputFeatures(object):
+    """A single set of features of data."""
+
+    def __init__(self, input_ids, input_mask, segment_ids, label_id, ent1_ids, ent2_ids):
+        self.ent2_ids = ent2_ids
+        self.ent1_ids = ent1_ids
+        self.input_ids = input_ids
+
+        self.input_mask = input_mask
+        self.segment_ids = segment_ids
+        self.label_id = label_id
+
+
+class SemEval2010Task8DataProcessor():
+    """Processor for the SemEval 2010 Task 8 Dataset"""
+
+    def _instance_generator(self, data):
+        for i in range(0, len(data), 4):
+            id, text = data[i].split('\t')
+            text = text.strip()
+            label = str(data[i + 1]).strip()
+            comment = data[i + 2].strip()
+            yield InputExample(id=id, text=text, label=label, comment=comment)
+
+    def _create_examples(self, path):
+        with open(path, 'r') as f:
+            data = f.readlines()
+        return self._instance_generator(data)
+
+    def get_train_examples(self, data_dir):
+        return self._create_examples(os.path.join(data_dir, "TRAIN_FILE.txt"))
+
+    def get_dev_examples(self, data_dir):
+        return self._create_examples(os.path.join(data_dir, "TEST_FILE_FULL.txt"))
+
+    def get_labels(self):
+        return ['Product-Producer(e1,e2)',
+                'Entity-Destination(e2,e1)',
+                'Message-Topic(e2,e1)',
+                'Entity-Origin(e1,e2)',
+                'Other',
+                'Instrument-Agency(e1,e2)',
+                'Member-Collection(e1,e2)',
+                'Component-Whole(e2,e1)',
+                'Content-Container(e2,e1)',
+                'Cause-Effect(e2,e1)',
+                'Component-Whole(e1,e2)',
+                'Content-Container(e1,e2)',
+                'Instrument-Agency(e2,e1)',
+                'Member-Collection(e2,e1)',
+                'Product-Producer(e2,e1)',
+                'Message-Topic(e1,e2)',
+                'Entity-Origin(e2,e1)',
+                'Entity-Destination(e1,e2)',
+                'Cause-Effect(e1,e2)']
+
+
+def find_entity_indices(id_list, tokenizer):
+    ent1_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.ent1_sep_token_id]
+    ent1_bounding_id_list = [ent1_bounding_id_list[0], ent1_bounding_id_list[1] + 1]
+    ent2_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.ent2_sep_token_id]
+    ent2_bounding_id_list = [ent2_bounding_id_list[0], ent2_bounding_id_list[1] + 1]
+    return ent1_bounding_id_list, ent2_bounding_id_list
+
+
+class DatasetBuilder():
+    def __init__(self, path_to_data, args, tokenizer):
+        self.path_to_data = path_to_data
+        self.args = args
+        self.tokenizer = tokenizer
+
+    def load_or_create_cached_features(self, evaluate=False):
+        cached_features_file = os.path.join(self.args.data_dir, 'cached_{}_{}_{}_{}_{}'.format(
+            'dev' if evaluate else 'train',
+            list(filter(None, self.args.model_name_or_path.split('/'))).pop(),
+            str(self.args.max_seq_length),
+            str(self.args.task_name),
+            os.path.basename(self.path_to_data)))
+        if os.path.exists(cached_features_file):
+            logger.info("Loading features from cached file %s", cached_features_file)
+            features = torch.load(cached_features_file)
+
+        else:
+            df = self._preprocess_dataframe()
+            features = self._dataframe_to_features(df, label_list=df['label'].unique(),
+                                                   max_seq_length=self.args.max_seq_length,
+                                                   tokenizer=self.tokenizer)
+            torch.save(features, cached_features_file)
+
+        return features
+
+    def create_dataset(self):
+        features = self.load_or_create_cached_features()
+        num_labels = self.label_count_from_features(features)
+        dataset = self.features_to_dataset(features)
+        return dataset, num_labels
+
+    def _preprocess_dataframe(self):
+        raise NotImplementedError()
+
+    @classmethod
+    def label_count_from_features(cls, features):
+        return len(set([x.label_id for x in features]))
+
+    @classmethod
+    def features_to_dataset(cls, features):
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
+        ent1_ids = torch.tensor([f.ent1_ids for f in features], dtype=torch.int)
+        ent2_ids = torch.tensor([f.ent2_ids for f in features], dtype=torch.int)
+        dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids)
+        return dataset
+
+    def _dataframe_to_features(self, df, label_list, max_seq_length,
+                               tokenizer,
+                               pad_token=0,
+                               mask_padding_with_zero=True):
+
+        label_map = {label: i for i, label in enumerate(label_list)}
+        features = []
+
+        for (ex_index, example) in df.iterrows():
+            if ex_index % 10000 == 0:
+                logger.info("Writing example %d of %d" % (ex_index, df.shape[1]))
+
+            input_ids = tokenizer.encode_with_relationship(example.text, example.ent1, example.ent2,
+                                                           text_pair=None, add_special_tokens=True)
+
+            # Account for [CLS] and [SEP] with "- 2"
+            if len(input_ids) > max_seq_length - 2:
+                input_ids = input_ids[:(max_seq_length - 2)]
+
+            # The mask has 1 for real tokens and 0 for padding tokens. Only real
+            # tokens are attended to.
+            input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
+
+            # Zero-pad up to the sequence length.
+            padding_length = max_seq_length - len(input_ids)
+
+            input_ids = input_ids + ([pad_token] * padding_length)
+            input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+
+            assert len(input_ids) == max_seq_length
+            assert len(input_mask) == max_seq_length
+
+            label_id = label_map[example.label]
+
+            ent1_bounding_id_list, ent2_bounding_id_list = find_entity_indices(input_ids, tokenizer)
+
+            features.append(
+                InputFeatures(input_ids=input_ids,
+                              input_mask=input_mask,
+                              segment_ids=[0] * len(input_ids),
+                              label_id=label_id,
+                              ent1_ids=ent1_bounding_id_list,
+                              ent2_ids=ent2_bounding_id_list
+                              ))
+        return features
+
+
+class SemEvalDatasetBuilder(DatasetBuilder):
+    def __init__(self, path_to_data, args, tokenizer):
+        super(SemEvalDatasetBuilder, self).__init__(path_to_data, args, tokenizer)
+
+    def _instance_generator(self, data):
+        for i in range(0, len(data), 4):
+            id, text = data[i].split('\t')
+            label = data[i + 1]
+            comment = data[i + 2]
+            yield (id, text, label, comment,)
+
+    def _semeval_textfile_to_dataframe(self, path):
+        with open(path, 'r') as f:
+            data = f.readlines()
+        df = pd.DataFrame.from_records(self._instance_generator(data))
+        df.columns = ['id', 'text', 'label_text', 'comment']
+        return df
+
+    def find_ents_and_modify_string(self, text):
+        def mod_text(in_text, hit):
+            before = in_text[:hit.start()]
+            during = hit.group(2)
+            after = in_text[hit.end():]
+
+            start = len(before)
+            end = len(before) + len(during)
+            return (before + during + after, [start, end],)
+
+        e1_hits = re.search("(<e1>)(.*)(</e1>)", text)
+        new_text, e1_offsets = mod_text(text, e1_hits)
+        e2_hits = re.search("(<e2>)(.*)(</e2>)", new_text)
+        new_text, e2_offsets = mod_text(new_text, e2_hits)
+
+        return new_text, e1_offsets, e2_offsets
+
+    def _preprocess_dataframe(self):
+        df = self._semeval_textfile_to_dataframe(self.path_to_data)
+        df['results'] = df['text'].apply(self.find_ents_and_modify_string)
+
+        df['text'] = df['results'].apply(lambda x: x[0])
+        df['ent1'] = df['results'].apply(lambda x: x[1])
+        df['ent2'] = df['results'].apply(lambda x: x[2])
+        df['label_text'] = df['label_text'].astype('category')
+        # for consistent label
+        df.sort_values(by=['label_text'], inplace=True)
+        df['label'] = df['label_text'].cat.codes
+        return df
+
+
+def mod_text(text, hit):
+    before = text[:hit.start()]
+    during = hit.group(2)
+    after = text[hit.end():]
+
+    start = len(before)
+    end = len(before) + len(during)
+    return (before + during + after, [start, end],)
+
+
+def find_ents_and_modify_string(text):
+    e1_hits = re.search("(<e1>)(.*)(</e1>)", text)
+    new_text, e1_offsets = mod_text(text, e1_hits)
+    e2_hits = re.search("(<e2>)(.*)(</e2>)", new_text)
+    new_text, e2_offsets = mod_text(new_text, e2_hits)
+
+    return new_text, e1_offsets, e2_offsets
+
+
+def convert_examples_to_features(examples, label_list, max_seq_length,
+                                 tokenizer, pad_token=0,
+                                 mask_padding_with_zero=True):
+    label_map = {label: i for i, label in enumerate(label_list)}
+
+    features = []
+    for (ex_index, example) in enumerate(examples):
+        if ex_index % 5000 == 0:
+            logger.info("Writing example %d of %d" % (ex_index, len(examples)))
+
+        new_text, e1_offsets, e2_offsets = find_ents_and_modify_string(example.text)
+        input_ids = tokenizer.encode_with_relationship(new_text, e1_offsets, e2_offsets,
+                                                       text_pair=None, add_special_tokens=True)
+
+        # Account for [CLS] and [SEP] with "- 2"
+        if len(input_ids) > max_seq_length - 2:
+            input_ids = input_ids[:(max_seq_length - 2)]
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
+
+        # Zero-pad up to the sequence length.
+        padding_length = max_seq_length - len(input_ids)
+
+        input_ids = input_ids + ([pad_token] * padding_length)
+        input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+
+        assert len(input_ids) == max_seq_length
+        assert len(input_mask) == max_seq_length
+
+        label_id = label_map[example.label]
+
+        ent1_bounding_id_list, ent2_bounding_id_list = find_entity_indices(input_ids, tokenizer)
+
+        features.append(
+            InputFeatures(input_ids=input_ids,
+                          input_mask=input_mask,
+                          segment_ids=[0] * len(input_ids),
+                          label_id=label_id,
+                          ent1_ids=ent1_bounding_id_list,
+                          ent2_ids=ent2_bounding_id_list
+                          ))
+    return features
+
+
+def convert_features_to_dataset(features, output_mode='classification'):
+    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+    if output_mode == "classification":
+        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
+    else:
+        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
+    ent1_ids = torch.tensor([f.ent1_ids for f in features], dtype=torch.int)
+    ent2_ids = torch.tensor([f.ent2_ids for f in features], dtype=torch.int)
+    dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids)
+    return dataset
+
+
+def call_semeval_2010_task_8_eval_script(labels, preds):
+    #     TODO
+    pass
+
+
+def compute_metrics(task_name, preds, labels):
+    assert len(preds) == len(labels)
+    if task_name == "semeval2010_task8":
+        return {"mcc": call_semeval_2010_task_8_eval_script(labels, preds)}
+    else:
+        raise KeyError(task_name)
+
+
+processors = {
+    "semeval2010_task8": SemEval2010Task8DataProcessor
+}
+
+output_modes = {
+    "semeval2010_task8": "classification"
+}
