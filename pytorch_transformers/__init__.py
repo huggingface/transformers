@@ -68,7 +68,8 @@ if _torch_available:
                                 GPT2LMHeadModel, GPT2DoubleHeadsModel,
                                 load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
-                                XLNetForSequenceClassification, XLNetForQuestionAnswering,
+                                XLNetForSequenceClassification, XLNetForQuestionAnsweringSimple,
+                                XLNetForQuestionAnswering,
                                 load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
                             XLMWithLMHeadModel, XLMForSequenceClassification,
@@ -112,6 +113,12 @@ if _tf_available:
                                    load_gpt2_pt_weights_in_tf2,
                                    TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_tf_xlnet import (TFXLNetPreTrainedModel, TFXLNetMainLayer,
+                                    TFXLNetModel, TFXLNetLMHeadModel,
+                                    TFXLNetForSequenceClassification,
+                                    TFXLNetForQuestionAnsweringSimple,
+                                    load_xlnet_pt_weights_in_tf2,
+                                    TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # Files and general utilities
 from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,

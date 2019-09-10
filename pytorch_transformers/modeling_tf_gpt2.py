@@ -70,7 +70,7 @@ def load_gpt2_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
     for symbolic_weight in symbolic_weights:
         name = symbolic_weight.name
         name = name.replace(':0', '')
-        name = name.replace('h_', 'h/')
+        name = name.replace('__', '/')
         name = name.split('/')
         name = name[2:]
 
@@ -282,7 +282,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.h = [TFBlock(config.n_ctx,
                           config,
                           scale=True,
-                          name='h_{}'.format(i)) for i in range(config.n_layer)]
+                          name='h__{}'.format(i)) for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_f')
 
     def _resize_token_embeddings(self, new_num_tokens):
