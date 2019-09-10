@@ -257,8 +257,11 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
-        examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(
-            args.data_dir)
+        if evaluate:
+            examples = processor.get_dev_examples(args.data_dir)
+            processor.write_dev_examples_to_official_format(args.data_dir)
+        else:
+            examples = processor.get_train_examples(args.data_dir,exclude_other=False)
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -278,7 +281,7 @@ def main():
     ## Required parameters
     parser.add_argument("--data_dir", default=None, type=str, required=True,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--model_name_or_path", default='bert-base-uncased', type=str)
+    parser.add_argument("--model_name_or_path", default='bert-large-uncased-whole-word-masking', type=str)
     parser.add_argument("--model_type", default='bert', type=str)
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")

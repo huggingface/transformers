@@ -52,32 +52,43 @@ class InputFeatures(object):
 
 
 class SemEval2010Task8DataProcessor():
-    """Processor for the SemEval 2010 Task 8 Dataset"""
-    def __init__(self,include_directionality=False):
+    """Processor for the SemEval 2010 Task 8 Dataset. Note, it's not clear from the RBert paper how many classes the
+    model is trained on. Clearly this has a big impact on the result.
+
+
+    """
+    def __init__(self,include_directionality=True):
         self.include_directionality = include_directionality
-        self.full_labels = [  'Product-Producer(e1,e2)',
-                         'Entity-Destination(e2,e1)',
-                         'Message-Topic(e2,e1)',
+
+        self.e1_e2_labels = [
+                        'Product-Producer(e1,e2)',
                          'Entity-Origin(e1,e2)',
-                         'Other',
                          'Instrument-Agency(e1,e2)',
                          'Member-Collection(e1,e2)',
-                         'Component-Whole(e2,e1)',
-                         'Content-Container(e2,e1)',
-                         'Cause-Effect(e2,e1)',
                          'Component-Whole(e1,e2)',
                          'Content-Container(e1,e2)',
-                         'Instrument-Agency(e2,e1)',
-                         'Member-Collection(e2,e1)',
-                         'Product-Producer(e2,e1)',
                          'Message-Topic(e1,e2)',
-                         'Entity-Origin(e2,e1)',
                          'Entity-Destination(e1,e2)',
                          'Cause-Effect(e1,e2)'
                        ]
-        self.undirected_labels = list(set([self._strip_direction(x) for x in self.full_labels]))
+        self.e2_e1_labels = [
+                         'Entity-Destination(e2,e1)',
+                         'Message-Topic(e2,e1)',
+                         'Component-Whole(e2,e1)',
+                         'Content-Container(e2,e1)',
+                         'Cause-Effect(e2,e1)',
+                         'Instrument-Agency(e2,e1)',
+                         'Member-Collection(e2,e1)',
+                         'Product-Producer(e2,e1)',
+                         'Entity-Origin(e2,e1)'
+                       ]
+        self.other_label = ['Other']
 
-    def _instance_generator(self, data):
+        self.all_labels = self.e1_e2_labels + self.e2_e1_labels + self.other_label
+        self.undirected_labels = self.e1_e2_labels + self.other_label
+
+
+    def _instance_generator(self, data,exclude_other):
         for i in range(0, len(data), 4):
             id, text = data[i].split('\t')
             text = text.strip()
@@ -85,27 +96,38 @@ class SemEval2010Task8DataProcessor():
                 label = str(data[i + 1]).strip()
             else:
                 label = self._strip_direction(str(data[i + 1]).strip())
-            comment = data[i + 2].strip()
-            yield InputExample(id=id, text=text, label=label, comment=comment)
+
+            if label == 'Other' and exclude_other:
+                logger.info(f'Skipping Other labeled instance at {id}')
+            else:
+                comment = data[i + 2].strip()
+                yield InputExample(id=id, text=text, label=label, comment=comment)
 
 
     def _strip_direction(self,label):
         return re.sub(r'\(.*', "", label)
 
-    def _create_examples(self, path):
+    def _create_examples(self, path,exclude_other):
         with open(path, 'r') as f:
             data = f.readlines()
-        return self._instance_generator(data)
+        return self._instance_generator(data,exclude_other)
 
-    def get_train_examples(self, data_dir):
-        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_training","TRAIN_FILE.TXT"))
+    def get_train_examples(self, data_dir,exclude_other):
+        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_training","TRAIN_FILE.TXT"),exclude_other)
 
     def get_dev_examples(self, data_dir):
-        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"))
+        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"),False)
+
+    def write_dev_examples_to_official_format(self,data_dir):
+        examples = self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"),False)
+        with open(os.path.join(data_dir,"TEST_FILE_FULL_EVAL_FORMAT.tsv"),'w') as f:
+            for example in examples:
+                f.write(str(example.id)+'\t'+example.label+'\n')
+
 
     def get_labels(self):
         if self.include_directionality:
-            return self.full_labels
+            return self.all_labels
         else:
             return self.undirected_labels
 
