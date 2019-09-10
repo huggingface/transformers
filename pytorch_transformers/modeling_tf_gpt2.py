@@ -28,7 +28,8 @@ from io import open
 import numpy as np
 import tensorflow as tf
 
-from .modeling_tf_utils import TFPreTrainedModel, TFConv1D, TFSequenceSummary, shape_list
+from .modeling_tf_utils import (TFPreTrainedModel, TFConv1D, TFSharedEmbeddings,
+                                TFSequenceSummary, shape_list)
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings
 
@@ -65,6 +66,7 @@ def load_gpt2_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     weight_value_tuples = []
+    all_pytorch_weights = set(list(state_dict.keys()))
     for symbolic_weight in symbolic_weights:
         name = symbolic_weight.name
         name = name.replace(':0', '')
@@ -100,13 +102,13 @@ def load_gpt2_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
 
         weight_value_tuples.append((symbolic_weight, array))
 
-        state_dict.pop(name)
+        all_pytorch_weights.discard(name)
 
     K.batch_set_value(weight_value_tuples)
 
     tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
 
-    assert not state_dict, "Weights not loaded: {}".format(list(state_dict.keys()))
+    logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
 
     return tf_model
 
@@ -267,65 +269,6 @@ class TFBlock(tf.keras.layers.Layer):
         outputs = [x] + output_attn[1:]
         return outputs  # x, present, (attentions)
 
-class TFGPT2Embeddings(tf.keras.layers.Layer):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
-    def __init__(self, config, **kwargs):
-        super(TFGPT2Embeddings, self).__init__(**kwargs)
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-
-    def build(self, input_shape):
-        """Build shared word embedding layer
-        Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        self.weight = self.add_weight(
-            "weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=tf.random_normal_initializer(
-                mean=0., stddev=self.hidden_size**-0.5))
-        super(TFGPT2Embeddings, self).build(input_shape)
-
-    def call(self, inputs, mode="embedding"):
-        """Get token embeddings of inputs.
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
-        Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
-                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
-                linear tensor, float32 with shape [batch_size, length, vocab_size].
-        Raises:
-            ValueError: if mode is not valid.
-        
-        Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        if mode == "embedding":
-            return self._embedding(inputs)
-        elif mode == "linear":
-            return self._linear(inputs)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids):
-        """Applies embedding based on inputs tensor."""
-        return tf.gather(self.weight, input_ids)
-
-    def _linear(self, inputs):
-        """Computes logits by running inputs through a linear layer.
-            Args:
-                inputs: A float32 tensor with shape [..., hidden_size]
-            Returns:
-                float32 tensor with shape [..., vocab_size].
-        """
-        first_dims = shape_list(inputs)[:-1]
-
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.weight, transpose_b=True)
-
-        return tf.reshape(logits, first_dims + [self.vocab_size])
 
 class TFGPT2MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
@@ -336,10 +279,13 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
 
-        self.wte = TFGPT2Embeddings(config, name='wte')
+        self.wte = TFSharedEmbeddings(config.vocab_size, config.hidden_size, name='wte')
         self.wpe = tf.keras.layers.Embedding(config.n_positions, config.n_embd, name='wpe')
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name='h_{}'.format(i)) for i in range(config.n_layer)]
+        self.h = [TFBlock(config.n_ctx,
+                          config,
+                          scale=True,
+                          name='h_{}'.format(i)) for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_f')
 
     def _resize_token_embeddings(self, new_num_tokens):
