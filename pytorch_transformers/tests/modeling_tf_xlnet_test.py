@@ -105,8 +105,8 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
             perm_mask_last = tf.ones((self.batch_size, self.seq_length + 1, 1), dtype=tf.float32)
             perm_mask = tf.concat([perm_mask, perm_mask_last], axis=-1)
             # perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-            target_mapping = tf.zeros((self.batch_size, 1, self.seq_length), dtype=torch.float32)
-            target_mapping_last = tf.ones((self.batch_size, 1, 1), dtype=torch.float32)
+            target_mapping = tf.zeros((self.batch_size, 1, self.seq_length), dtype=tf.float32)
+            target_mapping_last = tf.ones((self.batch_size, 1, 1), dtype=tf.float32)
             target_mapping = tf.concat([target_mapping, target_mapping_last], axis=-1)
             # target_mapping[:, 0, -1] = 1.0  # predict last token
 
@@ -145,18 +145,18 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
             model = TFXLNetModel(config)
 
-            inputs = {'input_ids': input_ids,
+            inputs = {'input_ids': input_ids_1,
                       'input_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+                      'token_type_ids': segment_ids}
 
             _, _ = model(inputs)
 
-            inputs = [input_ids, input_mask]
+            inputs = [input_ids_1, input_mask]
 
             outputs, mems_1 = model(inputs)
 
             result = {
-                "mems_1": [mem.numpy() for m in mems_1],
+                "mems_1": [mem.numpy() for mem in mems_1],
                 "outputs": outputs.numpy(),
             }
 

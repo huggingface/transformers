@@ -178,8 +178,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w + attention_mask
 
         w = tf.nn.softmax(w, axis=-1)
-        if training:
-            w = self.attn_dropout(w)
+        w = self.attn_dropout(w, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -221,8 +220,7 @@ class TFAttention(tf.keras.layers.Layer):
 
         a = self.merge_heads(a)
         a = self.c_proj(a)
-        if training:
-            a = self.resid_dropout(a)
+        a = self.resid_dropout(a, training=training)
 
         outputs = [a, present] + attn_outputs[1:]
         return outputs  # a, present, (attentions)
@@ -240,8 +238,7 @@ class TFMLP(tf.keras.layers.Layer):
     def call(self, x, training=False):
         h = self.act(self.c_fc(x))
         h2 = self.c_proj(h)
-        if training:
-            h2 = self.dropout(h2)
+        h2 = self.dropout(h2, training=training)
         return h2
 
 
@@ -368,8 +365,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         else:
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
-        if training:
-            hidden_states = self.drop(hidden_states)
+        hidden_states = self.drop(hidden_states, training=training)
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
 
