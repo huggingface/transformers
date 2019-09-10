@@ -33,7 +33,7 @@ from .modeling_common_test import (CommonTestCases, ids_tensor)
 
 class BertModelTest(CommonTestCases.CommonModelTester):
 
-    # Note,
+    # Note, we cannot include BertForRelationshipClassification here, as it has a different forward signature.
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
             BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
             BertForTokenClassification)
