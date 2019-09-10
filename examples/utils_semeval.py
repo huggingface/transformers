@@ -55,6 +55,27 @@ class SemEval2010Task8DataProcessor():
     """Processor for the SemEval 2010 Task 8 Dataset"""
     def __init__(self,include_directionality=False):
         self.include_directionality = include_directionality
+        self.full_labels = [  'Product-Producer(e1,e2)',
+                         'Entity-Destination(e2,e1)',
+                         'Message-Topic(e2,e1)',
+                         'Entity-Origin(e1,e2)',
+                         'Other',
+                         'Instrument-Agency(e1,e2)',
+                         'Member-Collection(e1,e2)',
+                         'Component-Whole(e2,e1)',
+                         'Content-Container(e2,e1)',
+                         'Cause-Effect(e2,e1)',
+                         'Component-Whole(e1,e2)',
+                         'Content-Container(e1,e2)',
+                         'Instrument-Agency(e2,e1)',
+                         'Member-Collection(e2,e1)',
+                         'Product-Producer(e2,e1)',
+                         'Message-Topic(e1,e2)',
+                         'Entity-Origin(e2,e1)',
+                         'Entity-Destination(e1,e2)',
+                         'Cause-Effect(e1,e2)'
+                       ]
+        self.undirected_labels = list(set([self._strip_direction(x) for x in self.full_labels]))
 
     def _instance_generator(self, data):
         for i in range(0, len(data), 4):
@@ -83,30 +104,10 @@ class SemEval2010Task8DataProcessor():
         return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"))
 
     def get_labels(self):
-        full_labels = [  'Product-Producer(e1,e2)',
-                         'Entity-Destination(e2,e1)',
-                         'Message-Topic(e2,e1)',
-                         'Entity-Origin(e1,e2)',
-                         'Other',
-                         'Instrument-Agency(e1,e2)',
-                         'Member-Collection(e1,e2)',
-                         'Component-Whole(e2,e1)',
-                         'Content-Container(e2,e1)',
-                         'Cause-Effect(e2,e1)',
-                         'Component-Whole(e1,e2)',
-                         'Content-Container(e1,e2)',
-                         'Instrument-Agency(e2,e1)',
-                         'Member-Collection(e2,e1)',
-                         'Product-Producer(e2,e1)',
-                         'Message-Topic(e1,e2)',
-                         'Entity-Origin(e2,e1)',
-                         'Entity-Destination(e1,e2)',
-                         'Cause-Effect(e1,e2)'
-                       ]
         if self.include_directionality:
-            return full_labels
+            return self.full_labels
         else:
-            return set([self._strip_direction(x) for x in full_labels])
+            return self.undirected_labels
 
 
 def find_entity_indices(id_list, tokenizer):
