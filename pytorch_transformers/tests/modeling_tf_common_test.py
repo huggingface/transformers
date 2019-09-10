@@ -262,7 +262,7 @@ class TFCommonTestCases:
             #     self.assertEqual(len(params_tied_2), len(params_tied))
 
 
-def ids_tensor(shape, vocab_size, rng=None, name=None):
+def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=tf.int32):
     """Creates a random int32 tensor of the shape within the vocab size."""
     if rng is None:
         rng = random.Random()
@@ -275,7 +275,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
 
-    return tf.constant(values, shape=shape)
+    return tf.constant(values, shape=shape, dtype=dtype)
 
 
 class TFModelUtilsTest(unittest.TestCase):
