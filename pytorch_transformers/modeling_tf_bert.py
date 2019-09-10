@@ -113,7 +113,7 @@ def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
 
     tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
 
-    logger.info("Weights not loaded: {}".format(all_pytorch_weights))
+    logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
 
     return tf_model
 
