@@ -163,8 +163,9 @@ class CommonTestCases:
             if not self.test_head_masking:
                 return
 
-            torch.manual_seed(42)
+            global_rng.seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            global_rng.seed()
 
             config.output_attentions = True
             config.output_hidden_states = True
@@ -174,7 +175,7 @@ class CommonTestCases:
                 model.eval()
 
                 # Prepare head_mask
-                # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior) 
+                # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
                 head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads)
                 head_mask[0, 0] = 0
                 head_mask[-1, :-1] = 0
@@ -665,12 +666,13 @@ class ConfigTester(object):
         self.create_and_test_config_to_json_file()
 
 
+global_rng = random.Random()
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):
     """Creates a random int32 tensor of the shape within the vocab size."""
     if rng is None:
-        rng = random.Random()
+        rng = global_rng
 
     total_dims = 1
     for dim in shape:
