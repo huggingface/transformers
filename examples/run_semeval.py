@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
+""" Finetuning the library models for sequence classification on Semeval (Bert)."""
 
 from __future__ import absolute_import, division, print_function
 
@@ -386,7 +386,7 @@ def main():
     # Set seed
     set_seed(args)
 
-    # Prepare GLUE task
+    # Prepare semeval task
     args.task_name = args.task_name.lower()
     if args.task_name not in processors:
         raise ValueError("Task not found: %s" % (args.task_name))
