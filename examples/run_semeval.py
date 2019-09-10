@@ -243,7 +243,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
-    processor = processors[task]()
+    processor = processors[task](include_directionality=args.include_directionality)
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}'.format(
@@ -350,6 +350,7 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
+    parser.add_argument("--include_directionality", action='store_true',help='train on all 19 classes. Exclude to train on the 9 relation labels only')
 
     args = parser.parse_args()
 
@@ -389,7 +390,7 @@ def main():
     args.task_name = args.task_name.lower()
     if args.task_name not in processors:
         raise ValueError("Task not found: %s" % (args.task_name))
-    processor = processors[args.task_name]()
+    processor = processors[args.task_name](include_directionality=args.include_directionality)
     args.output_mode = output_modes[args.task_name]
     label_list = processor.get_labels()
     logger.info(f"labels are:  {','.join(label_list)}")

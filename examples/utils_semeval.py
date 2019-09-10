@@ -59,44 +59,46 @@ class SemEval2010Task8DataProcessor():
     """
     def __init__(self,include_directionality=True):
         self.include_directionality = include_directionality
-
         self.e1_e2_labels = [
-                        'Product-Producer(e1,e2)',
+                         'Product-Producer(e1,e2)',
                          'Entity-Origin(e1,e2)',
-                         'Instrument-Agency(e1,e2)',
-                         'Member-Collection(e1,e2)',
+                         'Entity-Destination(e1,e2)',
+                         'Message-Topic(e1,e2)',
                          'Component-Whole(e1,e2)',
                          'Content-Container(e1,e2)',
-                         'Message-Topic(e1,e2)',
-                         'Entity-Destination(e1,e2)',
-                         'Cause-Effect(e1,e2)'
+                         'Instrument-Agency(e1,e2)',
+                         'Cause-Effect(e1,e2)',
+                         'Member-Collection(e1,e2)'
                        ]
         self.e2_e1_labels = [
+                         'Product-Producer(e2,e1)',
+                         'Entity-Origin(e2,e1)',
                          'Entity-Destination(e2,e1)',
                          'Message-Topic(e2,e1)',
                          'Component-Whole(e2,e1)',
                          'Content-Container(e2,e1)',
-                         'Cause-Effect(e2,e1)',
                          'Instrument-Agency(e2,e1)',
-                         'Member-Collection(e2,e1)',
-                         'Product-Producer(e2,e1)',
-                         'Entity-Origin(e2,e1)'
+                         'Cause-Effect(e2,e1)',
+                         'Member-Collection(e2,e1)'
                        ]
+        self.undirected_labels_mapping = dict(zip(self.e2_e1_labels,self.e1_e2_labels))
         self.other_label = ['Other']
+        self.undirected_labels_mapping[self.other_label[0]] = self.other_label[0]
 
-        self.all_labels = self.e1_e2_labels + self.e2_e1_labels + self.other_label
-        self.undirected_labels = self.e1_e2_labels + self.other_label
-
+        if self.include_directionality:
+            self.all_labels = self.e1_e2_labels + self.e2_e1_labels + self.other_label
+        else:
+            self.all_labels = self.e1_e2_labels  + self.other_label
 
     def _instance_generator(self, data,exclude_other):
         for i in range(0, len(data), 4):
             id, text = data[i].split('\t')
             text = text.strip()
-            if self.include_directionality:
-                label = str(data[i + 1]).strip()
-            else:
-                label = self._strip_direction(str(data[i + 1]).strip())
-
+            label = str(data[i + 1]).strip()
+            # map all labels to single direction if not using directionality
+            if not self.include_directionality and label in self.undirected_labels_mapping:
+                label = self.undirected_labels_mapping[label]
+            # Don't include Other label in training set
             if label == 'Other' and exclude_other:
                 logger.info(f'Skipping Other labeled instance at {id}')
             else:
@@ -126,10 +128,8 @@ class SemEval2010Task8DataProcessor():
 
 
     def get_labels(self):
-        if self.include_directionality:
-            return self.all_labels
-        else:
-            return self.undirected_labels
+        return self.all_labels
+
 
 
 def find_entity_indices(id_list, tokenizer):
