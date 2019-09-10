@@ -312,7 +312,7 @@ python ./examples/run_rbert.py \
 --overwrite_output_dir \
 --eval_all_checkpoints \
 --num_train_epochs 5.0 \
---task_name semeval8 \
+--task_name semeval2010_task8 \
 --per_gpu_train_batch_size 16 \
 --per_gpu_eval_batch_size 16 \
 --learning_rate 2e-5 \
