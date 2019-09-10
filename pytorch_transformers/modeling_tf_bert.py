@@ -218,8 +218,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         embeddings = words_embeddings + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
-        if training:
-            embeddings = self.dropout(embeddings)
+        embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
     def _linear(self, inputs):
@@ -286,10 +285,9 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
 
-        if training:
-            # This is actually dropping out entire tokens to attend to, which might
-            # seem a bit unusual, but is taken from the original Transformer paper.
-            attention_probs = self.dropout(attention_probs)
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -316,8 +314,7 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
         hidden_states, input_tensor = inputs
 
         hidden_states = self.dense(hidden_states)
-        if training:
-            hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -366,8 +363,7 @@ class TFBertOutput(tf.keras.layers.Layer):
         hidden_states, input_tensor = inputs
 
         hidden_states = self.dense(hidden_states)
-        if training:
-            hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -871,8 +867,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
 
         pooled_output = outputs[1]
 
-        if training:
-            pooled_output = self.dropout(pooled_output)
+        pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
@@ -947,8 +942,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
 
         pooled_output = outputs[1]
 
-        if training:
-            pooled_output = self.dropout(pooled_output)
+        pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
@@ -995,8 +989,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        if training:
-            sequence_output = self.dropout(sequence_output)
+        sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
