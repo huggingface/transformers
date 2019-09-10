@@ -299,6 +299,29 @@ python ./examples/run_generation.py \
     --model_name_or_path=gpt2 \
 ```
 
+### `run_semeval.py`: relationship classification using R-Bert
+
+This example code fine-tunes BERT on the semeval 2010 Task 8 dataset, to reach a F1 > 92 on the undirected relationship evaluation metric
+ 
+```bash
+python ./examples/run_rbert.py \
+--data_dir $SEMEVAL_DIR \
+--output_dir $RESULTS_DIR \
+--do_train \
+--do_eval \
+--overwrite_output_dir \
+--eval_all_checkpoints \
+--num_train_epochs 5.0 \
+--task_name semeval8 \
+--per_gpu_train_batch_size 16 \
+--per_gpu_eval_batch_size 16 \
+--learning_rate 2e-5 \
+--max_seq_length 128 
+```
+
+Note, although an F1 score is calculated in the python code, additional files are also written out at the checkpoint intervals ```{global_step}_semeval_results.tsv``` that may be used with the official Semeval evaluation script (supplied seperatedly)
+The Semeval dataset is available under creative commons and is available [here](http://docs.google.com/leaf?id=0B_jQiLugGTAkMDQ5ZjZiMTUtMzQ1Yy00YWNmLWJlZDYtOWY1ZDMwY2U4YjFk&sort=name&layout=list&num=50). The ```$SEMEVAL_DIR``` should point to the extracted archive.
+
 ## Migrating from pytorch-pretrained-bert to pytorch-transformers
 
 Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `pytorch-transformers`

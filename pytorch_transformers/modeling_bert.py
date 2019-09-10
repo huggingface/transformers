@@ -846,12 +846,6 @@ class BertForRelationshipClassification(BertPreTrainedModel):
             torch.nn.modules.activation.Tanh()
         )
 
-        self.entity2_layer = torch.nn.Sequential(
-            self.dropout,
-            torch.nn.Linear(config.hidden_size, config.hidden_size),
-            torch.nn.modules.activation.Tanh()
-        )
-
         self.classifier = nn.Linear(config.hidden_size * 3, self.config.num_labels)
 
         self.init_weights()
@@ -876,11 +870,11 @@ class BertForRelationshipClassification(BertPreTrainedModel):
                 batch_return_list.append(average_of_entity_vectors)
             return torch.cat(batch_return_list)
 
-        cls_tensor = self.sentence_layer(last_hidden_states[:, 0])
-        ent1_tensor = self.entity_layer(average_entity_vectors(ent1_ids))
-        ent2_tensor = self.entity2_layer(average_entity_vectors(ent2_ids))
+        cls_tensor = self.sentence_layer(last_hidden_states[:, 0]) #get the sentence embedding and pass through FC layer
+        ent1_tensor = self.entity_layer(average_entity_vectors(ent1_ids)) #average wordpieces of ent1 and pass through FC entity layer
+        ent2_tensor = self.entity_layer(average_entity_vectors(ent2_ids)) #ditto - ent2 shared parameters with ent1
 
-        entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1)
+        entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1) #concat all and pass through classifier layer
         logits = self.classifier(entities_and_cls_tensor)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here

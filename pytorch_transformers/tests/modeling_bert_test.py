@@ -33,6 +33,7 @@ from .modeling_common_test import (CommonTestCases, ids_tensor)
 
 class BertModelTest(CommonTestCases.CommonModelTester):
 
+    # Note,
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
             BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
             BertForTokenClassification)
@@ -209,6 +210,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             import torch
             config.num_labels = self.num_labels
             model = BertForRelationshipClassification(config=config)
+
             ent1_ids = torch.tensor([[2, 5] for _ in range(0, 13)], dtype=torch.int)
             ent2_ids = torch.tensor([[6, 7] for _ in range(0, 13)], dtype=torch.int)
             model.eval()

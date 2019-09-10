@@ -40,7 +40,8 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_id, ent1_ids, ent2_ids):
+    def __init__(self, input_ids, input_mask, segment_ids, label_id, ent1_ids, ent2_ids,instance_id):
+        self.instance_id = instance_id
         self.ent2_ids = ent2_ids
         self.ent1_ids = ent1_ids
         self.input_ids = input_ids
@@ -49,16 +50,26 @@ class InputFeatures(object):
         self.label_id = label_id
 
 
+
 class SemEval2010Task8DataProcessor():
     """Processor for the SemEval 2010 Task 8 Dataset"""
+    def __init__(self,include_directionality=False):
+        self.include_directionality = include_directionality
 
     def _instance_generator(self, data):
         for i in range(0, len(data), 4):
             id, text = data[i].split('\t')
             text = text.strip()
-            label = str(data[i + 1]).strip()
+            if self.include_directionality:
+                label = str(data[i + 1]).strip()
+            else:
+                label = self._strip_direction(str(data[i + 1]).strip())
             comment = data[i + 2].strip()
             yield InputExample(id=id, text=text, label=label, comment=comment)
+
+
+    def _strip_direction(self,label):
+        return re.sub(r'\(.*', "", label)
 
     def _create_examples(self, path):
         with open(path, 'r') as f:
@@ -66,31 +77,36 @@ class SemEval2010Task8DataProcessor():
         return self._instance_generator(data)
 
     def get_train_examples(self, data_dir):
-        return self._create_examples(os.path.join(data_dir, "TRAIN_FILE.txt"))
+        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_training","TRAIN_FILE.TXT"))
 
     def get_dev_examples(self, data_dir):
-        return self._create_examples(os.path.join(data_dir, "TEST_FILE_FULL.txt"))
+        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"))
 
     def get_labels(self):
-        return ['Product-Producer(e1,e2)',
-                'Entity-Destination(e2,e1)',
-                'Message-Topic(e2,e1)',
-                'Entity-Origin(e1,e2)',
-                'Other',
-                'Instrument-Agency(e1,e2)',
-                'Member-Collection(e1,e2)',
-                'Component-Whole(e2,e1)',
-                'Content-Container(e2,e1)',
-                'Cause-Effect(e2,e1)',
-                'Component-Whole(e1,e2)',
-                'Content-Container(e1,e2)',
-                'Instrument-Agency(e2,e1)',
-                'Member-Collection(e2,e1)',
-                'Product-Producer(e2,e1)',
-                'Message-Topic(e1,e2)',
-                'Entity-Origin(e2,e1)',
-                'Entity-Destination(e1,e2)',
-                'Cause-Effect(e1,e2)']
+        full_labels = [  'Product-Producer(e1,e2)',
+                         'Entity-Destination(e2,e1)',
+                         'Message-Topic(e2,e1)',
+                         'Entity-Origin(e1,e2)',
+                         'Other',
+                         'Instrument-Agency(e1,e2)',
+                         'Member-Collection(e1,e2)',
+                         'Component-Whole(e2,e1)',
+                         'Content-Container(e2,e1)',
+                         'Cause-Effect(e2,e1)',
+                         'Component-Whole(e1,e2)',
+                         'Content-Container(e1,e2)',
+                         'Instrument-Agency(e2,e1)',
+                         'Member-Collection(e2,e1)',
+                         'Product-Producer(e2,e1)',
+                         'Message-Topic(e1,e2)',
+                         'Entity-Origin(e2,e1)',
+                         'Entity-Destination(e1,e2)',
+                         'Cause-Effect(e1,e2)'
+                       ]
+        if self.include_directionality:
+            return full_labels
+        else:
+            return set([self._strip_direction(x) for x in full_labels])
 
 
 def find_entity_indices(id_list, tokenizer):
@@ -160,7 +176,8 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
                           segment_ids=[0] * len(input_ids),
                           label_id=label_id,
                           ent1_ids=ent1_bounding_id_list,
-                          ent2_ids=ent2_bounding_id_list
+                          ent2_ids=ent2_bounding_id_list,
+                          instance_id=int(example.id)
                           ))
     return features
 
@@ -175,7 +192,8 @@ def convert_features_to_dataset(features, output_mode='classification'):
         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
     ent1_ids = torch.tensor([f.ent1_ids for f in features], dtype=torch.int)
     ent2_ids = torch.tensor([f.ent2_ids for f in features], dtype=torch.int)
-    dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids)
+    instance_ids = torch.tensor([f.instance_id for f in features], dtype=torch.int)
+    dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids,instance_ids)
     return dataset
 
 
@@ -188,7 +206,7 @@ def simple_accuracy(preds, labels):
 
 def acc_and_f1(preds, labels):
     acc = simple_accuracy(preds, labels)
-    f1 = f1_score(y_true=labels, y_pred=preds)
+    f1 = f1_score(y_true=labels, y_pred=preds,average='macro')
     return {
         "acc": acc,
         "f1": f1,
