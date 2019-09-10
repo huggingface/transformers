@@ -83,7 +83,7 @@ def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
         name = name.replace('cls_mlm', 'cls')  # We had to split this layer in two in the TF model to be
         name = name.replace('cls_nsp', 'cls')  # able to do transfer learning (Keras only allow to remove full layers)
         name = name.replace(':0', '')
-        name = name.replace('layer_', 'layer/')
+        name = name.replace('__', '/')
         name = name.split('/')
         name = name[1:]
 
@@ -391,7 +391,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         super(TFBertEncoder, self).__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = [TFBertLayer(config, name='layer_{}'.format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFBertLayer(config, name='layer__{}'.format(i)) for i in range(config.num_hidden_layers)]
 
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs

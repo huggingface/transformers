@@ -24,12 +24,13 @@ import tensorflow as tf
 from pytorch_transformers import is_torch_available
 
 from pytorch_transformers import (BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf2,
-                                  GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2)
+                                  GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2,
+                                  XLNetConfig, TFXLNetLMHeadModel, load_xlnet_pt_weights_in_tf2)
 
 if is_torch_available():
     import torch
     import numpy as np
-    from pytorch_transformers import BertForPreTraining, GPT2LMHeadModel
+    from pytorch_transformers import BertForPreTraining, GPT2LMHeadModel, XLNetLMHeadModel
 else:
     BertForPreTraining, GPT2LMHeadModel = None, None
 
@@ -40,6 +41,7 @@ logging.basicConfig(level=logging.INFO)
 MODEL_CLASSES = {
     'bert': (BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf2, BertForPreTraining),
     'gpt2': (GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2, GPT2LMHeadModel),
+    'xlnet': (XLNetConfig, TFXLNetLMHeadModel, load_xlnet_pt_weights_in_tf2, XLNetLMHeadModel),
 }
 
 def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False):
@@ -50,6 +52,8 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
 
     # Initialise TF model
     config = config_class.from_json_file(config_file)
+    config.output_hidden_states = True
+    config.output_attentions = True
     print("Building TensorFlow model from configuration: {}".format(str(config)))
     tf_model = model_class(config)
 

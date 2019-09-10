@@ -28,9 +28,10 @@ from pytorch_transformers import XLNetConfig, is_tf_available
 if is_tf_available():
     import tensorflow as tf
 
-    from pytorch_transformers.modeling_tf_xlnet import (TFXLNetModel, TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
-                                    #   XLNetLMHeadModel,
-                                    #   XLNetForSequenceClassification, XLNetForQuestionAnswering)
+    from pytorch_transformers.modeling_tf_xlnet import (TFXLNetModel, TFXLNetLMHeadModel,
+                                                        TFXLNetForSequenceClassification,
+                                                        TFXLNetForQuestionAnsweringSimple,
+                                                        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
     pytestmark = pytest.mark.skip("Require TensorFlow")
 
@@ -39,9 +40,9 @@ from .configuration_common_test import ConfigTester
 
 class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes=(TFXLNetModel, ) if is_tf_available() else ()
-    # all_model_classes=(TFXLNetModel, TFXLNetLMHeadModel,
-    #                    TFXLNetForSequenceClassification, TFXLNetForQuestionAnswering) if is_tf_available() else ()
+    all_model_classes=(TFXLNetModel, TFXLNetLMHeadModel,
+                       TFXLNetForSequenceClassification,
+                       TFXLNetForQuestionAnsweringSimple) if is_tf_available() else ()
     test_pruning = False
 
     class TFXLNetModelTester(object):
@@ -169,128 +170,88 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
 
         def create_and_check_xlnet_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
                 target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
-            pass
-            # model = XLNetLMHeadModel(config)
-            # model.eval()
+            model = TFXLNetLMHeadModel(config)
 
-            # loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
+            inputs_1 = {'input_ids': input_ids_1,
+                      'token_type_ids': segment_ids}
 
-            # loss_2, all_logits_2, mems_2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1)
+            all_logits_1, mems_1 = model(inputs_1)
 
-            # logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
+            inputs_2 = {'input_ids': input_ids_2,
+                        'mems': mems_1,
+                        'token_type_ids': segment_ids}
 
-            # result = {
-            #     "loss_1": loss_1,
-            #     "mems_1": mems_1,
-            #     "all_logits_1": all_logits_1,
-            #     "loss_2": loss_2,
-            #     "mems_2": mems_2,
-            #     "all_logits_2": all_logits_2,
-            # }
+            all_logits_2, mems_2 = model(inputs_2)
 
-            # self.parent.assertListEqual(
-            #     list(result["loss_1"].size()),
-            #     [])
-            # self.parent.assertListEqual(
-            #     list(result["all_logits_1"].size()),
-            #     [self.batch_size, self.seq_length, self.vocab_size])
-            # self.parent.assertListEqual(
-            #     list(list(mem.size()) for mem in result["mems_1"]),
-            #     [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+            inputs_3 = {'input_ids': input_ids_q,
+                        'perm_mask': perm_mask,
+                        'target_mapping': target_mapping}
 
-            # self.parent.assertListEqual(
-            #     list(result["loss_2"].size()),
-            #     [])
-            # self.parent.assertListEqual(
-            #     list(result["all_logits_2"].size()),
-            #     [self.batch_size, self.seq_length, self.vocab_size])
-            # self.parent.assertListEqual(
-            #     list(list(mem.size()) for mem in result["mems_2"]),
-            #     [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+            logits, _ = model(inputs_3)
+
+            result = {
+                "mems_1": [mem.numpy() for mem in mems_1],
+                "all_logits_1": all_logits_1.numpy(),
+                "mems_2": [mem.numpy() for mem in mems_2],
+                "all_logits_2": all_logits_2.numpy(),
+            }
+
+            self.parent.assertListEqual(
+                list(result["all_logits_1"].shape),
+                [self.batch_size, self.seq_length, self.vocab_size])
+            self.parent.assertListEqual(
+                list(list(mem.shape) for mem in result["mems_1"]),
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+
+            self.parent.assertListEqual(
+                list(result["all_logits_2"].shape),
+                [self.batch_size, self.seq_length, self.vocab_size])
+            self.parent.assertListEqual(
+                list(list(mem.shape) for mem in result["mems_2"]),
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
         def create_and_check_xlnet_qa(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
                 target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
-            pass
-            # model = XLNetForQuestionAnswering(config)
-            # model.eval()
+            model = TFXLNetForQuestionAnsweringSimple(config)
 
-            # outputs = model(input_ids_1)
-            # start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
+            inputs = {'input_ids': input_ids_1,
+                      'attention_mask': input_mask,
+                      'token_type_ids': segment_ids}
+            start_logits, end_logits, mems = model(inputs)
 
-            # outputs = model(input_ids_1, start_positions=sequence_labels,
-            #                              end_positions=sequence_labels,
-            #                              cls_index=sequence_labels,
-            #                              is_impossible=is_impossible_labels,
-            #                              p_mask=input_mask)
+            result = {
+                "start_logits": start_logits.numpy(),
+                "end_logits": end_logits.numpy(),
+                "mems": [m.numpy() for m in mems],
+            }
 
-            # outputs = model(input_ids_1, start_positions=sequence_labels,
-            #                              end_positions=sequence_labels,
-            #                              cls_index=sequence_labels,
-            #                              is_impossible=is_impossible_labels)
-
-            # total_loss, mems = outputs
-
-            # outputs = model(input_ids_1, start_positions=sequence_labels,
-            #                              end_positions=sequence_labels)
-
-            # total_loss, mems = outputs
-
-            # result = {
-            #     "loss": total_loss,
-            #     "start_top_log_probs": start_top_log_probs,
-            #     "start_top_index": start_top_index,
-            #     "end_top_log_probs": end_top_log_probs,
-            #     "end_top_index": end_top_index,
-            #     "cls_logits": cls_logits,
-            #     "mems": mems,
-            # }
-
-            # self.parent.assertListEqual(
-            #     list(result["loss"].size()),
-            #     [])
-            # self.parent.assertListEqual(
-            #     list(result["start_top_log_probs"].size()),
-            #     [self.batch_size, model.config.start_n_top])
-            # self.parent.assertListEqual(
-            #     list(result["start_top_index"].size()),
-            #     [self.batch_size, model.config.start_n_top])
-            # self.parent.assertListEqual(
-            #     list(result["end_top_log_probs"].size()),
-            #     [self.batch_size, model.config.start_n_top * model.config.end_n_top])
-            # self.parent.assertListEqual(
-            #     list(result["end_top_index"].size()),
-            #     [self.batch_size, model.config.start_n_top * model.config.end_n_top])
-            # self.parent.assertListEqual(
-            #     list(result["cls_logits"].size()),
-            #     [self.batch_size])
-            # self.parent.assertListEqual(
-            #     list(list(mem.size()) for mem in result["mems"]),
-            #     [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+            self.parent.assertListEqual(
+                list(result["start_logits"].shape),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(result["end_logits"].shape),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(list(mem.shape) for mem in result["mems"]),
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
         def create_and_check_xlnet_sequence_classif(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
                 target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
-            pass
-            # model = XLNetForSequenceClassification(config)
-            # model.eval()
+            model = TFXLNetForSequenceClassification(config)
 
-            # logits, mems_1 = model(input_ids_1)
-            # loss, logits, mems_1 = model(input_ids_1, labels=sequence_labels)
+            logits, mems_1 = model(input_ids_1)
 
-            # result = {
-            #     "loss": loss,
-            #     "mems_1": mems_1,
-            #     "logits": logits,
-            # }
+            result = {
+                "mems_1": [mem.numpy() for mem in mems_1],
+                "logits": logits.numpy(),
+            }
 
-            # self.parent.assertListEqual(
-            #     list(result["loss"].size()),
-            #     [])
-            # self.parent.assertListEqual(
-            #     list(result["logits"].size()),
-            #     [self.batch_size, self.type_sequence_label_size])
-            # self.parent.assertListEqual(
-            #     list(list(mem.size()) for mem in result["mems_1"]),
-            #     [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
+                [self.batch_size, self.type_sequence_label_size])
+            self.parent.assertListEqual(
+                list(list(mem.shape) for mem in result["mems_1"]),
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()

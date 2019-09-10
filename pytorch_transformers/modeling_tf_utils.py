@@ -386,7 +386,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
 
         self.activation = None
         if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':
-            self.activation = tf.keras.layers.Tanh()
+            self.activation = tf.keras.activations.tanh
 
         self.first_dropout = None
         if hasattr(config, 'summary_first_dropout') and config.summary_first_dropout > 0:
