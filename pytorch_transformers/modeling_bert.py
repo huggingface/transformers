@@ -26,7 +26,7 @@ from io import open
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss, MSELoss, BCEWithLogitsLoss
 
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .configuration_bert import BertConfig
@@ -1048,7 +1048,8 @@ class BertForTokenClassification(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             # Only keep active parts of the loss
             if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
+                # active_loss = attention_mask.view(-1) == 1
+                active_loss = labels.view(-1) != -1
                 active_logits = logits.view(-1, self.num_labels)[active_loss]
                 active_labels = labels.view(-1)[active_loss]
                 loss = loss_fct(active_logits, active_labels)
@@ -1143,3 +1144,71 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""Bert Model transformer with a multi-label classification head on top (a linear layer on top of
+    the pooled output) e.g. for BLUE - document multilabel classification tasks. """,
+                      BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+class BertForMultiLabelClassification(BertPreTrainedModel):
+    r"""
+        **labels**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size,config.num_labels,)``:
+            Labels for computing the multi-label classification.
+            Labels are the arrays of n elements in ``[0, 1]``, corresponding to n = ``config.num_labels`` labels.
+            If the input is labeled l and m (l,m in [0,n-1], the l-th and m-th elements will be 1, otherwise elements will be 0.
+            If the labels are all zero, the input does not have any label.
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification (or regression if config.num_labels==1) loss.
+        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForMultiLabelClassification.from_pretrained('bert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([0, 1, 1]).unsqueeze(0)  # Batch size 1, config.num_labels = 3, labels = [1,2]
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
+
+    """
+
+    def __init__(self, config):
+        super(BertForMultiLabelClassification, self).__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
+
+        self.apply(self.init_weights)
+
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
+                position_ids=None, head_mask=None, labels=None):
+
+        outputs = self.bert(input_ids,
+                            attention_mask=attention_mask,
+                            token_type_ids=token_type_ids,
+                            position_ids=position_ids,
+                            head_mask=head_mask)
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss_fct = BCEWithLogitsLoss()
+            loss = loss_fct(logits, labels)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)

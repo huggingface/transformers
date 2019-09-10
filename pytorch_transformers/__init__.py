@@ -44,6 +44,7 @@ from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
                             BertForMaskedLM, BertForNextSentencePrediction,
                             BertForSequenceClassification, BertForMultipleChoice,
                             BertForTokenClassification, BertForQuestionAnswering,
+                            BertForMultiLabelClassification,
                             load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
                               OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
@@ -60,6 +61,7 @@ from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
                            XLMWithLMHeadModel, XLMForSequenceClassification,
                            XLMForQuestionAnswering, XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_roberta import (RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
+                                RobertaForTokenClassification, RobertaForMultiLabelClassification,
                                ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
