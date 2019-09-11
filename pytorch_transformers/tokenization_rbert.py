@@ -33,7 +33,7 @@ class RBertTokenizer(BertTokenizer):
     BertForRelationshipClassification head
 
     Args:
-        same as BertTokenizer, apart crom
+        same as BertTokenizer, apart from
         replace_conflicting_entity_offset_char: since the forward method of BertForRelationshipClassification detects
                                                 the special characters that bound each entity, any pre-existing characters
                                                 of this type will cause a conflict. To prevent this, we replace any affected
