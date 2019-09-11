@@ -140,7 +140,7 @@ class PreTrainedModel(nn.Module):
         Arguments:
 
             new_num_tokens: (`optional`) int:
-                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end. 
+                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end.
                 If not provided or None: does nothing and just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
 
         Return: ``torch.nn.Embeddings``
@@ -434,7 +434,10 @@ class PoolerStartLogits(nn.Module):
         x = self.dense(hidden_states).squeeze(-1)
 
         if p_mask is not None:
-            x = x * (1 - p_mask) - 1e30 * p_mask
+            if next(self.parameters()).dtype == torch.float16:
+                x = x * (1 - p_mask) - 65500 * p_mask
+            else:
+                x = x * (1 - p_mask) - 1e30 * p_mask
 
         return x
 
