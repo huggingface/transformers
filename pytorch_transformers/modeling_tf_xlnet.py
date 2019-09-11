@@ -30,6 +30,7 @@ import tensorflow as tf
 from .configuration_xlnet import XLNetConfig
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
 from .file_utils import add_start_docstrings
+from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 
 logger = logging.getLogger(__name__)
@@ -40,71 +41,11 @@ TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-def load_xlnet_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
-    """ Load pytorch checkpoints in a TF 2.0 model and save it using HDF5 format
-        We use HDF5 to easily do transfer learning
-        (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
-    """
-    try:
-        import re
-        import torch
-        import numpy
-        from tensorflow.python.keras import backend as K
-    except ImportError:
-        logger.error("Loading a PyTorch model in TensorFlow, requires PyTorch to be installed. Please see "
-            "https://pytorch.org/ for installation instructions.")
-        raise
-
-    pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info("Loading PyTorch weights from {}".format(pt_path))
-    # Load pytorch model
-    state_dict = torch.load(pt_path, map_location='cpu')
-
+def load_xlnet_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
     inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
     tf_inputs = tf.constant(inputs_list)
     tfo = tf_model(tf_inputs, training=False)  # build the network
-
-    symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
-    weight_value_tuples = []
-    all_pytorch_weights = set(list(state_dict.keys()))
-    for symbolic_weight in symbolic_weights:
-        name = symbolic_weight.name
-        name = name.replace(':0', '')
-        name = name.replace('__', '/')
-        name = name.split('/')
-        name = name[1:]
-
-        transpose = bool(name[-1] == 'kernel')
-        if name[-1] == 'kernel' or name[-1] == 'embeddings' or name[-1] == 'gamma':
-            name[-1] = 'weight'
-        if name[-1] == 'beta':
-            name[-1] = 'bias'
-
-        name = '.'.join(name)
-        assert name in state_dict, "{} not found in PyTorch model".format(name)
-        array = state_dict[name].numpy()
-
-        if transpose:
-            array = numpy.transpose(array)
-
-        try:
-            assert list(symbolic_weight.shape) == list(array.shape)
-        except AssertionError as e:
-            e.args += (symbolic_weight.shape, array.shape)
-            raise e
-
-        logger.info("Initialize TF weight {}".format(symbolic_weight.name))
-
-        weight_value_tuples.append((symbolic_weight, array))
-        all_pytorch_weights.discard(name)
-
-    K.batch_set_value(weight_value_tuples)
-
-    tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
-
-    logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
-
-    return tf_model
+    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
 
 def gelu(x):
@@ -430,7 +371,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
 
         self.word_embedding = TFSharedEmbeddings(config.n_token, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
-        self.layer = [TFXLNetLayer(config, name='layer__{}'.format(i)) for i in range(config.n_layer)]
+        self.layer = [TFXLNetLayer(config, name='layer_._{}'.format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def build(self, input_shape):

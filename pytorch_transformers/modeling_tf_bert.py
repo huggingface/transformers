@@ -30,6 +30,7 @@ import tensorflow as tf
 from .configuration_bert import BertConfig
 from .modeling_tf_utils import TFPreTrainedModel
 from .file_utils import add_start_docstrings
+from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
@@ -51,71 +52,12 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-def load_bert_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
-    """ Load pytorch checkpoints in a TF 2.0 model and save it using HDF5 format
-        We use HDF5 to easily do transfer learning
-        (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
-    """
-    try:
-        import re
-        import torch
-        import numpy
-        from tensorflow.python.keras import backend as K
-    except ImportError:
-        logger.error("Loading a PyTorch model in TensorFlow, requires PyTorch to be installed. Please see "
-            "https://pytorch.org/ for installation instructions.")
-        raise
-
-    pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info("Loading PyTorch weights from {}".format(pt_path))
-    # Load pytorch model
-    state_dict = torch.load(pt_path, map_location='cpu')
-
+def load_bert_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
+    # build the network
     inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
     tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)  # build the network
-
-    symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
-    weight_value_tuples = []
-    all_pytorch_weights = set(list(state_dict.keys()))
-    for symbolic_weight in symbolic_weights:
-        name = symbolic_weight.name
-        name = name.replace('cls_mlm', 'cls')  # We had to split this layer in two in the TF model to be
-        name = name.replace('cls_nsp', 'cls')  # able to do transfer learning (Keras only allow to remove full layers)
-        name = name.replace(':0', '')
-        name = name.replace('__', '/')
-        name = name.split('/')
-        name = name[1:]
-
-        transpose = bool(name[-1] == 'kernel')
-        if name[-1] == 'kernel' or name[-1] == 'embeddings':
-            name[-1] = 'weight'
-
-        name = '.'.join(name)
-        assert name in state_dict, "{} not found in PyTorch model".format(name)
-        array = state_dict[name].numpy()
-
-        if transpose:
-            array = numpy.transpose(array)
-
-        try:
-            assert list(symbolic_weight.shape) == list(array.shape)
-        except AssertionError as e:
-            e.args += (symbolic_weight.shape, array.shape)
-            raise e
-
-        logger.info("Initialize TF weight {}".format(symbolic_weight.name))
-
-        weight_value_tuples.append((symbolic_weight, array))
-        all_pytorch_weights.discard(name)
-
-    K.batch_set_value(weight_value_tuples)
-
-    tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
-
-    logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
-
-    return tf_model
+    tfo = tf_model(tf_inputs, training=False)
+    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
 
 def gelu(x):
@@ -391,7 +333,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         super(TFBertEncoder, self).__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = [TFBertLayer(config, name='layer__{}'.format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFBertLayer(config, name='layer_._{}'.format(i)) for i in range(config.num_hidden_layers)]
 
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
@@ -730,15 +672,15 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         super(TFBertForPreTraining, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
-        self.cls_mlm = TFBertMLMHead(config, self.bert.embeddings, name='cls_mlm')
+        self.nsp = TFBertNSPHead(config, name='nsp___cls')
+        self.mlm = TFBertMLMHead(config, self.bert.embeddings, name='mlm___cls')
 
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.cls_mlm(sequence_output, training=training)
-        seq_relationship_score = self.cls_nsp(pooled_output)
+        prediction_scores = self.mlm(sequence_output, training=training)
+        seq_relationship_score = self.nsp(pooled_output)
 
         outputs = (prediction_scores, seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
 
@@ -773,13 +715,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         super(TFBertForMaskedLM, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_mlm = TFBertMLMHead(config, self.bert.embeddings, name='cls_mlm')
+        self.mlm = TFBertMLMHead(config, self.bert.embeddings, name='mlm___cls')
 
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls_mlm(sequence_output, training=training)
+        prediction_scores = self.mlm(sequence_output, training=training)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
@@ -816,13 +758,13 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         super(TFBertForNextSentencePrediction, self).__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name='bert')
-        self.cls_nsp = TFBertNSPHead(config, name='cls_nsp')
+        self.nsp = TFBertNSPHead(config, name='nsp___cls')
 
     def call(self, inputs, training=False):
         outputs = self.bert(inputs, training=training)
 
         pooled_output = outputs[1]
-        seq_relationship_score = self.cls_nsp(pooled_output)
+        seq_relationship_score = self.nsp(pooled_output)
 
         outputs = (seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
 
