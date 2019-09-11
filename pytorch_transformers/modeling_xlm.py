@@ -563,10 +563,10 @@ class XLMPredLayer(nn.Module):
         """
         outputs = ()
         if self.asm is False:
-            scores = self.proj(x).view(-1, self.n_words)
+            scores = self.proj(x)
             outputs = (scores,) + outputs
             if y is not None:
-                loss = F.cross_entropy(scores, y, reduction='elementwise_mean')
+                loss = F.cross_entropy(scores.view(-1, self.n_words), y, reduction='elementwise_mean')
                 outputs = (loss,) + outputs
         else:
             scores = self.proj.log_prob(x)
