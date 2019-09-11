@@ -67,6 +67,14 @@ class RBertTokenizer(BertTokenizer):
 
     def encode_with_relationship(self, text, e1_offset_tup, e2_offset_tup,
                                  text_pair=None, add_special_tokens=False):
+        """
+        Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary
+        :param text: the string to encode
+        :param e1_offset_tup: a 2-tuple describing the start end offsets of entity 1
+        :param e2_offset_tup: a 2-tuple describing the start end offsets of entity 1
+        :param text_pair: passed to BertTokenizer.encode
+        :param add_special_tokens: : passed to BertTokenizer.encode
+        """
 
         if e1_offset_tup and e2_offset_tup:
             text = self._clean_special_chars(text)
