@@ -852,7 +852,7 @@ class BertForRelationshipClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    def get_indices_tensor2(self,instance_input_ids,entity_char_id):
+    def get_indices_tensor(self,instance_input_ids,entity_char_id):
         index_tensors = (instance_input_ids == entity_char_id).nonzero()
         start_index = index_tensors[0].item() + 1 # do not include the symbol itself in the calculation
         end_index = index_tensors[1].item()
@@ -861,7 +861,7 @@ class BertForRelationshipClassification(BertPreTrainedModel):
     def average_entity_vectors(self,last_hidden_states,input_ids,entity_char_id):
         batch_return_list = []
         for instance_hidden_state,instance_input_ids in zip(last_hidden_states,input_ids):
-            lookup_tensor = self.get_indices_tensor2(instance_input_ids,entity_char_id)
+            lookup_tensor = self.get_indices_tensor(instance_input_ids,entity_char_id)
             average_of_entity_vectors = torch.index_select(instance_hidden_state, 0, lookup_tensor).unsqueeze(0).mean(1)
             batch_return_list.append(average_of_entity_vectors)
         return torch.cat(batch_return_list)
