@@ -21,7 +21,7 @@ import unittest
 
 import pytest
 
-from pytorch_transformers import (RBertConfig, BertModel, BertForMaskedLM,
+from pytorch_transformers import (BertConfig,RBertConfig, BertModel, BertForMaskedLM,
                                   BertForNextSentencePrediction, BertForPreTraining,
                                   BertForQuestionAnswering, BertForSequenceClassification,
                                   BertForTokenClassification, BertForMultipleChoice,
@@ -105,7 +105,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-            config = RBertConfig(
+            config = BertConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
@@ -207,6 +207,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_bert_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask,
                                                                   sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
+            config = RBertConfig(**config.__dict__)
             config.entity_1_token_id = 4
             config.entity_2_token_id = 8
             # we need to mock the behaviour of the RBertTokenizer
@@ -288,7 +289,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
 
     def setUp(self):
         self.model_tester = BertModelTest.BertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
