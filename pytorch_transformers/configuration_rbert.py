@@ -39,8 +39,8 @@ class RBertConfig(BertConfig):
             entity_2_token_id: the token ID if the second entity delimiter
     """
     def __init__(self,
-                 entity_1_token_id=None,
-                 entity_2_token_id=None,
+                 entity_1_token_id=1001,
+                 entity_2_token_id=1002,
                  **kwargs):
         super(RBertConfig, self).__init__(**kwargs)
         self.entity_2_token_id = entity_2_token_id
