@@ -69,10 +69,8 @@ def load_xlnet_pt_weights_in_tf2(tf_model, config, pytorch_checkpoint_path):
     all_pytorch_weights = set(list(state_dict.keys()))
     for symbolic_weight in symbolic_weights:
         name = symbolic_weight.name
-        name = name.replace('cls_mlm', 'cls')  # We had to split this layer in two in the TF model to be
-        name = name.replace('cls_nsp', 'cls')  # able to do transfer learning (Keras only allow to remove full layers)
         name = name.replace(':0', '')
-        name = name.replace('layer__', 'layer/')
+        name = name.replace('__', '/')
         name = name.split('/')
         name = name[1:]
 
@@ -887,8 +885,6 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     """
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetLMHeadModel, self).__init__(config, *inputs, **kwargs)
-        self.n_token = config.n_token
-
         self.transformer = TFXLNetMainLayer(config, name='transformer')
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name='lm_loss')
 
@@ -993,8 +989,6 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
     """
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
-
         self.transformer = TFXLNetMainLayer(config, name='transformer')
         self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
 

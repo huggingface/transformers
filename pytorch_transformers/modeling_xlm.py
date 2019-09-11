@@ -337,11 +337,6 @@ class XLMModel(XLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
-    ATTRIBUTES = ['encoder', 'eos_index', 'pad_index',  # 'with_output', 
-                  'n_langs', 'use_lang_emb', 'n_words', 'dim', 'n_layers', 'n_heads', 
-                  'hidden_dim', 'dropout', 'attention_dropout', 'asm',
-                  'asm_cutoffs', 'asm_div_value']
-
     def __init__(self, config):  #, dico, is_encoder, with_output):
         super(XLMModel, self).__init__(config)
         self.output_attentions = config.output_attentions
