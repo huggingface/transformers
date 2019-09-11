@@ -37,6 +37,7 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off -r docs/requirements.txt
             - run: sudo pip install --progress-bar off -r requirements.txt
+            - run: cd docs/source && ln -s ../../examples/README.md examples.md && cd -
             - run: cd docs && make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir
 workflow_filters: &workflow_filters
     filters:
