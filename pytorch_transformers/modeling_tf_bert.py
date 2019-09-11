@@ -57,7 +57,7 @@ def load_bert_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
     inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
     tf_inputs = tf.constant(inputs_list)
     tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
+    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def gelu(x):

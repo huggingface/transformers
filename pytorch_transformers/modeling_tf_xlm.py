@@ -50,11 +50,9 @@ def load_xlm_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
     inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
     attns_list = [[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]
     langs_list = [[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]
-    tf_inputs = tf.constant(inputs_list)
-    tf_attns = tf.constant(attns_list)
-    tf_langs = tf.constant(langs_list)
-    tfo = tf_model([tf_inputs, tf_attns, tf_langs], training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
+    tf_inputs = [tf.constant(inputs_list), tf.constant(attns_list), tf.constant(langs_list)]
+    tfo = tf_model(tf_inputs, training=False)
+    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -614,7 +612,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     """
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLMWithLMHeadModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name='transformer___')
+        self.transformer = TFXLMMainLayer(config, name='transformer')
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name='pred_layer_._proj')
 
 

@@ -19,34 +19,34 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import logging
-
-from pytorch_transformers import is_tf_available, is_torch_available
+import os
 
 logger = logging.getLogger(__name__)
 
 
-def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path):
+def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None):
     """ Load pytorch checkpoints in a TF 2.0 model
         Conventions for TF2.0 scopes -> PyTorch attribute names conversions:
             - '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
             - '_._' is replaced by a new level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     """
-    if not is_tf_available() or not is_torch_available():
+    try:
+        import tensorflow as tf
+        import torch
+    except ImportError as e:
         logger.error("Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
-        raise ImportError
-
-    import torch
+        raise e
 
     pt_path = os.path.abspath(pytorch_checkpoint_path)
     logger.info("Loading PyTorch weights from {}".format(pt_path))
 
     pt_state_dict = torch.load(pt_path, map_location='cpu')
 
-    return load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict)
+    return load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs)
 
 
-def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict):
+def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None):
     """ Load pytorch state_dict in a TF 2.0 model.
         Conventions for TF2.0 scopes -> PyTorch attribute names conversions:
             - '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
@@ -102,7 +102,8 @@ def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict):
 
     K.batch_set_value(weight_value_tuples)
 
-    tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+    if tf_inputs is not None:
+        tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
 
     logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
 
