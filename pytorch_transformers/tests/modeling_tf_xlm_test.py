@@ -20,26 +20,30 @@ import unittest
 import shutil
 import pytest
 
-from pytorch_transformers import is_torch_available
+from pytorch_transformers import is_tf_available
 
-if is_torch_available():
-    from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
-                                      XLMForSequenceClassification)
-    from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+if is_tf_available():
+    import tensorflow as tf
+    from pytorch_transformers import (XLMConfig, TFXLMModel,
+                                      TFXLMWithLMHeadModel,
+                                      TFXLMForSequenceClassification,
+                                      TFXLMForQuestionAnsweringSimple,
+                                      TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
-    pytestmark = pytest.mark.skip("Require Torch")
+    pytestmark = pytest.mark.skip("Require TensorFlow")
 
-from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
 
-class XLMModelTest(CommonTestCases.CommonModelTester):
+class TFXLMModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
-                         XLMForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (TFXLMModel, TFXLMWithLMHeadModel,
+                         TFXLMForSequenceClassification,
+                         TFXLMForQuestionAnsweringSimple) if is_tf_available() else ()
 
 
-    class XLMModelTester(object):
+    class TFXLMModelTester(object):
 
         def __init__(self,
                      parent,
@@ -103,7 +107,7 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
+            input_mask = ids_tensor([self.batch_size, self.seq_length], 2, dtype=tf.float32)
 
             input_lengths = None
             if self.use_input_lengths:
@@ -119,7 +123,7 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
             if self.use_labels:
                 sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                is_impossible_labels = ids_tensor([self.batch_size], 2).float()
+                is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
             config = XLMConfig(
                  vocab_size_or_config_json_file=self.vocab_size,
@@ -141,116 +145,79 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
 
             return config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask
 
-        def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-
         def create_and_check_xlm_model(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
-            model = XLMModel(config=config)
-            model.eval()
-            outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
-            outputs = model(input_ids, langs=token_type_ids)
-            outputs = model(input_ids)
+            model = TFXLMModel(config=config)
+            inputs = {'input_ids': input_ids,
+                      'lengths': input_lengths,
+                      'langs': token_type_ids}
+            outputs = model(inputs)
+
+            inputs = [input_ids, input_mask]
+            outputs = model(inputs)
             sequence_output = outputs[0]
             result = {
-                "sequence_output": sequence_output,
+                "sequence_output": sequence_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()),
+                list(result["sequence_output"].shape),
                 [self.batch_size, self.seq_length, self.hidden_size])
 
 
         def create_and_check_xlm_lm_head(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
-            model = XLMWithLMHeadModel(config)
-            model.eval()
+            model = TFXLMWithLMHeadModel(config)
 
-            loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
+            inputs = {'input_ids': input_ids,
+                      'lengths': input_lengths,
+                      'langs': token_type_ids}
+            outputs = model(inputs)
+
+            logits = outputs[0]
 
             result = {
-                "loss": loss,
-                "logits": logits,
+                "logits": logits.numpy(),
             }
 
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
+                list(result["logits"].shape),
                 [self.batch_size, self.seq_length, self.vocab_size])
 
 
         def create_and_check_xlm_qa(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
-            model = XLMForQuestionAnswering(config)
-            model.eval()
+            model = TFXLMForQuestionAnsweringSimple(config)
 
-            outputs = model(input_ids)
-            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
+            inputs = {'input_ids': input_ids,
+                      'lengths': input_lengths}
 
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                         end_positions=sequence_labels,
-                                         cls_index=sequence_labels,
-                                         is_impossible=is_impossible_labels,
-                                         p_mask=input_mask)
-
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                         end_positions=sequence_labels,
-                                         cls_index=sequence_labels,
-                                         is_impossible=is_impossible_labels)
-
-            (total_loss,) = outputs
-
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                         end_positions=sequence_labels)
-
-            (total_loss,) = outputs
+            outputs = model(inputs)
+            start_logits, end_logits = model(inputs)
 
             result = {
-                "loss": total_loss,
-                "start_top_log_probs": start_top_log_probs,
-                "start_top_index": start_top_index,
-                "end_top_log_probs": end_top_log_probs,
-                "end_top_index": end_top_index,
-                "cls_logits": cls_logits,
+                "start_logits": start_logits.numpy(),
+                "end_logits": end_logits.numpy(),
             }
 
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+                list(result["start_logits"].shape),
+                [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["start_top_log_probs"].size()),
-                [self.batch_size, model.config.start_n_top])
-            self.parent.assertListEqual(
-                list(result["start_top_index"].size()),
-                [self.batch_size, model.config.start_n_top])
-            self.parent.assertListEqual(
-                list(result["end_top_log_probs"].size()),
-                [self.batch_size, model.config.start_n_top * model.config.end_n_top])
-            self.parent.assertListEqual(
-                list(result["end_top_index"].size()),
-                [self.batch_size, model.config.start_n_top * model.config.end_n_top])
-            self.parent.assertListEqual(
-                list(result["cls_logits"].size()),
-                [self.batch_size])
+                list(result["end_logits"].shape),
+                [self.batch_size, self.seq_length])
 
 
         def create_and_check_xlm_sequence_classif(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
-            model = XLMForSequenceClassification(config)
-            model.eval()
+            model = TFXLMForSequenceClassification(config)
 
-            (logits,) = model(input_ids)
-            loss, logits = model(input_ids, labels=sequence_labels)
+            inputs = {'input_ids': input_ids,
+                      'lengths': input_lengths}
+
+            (logits,) = model(inputs)
 
             result = {
-                "loss": loss,
-                "logits": logits,
+                "logits": logits.numpy(),
             }
 
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
+                list(result["logits"].shape),
                 [self.batch_size, self.type_sequence_label_size])
 
 
@@ -262,7 +229,7 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = XLMModelTest.XLMModelTester(self)
+        self.model_tester = TFXLMModelTest.TFXLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
 
     def test_config(self):
@@ -287,7 +254,7 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = XLMModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)

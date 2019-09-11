@@ -120,6 +120,13 @@ if _tf_available:
                                     load_xlnet_pt_weights_in_tf2,
                                     TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_tf_xlm import (TFXLMPreTrainedModel, TFXLMMainLayer,
+                                  TFXLMModel, TFXLMWithLMHeadModel,
+                                  TFXLMForSequenceClassification,
+                                  TFXLMForQuestionAnsweringSimple,
+                                  load_xlm_pt_weights_in_tf2,
+                                  TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
+
 # Files and general utilities
 from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
                          cached_path, add_start_docstrings, add_end_docstrings,
