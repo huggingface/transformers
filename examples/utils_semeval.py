@@ -40,10 +40,8 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_id, ent1_ids, ent2_ids,instance_id):
+    def __init__(self, input_ids, input_mask, segment_ids, label_id, instance_id):
         self.instance_id = instance_id
-        self.ent2_ids = ent2_ids
-        self.ent1_ids = ent1_ids
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
@@ -134,9 +132,9 @@ class SemEval2010Task8DataProcessor():
 
 
 def find_entity_indices(id_list, tokenizer):
-    ent1_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.ent1_sep_token_id]
+    ent1_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_1_token_id]
     ent1_bounding_id_list = [ent1_bounding_id_list[0], ent1_bounding_id_list[1] + 1]
-    ent2_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.ent2_sep_token_id]
+    ent2_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_2_token_id]
     ent2_bounding_id_list = [ent2_bounding_id_list[0], ent2_bounding_id_list[1] + 1]
     return ent1_bounding_id_list, ent2_bounding_id_list
 
@@ -191,16 +189,11 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         assert len(input_mask) == max_seq_length
 
         label_id = label_map[example.label]
-
-        ent1_bounding_id_list, ent2_bounding_id_list = find_entity_indices(input_ids, tokenizer)
-
         features.append(
             InputFeatures(input_ids=input_ids,
                           input_mask=input_mask,
                           segment_ids=[0] * len(input_ids),
                           label_id=label_id,
-                          ent1_ids=ent1_bounding_id_list,
-                          ent2_ids=ent2_bounding_id_list,
                           instance_id=int(example.id)
                           ))
     return features
@@ -214,10 +207,8 @@ def convert_features_to_dataset(features, output_mode='classification'):
         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
     else:
         all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
-    ent1_ids = torch.tensor([f.ent1_ids for f in features], dtype=torch.int)
-    ent2_ids = torch.tensor([f.ent2_ids for f in features], dtype=torch.int)
     instance_ids = torch.tensor([f.instance_id for f in features], dtype=torch.int)
-    dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids,instance_ids)
+    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids,instance_ids)
     return dataset
 
 def simple_accuracy(preds, labels):

@@ -832,6 +832,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 class BertForRelationshipClassification(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForRelationshipClassification, self).__init__(config)
+        self.ent_2_index_id = config.entity_2_token_id
+        self.ent_1_index_id = config.entity_1_token_id
         self.num_labels = config.num_labels
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.bert = BertModel(config)
@@ -850,29 +852,30 @@ class BertForRelationshipClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, ent1_ids, ent2_ids, token_type_ids=None, attention_mask=None, labels=None,
+    def get_indices_tensor2(self,instance_input_ids,entity_char_id):
+        index_tensors = (instance_input_ids == entity_char_id).nonzero()
+        start_index = index_tensors[0].item() + 1 # do not include the symbol itself in the calculation
+        end_index = index_tensors[1].item()
+        return torch.arange(start_index, end_index, device=instance_input_ids.device.type)
+
+    def average_entity_vectors(self,last_hidden_states,input_ids,entity_char_id):
+        batch_return_list = []
+        for instance_hidden_state,instance_input_ids in zip(last_hidden_states,input_ids):
+            lookup_tensor = self.get_indices_tensor2(instance_input_ids,entity_char_id)
+            average_of_entity_vectors = torch.index_select(instance_hidden_state, 0, lookup_tensor).unsqueeze(0).mean(1)
+            batch_return_list.append(average_of_entity_vectors)
+        return torch.cat(batch_return_list)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
                 position_ids=None, head_mask=None):
 
         outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
                             attention_mask=attention_mask, head_mask=head_mask)
         last_hidden_states = outputs[0]
 
-        def get_indices_tensor(start_end_tensor):
-            start_tensor = start_end_tensor[0]
-            end_tensor = start_end_tensor[1]
-            return torch.arange(start_tensor, end_tensor, device=start_end_tensor.device.type)
-
-        def average_entity_vectors(start_end_tensor):
-            batch_return_list = []
-            for hidden_states, target_tensor_indices in zip(last_hidden_states, start_end_tensor):
-                lookup_tensor = get_indices_tensor(target_tensor_indices)
-                average_of_entity_vectors = torch.index_select(hidden_states, 0, lookup_tensor).unsqueeze(0).mean(1)
-                batch_return_list.append(average_of_entity_vectors)
-            return torch.cat(batch_return_list)
-
         cls_tensor = self.sentence_layer(last_hidden_states[:, 0]) #get the sentence embedding and pass through FC layer
-        ent1_tensor = self.entity_layer(average_entity_vectors(ent1_ids)) #average wordpieces of ent1 and pass through FC entity layer
-        ent2_tensor = self.entity_layer(average_entity_vectors(ent2_ids)) #ditto - ent2 shared parameters with ent1
+        ent1_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_1_index_id)) #average wordpieces of ent1 and pass through FC entity layer
+        ent2_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_2_index_id)) #ditto - ent2 shared parameters with ent1
 
         entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1) #concat all and pass through classifier layer
         logits = self.classifier(entities_and_cls_tensor)

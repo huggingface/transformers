@@ -31,7 +31,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
-from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
+from pytorch_transformers import (WEIGHTS_NAME, RBertConfig,
                                   BertForRelationshipClassification, RBertTokenizer)
 from utils_semeval import (processors, output_modes, convert_examples_to_features,
                             convert_features_to_dataset, compute_metrics)
@@ -39,7 +39,7 @@ from utils_semeval import (processors, output_modes, convert_examples_to_feature
 logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
-    'bert': (BertConfig, BertForRelationshipClassification, RBertTokenizer)
+    'bert': (RBertConfig, BertForRelationshipClassification, RBertTokenizer)
 }
 
 def set_seed(args):
@@ -113,11 +113,9 @@ def train(args, train_dataset, model, tokenizer):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids': batch[0],
-                      'ent1_ids': batch[1],
-                      'ent2_ids': batch[2],
-                      'attention_mask': batch[3],
-                      'token_type_ids': batch[4],
-                      'labels': batch[5]}
+                      'attention_mask': batch[1],
+                      'token_type_ids': batch[2],
+                      'labels': batch[3]}
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
@@ -204,11 +202,9 @@ def evaluate(args, model, eval_dataset, prefix=""):
 
         with torch.no_grad():
             inputs = {'input_ids': batch[0],
-                      'ent1_ids': batch[1],
-                      'ent2_ids': batch[2],
-                      'attention_mask': batch[3],
-                      'token_type_ids': batch[4],
-                      'labels': batch[5]}
+                      'attention_mask': batch[1],
+                      'token_type_ids': batch[2],
+                      'labels': batch[3]}
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
 
@@ -218,11 +214,11 @@ def evaluate(args, model, eval_dataset, prefix=""):
         if preds is None:
             preds = logits.detach().cpu().numpy()
             out_label_ids = inputs['labels'].detach().cpu().numpy()
-            out_instance_ids = batch[6].detach().cpu().numpy()
+            out_instance_ids = batch[4].detach().cpu().numpy()
         else:
             preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
             out_label_ids = np.append(out_label_ids, inputs['labels'].detach().cpu().numpy(), axis=0)
-            out_instance_ids = np.append(out_instance_ids, batch[6].detach().cpu().numpy(), axis=0)
+            out_instance_ids = np.append(out_instance_ids, batch[4].detach().cpu().numpy(), axis=0)
 
     eval_loss = eval_loss / nb_eval_steps
     preds = np.argmax(preds, axis=1)
@@ -404,8 +400,15 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                do_lower_case=args.do_lower_case)
+
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                          num_labels=num_labels, finetuning_task=args.task_name,
+                                          entity_1_token_id=tokenizer.entity_1_token_id,
+                                          entity_2_token_id=tokenizer.entity_2_token_id,
+                                          )
+
     model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
 
     if args.local_rank == 0:

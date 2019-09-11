@@ -40,8 +40,8 @@ class RBertTokenizer(BertTokenizer):
                                              **kwargs)
         self.ent1_sep_token = "$"
         self.ent2_sep_token = "#"
-        self.ent1_sep_token_id = self.encode(self.ent1_sep_token)[0]
-        self.ent2_sep_token_id = self.encode(self.ent2_sep_token)[0]
+        self.entity_1_token_id = self.encode(self.ent1_sep_token)[0]
+        self.entity_2_token_id = self.encode(self.ent2_sep_token)[0]
 
     def encode_with_relationship(self, text, e1_offset_tup, e2_offset_tup,
                                  text_pair=None, add_special_tokens=False):
