@@ -25,12 +25,13 @@ from pytorch_transformers import is_torch_available
 
 from pytorch_transformers import (BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf2,
                                   GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2,
-                                  XLNetConfig, TFXLNetLMHeadModel, load_xlnet_pt_weights_in_tf2)
+                                  XLNetConfig, TFXLNetLMHeadModel, load_xlnet_pt_weights_in_tf2,
+                                  XLMConfig, TFXLMWithLMHeadModel, load_xlm_pt_weights_in_tf2,)
 
 if is_torch_available():
     import torch
     import numpy as np
-    from pytorch_transformers import BertForPreTraining, GPT2LMHeadModel, XLNetLMHeadModel
+    from pytorch_transformers import BertForPreTraining, GPT2LMHeadModel, XLNetLMHeadModel, XLMWithLMHeadModel
 else:
     BertForPreTraining, GPT2LMHeadModel = None, None
 
@@ -42,6 +43,7 @@ MODEL_CLASSES = {
     'bert': (BertConfig, TFBertForPreTraining, load_bert_pt_weights_in_tf2, BertForPreTraining),
     'gpt2': (GPT2Config, TFGPT2LMHeadModel, load_gpt2_pt_weights_in_tf2, GPT2LMHeadModel),
     'xlnet': (XLNetConfig, TFXLNetLMHeadModel, load_xlnet_pt_weights_in_tf2, XLNetLMHeadModel),
+    'xlm': (XLMConfig, TFXLMWithLMHeadModel, load_xlm_pt_weights_in_tf2, XLMWithLMHeadModel),
 }
 
 def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False):
@@ -58,7 +60,7 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
     tf_model = model_class(config)
 
     # Load weights from tf checkpoint
-    tf_model = loading_fct(tf_model, config, pytorch_checkpoint_path)
+    tf_model = loading_fct(tf_model, pytorch_checkpoint_path)
 
     if compare_with_pt_model:
         inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]

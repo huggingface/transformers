@@ -33,7 +33,15 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
     # Load checkpoint
     chkpt = torch.load(xlm_checkpoint_path, map_location='cpu')
 
-    model = chkpt['model']
+    state_dict = chkpt['model']
+
+    # We have the base model one level deeper than the original XLM repository
+    two_levels_state_dict = {}
+    for k, v in state_dict.items():
+        if 'pred_layer' in k:
+            two_levels_state_dict[k] = v
+        else:
+            two_levels_state_dict['transformer.' + k] = v
 
     config = chkpt['params']
     config = dict((n, v) for n, v in config.items() if not isinstance(v, (torch.FloatTensor, numpy.ndarray)))
@@ -47,7 +55,7 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
     pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' +  VOCAB_FILES_NAMES['vocab_file']
 
     print("Save PyTorch model to {}".format(pytorch_weights_dump_path))
-    torch.save(model, pytorch_weights_dump_path)
+    torch.save(two_levels_state_dict, pytorch_weights_dump_path)
 
     print("Save configuration file to {}".format(pytorch_config_dump_path))
     with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:
