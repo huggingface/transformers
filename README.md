@@ -311,19 +311,25 @@ python ./examples/run_rbert.py \
 --do_eval \
 --overwrite_output_dir \
 --eval_all_checkpoints \
---num_train_epochs 5.0 \
+--num_train_epochs 15.0 \
 --task_name semeval2010_task8 \
 --per_gpu_train_batch_size 16 \
 --per_gpu_eval_batch_size 16 \
 --learning_rate 2e-5 \
 --include_directionality \
---max_seq_length 128 
+--max_seq_length 128 \
+--eval_on_other_labels \
+--train_on_other_labels
+
 ```
 
 Note, although an F1 score is calculated in the python code, additional files are also written out at the checkpoint intervals ```{global_step}_semeval_results.tsv``` that may be used with the official Semeval evaluation script (supplied seperatedly)
 The Semeval dataset is available under creative commons and is available [here](http://docs.google.com/leaf?id=0B_jQiLugGTAkMDQ5ZjZiMTUtMzQ1Yy00YWNmLWJlZDYtOWY1ZDMwY2U4YjFk&sort=name&layout=list&num=50). The ```$SEMEVAL_DIR``` should point to the extracted archive.
 
-The ```--include_directionality``` flag trains a classifier using all 19 semeval classes. Removing this flag trains a classifier that only uses 10 classes (9 undirected +1 Other). This gives slightly better performance. See the original task documentation for further details.  
+The ```--include_directionality``` flag trains a classifier using all 18 semeval classes. The ```--train_on_other_labels``` and ```--eval_on_other_labels``` flags also include instances labeled as 'Other' in the training and evaluation respectively. Include all of these to be able to use the official evaluation script
+
+In addition, the original R-BERT paper describes training for 5 epochs. However, we have discovered that by training for 15 you can achieve an undirected Macro F1 around 93.36!
+
 ## Migrating from pytorch-pretrained-bert to pytorch-transformers
 
 Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `pytorch-transformers`
