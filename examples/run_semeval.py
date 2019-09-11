@@ -258,10 +258,11 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
         if evaluate:
-            examples = processor.get_dev_examples(args.data_dir)
-            processor.write_dev_examples_to_official_format(args.data_dir)
+            examples = list(processor.get_dev_examples(args.data_dir,include_other=args.eval_on_other_labels))
+            # so that the official scoring script can be used
+            processor.write_dev_examples_to_official_format(args.output_dir,examples=examples)
         else:
-            examples = processor.get_train_examples(args.data_dir,exclude_other=False)
+            examples = list(processor.get_train_examples(args.data_dir,include_other=args.train_on_other_labels))
         features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -350,7 +351,9 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
-    parser.add_argument("--include_directionality", action='store_true',help='train on all 19 classes. Exclude to train on the 9 relation labels only')
+    parser.add_argument("--include_directionality", action='store_true',help='train on all 19 classes. Exclude this flag to train on the 9 relation labels only')
+    parser.add_argument("--train_on_other_labels", action='store_true',help='Do not include instances with the label "Other" in the training data')
+    parser.add_argument("--eval_on_other_labels", action='store_true',help='Do not include instances with the label "Other" in the evaluation data')
 
     args = parser.parse_args()
 

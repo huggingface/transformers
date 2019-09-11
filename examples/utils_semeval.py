@@ -90,7 +90,7 @@ class SemEval2010Task8DataProcessor():
         else:
             self.all_labels = self.e1_e2_labels  + self.other_label
 
-    def _instance_generator(self, data,exclude_other):
+    def _instance_generator(self, data,include_other):
         for i in range(0, len(data), 4):
             id, text = data[i].split('\t')
             text = text.strip()
@@ -99,7 +99,7 @@ class SemEval2010Task8DataProcessor():
             if not self.include_directionality and label in self.undirected_labels_mapping:
                 label = self.undirected_labels_mapping[label]
             # Don't include Other label in training set
-            if label == 'Other' and exclude_other:
+            if label == 'Other' and not include_other:
                 logger.info(f'Skipping Other labeled instance at {id}')
             else:
                 comment = data[i + 2].strip()
@@ -114,15 +114,16 @@ class SemEval2010Task8DataProcessor():
             data = f.readlines()
         return self._instance_generator(data,exclude_other)
 
-    def get_train_examples(self, data_dir,exclude_other):
-        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_training","TRAIN_FILE.TXT"),exclude_other)
+    def get_train_examples(self, data_dir,include_other):
+        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_training","TRAIN_FILE.TXT"),
+                                     include_other)
 
-    def get_dev_examples(self, data_dir):
-        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"),False)
+    def get_dev_examples(self, data_dir,include_other):
+        return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"),
+                                     include_other)
 
-    def write_dev_examples_to_official_format(self,data_dir):
-        examples = self._create_examples(os.path.join(data_dir, "SemEval2010_task8_testing_keys","TEST_FILE_FULL.TXT"),False)
-        with open(os.path.join(data_dir,"TEST_FILE_FULL_EVAL_FORMAT.tsv"),'w') as f:
+    def write_dev_examples_to_official_format(self,data_dir,examples):
+        with open(os.path.join(data_dir,"TEST_FILE_SEMEVAL_SCRIPT_FORMAT.tsv"),'w') as f:
             for example in examples:
                 f.write(str(example.id)+'\t'+example.label+'\n')
 
@@ -218,11 +219,6 @@ def convert_features_to_dataset(features, output_mode='classification'):
     instance_ids = torch.tensor([f.instance_id for f in features], dtype=torch.int)
     dataset = TensorDataset(all_input_ids, ent1_ids, ent2_ids, all_input_mask, all_segment_ids, all_label_ids,instance_ids)
     return dataset
-
-
-def call_semeval_2010_task_8_eval_script(labels, preds):
-    #     TODO
-    pass
 
 def simple_accuracy(preds, labels):
     return (preds == labels).mean()
