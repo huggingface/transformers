@@ -235,7 +235,6 @@ def evaluate(args, model, eval_dataset, prefix=""):
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
-    print(f"out instance shape = {out_instance_ids.shape}, preds: {preds.shape}")
     return results, np.stack([out_instance_ids,preds],axis=1)
 
 
@@ -456,7 +455,7 @@ def main():
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
-            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else "best"
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             eval_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=True)
