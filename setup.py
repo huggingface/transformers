@@ -38,7 +38,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="pytorch_transformers",
-    version="1.1.0",
+    version="1.2.0",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors",
     author_email="thomas@huggingface.co",
     description="Repository of pre-trained NLP Transformer models: BERT & RoBERTa, GPT & GPT-2, Transformer-XL, XLNet and XLM",
@@ -55,7 +55,8 @@ setup(
                       'requests',
                       'tqdm',
                       'regex',
-                      'sentencepiece'],
+                      'sentencepiece',
+                      'sacremoses'],
     entry_points={
       'console_scripts': [
         "pytorch_transformers=pytorch_transformers.__main__:main",

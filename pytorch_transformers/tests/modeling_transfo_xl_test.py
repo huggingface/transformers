@@ -16,9 +16,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import unittest
-import json
 import random
 import shutil
 import pytest
@@ -28,7 +26,8 @@ import torch
 from pytorch_transformers import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
 from pytorch_transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import ConfigTester, CommonTestCases, ids_tensor
+from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
 
 class TransfoXLModelTest(CommonTestCases.CommonModelTester):
 

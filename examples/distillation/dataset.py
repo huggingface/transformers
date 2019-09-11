@@ -77,7 +77,7 @@ class Dataset:
                     if sub_s[0] != cls_id:
                         sub_s = np.insert(sub_s, 0, cls_id)
                     if sub_s[-1] != sep_id:
-                        sub_s = np.insert(sub_s, len(sub_s), cls_id)
+                        sub_s = np.insert(sub_s, len(sub_s), sep_id)
                     assert len(sub_s) <= max_len
                     sub_seqs.append(sub_s)
 

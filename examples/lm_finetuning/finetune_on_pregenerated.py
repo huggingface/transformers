@@ -235,8 +235,9 @@ def main():
 
     # Prepare model
     model = BertForPreTraining.from_pretrained(args.bert_model)
-    if args.fp16:
-        model.half()
+    # We don't need to manually call model.half() following Apex's recommend
+    # if args.fp16:
+    #     model.half()
     model.to(device)
     if args.local_rank != -1:
         try:
@@ -257,25 +258,36 @@ def main():
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps,
+                                     t_total=num_train_optimization_steps)
+
     if args.fp16:
         try:
-            from apex.optimizers import FP16_Optimizer
-            from apex.optimizers import FusedAdam
+            # from apex.optimizers import FP16_Optimizer
+            # from apex.optimizers import FusedAdam
+            from apex import amp
         except ImportError:
             raise ImportError(
                 "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
 
-        optimizer = FusedAdam(optimizer_grouped_parameters,
-                              lr=args.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
-        else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
-    else:
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
+        # This below line of code is the main upgrade of Apex Fp16 implementation. I chose opt_leve="01"
+        # because it's recommended for typical use by Apex. We can make it configured
+        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+
+    # We don't need to use FP16_Optimizer wrapping over FusedAdam as well. Now Apex supports all Pytorch Optimizer
+
+    #     optimizer = FusedAdam(optimizer_grouped_parameters,
+    #                           lr=args.learning_rate,
+    #                           bias_correction=False,
+    #                           max_grad_norm=1.0)
+    #     if args.loss_scale == 0:
+    #         optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+    #     else:
+    #         optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
+    # else:
+    #     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    # scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=num_train_optimization_steps)
 
     global_step = 0
     logging.info("***** Running training *****")
@@ -304,7 +316,10 @@ def main():
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
                 if args.fp16:
-                    optimizer.backward(loss)
+                    # I depricate FP16_Optimizer's backward func and replace as Apex document
+                    # optimizer.backward(loss)
+                    with amp.scale_loss(loss, optimizer) as scaled_loss:
+                        scaled_loss.backward()
                 else:
                     loss.backward()
                 tr_loss += loss.item()
