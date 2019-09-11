@@ -198,3 +198,16 @@ class CommonTestCases:
                 seq_1 = "With these inputs."
                 sequences, mask = tokenizer.encode(seq_0, seq_1, add_special_tokens=True, output_mask=True)
                 assert len(sequences) == len(mask)
+
+        def test_number_of_added_tokens(self):
+            tokenizer = self.get_tokenizer()
+
+            seq_0 = "Test this method."
+            seq_1 = "With these inputs."
+
+            sequences = tokenizer.encode(seq_0, seq_1)
+            attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
+
+            # Method is implemented (e.g. not GPT-2)
+            if len(attached_sequences) != 2:
+                assert tokenizer.num_added_tokens(pair=True) == len(attached_sequences) - sum([len(seq) for seq in sequences])
