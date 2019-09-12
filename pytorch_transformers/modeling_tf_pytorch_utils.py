@@ -63,6 +63,9 @@ def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None
         raise e
 
     # Adapt state dict - TODO remove this and update the AWS weights files instead
+    # Convert old format to new format if needed from a PyTorch state_dict
+    old_keys = []
+    new_keys = []
     for key in pt_state_dict.keys():
         new_key = None
         if 'gamma' in key:
