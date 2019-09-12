@@ -323,12 +323,11 @@ python ./examples/run_rbert.py \
 
 ```
 
-Note, although an F1 score is calculated in the python code, additional files are also written out at the checkpoint intervals ```{global_step}_semeval_results.tsv``` that may be used with the official Semeval evaluation script (supplied seperatedly)
+Note, although an F1 score is calculated in the python code, additional files are also written out at the checkpoint intervals ```{global_step}_semeval_results.tsv``` that may be used with the official Semeval evaluation script (supplied with the semeval data)
 The Semeval dataset is available under creative commons and is available [here](http://docs.google.com/leaf?id=0B_jQiLugGTAkMDQ5ZjZiMTUtMzQ1Yy00YWNmLWJlZDYtOWY1ZDMwY2U4YjFk&sort=name&layout=list&num=50). The ```$SEMEVAL_DIR``` should point to the extracted archive.
 
-The ```--include_directionality``` flag trains a classifier using all 18 semeval classes. The ```--train_on_other_labels``` and ```--eval_on_other_labels``` flags also include instances labeled as 'Other' in the training and evaluation respectively. Include all of these to be able to use the official evaluation script
-
-In addition, the original R-BERT paper describes training for 5 epochs. However, we have discovered that by training for 15 you can achieve an undirected Macro F1 around 93.36!
+The ```--include_directionality``` flag trains a classifier using all 18 semeval classes. The ```--train_on_other_labels``` and ```--eval_on_other_labels``` flags also include instances labeled as 'Other' in the training and evaluation respectively. Include all of these to be able to use the official evaluation script.
+Using the ```bert-large-uncased-whole-word-masking``` should give a macro F1 of around 89.xx, whereas using ```bert-base-uncased``` should give around 87.xx. 
 
 ## Migrating from pytorch-pretrained-bert to pytorch-transformers
 
