@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
 from .configuration_roberta import RobertaConfig
+from .configuration_rbert import RBertForRobertaConfig
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -320,6 +321,73 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
+class RobertaForRelationshipClassification(BertPreTrainedModel):
+    config_class = RBertForRobertaConfig
+    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "roberta"
+    def __init__(self, config):
+        super(RobertaForRelationshipClassification, self).__init__(config)
+        self.ent_2_index_id = config.entity_2_token_id
+        self.ent_1_index_id = config.entity_1_token_id
+        self.num_labels = config.num_labels
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.roberta = RobertaModel(config)
+        self.sentence_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh(),
+        )
+        self.entity_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh()
+        )
+
+        self.classifier = nn.Linear(config.hidden_size * 3, self.config.num_labels)
+
+        self.init_weights()
+
+    def get_indices_tensor(self,instance_input_ids,entity_char_id):
+        index_tensors = (instance_input_ids == entity_char_id).nonzero()
+        start_index = index_tensors[0].item() + 1 # do not include the symbol itself in the calculation
+        end_index = index_tensors[1].item()
+        return torch.arange(start_index, end_index, device=instance_input_ids.device.type)
+
+    def average_entity_vectors(self,last_hidden_states,input_ids,entity_char_id):
+        batch_return_list = []
+        for instance_hidden_state,instance_input_ids in zip(last_hidden_states,input_ids):
+            lookup_tensor = self.get_indices_tensor(instance_input_ids,entity_char_id)
+            average_of_entity_vectors = torch.index_select(instance_hidden_state, 0, lookup_tensor).unsqueeze(0).mean(1)
+            batch_return_list.append(average_of_entity_vectors)
+        return torch.cat(batch_return_list)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
+                position_ids=None, head_mask=None):
+        outputs = self.roberta(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                            attention_mask=attention_mask, head_mask=head_mask)
+
+        last_hidden_states = outputs[0]
+
+        cls_tensor = self.sentence_layer(last_hidden_states[:, 0]) #get the sentence embedding and pass through FC layer
+        ent1_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_1_index_id)) #average wordpieces of ent1 and pass through FC entity layer
+        ent2_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_2_index_id)) #ditto - ent2 shared parameters with ent1
+
+        entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1) #concat all and pass through classifier layer
+        logits = self.classifier(entities_and_cls_tensor)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 class RobertaClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""

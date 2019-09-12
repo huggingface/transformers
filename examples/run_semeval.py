@@ -32,14 +32,16 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers import (WEIGHTS_NAME, RBertConfig,
-                                  BertForRelationshipClassification, RBertTokenizer)
+                                  BertForRelationshipClassification, RBertTokenizer,RBertForRobertaConfig,
+                                  RBertForRobertaTokenizer,RobertaForRelationshipClassification)
 from utils_semeval import (processors, output_modes, convert_examples_to_features,
                             convert_features_to_dataset, compute_metrics)
 
 logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
-    'bert': (RBertConfig, BertForRelationshipClassification, RBertTokenizer)
+    'bert': (RBertConfig, BertForRelationshipClassification, RBertTokenizer),
+    'roberta': (RBertForRobertaConfig, RobertaForRelationshipClassification, RBertForRobertaTokenizer)
 }
 
 def set_seed(args):

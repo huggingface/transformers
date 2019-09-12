@@ -17,12 +17,10 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import json
 import logging
-import sys
-from io import open
 
 from pytorch_transformers import BertConfig
+from .configuration_roberta import RobertaConfig
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +41,25 @@ class RBertConfig(BertConfig):
                  entity_2_token_id=1002,
                  **kwargs):
         super(RBertConfig, self).__init__(**kwargs)
+        self.entity_2_token_id = entity_2_token_id
+        self.entity_1_token_id = entity_1_token_id
+
+class RBertForRobertaConfig(RobertaConfig):
+    r"""
+        :class:`~pytorch_transformers.RBertConfig` is a small extension of the BertConfig, required for the
+        :class:`~pytorch_transformers.BertForRelationshipClassification model
+
+
+
+        Arguments:
+            entity_1_token_id: the token ID of the first entity delimiter
+            entity_2_token_id: the token ID if the second entity delimiter
+    """
+    def __init__(self,
+                 entity_1_token_id=1001,
+                 entity_2_token_id=1002,
+                 **kwargs):
+        super(RBertForRobertaConfig, self).__init__(**kwargs)
         self.entity_2_token_id = entity_2_token_id
         self.entity_1_token_id = entity_1_token_id
 

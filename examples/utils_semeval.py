@@ -167,9 +167,20 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         if ex_index % 5000 == 0:
             logger.info("Writing example %d" % (ex_index))
 
+        if example.id == '8':
+            pass
         new_text, e1_offsets, e2_offsets = find_ents_and_modify_string(example.text)
         input_ids = tokenizer.encode_with_relationship(new_text, e1_offsets, e2_offsets,
                                                        text_pair=None, add_special_tokens=True)
+
+
+        special_tokens_ordered = list(filter(lambda n: n in [tokenizer.entity_1_token_id, tokenizer.entity_2_token_id], input_ids))
+
+
+        assert special_tokens_ordered[0] == tokenizer.entity_1_token_id
+        assert special_tokens_ordered[1] == tokenizer.entity_1_token_id
+        assert special_tokens_ordered[2] == tokenizer.entity_2_token_id
+        assert special_tokens_ordered[3] == tokenizer.entity_2_token_id
 
         # Account for [CLS] and [SEP] with "- 2"
         if len(input_ids) > max_seq_length - 2:

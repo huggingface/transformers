@@ -13,7 +13,7 @@ except:
 
 from .configuration_auto import AutoConfig
 from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_rbert import RBertConfig
+from .configuration_rbert import RBertConfig, RBertForRobertaConfig
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_gpt2 import GPT2Config, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -45,7 +45,7 @@ from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
                               OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
                               load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_roberta import (RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
-                               ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                RobertaForRelationshipClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_transfo_xl import (TransfoXLPreTrainedModel, TransfoXLModel, TransfoXLLMHeadModel,
                                   load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
 # Modeling
@@ -64,7 +64,7 @@ from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
-from .tokenization_rbert import RBertTokenizer
+from .tokenization_rbert import RBertTokenizer, RBertForRobertaTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 # Tokenizer
