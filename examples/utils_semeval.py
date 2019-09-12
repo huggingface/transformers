@@ -107,10 +107,10 @@ class SemEval2010Task8DataProcessor():
     def _strip_direction(self,label):
         return re.sub(r'\(.*', "", label)
 
-    def _create_examples(self, path,exclude_other):
+    def _create_examples(self, path,include_other):
         with open(path, 'r') as f:
             data = f.readlines()
-        return self._instance_generator(data,exclude_other)
+        return self._instance_generator(data,include_other)
 
     def get_train_examples(self, data_dir,include_other):
         return self._create_examples(os.path.join(data_dir, "SemEval2010_task8_training","TRAIN_FILE.TXT"),
