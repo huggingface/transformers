@@ -126,6 +126,8 @@ def convert_all_pt_checkpoints_to_tf(args_model_type, tf_dump_path, compare_with
                                         config_file,
                                         os.path.join(tf_dump_path, shortcut_name + '-tf_model.h5'),
                                         compare_with_pt_model=compare_with_pt_model)
+            os.remove(config_file)
+            os.remove(model_file)
 
 
 if __name__ == "__main__":
