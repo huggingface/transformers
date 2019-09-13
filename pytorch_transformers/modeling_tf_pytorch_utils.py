@@ -91,8 +91,10 @@ def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None
         name = name.split('/')                              # Convert from TF2.0 '/' separators to PyTorch '.' separators
         name = name[1:]                                     # Remove level zero
 
+        # When should we transpose the weights
+        transpose = bool(name[-1] == 'kernel' or 'emb_projs' in name or 'out_projs' in name)
+
         # Convert standard TF2.0 names in PyTorch names
-        transpose = bool(name[-1] == 'kernel')
         if name[-1] == 'kernel' or name[-1] == 'embeddings' or name[-1] == 'gamma':
             name[-1] = 'weight'
         if name[-1] == 'beta':
