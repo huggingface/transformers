@@ -30,6 +30,16 @@ class RBertConfig(BertConfig):
         :class:`~pytorch_transformers.RBertConfig` is a small extension of the BertConfig, required for the
         :class:`~pytorch_transformers.BertForRelationshipClassification model
 
+        To ensure the delimiting entity token id's are correct for a given language model,
+        this class should be instantiated after the RBertTokenizer. For example:
+
+        tokenizer = RBertTokenizer.from_pretrained("tokenizer_name")
+
+        config = RBertConfig.from_pretrained("config_name",
+                                          num_labels=num_labels, finetuning_task=args.task_name,
+                                          entity_1_token_id=tokenizer.entity_1_token_id,
+                                          entity_2_token_id=tokenizer.entity_2_token_id,
+                                          )
 
 
         Arguments:
@@ -49,6 +59,16 @@ class RBertForRobertaConfig(RobertaConfig):
         :class:`~pytorch_transformers.RBertConfig` is a small extension of the BertConfig, required for the
         :class:`~pytorch_transformers.BertForRelationshipClassification model
 
+        To ensure the delimiting entity token id's are correct for a given language model,
+        this class should be instantiated after the RBertTokenizer. For example:
+
+        tokenizer = RBertForRobertaTokenizer.from_pretrained("tokenizer_name")
+
+        config = RBertForRobertaConfig.from_pretrained("config_name",
+                                          num_labels=num_labels, finetuning_task=args.task_name,
+                                          entity_1_token_id=tokenizer.entity_1_token_id,
+                                          entity_2_token_id=tokenizer.entity_2_token_id,
+                                          )
 
 
         Arguments:

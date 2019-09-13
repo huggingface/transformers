@@ -439,6 +439,55 @@ class BertPreTrainingHeads(nn.Module):
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
 
+class RBertClassificationHead(nn.Module):
+    """Bert Model transformer with a sequence classification/regression head on top, making use of
+        entity offsets for relationship classification.
+        See the details in the R-Bert paper https://arxiv.org/pdf/1905.08284.pdf"""
+
+    def __init__(self, config):
+        """
+        :param config: Either an RBertaConfig or a RBertForRobertaConfig.
+        """
+        super(RBertClassificationHead, self).__init__()
+        self.ent_2_index_id = config.entity_2_token_id
+        self.ent_1_index_id = config.entity_1_token_id
+        self.sentence_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh(),
+        )
+        self.entity_layer = torch.nn.Sequential(
+            self.dropout,
+            torch.nn.Linear(config.hidden_size, config.hidden_size),
+            torch.nn.modules.activation.Tanh()
+        )
+
+        self.classifier = nn.Linear(config.hidden_size * 3, self.config.num_labels)
+
+    def get_indices_tensor(self,instance_input_ids,entity_char_id):
+        index_tensors = (instance_input_ids == entity_char_id).nonzero()
+        start_index = index_tensors[0].item() + 1 # do not include the symbol itself in the calculation
+        end_index = index_tensors[1].item()
+        return torch.arange(start_index, end_index, device=instance_input_ids.device.type)
+
+    def average_entity_vectors(self,last_hidden_states,input_ids,entity_char_id):
+        batch_return_list = []
+        for instance_hidden_state,instance_input_ids in zip(last_hidden_states,input_ids):
+            lookup_tensor = self.get_indices_tensor(instance_input_ids,entity_char_id)
+            average_of_entity_vectors = torch.index_select(instance_hidden_state, 0, lookup_tensor).unsqueeze(0).mean(1)
+            batch_return_list.append(average_of_entity_vectors)
+        return torch.cat(batch_return_list)
+
+    def forward(self, input_ids, last_hidden_states):
+
+        cls_tensor = self.sentence_layer(last_hidden_states[:, 0]) #get the sentence embedding and pass through FC layer
+        ent1_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_1_index_id)) #average wordpieces of ent1 and pass through FC entity layer
+        ent2_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_2_index_id)) #ditto - ent2 shared parameters with ent1
+
+        entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1) #concat all and pass through classifier layer
+        logits = self.classifier(entities_and_cls_tensor)
+        return logits
+
 
 class BertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
@@ -824,47 +873,56 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         return outputs  # (next_sentence_loss), seq_relationship_score, (hidden_states), (attentions)
 
 
-"""Bert Model transformer with a sequence classification/regression head on top, making use of 
-    entity offsets for relationship classification. Note, the parameters of forward requires tensors describing the 
-    indices of each entity. See the details in the R-Bert paper https://arxiv.org/pdf/1905.08284.pdf"""
+
+RBERT_INPUTS_DOCSTRING=r"""
+    Inputs:
+        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            Rbert takes a single sequence:
+
+                ``tokens:         [CLS] The most common $ audits $ were about # waste # and recycling . [SEP]
+                
+                ``token_type_ids:  0    0   0    0      0 0      0 0    0     0 0     0 0   0         0  0 
+
+            Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+            
+            Note the use of the $ and # tokens that delimit the entities of interest. These will be added automatically
+            if you use the RBertTokenizer (or RBertForRobertaTokenizer if using a Roberta model). 
+
+            Indices can be obtained using :class:`pytorch_transformers.BertTokenizer`.
+            See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
+            :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+"""
 
 
+@add_start_docstrings("""RBert Model transformer with a relationship classification/regression head on top (a linear layer on top of
+    the pooled output) e.g. for Semeval 2010 task 8""",
+    BERT_START_DOCSTRING, RBERT_INPUTS_DOCSTRING)
 class BertForRelationshipClassification(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForRelationshipClassification, self).__init__(config)
-        self.ent_2_index_id = config.entity_2_token_id
-        self.ent_1_index_id = config.entity_1_token_id
         self.num_labels = config.num_labels
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.bert = BertModel(config)
-        self.sentence_layer = torch.nn.Sequential(
-            self.dropout,
-            torch.nn.Linear(config.hidden_size, config.hidden_size),
-            torch.nn.modules.activation.Tanh(),
-        )
-        self.entity_layer = torch.nn.Sequential(
-            self.dropout,
-            torch.nn.Linear(config.hidden_size, config.hidden_size),
-            torch.nn.modules.activation.Tanh()
-        )
-
-        self.classifier = nn.Linear(config.hidden_size * 3, self.config.num_labels)
-
+        self.rbert = RBertClassificationHead(config)
         self.init_weights()
-
-    def get_indices_tensor(self,instance_input_ids,entity_char_id):
-        index_tensors = (instance_input_ids == entity_char_id).nonzero()
-        start_index = index_tensors[0].item() + 1 # do not include the symbol itself in the calculation
-        end_index = index_tensors[1].item()
-        return torch.arange(start_index, end_index, device=instance_input_ids.device.type)
-
-    def average_entity_vectors(self,last_hidden_states,input_ids,entity_char_id):
-        batch_return_list = []
-        for instance_hidden_state,instance_input_ids in zip(last_hidden_states,input_ids):
-            lookup_tensor = self.get_indices_tensor(instance_input_ids,entity_char_id)
-            average_of_entity_vectors = torch.index_select(instance_hidden_state, 0, lookup_tensor).unsqueeze(0).mean(1)
-            batch_return_list.append(average_of_entity_vectors)
-        return torch.cat(batch_return_list)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
                 position_ids=None, head_mask=None):
@@ -873,12 +931,7 @@ class BertForRelationshipClassification(BertPreTrainedModel):
                             attention_mask=attention_mask, head_mask=head_mask)
         last_hidden_states = outputs[0]
 
-        cls_tensor = self.sentence_layer(last_hidden_states[:, 0]) #get the sentence embedding and pass through FC layer
-        ent1_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_1_index_id)) #average wordpieces of ent1 and pass through FC entity layer
-        ent2_tensor = self.entity_layer(self.average_entity_vectors(last_hidden_states,input_ids,self.ent_2_index_id)) #ditto - ent2 shared parameters with ent1
-
-        entities_and_cls_tensor = torch.cat((cls_tensor, ent1_tensor, ent2_tensor), dim=1) #concat all and pass through classifier layer
-        logits = self.classifier(entities_and_cls_tensor)
+        logits = self.rbert(input_ids,last_hidden_states)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
