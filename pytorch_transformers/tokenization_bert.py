@@ -193,7 +193,7 @@ class BertTokenizer(PreTrainedTokenizer):
     def _detokenize_for_offsets(self, tok: str):
         if tok.startswith('##'):
             return tok[2:]
-        return tok
+        return tok.strip()
 
     def add_special_tokens_single_sentence(self, token_ids):
         """

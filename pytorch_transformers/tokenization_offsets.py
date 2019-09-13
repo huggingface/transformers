@@ -26,10 +26,10 @@ def match_back_by_length(tlens, offsets, tstart, tend):
     # when this is called, all offsets[tstart:tend] are the same (the same chunk)
     text_end = offsets[tstart, 1]
     prev_end = offsets[tstart, 0]
-    tok_len_remaining = sum(tlens[tstart:tend]) + 1
+    tok_len_remaining = sum(tlens[tstart:tend]) + 0.1
     for ci in range(tstart, tend):
         text_remaining = text_end - prev_end
-        token_len = tlens[ci] + 1/(tend-tstart)
+        token_len = tlens[ci] + 0.1/(tend-tstart)
         offsets[ci, 0] = prev_end
         if ci < tend - 1:
             scale = text_remaining / tok_len_remaining

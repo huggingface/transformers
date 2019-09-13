@@ -34,8 +34,9 @@ def ignore_variations(tokens):
 
 
 class TokenizationCheck:
-    def __init__(self, equiv_required=True):
+    def __init__(self, mask_token, equiv_required=True):
         self.equiv_required = equiv_required
+        self.mask_token = mask_token
         self.limit_warn = 2
         self.show_diff = 2
         self.diffs_passed = 0
@@ -107,8 +108,8 @@ class TokenizationCheck:
 
     def check_same_tokens(self, tokenizer: PreTrainedTokenizer, text: str, strict=False):
         # also check if we are handling special tokens ([MASK] etc) the same way
-        if random.random() < 0.5:
-            text = self.mask_a_token(text, tokenizer.mask_token)
+        if self.mask_token and random.random() < 0.5:
+            text = self.mask_a_token(text, self.mask_token)
         tokens_orig = tokenizer.tokenize(text)
         tokens_offs, offsets = tokenizer.tokenize_with_offsets(text)
         if tokens_orig != tokens_offs and (strict or ignore_variations(tokens_orig) != ignore_variations(tokens_offs)):
@@ -151,7 +152,7 @@ if __name__ == "__main__":
             # iterate over a jsonl test file, try tokenizing each document both with and without offsets
             # verify that they give the same tokens
             # also show differences in 'detokenized' tokens vs. the substring of text indicated by the offsets
-            tokenizer_check = TokenizationCheck(equiv_required=(model_map not in still_need_work))
+            tokenizer_check = TokenizationCheck(tokenizer.mask_token, equiv_required=(model_map not in still_need_work))
             with open(sys.argv[1], 'r') as f:
                 line_count = 0
                 for line in f:
