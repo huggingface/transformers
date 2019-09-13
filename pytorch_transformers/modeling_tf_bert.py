@@ -455,6 +455,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    # def call(self, input_ids, attention_mask=None, token_type_ids=None,
+    #          position_ids=None, head_mask=None, training=False):
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs

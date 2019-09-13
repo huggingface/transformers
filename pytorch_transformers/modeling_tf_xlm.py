@@ -261,8 +261,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         self.ffns = []
         self.layer_norm2 = []
         # if self.is_decoder:
-        #     self.layer_norm15 = tf.keras.layers.LayerList()
-        #     self.encoder_attn = tf.keras.layers.LayerList()
+        #     self.layer_norm15 = []
+        #     self.encoder_attn = []
 
         for i in range(self.n_layers):
             self.attentions.append(TFMultiHeadAttention(self.n_heads, self.dim, config=config, name='attentions_._{}'.format(i)))
