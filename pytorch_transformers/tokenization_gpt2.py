@@ -127,6 +127,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.splitter_pat = self.pat
 
     @property
     def vocab_size(self):
@@ -173,9 +174,14 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text):
+    def tokenize_with_offsets(self, text, **kwargs):
+        kwargs = dict(kwargs, leading_space=False)
+        return super(GPT2Tokenizer, self).tokenize_with_offsets(text, initial_space=True, **kwargs)
+
+    def _tokenize(self, text, leading_space=True):
         """ Tokenize a string. """
-        text = ' ' + text  # GPT-2 (and RoBERTa) tokenizers need at least one space to begin the sentence with.
+        if leading_space:
+            text = ' ' + text  # GPT-2 (and RoBERTa) tokenizers need at least one space to begin the sentence with.
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             if sys.version_info[0] == 2:
@@ -198,6 +204,9 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         text = ''.join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
         return text
+
+    def _detokenize_for_offsets(self, tok):
+        return bytearray([self.byte_decoder[c] for c in tok]).decode('utf-8', errors=self.errors).strip()
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""

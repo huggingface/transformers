@@ -22,6 +22,7 @@ from shutil import copyfile
 
 import unicodedata
 import six
+import regex as re
 
 from .tokenization_utils import PreTrainedTokenizer
 
@@ -89,6 +90,8 @@ class XLNetTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
 
+        self.splitter_pat = re.compile(r"""\s?[^\s]+|\s+(?!\S)|\s+""", re.UNICODE)
+
     @property
     def vocab_size(self):
         return len(self.sp_model)
@@ -126,10 +129,15 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         return outputs
 
-    def _tokenize(self, text, return_unicode=True, sample=False):
+    def tokenize_with_offsets(self, text, **kwargs):
+        kwargs = dict(kwargs, leading_space=False)
+        return super(XLNetTokenizer, self).tokenize_with_offsets(text, initial_space=True, **kwargs)
+
+    def _tokenize(self, text, return_unicode=True, sample=False, leading_space=True):
         """ Tokenize a string.
             return_unicode is used only for py2
         """
+        orig_text = text
         text = self.preprocess_text(text)
         # note(zhiliny): in some systems, sentencepiece only accepts str for py2
         if six.PY2 and isinstance(text, unicode):
@@ -139,6 +147,16 @@ class XLNetTokenizer(PreTrainedTokenizer):
             pieces = self.sp_model.EncodeAsPieces(text)
         else:
             pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+        # strip the space when it is included in the token if the resulting token is in self.sp_model.PieceToId
+        if not leading_space and pieces and pieces[0][0] == '▁' and not orig_text[0].isspace():
+            if pieces[0] == '▁':
+                pieces = pieces[1:]
+            elif self.sp_model.PieceToId(pieces[0][1:]) != 0:
+                pieces[0] = pieces[0][1:]
+            else:
+                special_prefixed = self.sp_model.EncodeAsPieces('!'+text)
+                if len(special_prefixed) > 2:
+                    pieces = special_prefixed[2:]
         new_pieces = []
         for piece in pieces:
             if len(piece) > 1 and piece[-1] == ',' and piece[-2].isdigit():
@@ -180,6 +198,9 @@ class XLNetTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
         return out_string
+
+    def _detokenize_for_offsets(self, tok):
+        return tok.replace(SPIECE_UNDERLINE, ' ').strip()
 
     def add_special_tokens_single_sentence(self, token_ids):
         """

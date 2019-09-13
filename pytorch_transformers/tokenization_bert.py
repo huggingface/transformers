@@ -20,6 +20,7 @@ import collections
 import logging
 import os
 import unicodedata
+import regex as re
 from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
@@ -159,6 +160,8 @@ class BertTokenizer(PreTrainedTokenizer):
                                                   never_split=never_split,
                                                   tokenize_chinese_chars=tokenize_chinese_chars)
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        # basic, pre-wordpiece splitting
+        self.splitter_pat = re.compile(r"""[^\s]+""")
 
     @property
     def vocab_size(self):
@@ -186,6 +189,11 @@ class BertTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
+
+    def _detokenize_for_offsets(self, tok: str):
+        if tok.startswith('##'):
+            return tok[2:]
+        return tok
 
     def add_special_tokens_single_sentence(self, token_ids):
         """

@@ -22,8 +22,11 @@ import json
 import six
 import copy
 from io import open
+import regex as re
+import numpy as np
 
 from .file_utils import cached_path
+from .tokenization_offsets import finalize_token_offsets
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +230,9 @@ class PreTrainedTokenizer(object):
                     assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))
                 setattr(self, key, value)
 
+        self.splitter_pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.special_pat_str = ''
+        self.special_pat = None
 
     @classmethod
     def from_pretrained(cls, *inputs, **kwargs):
@@ -623,6 +629,103 @@ class PreTrainedTokenizer(object):
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
         return tokenized_text
+
+    def _detokenize_for_offsets(self, tok):
+        """
+        Remove any tokenization artifacts for sub-word tokens.
+        Used by tokenize_with_offsets to match tokens back in the original text.
+         (like ## prefix for BERT)
+        :param tok: the token from the tokenizer
+        :return: the token as it would have looked (best approximation) in the original text
+        """
+        return tok.strip()
+
+    def tokenize_with_offsets(self, text, initial_space=False, **kwargs):
+        """
+        The utils_squad approach to getting from tokens to original text.
+        We chop up into 'chunks' and pass each of these to the tokenizer.
+        We know our offsets will never be terrible, since we know the chunk the token comes from.
+        If multiple tokens come back for a chunk, we divide the span up proportional to token length.
+        Known issues:
+          in XLMTokenizer we lose '\n</w>'
+             compare 'hello \n there'
+             possible solution: remove the .strip() in the preprocessing OR surround input with special tokens
+          in TransfoXLTokenizer
+             test add_eos=False, add_double_eos=False
+        :param text: the text to tokenize
+        :param kwargs: passed to the underlying tokenization implementation
+        :return: tokens, offsets; offsets is len(tokens) x 2 numpy array of character offsets [begin,one-past-end)
+        """
+        tok_to_chunk_index = []
+        tokens = []
+
+        # add the tokenized chunk to the tokens along with the chunk index they correspond to
+        def tokenize_with_offsets_chunk(chunks_with_start, chunk_start, **kwargs):
+            chunks = [t[0] for t in chunks_with_start]
+            for i, chunk in enumerate(chunks):
+                sub_tokens = self._tokenize(chunk, **kwargs)
+                for sub_token in sub_tokens:
+                    tok_to_chunk_index.append(i + chunk_start)
+                    tokens.append(sub_token)
+
+        def chunkify(offset, text, exclude_empty=False, strip=True):
+            # exclude_empty mirrors the tokenize method's policy of discarding leading/trailing whitespace segments
+            # when they come before/after a special token
+            space = 0
+            # maybe strip spaces
+            if strip:
+                while space < len(text) and text[space].isspace():
+                    space += 1
+                text = text.strip()
+                offset += space
+            if exclude_empty and not text:
+                return []
+            # maybe add an initial space, like for GPT2
+            if initial_space:
+                text = ' ' + text
+                offset -= 1
+            chunks = [(m.group(0), offset + m.start(), offset + m.end()) for m in re.finditer(self.splitter_pat, text)]
+            # our imaginary space may not be in the original text though
+            if initial_space and space == 0 and chunks[0][1] == offset:
+                chunks[0] = chunks[0][0], chunks[0][1] + 1, chunks[0][2]
+            return chunks
+
+        # handle self.added_tokens_encoder and self.all_special_tokens
+        added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
+        added_tokens.sort()  # sort to canonicalize the resulting special_pat_str
+        special_pat_str = '|'.join([re.escape(st) for st in added_tokens])
+        if special_pat_str:
+            # create or recreate the special token regex
+            if special_pat_str != self.special_pat_str:
+                self.special_pat = re.compile(special_pat_str)
+                self.special_pat_str = special_pat_str
+            chunks_offsets = []
+            prev_end = 0
+            for sm in re.finditer(self.special_pat, text):
+                # add the tokens before the special token
+                sub_chunks = chunkify(prev_end, text[prev_end:sm.start()], exclude_empty=not chunks_offsets)
+                tokenize_with_offsets_chunk(sub_chunks, len(chunks_offsets), **kwargs)
+                chunks_offsets.extend(sub_chunks)
+                # add the special token
+                tokens.append(sm.group(0))
+                tok_to_chunk_index.append(len(chunks_offsets))
+                chunks_offsets.append((sm.group(0), sm.start(), sm.end()))
+                prev_end = sm.end()
+            # add remaining tokens
+            sub_chunks = chunkify(prev_end, text[prev_end:], exclude_empty=True)
+            tokenize_with_offsets_chunk(sub_chunks, len(chunks_offsets), **kwargs)
+            chunks_offsets.extend(sub_chunks)
+        else:
+            chunks_offsets = chunkify(0, text, strip=False)  # TODO: behavior copied from tokenize, correct?
+            tokenize_with_offsets_chunk(chunks_offsets, 0, **kwargs)
+        # convert the offsets to np array
+        offsets = np.zeros((len(tok_to_chunk_index), 2), dtype=np.int32)
+        for ti, ci in enumerate(tok_to_chunk_index):
+            offsets[ti, 0] = chunks_offsets[ci][1]
+            offsets[ti, 1] = chunks_offsets[ci][2]
+        # when chunks have multiple tokens, we need to find the proper span for each
+        finalize_token_offsets([self._detokenize_for_offsets(t) for t in tokens], text, offsets)
+        return tokens, offsets
 
     def _tokenize(self, text, **kwargs):
         """ Converts a string in a sequence of tokens (string), using the tokenizer.

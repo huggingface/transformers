@@ -23,6 +23,7 @@ import re
 import sys
 import unicodedata
 from io import open
+import regex
 
 import sacremoses as sm
 
@@ -571,6 +572,8 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+        self.splitter_pat = regex.compile(r"""[^\s]+""")
+
     def moses_punct_norm(self, text, lang):
         if lang not in self.cache_moses_punct_normalizer:
             punct_normalizer = sm.MosesPunctNormalizer(lang=lang)
@@ -753,6 +756,9 @@ class XLMTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
         return out_string
+
+    def _detokenize_for_offsets(self, tok):
+        return tok.replace('</w>', ' ').strip()
 
     def add_special_tokens_single_sentence(self, token_ids):
         """
