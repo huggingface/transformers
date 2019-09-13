@@ -104,7 +104,7 @@ class WarmupCosineWithHardRestartsSchedule(LambdaLR):
 
 
 
-class AdamW(Optimizer):
+class AdamWNative(Optimizer):
     """ Implements Adam algorithm with weight decay fix.
 
     Parameters:
@@ -187,3 +187,64 @@ class AdamW(Optimizer):
                     p.data.add_(-group['lr'] * group['weight_decay'], p.data)
 
         return loss
+
+# Basic wrapper class for grad clipping
+class L2GradClipNative(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, parameters, max_grad_norm):
+        torch.nn.utils.grad_clip_norm_(parameters, max_grad_norm)
+
+try:
+    from apex.optimizers import FusedAdam
+    import functools
+
+    # Apex's FusedAdam class is perfect here, but requires passing adam_w_mode=True to be equivalent to
+    # the original version
+    class AdamWApex(FusedAdam):
+        def __init__(self, *args, **kwargs):
+            super(AdamWApex, self).__init__(*args, **kwargs, adam_w_mode=True)
+
+    AdamW = AdamWApex
+
+    # if available we can also fuse the grad clipping to use apex's multi_tensor_apply
+    from apex.multi_tensor_apply import multi_tensor_applier
+    import amp_C
+
+    if multi_tensor_applier.available:
+        class L2GradClipApex(object):
+            def __init__(self):
+                self.overflow_buf = torch.zeros(1, dtype=torch.int, device='cuda')
+
+            def __call__(self, parameters, max_norm):
+                if isinstance(parameters, torch.Tensor):
+                    parameters = [parameters]
+                parameters = list(filter(lambda p: p.grad is not None, parameters))
+                norm, _ = multi_tensor_applier(
+                    amp_C.multi_tensor_l2norm,
+                    self.overflow_buf,
+                    [parameters],
+                    False # no per-parameter norm
+                )
+                # print(norm.item())
+                total_norm = norm.item()
+                clip_coef = max_norm / (total_norm + 1e-6)
+                grads = [p.grad for p in parameters]
+                if clip_coef < 1:
+                    # print('    ', clip_coef)
+                    multi_tensor_applier(
+                        amp_C.multi_tensor_scale,
+                        self.overflow_buf,
+                        [grads, grads],
+                        clip_coef)
+                return total_norm
+        l2_grad_clipper = L2GradClipApex
+    else:
+        l2_grad_clipper = L2GradClipNative
+
+except ImportError:
+    # Use defaults for both AdamW and L2GradClip
+    AdamW = AdamWNative
+    l2_grad_clipper = L2GradClipNative
+

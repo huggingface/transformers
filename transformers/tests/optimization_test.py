@@ -62,8 +62,9 @@ class OptimizationTest(unittest.TestCase):
             self.assertAlmostEqual(a, b, delta=tol)
 
     def test_adam_w(self):
-        w = torch.tensor([0.1, -0.2, -0.1], requires_grad=True)
-        target = torch.tensor([0.4, 0.2, -0.5])
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        w = torch.tensor([0.1, -0.2, -0.1], device=device, requires_grad=True)
+        target = torch.tensor([0.4, 0.2, -0.5], device=device)
         criterion = torch.nn.MSELoss()
         # No warmup, constant schedule, no gradient clipping
         optimizer = AdamW(params=[w], lr=2e-1, weight_decay=0.0)

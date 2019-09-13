@@ -96,7 +96,7 @@ if is_torch_available():
 
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
-                               WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
+                               WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule, l2_grad_clipper)
 
 
 # TensorFlow
