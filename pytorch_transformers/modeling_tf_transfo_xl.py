@@ -66,7 +66,7 @@ class TFPositionalEmbedding(tf.keras.layers.Layer):
 
 
 class TFPositionwiseFF(tf.keras.layers.Layer):
-    def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, **kwargs):
+    def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5, **kwargs):
         super(TFPositionwiseFF, self).__init__(**kwargs)
 
         self.d_model = d_model
@@ -75,10 +75,10 @@ class TFPositionwiseFF(tf.keras.layers.Layer):
 
         self.layer_1 = tf.keras.layers.Dense(d_inner, activation=tf.nn.relu, name='CoreNet_._0')
         self.drop_1 = tf.keras.layers.Dropout(dropout)
-        self.layer_2 = tf.keras.layers.Dense(d_model, name='CoreNet_._2')
+        self.layer_2 = tf.keras.layers.Dense(d_model, name='CoreNet_._3')
         self.drop_2 = tf.keras.layers.Dropout(dropout)
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name='layer_norm')
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name='layer_norm')
 
         self.pre_lnorm = pre_lnorm
 
@@ -109,7 +109,8 @@ class TFPositionwiseFF(tf.keras.layers.Layer):
 class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
     def __init__(self, n_head, d_model, d_head, dropout, dropatt=0,
                  tgt_len=None, ext_len=None, mem_len=None, pre_lnorm=False,
-                 r_r_bias=None, r_w_bias=None, output_attentions=False, **kwargs):
+                 r_r_bias=None, r_w_bias=None, output_attentions=False, 
+                 layer_norm_epsilon=1e-5, **kwargs):
         super(TFRelPartialLearnableMultiHeadAttn, self).__init__(**kwargs)
 
         self.output_attentions = output_attentions
@@ -124,7 +125,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         self.dropatt = tf.keras.layers.Dropout(dropatt)
         self.o_net = tf.keras.layers.Dense(d_model, use_bias=False, name='o_net')
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name='layer_norm')
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name='layer_norm')
 
         self.scale = 1 / (d_head ** 0.5)
 
@@ -247,6 +248,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
                  r_w_bias=None,
                  r_r_bias=None,
                  output_attentions=False,
+                 layer_norm_epsilon=1e-5,
                  **kwargs):
         super(TFRelPartialLearnableDecoderLayer, self).__init__(**kwargs)
 
@@ -254,9 +256,12 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
                             d_head, dropout, tgt_len=tgt_len, ext_len=ext_len,
                             mem_len=mem_len, dropatt=dropatt, pre_lnorm=pre_lnorm,
                             r_w_bias=r_w_bias, r_r_bias=r_r_bias,
-                            output_attentions=output_attentions, name='dec_attn')
+                            output_attentions=output_attentions,
+                            layer_norm_epsilon=layer_norm_epsilon, name='dec_attn')
         self.pos_ff = TFPositionwiseFF(d_model, d_inner, dropout, 
-                                       pre_lnorm=pre_lnorm, name='pos_ff')
+                                       pre_lnorm=pre_lnorm,
+                                       layer_norm_epsilon=layer_norm_epsilon,
+                                       name='pos_ff')
 
     def call(self, inputs, training=False):
         dec_inp, r, dec_attn_mask, mems, head_mask = inputs
@@ -300,7 +305,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
             d_emb_i = self.d_embed // (self.div_val ** i)
             self.emb_projs.append(self.add_weight(shape=(d_emb_i, self.d_proj),
                                                   trainable=True,
-                                                  name='emb_projs._{}'.format(i)))
+                                                  name='emb_projs_._{}'.format(i)))
         super(TFAdaptiveEmbedding, self).build(input_shape)
 
     def call(self, inp):
@@ -368,6 +373,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                         r_w_bias=None if self.untie_r else self.r_w_bias,
                         r_r_bias=None if self.untie_r else self.r_r_bias,
                         output_attentions=self.output_attentions,
+                        layer_norm_epsilon=config.layer_norm_epsilon,
                         name='layers_._{}'.format(i))
                 )
         else: # learnable embeddings and absolute embeddings

@@ -84,8 +84,8 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
         tfo = tf_model(tf_inputs, training=False)  # build the network
 
         pt_model = pt_model_class.from_pretrained(None,
-                                                config=config,
-                                                state_dict=torch.load(pytorch_checkpoint_path,
+                                                  config=config,
+                                                  state_dict=torch.load(pytorch_checkpoint_path,
                                                                         map_location='cpu'))
         pt_inputs = torch.tensor(inputs_list)
         with torch.no_grad():
@@ -124,7 +124,7 @@ def convert_all_pt_checkpoints_to_tf(args_model_type, tf_dump_path, compare_with
             print("    Converting checkpoint {}/{}: {}".format(i, len(aws_config_map), shortcut_name))
             print("-" * 100)
             if 'finetuned' in shortcut_name:
-                print("    Skipping fintenued checkpoint ")
+                print("    Skipping finetuned checkpoint ")
                 continue
             config_file = cached_path(aws_config_map[shortcut_name], force_download=True)
             model_file = cached_path(aws_model_maps[shortcut_name], force_download=True)

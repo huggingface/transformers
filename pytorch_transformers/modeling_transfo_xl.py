@@ -194,7 +194,7 @@ class PositionalEmbedding(nn.Module):
 
 
 class PositionwiseFF(nn.Module):
-    def __init__(self, d_model, d_inner, dropout, pre_lnorm=False):
+    def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5):
         super(PositionwiseFF, self).__init__()
 
         self.d_model = d_model
@@ -208,7 +208,7 @@ class PositionwiseFF(nn.Module):
             nn.Dropout(dropout),
         )
 
-        self.layer_norm = nn.LayerNorm(d_model)
+        self.layer_norm = nn.LayerNorm(d_model, eps=layer_norm_epsilon)
 
         self.pre_lnorm = pre_lnorm
 
@@ -232,7 +232,8 @@ class PositionwiseFF(nn.Module):
 class RelPartialLearnableMultiHeadAttn(nn.Module):
     def __init__(self, n_head, d_model, d_head, dropout, dropatt=0,
                  tgt_len=None, ext_len=None, mem_len=None, pre_lnorm=False,
-                 r_r_bias=None, r_w_bias=None, output_attentions=False):
+                 r_r_bias=None, r_w_bias=None, output_attentions=False,
+                 layer_norm_epsilon=1e-5):
         super(RelPartialLearnableMultiHeadAttn, self).__init__()
 
         self.output_attentions = output_attentions
@@ -247,7 +248,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         self.dropatt = nn.Dropout(dropatt)
         self.o_net = nn.Linear(n_head * d_head, d_model, bias=False)
 
-        self.layer_norm = nn.LayerNorm(d_model)
+        self.layer_norm = nn.LayerNorm(d_model, eps=layer_norm_epsilon)
 
         self.scale = 1 / (d_head ** 0.5)
 
@@ -359,14 +360,15 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
 
 class RelPartialLearnableDecoderLayer(nn.Module):
-    def __init__(self, n_head, d_model, d_head, d_inner, dropout,
+    def __init__(self, n_head, d_model, d_head, d_inner, dropout, layer_norm_epsilon=1e-5,
                  **kwargs):
         super(RelPartialLearnableDecoderLayer, self).__init__()
 
         self.dec_attn = RelPartialLearnableMultiHeadAttn(n_head, d_model,
-                            d_head, dropout, **kwargs)
+                            d_head, dropout, layer_norm_epsilon=layer_norm_epsilon, **kwargs)
         self.pos_ff = PositionwiseFF(d_model, d_inner, dropout, 
-                                     pre_lnorm=kwargs.get('pre_lnorm'))
+                                     pre_lnorm=kwargs.get('pre_lnorm'),
+                                     layer_norm_epsilon=layer_norm_epsilon)
 
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None):
 
@@ -613,7 +615,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                         dropatt=config.dropatt, pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if config.untie_r else self.r_w_bias,
                         r_r_bias=None if config.untie_r else self.r_r_bias,
-                        output_attentions=self.output_attentions)
+                        output_attentions=self.output_attentions,
+                        layer_norm_epsilon=config.layer_norm_epsilon)
                 )
         else: # learnable embeddings and absolute embeddings are not used in our pretrained checkpoints
             raise NotImplementedError  # Removed them to avoid maintaining dead code
