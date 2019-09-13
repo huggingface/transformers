@@ -113,6 +113,11 @@ if _tf_available:
                                    load_gpt2_pt_weights_in_tf2,
                                    TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_tf_transfo_xl import (TFTransfoXLPreTrainedModel, TFTransfoXLMainLayer,
+                                         TFTransfoXLModel, TFTransfoXLLMHeadModel,
+                                         load_transfo_xl_pt_weights_in_tf2,
+                                         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
+
     from .modeling_tf_xlnet import (TFXLNetPreTrainedModel, TFXLNetMainLayer,
                                     TFXLNetModel, TFXLNetLMHeadModel,
                                     TFXLNetForSequenceClassification,
