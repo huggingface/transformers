@@ -329,7 +329,8 @@ def main():
                     doc = []
                 else:
                     tokens = tokenizer.tokenize(line)
-                    doc.append(tokens)
+                    if tokens:
+                        doc.append(tokens)
             if doc:
                 docs.add_document(doc)  # If the last doc didn't end on a newline, make sure it still gets added
         if len(docs) <= 1:
