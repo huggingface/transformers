@@ -26,7 +26,7 @@ author = u'huggingface'
 # The short X.Y version
 version = u''
 # The full version, including alpha/beta/rc tags
-release = u'1.0.0'
+release = u'1.2.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -43,7 +43,8 @@ extensions = [
     'sphinx.ext.coverage',
     'sphinx.ext.napoleon',
     'recommonmark',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'sphinx_markdown_tables'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
