@@ -95,7 +95,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             # in a library like ours, at all.
             vocab_dict = torch.load(pretrained_vocab_file)
             for key, value in vocab_dict.items():
-                self.__dict__[key] = value
+                if key not in self.__dict__:
+                    self.__dict__[key] = value
 
         if vocab_file is not None:
             self.build_vocab()

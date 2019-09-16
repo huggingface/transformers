@@ -61,7 +61,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, max_len=None,
+    def __init__(self, vocab_file,
                  do_lower_case=False, remove_space=True, keep_accents=False,
                  bos_token="<s>", eos_token="</s>", unk_token="<unk>", sep_token="<sep>",
                  pad_token="<pad>", cls_token="<cls>", mask_token="<mask>",
@@ -186,8 +186,8 @@ class XLNetTokenizer(PreTrainedTokenizer):
         Adds special tokens to a sequence pair for sequence classification tasks.
         An XLNet sequence pair has the following format: A [SEP] B [SEP][CLS]
         """
-        sep = [self._convert_token_to_id(self.sep_token)]
-        cls = [self._convert_token_to_id(self.cls_token)]
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
         return token_ids + sep + cls
 
     def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
@@ -195,8 +195,8 @@ class XLNetTokenizer(PreTrainedTokenizer):
         Adds special tokens to a sequence for sequence classification tasks.
         An XLNet sequence has the following format: X [SEP][CLS]
         """
-        sep = [self._convert_token_to_id(self.sep_token)]
-        cls = [self._convert_token_to_id(self.cls_token)]
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
         return token_ids_0 + sep + token_ids_1 + sep + cls
 
     def save_vocabulary(self, save_directory):
