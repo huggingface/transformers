@@ -1,3 +1,6 @@
+# coding=utf-8
+from __future__ import (absolute_import, division, print_function, unicode_literals)
+
 import logging
 import json
 import random
@@ -44,7 +47,7 @@ class TokenizationCheck:
         self.equiv_passed = 0
         self.equiv_failed = 0
 
-    def tokens_vs_spans(self, tokenizer: PreTrainedTokenizer, tokens, offsets, text):
+    def tokens_vs_spans(self, tokenizer, tokens, offsets, text):
         def normalize(token):
             # normalize tokens, just to compare our spans in original text to the tokens
             token = unicodedata.normalize('NFKD', token)
@@ -54,7 +57,7 @@ class TokenizationCheck:
             return token.lower().strip()
 
         def samey(tok, txt):
-            return normalize(tok) == normalize(txt) or tok == '[UNK]' or tok == '�'
+            return normalize(tok) == normalize(txt) or tok == '[UNK]' or tok == u'�'
 
         tok_strs = [tokenizer._detokenize_for_offsets(t) for t in tokens]
         text_strs = [text[offsets[i, 0]:offsets[i, 1]] for i in range(len(tokens))]
@@ -94,7 +97,8 @@ class TokenizationCheck:
         self.diffs_failed += 1
         return False
 
-    def mask_a_token(self, text, mask_token):
+    @staticmethod
+    def mask_a_token(text, mask_token):
         if len(text) < 30:
             return text
         sndx = random.randint(0, len(text)-10)
@@ -106,7 +110,7 @@ class TokenizationCheck:
             return text
         return text[:start] + mask_token + text[end:]
 
-    def check_same_tokens(self, tokenizer: PreTrainedTokenizer, text: str, strict=False):
+    def check_same_tokens(self, tokenizer, text, strict=False):
         # also check if we are handling special tokens ([MASK] etc) the same way
         if self.mask_token and random.random() < 0.5:
             text = self.mask_a_token(text, self.mask_token)
@@ -116,7 +120,7 @@ class TokenizationCheck:
             self.equiv_failed += 1
             if self.limit_warn > 0:
                 linetext = text.replace('\n', ' ')
-                print(f'tokenization is different for "{linetext}"\n  {tokens_orig}\n  {tokens_offs}')
+                print('tokenization is different for "'+linetext+'"\n  '+str(tokens_orig)+'\n  '+str(tokens_offs))
                 self.limit_warn -= 1
             if self.equiv_required:
                 raise ValueError
@@ -127,14 +131,15 @@ class TokenizationCheck:
             self.tokens_vs_spans(tokenizer, tokens_offs, offsets, text)
 
     def show_stats(self):
-        print(f'equivalence with tokenize {self.equiv_passed} passed and {self.equiv_failed} failed')
-        print(f'subword tokens match text {self.diffs_passed} passed and {self.diffs_failed} failed')
+        print('equivalence with tokenize %d passed and %d failed' % (self.equiv_passed, self.equiv_failed))
+        print('subword tokens match text %d passed and %d failed' % (self.diffs_passed, self.diffs_failed))
 
 
-if __name__ == "__main__":
+def main(test_file):
     # python regression_test_tokenization_with_offsets.py tokenize_offset_test_data.jsonl
     # tokenize_offset_test_data.jsonl at https://ibm.box.com/s/228183fe95ptn8eb9n0zq4i2y7picq4r
     #   (Wikipedia paragraphs)
+    # Note that GPT2 (and therefore RoBERTa do not work in python 2
     # TODO: more model maps once other tokenization_* are adapted
     model_maps = [
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -153,11 +158,15 @@ if __name__ == "__main__":
             # verify that they give the same tokens
             # also show differences in 'detokenized' tokens vs. the substring of text indicated by the offsets
             tokenizer_check = TokenizationCheck(tokenizer.mask_token, equiv_required=(model_map not in still_need_work))
-            with open(sys.argv[1], 'r') as f:
+            with open(test_file, 'r') as f:
                 line_count = 0
                 for line in f:
                     jobj = json.loads(line)
                     tokenizer_check.check_same_tokens(tokenizer, jobj['contents'])
                     line_count += 1
             tokenizer_check.show_stats()
-            logger.info(f'tested {model_name} on {line_count} paragraphs')
+            logger.info('tested %s on %d paragraphs' % (model_name, line_count))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

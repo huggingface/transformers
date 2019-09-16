@@ -1,3 +1,6 @@
+# coding=utf-8
+from __future__ import (absolute_import, division, print_function, unicode_literals)
+
 import numpy as np
 
 
@@ -16,7 +19,7 @@ def whitespace_reduce(offsets, text):
             offsets[ti, 1] = nend
 
 
-UNMATCHABLE_TOKENS = ['�']  # consider putting in tokenization_utils, so subclasses can override
+UNMATCHABLE_TOKENS = [u'�']  # consider putting in tokenization_utils, so subclasses can override
 
 
 def match_back_by_length(tlens, offsets, tstart, tend):

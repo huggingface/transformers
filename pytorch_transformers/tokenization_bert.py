@@ -190,7 +190,7 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
-    def _detokenize_for_offsets(self, tok: str):
+    def _detokenize_for_offsets(self, tok):
         if tok.startswith('##'):
             return tok[2:]
         return tok.strip()

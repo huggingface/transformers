@@ -653,6 +653,7 @@ class PreTrainedTokenizer(object):
           in TransfoXLTokenizer
              test add_eos=False, add_double_eos=False
         :param text: the text to tokenize
+        :param initial_space: should we include an initial_space when tokenizing the text?
         :param kwargs: passed to the underlying tokenization implementation
         :return: tokens, offsets; offsets is len(tokens) x 2 numpy array of character offsets [begin,one-past-end)
         """
