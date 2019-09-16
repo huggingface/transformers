@@ -9,6 +9,12 @@ DistilBERT stands for Distillated-BERT. DistilBERT is a small, fast, cheap and l
 For more information on DistilBERT, please refer to our [detailed blog post](https://medium.com/huggingface/smaller-faster-cheaper-lighter-introducing-distilbert-a-distilled-version-of-bert-8cf3380435b5
 ).
 
+## Setup
+
+This part of the library has only be tested with Python3.6+. There are few specific dependencies to install before launching a distillation, you can install them with the command `pip install -r requirements.txt`. 
+
+**Important note:** The training scripts have been updated to support PyTorch v1.2.0 (there are breakings changes compared to v1.1.0). It is important to note that there is a small internal bug in the current version of PyTorch available on pip that causes a memory leak in our training/distillation. It has been recently fixed and will likely be integrated into the next release. For the moment, we recommend to [compile PyTorch from source](https://github.com/pytorch/pytorch#from-source). Please refer to [issue 1179](https://github.com/huggingface/pytorch-transformers/issues/1179) for more details.
+
 ## How to use DistilBERT
 
 PyTorch-Transformers includes two pre-trained DistilBERT models, currently only provided for English (we are investigating the possibility to train and release a multilingual version of DistilBERT):
@@ -68,7 +74,7 @@ python train.py \
 
 By default, this will launch a training on a single GPU (even if more are available on the cluster). Other parameters are available in the command line, please look in `train.py` or run `python train.py --help` to list them.
 
-We highly encourage you to distributed training for training DistilBert as the training corpus is quite large. Here's an example that runs a distributed training on a single node having 4 GPUs:
+We highly encourage you to use distributed training for training DistilBert as the training corpus is quite large. Here's an example that runs a distributed training on a single node having 4 GPUs:
 
 ```bash
 export NODE_RANK=0
@@ -90,11 +96,11 @@ python -m torch.distributed.launch \
     train.py \
         --force \
         --n_gpu $WORLD_SIZE \
-        --data_file data/dump_concat_wiki_toronto_bk.bert-base-uncased.pickle \
-        --token_counts data/token_counts_concat_wiki_toronto_bk.bert-base-uncased.pickle \
-        --dump_path serialization_dir/with_transform/last_word
+        --data_file data/binarized_text.bert-base-uncased.pickle \
+        --token_counts data/token_counts.bert-base-uncased.pickle \
+        --dump_path serialization_dir/my_first_distillation
 ```
 
-**Tips** Starting distillated training with good initialization of the model weights is crucial to reach decent performance. In our experiments, we initialized our model from a few layers of the teacher (Bert) itself! Please refer to `scripts/extract_for_distil.py` to create a valid initialization checkpoint and use `--from_pretrained_weights` and `--from_pretrained_config` arguments to use this initialization for the distilled training!
+**Tips:** Starting distillated training with good initialization of the model weights is crucial to reach decent performance. In our experiments, we initialized our model from a few layers of the teacher (Bert) itself! Please refer to `scripts/extract_for_distil.py` to create a valid initialization checkpoint and use `--from_pretrained_weights` and `--from_pretrained_config` arguments to use this initialization for the distilled training!
 
 Happy distillation!

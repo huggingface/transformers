@@ -27,8 +27,8 @@ class DistilBertTokenizationTest(BertTokenizationTest):
 
     tokenizer_class = DistilBertTokenizer
 
-    def get_tokenizer(self):
-        return DistilBertTokenizer.from_pretrained(self.tmpdirname)
+    def get_tokenizer(self, **kwargs):
+        return DistilBertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_sequence_builders(self):
         tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")

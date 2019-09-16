@@ -23,7 +23,7 @@ from io import open
 import torch
 import numpy
 
-from pytorch_transformers.modeling_utils import CONFIG_NAME, WEIGHTS_NAME
+from pytorch_transformers import CONFIG_NAME, WEIGHTS_NAME
 from pytorch_transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
 import logging

@@ -35,8 +35,8 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def get_tokenizer(self):
-        return XLNetTokenizer.from_pretrained(self.tmpdirname)
+    def get_tokenizer(self, **kwargs):
+        return XLNetTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
         input_text = u"This is a test"

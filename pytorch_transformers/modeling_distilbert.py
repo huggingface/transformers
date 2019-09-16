@@ -31,7 +31,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from pytorch_transformers.modeling_utils import PretrainedConfig, PreTrainedModel, add_start_docstrings, prune_linear_layer
+from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .configuration_distilbert import DistilBertConfig
+from .file_utils import add_start_docstrings
 
 import logging
 logger = logging.getLogger(__name__)
@@ -41,69 +43,6 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-pytorch_model.bin",
     'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-pytorch_model.bin"
 }
-
-DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-config.json",
-    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-config.json"
-}
-
-
-class DistilBertConfig(PretrainedConfig):
-    pretrained_config_archive_map = DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-
-    def __init__(self,
-                 vocab_size_or_config_json_file=30522,
-                 max_position_embeddings=512,
-                 sinusoidal_pos_embds=True,
-                 n_layers=6,
-                 n_heads=12,
-                 dim=768,
-                 hidden_dim=4*768,
-                 dropout=0.1,
-                 attention_dropout=0.1,
-                 activation='gelu',
-                 initializer_range=0.02,
-                 tie_weights_=True,
-                 qa_dropout=0.1,
-                 seq_classif_dropout=0.2,
-                 **kwargs):
-        super(DistilBertConfig, self).__init__(**kwargs)
-
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.vocab_size = vocab_size_or_config_json_file
-            self.max_position_embeddings = max_position_embeddings
-            self.sinusoidal_pos_embds = sinusoidal_pos_embds
-            self.n_layers = n_layers
-            self.n_heads = n_heads
-            self.dim = dim
-            self.hidden_dim = hidden_dim
-            self.dropout = dropout
-            self.attention_dropout = attention_dropout
-            self.activation = activation
-            self.initializer_range = initializer_range
-            self.tie_weights_ = tie_weights_
-            self.qa_dropout = qa_dropout
-            self.seq_classif_dropout = seq_classif_dropout
-        else:
-            raise ValueError("First argument must be either a vocabulary size (int)"
-                             " or the path to a pretrained model config file (str)")
-    @property
-    def hidden_size(self):
-        return self.dim
-
-    @property
-    def num_attention_heads(self):
-        return self.n_heads
-
-    @property
-    def num_hidden_layers(self):
-        return self.n_layers
 
 
 ### UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE ###
@@ -174,12 +113,16 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
+        self.pruned_heads = set()
+
     def prune_heads(self, heads):
         attention_head_size = self.dim // self.n_heads
         if len(heads) == 0:
             return
         mask = torch.ones(self.n_heads, attention_head_size)
+        heads = set(heads) - self.pruned_heads
         for head in heads:
+            head -= sum(1 if h < head else 0 for h in self.pruned_heads)
             mask[head] = 0
         mask = mask.view(-1).contiguous().eq(1)
         index = torch.arange(len(mask))[mask].long()
@@ -191,6 +134,7 @@ class MultiHeadSelfAttention(nn.Module):
         # Update hyper params
         self.n_heads = self.n_heads - len(heads)
         self.dim = attention_head_size * self.n_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, query, key, value, mask, head_mask = None):
         """
@@ -395,7 +339,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     def __init__(self, *inputs, **kwargs):
         super(DistilBertPreTrainedModel, self).__init__(*inputs, **kwargs)
     
-    def init_weights(self, module):
+    def _init_weights(self, module):
         """ Initialize the weights.
         """
         if isinstance(module, nn.Embedding):
@@ -480,7 +424,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)   # Embeddings
         self.transformer = Transformer(config) # Encoder
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.embeddings.word_embeddings
@@ -568,7 +512,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
 
-        self.apply(self.init_weights)
+        self.init_weights()
         self.tie_weights()
 
         self.mlm_loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
@@ -580,10 +524,10 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self._tie_or_clone_weights(self.vocab_projector,
                                    self.distilbert.embeddings.word_embeddings)
 
-    def forward(self, input_ids, attention_mask=None, masked_lm_labels=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, head_mask=None, masked_lm_labels=None):
         dlbrt_output = self.distilbert(input_ids=input_ids,
-                                    attention_mask=attention_mask,
-                                    head_mask=head_mask)
+                                       attention_mask=attention_mask,
+                                       head_mask=head_mask)
         hidden_states = dlbrt_output[0]                              # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)      # (bs, seq_length, dim)
         prediction_logits = gelu(prediction_logits)                  # (bs, seq_length, dim)
@@ -642,12 +586,12 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self.classifier = nn.Linear(config.dim, config.num_labels)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
-    def forward(self, input_ids,  attention_mask=None, labels=None, head_mask=None):
+    def forward(self, input_ids,  attention_mask=None, head_mask=None, labels=None):
         distilbert_output = self.distilbert(input_ids=input_ids,
-                                      attention_mask=attention_mask,
-                                      head_mask=head_mask)
+                                            attention_mask=attention_mask,
+                                            head_mask=head_mask)
         hidden_state = distilbert_output[0]                    # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]                    # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)   # (bs, dim)
@@ -716,12 +660,12 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         assert config.num_labels == 2
         self.dropout = nn.Dropout(config.qa_dropout)
 
-        self.apply(self.init_weights)
+        self.init_weights()
         
-    def forward(self, input_ids, attention_mask=None, start_positions=None, end_positions=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, head_mask=None, start_positions=None, end_positions=None):
         distilbert_output = self.distilbert(input_ids=input_ids,
-                                      attention_mask=attention_mask,
-                                      head_mask=head_mask)
+                                            attention_mask=attention_mask,
+                                            head_mask=head_mask)
         hidden_states = distilbert_output[0]                                 # (bs, max_query_len, dim)
 
         hidden_states = self.dropout(hidden_states)                       # (bs, max_query_len, dim)
