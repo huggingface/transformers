@@ -1065,7 +1065,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.d_model, 1)
 
-        self.apply(self.init_weights)
+        self.init_weights()
 
     def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
