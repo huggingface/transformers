@@ -443,7 +443,9 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
         if len(tokens_a) > len(tokens_b):
             tokens_a.pop()
         else:
-            logger.info('Attention! you are removing from question + options. Try to use a bigger max seq length!')
+            logger.info('Attention! you are removing from token_b (swag task is ok). '
+                        'If you are training ARC and RACE (you are poping question + options), '
+                        'you need to try to use a bigger max seq length!')
             tokens_b.pop()
 
 
