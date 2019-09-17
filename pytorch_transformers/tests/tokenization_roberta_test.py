@@ -59,6 +59,9 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
         text = "lower newer"
         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), offsets.shape[0])
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]

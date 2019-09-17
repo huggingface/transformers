@@ -49,7 +49,11 @@ class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
     def test_full_tokenizer(self):
         tokenizer = TransfoXLTokenizer(vocab_file=self.vocab_file, lower_case=True)
 
-        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
+        text = u"<unk> UNwanted , running"
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), offsets.shape[0])
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
 
         self.assertListEqual(

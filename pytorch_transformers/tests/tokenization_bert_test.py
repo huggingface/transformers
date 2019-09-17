@@ -52,7 +52,11 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
-        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
+        text = u"UNwant\u00E9d,running"
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), offsets.shape[0])
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 

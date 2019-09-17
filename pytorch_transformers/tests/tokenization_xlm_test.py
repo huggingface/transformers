@@ -59,6 +59,9 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         text = "lower"
         bpe_tokens = ["low", "er</w>"]
         tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), offsets.shape[0])
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + ["<unk>"]

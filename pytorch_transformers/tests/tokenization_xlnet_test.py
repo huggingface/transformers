@@ -47,7 +47,11 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
     def test_full_tokenizer(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
-        tokens = tokenizer.tokenize(u'This is a test')
+        text = u'This is a test'
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), offsets.shape[0])
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, [u'▁This', u'▁is', u'▁a', u'▁t', u'est'])
 
         self.assertListEqual(
