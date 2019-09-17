@@ -124,7 +124,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare RoBERTa Model transformer outputing raw hidden-states without any specific head on top.",
+@add_start_docstrings("The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
                       ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
 class RobertaModel(BertModel):
     r"""
