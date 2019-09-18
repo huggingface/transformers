@@ -170,7 +170,7 @@ def train(args, train_dataset, model, tokenizer):
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
                             tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                        if results["eval_acc"] < best_dev_acc:
+                        if results["eval_acc"] > best_dev_acc:
                             best_dev_acc = results["eval_acc"]
                             best_dev_loss = results["eval_loss"]
                             best_steps = global_step
