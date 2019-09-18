@@ -36,7 +36,6 @@ class OpenAIGPTConfig(PretrainedConfig):
 
     Args:
         vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `OpenAIGPTModel` or a configuration json file.
-        n_special: The number of special tokens to learn during fine-tuning ('[SEP]', '[CLF]', ...)
         n_positions: Number of positional embeddings.
         n_ctx: Size of the causal mask (usually same as n_positions).
         n_embd: Dimensionality of the embeddings and hidden states.
