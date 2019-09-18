@@ -231,16 +231,43 @@ class BertSelfAttention(nn.Module):
         return outputs
 
 
+class Adapter(nn.Module):
+    def __init__(self, config):
+        super(Adapter, self).__init__()
+        self.down_project = nn.Linear(config.hidden_size, config.adapter_size)
+        self.activation = ACT2FN[config.adapter_act] \
+            if isinstance(config.adapter_act, str) else config.adapter_act
+        self.up_project = nn.Linear(config.adapter_size, config.hidden_size)
+        self.init_weights(config)
+
+    def forward(self, hidden_states):
+        down_projected = self.down_project(hidden_states)
+        activated = self.activation(down_projected)
+        up_projected = self.up_project(activated)
+        return hidden_states + up_projected
+
+    def init_weights(self, config):
+        # Slightly different from the TF version which uses truncated_normal for initialization
+        # cf https://github.com/pytorch/pytorch/pull/5617
+        self.down_project.weight.data.normal_(mean=0.0, std=config.adapter_initializer_range)
+        self.down_project.bias.data.zero_()
+        self.up_project.weight.data.normal_(mean=0.0, std=config.adapter_initializer_range)
+        self.up_project.bias.data.zero_()
+
+
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super(BertSelfOutput, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.adapter = Adapter(config) if config.use_adapter else None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -302,11 +329,14 @@ class BertOutput(nn.Module):
         super(BertOutput, self).__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.adapter = Adapter(config) if config.use_adapter else None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -1143,3 +1173,20 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+
+def get_adapter_params(model):
+    """
+    Gets list of adapter parameters from a model
+
+    :param model: nn.Module
+    :return: list
+    """
+    adapter_params = []
+    for name, sub_module in model.named_modules():
+        if isinstance(sub_module, (Adapter, BertLayerNorm)):
+            adapter_params += [
+                (name + "." + k, v)
+                for k, v in sub_module.named_parameters()
+            ]
+    return adapter_params

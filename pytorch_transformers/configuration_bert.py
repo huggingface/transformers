@@ -87,6 +87,10 @@ class BertConfig(PretrainedConfig):
                  type_vocab_size=2,
                  initializer_range=0.02,
                  layer_norm_eps=1e-12,
+                 use_adapter=False,
+                 adapter_act="gelu",
+                 adapter_size=64,
+                 adapter_initializer_range=0.0002,
                  **kwargs):
         super(BertConfig, self).__init__(**kwargs)
         if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
@@ -108,6 +112,12 @@ class BertConfig(PretrainedConfig):
             self.type_vocab_size = type_vocab_size
             self.initializer_range = initializer_range
             self.layer_norm_eps = layer_norm_eps
+
+            # Adapter config
+            self.use_adapter = use_adapter
+            self.adapter_act = adapter_act
+            self.adapter_size = adapter_size
+            self.adapter_initializer_range = adapter_initializer_range
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              " or the path to a pretrained model config file (str)")
