@@ -28,6 +28,7 @@ from io import open
 
 import torch
 import numpy as np
+import regex
 
 from .file_utils import cached_path
 from .tokenization_utils import PreTrainedTokenizer
@@ -100,6 +101,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         if vocab_file is not None:
             self.build_vocab()
+
+        self.splitter_pat = regex.compile(r"""[^\s]+""")
 
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose: logger.info('counting file {} ...'.format(path))

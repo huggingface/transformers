@@ -21,6 +21,7 @@ import logging
 import os
 import re
 from io import open
+import regex
 
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_bert import BasicTokenizer
@@ -108,6 +109,8 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+        self.splitter_pat = regex.compile(r"""[^\s]+""")  # TODO: and support \n</w>
+
     @property
     def vocab_size(self):
         return len(self.encoder)
@@ -182,6 +185,9 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = ''.join(tokens).replace('</w>', ' ').strip()
         return out_string
+
+    def _detokenize_for_offsets(self, tok):
+        return tok.replace('</w>', ' ').strip()
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""

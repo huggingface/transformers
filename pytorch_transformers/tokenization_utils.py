@@ -647,7 +647,7 @@ class PreTrainedTokenizer(object):
         We know our offsets will never be terrible, since we know the chunk the token comes from.
         If multiple tokens come back for a chunk, we divide the span up proportional to token length.
         Known issues:
-          in XLMTokenizer we lose '\n</w>'
+          in OpenAIGPTTokenizer, XLMTokenizer we lose '\n</w>'
              compare 'hello \n there'
              possible solution: remove the .strip() in the preprocessing OR surround input with special tokens
           in TransfoXLTokenizer

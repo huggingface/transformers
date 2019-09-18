@@ -14,6 +14,9 @@ from pytorch_transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
 from pytorch_transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
 from pytorch_transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers.modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
+from pytorch_transformers.modeling_distilbert import DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 logging.basicConfig(format='%(filename)s:%(lineno)d - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -140,8 +143,11 @@ def main(test_file):
     # tokenize_offset_test_data.jsonl at https://ibm.box.com/s/228183fe95ptn8eb9n0zq4i2y7picq4r
     #   (Wikipedia paragraphs)
     # Note that GPT2 (and therefore RoBERTa do not work in python 2
-    # TODO: more model maps once other tokenization_* are adapted
+    # also have issue with XLNet in python 2
     model_maps = [
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
         GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -149,7 +155,8 @@ def main(test_file):
         XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     still_need_work = [
-        XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,  # omits '\n</w>' tokens
+        XLM_PRETRAINED_MODEL_ARCHIVE_MAP,         # non-sentence final periods '... inc. reported ...'
     ]
     for model_map in model_maps:
         for model_name in list(model_map.keys())[:1]:
