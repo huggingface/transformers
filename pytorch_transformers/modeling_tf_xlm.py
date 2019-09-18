@@ -53,7 +53,7 @@ def load_xlm_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
         langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
     else:
         langs_list = None
-    tf_inputs = [inputs_list, attns_list), langs_list]
+    tf_inputs = [inputs_list, attns_list, langs_list]
     tfo = tf_model(tf_inputs, training=False)
     return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
