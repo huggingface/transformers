@@ -102,7 +102,7 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
     tf_model.save_weights(tf_dump_path, save_format='h5')
 
 
-def convert_all_pt_checkpoints_to_tf(args_model_type, tf_dump_path, compare_with_pt_model=False):
+def convert_all_pt_checkpoints_to_tf(args_model_type, tf_dump_path, compare_with_pt_model=False, use_cached_models=False):
     assert os.path.isdir(args.tf_dump_path), "--tf_dump_path should be a directory"
 
     if args_model_type is None:
@@ -126,8 +126,8 @@ def convert_all_pt_checkpoints_to_tf(args_model_type, tf_dump_path, compare_with
             if 'finetuned' in shortcut_name:
                 print("    Skipping finetuned checkpoint ")
                 continue
-            config_file = cached_path(aws_config_map[shortcut_name], force_download=True)
-            model_file = cached_path(aws_model_maps[shortcut_name], force_download=True)
+            config_file = cached_path(aws_config_map[shortcut_name], force_download=not use_cached_models)
+            model_file = cached_path(aws_model_maps[shortcut_name], force_download=not use_cached_models)
 
             convert_pt_checkpoint_to_tf(model_type,
                                         model_file,
@@ -165,6 +165,9 @@ if __name__ == "__main__":
     parser.add_argument("--compare_with_pt_model",
                         action='store_true',
                         help = "Compare Tensorflow and PyTorch model predictions.")
+    parser.add_argument("--use_cached_models",
+                        action='store_true',
+                        help = "Use cached models if possible instead of updating to latest checkpoint versions.")
     args = parser.parse_args()
 
     if args.pytorch_checkpoint_path is not None:
@@ -176,4 +179,5 @@ if __name__ == "__main__":
     else:
         convert_all_pt_checkpoints_to_tf(args.model_type.lower() if args.model_type is not None else None,
                                          args.tf_dump_path,
-                                         compare_with_pt_model=args.compare_with_pt_model)
+                                         compare_with_pt_model=args.compare_with_pt_model,
+                                         use_cached_models=args.use_cached_models)

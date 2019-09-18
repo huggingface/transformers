@@ -78,6 +78,12 @@ def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None
     for old_key, new_key in zip(old_keys, new_keys):
         pt_state_dict[new_key] = pt_state_dict.pop(old_key)
 
+    # Make sure we are able to load PyTorch base models as well as derived models (with heads)
+    # TF models always have a prefix, some of PyTorch models (base ones) don't
+    start_prefix_to_remove = ''
+    if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
+        start_prefix_to_remove = tf_model.base_model_prefix + '.'
+
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
 
     weight_value_tuples = []
@@ -100,12 +106,22 @@ def load_pytorch_state_dict_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None
         if name[-1] == 'beta':
             name[-1] = 'bias'
 
+        # Remove prefix if needed
         name = '.'.join(name)
+        if start_prefix_to_remove:
+            name = name.replace(start_prefix_to_remove, '', 1)
+
+        # Find associated numpy array in pytorch model state dict
         assert name in pt_state_dict, "{} not found in PyTorch model".format(name)
         array = pt_state_dict[name].numpy()
 
         if transpose:
             array = numpy.transpose(array)
+
+        if len(symbolic_weight.shape) < len(array.shape):
+            array = numpy.squeeze(array)
+        elif len(symbolic_weight.shape) > len(array.shape):
+            array = numpy.expand_dims(array, axis=0)
 
         try:
             assert list(symbolic_weight.shape) == list(array.shape)
