@@ -820,7 +820,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare Bert Model transformer outputing raw hidden-states without any specific head on top.",
+@add_start_docstrings("The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
                       TRANSFO_XL_START_DOCSTRING, TRANSFO_XL_INPUTS_DOCSTRING)
 class TransfoXLModel(TransfoXLPreTrainedModel):
     r"""
