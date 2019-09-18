@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 OpenAI GPT-2 model. """
+""" TF 2.0 OpenAI GPT model."""
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -30,18 +30,16 @@ import tensorflow as tf
 
 from .modeling_tf_utils import (TFPreTrainedModel, TFConv1D, TFSharedEmbeddings,
                                 TFSequenceSummary, shape_list)
-from .configuration_gpt2 import GPT2Config
+from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
-TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-tf_model.h5",
-                                     "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-tf_model.h5",
-                                     "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-tf_model.h5"}
+TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-tf_model.h5"}
 
 
-def load_gpt2_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
+def load_openai_gpt_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
     # build the network
     inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
     tf_inputs = tf.constant(inputs_list)
@@ -61,6 +59,15 @@ def gelu(x):
     cdf = 0.5 * (1.0 + tf.tanh(
         (np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
     return x * cdf
+
+
+def swish(x):
+    return x * tf.math.sigmoid(x)
+
+
+ACT_FNS = {"gelu": tf.keras.layers.Activation(gelu),
+           "relu": tf.keras.activations.relu,
+           "swish": tf.keras.layers.Activation(swish)}
 
 
 class TFAttention(tf.keras.layers.Layer):
@@ -138,18 +145,13 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask = inputs
+        x, attention_mask, head_mask = inputs
 
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
         query = self.split_heads(query)
         key = self.split_heads(key)
         value = self.split_heads(value)
-        if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=1)
-            key = tf.concat([past_key, key], axis=-2)
-            value = tf.concat([past_value, value], axis=-2)
-        present = tf.stack([key, value], axis=1)
 
         attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
         a = attn_outputs[0]
@@ -158,8 +160,8 @@ class TFAttention(tf.keras.layers.Layer):
         a = self.c_proj(a)
         a = self.resid_dropout(a, training=training)
 
-        outputs = [a, present] + attn_outputs[1:]
-        return outputs  # a, present, (attentions)
+        outputs = [a] + attn_outputs[1:]
+        return outputs  # a, (attentions)
 
 
 class TFMLP(tf.keras.layers.Layer):
@@ -182,44 +184,41 @@ class TFBlock(tf.keras.layers.Layer):
     def __init__(self, n_ctx, config, scale=False, **kwargs):
         super(TFBlock, self).__init__(**kwargs)
         nx = config.n_embd
-        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_1')
         self.attn = TFAttention(nx, n_ctx, config, scale, name='attn')
-        self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_2')
+        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_1')
         self.mlp = TFMLP(4 * nx, config, name='mlp')
+        self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_2')
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask = inputs
+        x, attention_mask, head_mask = inputs
 
-        a = self.ln_1(x)
-        output_attn = self.attn([a, layer_past, attention_mask, head_mask], training=training)
-        a = output_attn[0]  # output_attn: a, present, (attentions)
-        x = x + a
+        output_attn = self.attn([x, attention_mask, head_mask], training=training)
+        a = output_attn[0]  # output_attn: a, (attentions)
 
-        m = self.ln_2(x)
-        m = self.mlp(m, training=training)
-        x = x + m
+        n = self.ln_1(x + a)
+        m = self.mlp(n, training=training)
+        h = self.ln_2(n + m)
 
-        outputs = [x] + output_attn[1:]
-        return outputs  # x, present, (attentions)
+        outputs = [h] + output_attn[1:]
+        return outputs  # x, (attentions)
 
 
-class TFGPT2MainLayer(tf.keras.layers.Layer):
+class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFGPT2MainLayer, self).__init__(config, *inputs, **kwargs)
+        super(TFOpenAIGPTMainLayer, self).__init__(config, *inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
 
-        self.wte = TFSharedEmbeddings(config.vocab_size, config.hidden_size, name='wte')
-        self.wpe = tf.keras.layers.Embedding(config.n_positions, config.n_embd, name='wpe')
+        self.tokens_embed = TFSharedEmbeddings(config.vocab_size, config.n_embd, name='tokens_embed')
+        self.positions_embed = tf.keras.layers.Embedding(config.n_positions, config.n_embd, name='positions_embed')
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx,
                           config,
                           scale=True,
                           name='h_._{}'.format(i)) for i in range(config.n_layer)]
-        self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name='ln_f')
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -233,31 +232,24 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs
-            past, attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None, None
+            attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None
         elif isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            past = inputs[1] if len(inputs) > 1 else None
-            attention_mask = inputs[2] if len(inputs) > 2 else None
-            token_type_ids = inputs[3] if len(inputs) > 3 else None
-            position_ids = inputs[4] if len(inputs) > 4 else None
-            head_mask = inputs[5] if len(inputs) > 5 else None
-            assert len(inputs) <= 6, "Too many inputs."
+            attention_mask = inputs[1] if len(inputs) > 1 else None
+            token_type_ids = inputs[2] if len(inputs) > 2 else None
+            position_ids = inputs[3] if len(inputs) > 3 else None
+            head_mask = inputs[4] if len(inputs) > 4 else None
+            assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs.get('input_ids')
-            past = inputs.get('past', None)
             attention_mask = inputs.get('attention_mask', None)
             token_type_ids = inputs.get('token_type_ids', None)
             position_ids = inputs.get('position_ids', None)
             head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 6, "Too many inputs."
+            assert len(inputs) <= 5, "Too many inputs."
 
-        if past is None:
-            past_length = 0
-            past = [None] * len(self.h)
-        else:
-            past_length = shape_list(past[0][0])[-2]
         if position_ids is None:
-            position_ids = tf.range(past_length, shape_list(input_ids)[-1] + past_length, dtype=tf.int32)[tf.newaxis, :]
+            position_ids = tf.range(shape_list(input_ids)[-1], dtype=tf.int32)[tf.newaxis, :]
 
         if attention_mask is not None:
             # We create a 3D attention mask from a 2D tensor mask.
@@ -293,11 +285,11 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
-        inputs_embeds = self.wte(input_ids, mode='embedding')
-        position_embeds = self.wpe(position_ids)
+        inputs_embeds = self.tokens_embed(input_ids, mode='embedding')
+        position_embeds = self.positions_embed(position_ids)
         if token_type_ids is not None:
             token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
-            token_type_embeds = self.wte(token_type_ids, mode='embedding')
+            token_type_embeds = self.tokens_embed(token_type_ids, mode='embedding')
         else:
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
@@ -305,29 +297,23 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
 
-        presents = ()
         all_attentions = []
         all_hidden_states = ()
-        for i, (block, layer_past) in enumerate(zip(self.h, past)):
+        for i, block in enumerate(self.h):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, layer_past, attention_mask, head_mask[i]], training=training)
-
-            hidden_states, present = outputs[:2]
-            presents = presents + (present,)
-
+            outputs = block([hidden_states, attention_mask, head_mask[i]], training=training)
+            hidden_states = outputs[0]
             if self.output_attentions:
-                all_attentions.append(outputs[2])
-
-        hidden_states = self.ln_f(hidden_states)
+                all_attentions.append(outputs[1])
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
         if self.output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states, presents)
+        outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
@@ -335,30 +321,30 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
             outputs = outputs + (all_attentions,)
-        return outputs  # last hidden state, presents, (all hidden_states), (attentions)
+        return outputs  # last hidden state, (all hidden_states), (attentions)
 
 
-class TFGPT2PreTrainedModel(TFPreTrainedModel):
+class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
-    config_class = GPT2Config
-    pretrained_model_archive_map = TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_gpt2_pt_weights_in_tf2
+    config_class = OpenAIGPTConfig
+    pretrained_model_archive_map = TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
+    load_pt_weights = load_openai_gpt_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 
-GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
-    `Language Models are Unsupervised Multitask Learners`_
-    by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
-    It's a causal (unidirectional) transformer pre-trained using  language modeling on a very large
-    corpus of ~40 GB of text data.
+OPENAI_GPT_START_DOCSTRING = r"""    OpenAI GPT model was proposed in
+    `Improving Language Understanding by Generative Pre-Training`_
+    by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
+    It's a causal (unidirectional) transformer pre-trained using language modeling on a large
+    corpus will long range dependencies, the Toronto Book Corpus.
 
     This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
-    .. _`Language Models are Unsupervised Multitask Learners`:
-        https://openai.com/blog/better-language-models/
+    .. _`Improving Language Understanding by Generative Pre-Training`:
+        https://openai.com/blog/language-unsupervised/
 
     .. _`tf.keras.Model`:
         https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
@@ -376,23 +362,19 @@ GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
             `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
-        config (:class:`~pytorch_transformers.GPT2Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~pytorch_transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~pytorch_transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-GPT2_INPUTS_DOCSTRING = r"""    Inputs:
+OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
-            GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            GPT is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
             Indices can be obtained using :class:`pytorch_transformers.BPT2Tokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer):
-            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see `past` output below). Can be used to speed up sequential decoding.
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -400,7 +382,7 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
-            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
+            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices)
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
@@ -410,17 +392,13 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare GPT2 Model transformer outputing raw hidden-states without any specific head on top.",
-                      GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
-class TFGPT2Model(TFGPT2PreTrainedModel):
+@add_start_docstrings("The bare OpenAI GPT transformer model outputing raw hidden-states without any specific head on top.",
+                      OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
+class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -431,33 +409,31 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
 
     Examples::
 
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2Model.from_pretrained('gpt2')
+        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        model = OpenAIGPTModel.from_pretrained('openai-gpt')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
     def __init__(self, config, *inputs, **kwargs):
-        super(TFGPT2Model, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFGPT2MainLayer(config, name='transformer')
+        super(TFOpenAIGPTModel, self).__init__(config, *inputs, **kwargs)
+        self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
 
     def call(self, inputs, training=False):
         outputs = self.transformer(inputs, training=training)
         return outputs
 
 
-@add_start_docstrings("""The GPT2 Model transformer with a language modeling head on top
-(linear layer with weights tied to the input embeddings). """, GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
-class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
+@add_start_docstrings("""OpenAI GPT Model transformer with a language modeling head on top
+(linear layer with weights tied to the input embeddings). """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
+class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -468,52 +444,48 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
 
     Examples::
 
-        import torch
-        from pytorch_transformers import GPT2Tokenizer, GPT2LMHeadModel
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2LMHeadModel.from_pretrained('gpt2')
-
+        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        logits = outputs[:2]
+        outputs = model(input_ids, labels=input_ids)
+        loss, logits = outputs[:2]
 
     """
     def __init__(self, config, *inputs, **kwargs):
-        super(TFGPT2LMHeadModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFGPT2MainLayer(config, name='transformer')
+        super(TFOpenAIGPTLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
 
     def call(self, inputs, training=False):
         transformer_outputs = self.transformer(inputs, training=training)
         hidden_states = transformer_outputs[0]
 
-        lm_logits = self.transformer.wte(hidden_states, mode="linear")
+        lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
 
         outputs = (lm_logits,) + transformer_outputs[1:]
 
-        return outputs  # lm_logits, presents, (all hidden_states), (attentions)
+        return outputs  # lm_logits, (all hidden_states), (attentions)
 
 
-@add_start_docstrings("""The GPT2 Model transformer with a language modeling and a multiple-choice classification
+@add_start_docstrings("""OpenAI GPT Model transformer with a language modeling and a multiple-choice classification
 head on top e.g. for RocStories/SWAG tasks. The two heads are two linear layers.
 The language modeling head has its weights tied to the input embeddings,
 the classification head takes as input the input of a specified classification token index in the input sequence).
-""", GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
-class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
+""", OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
+class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     r"""
         **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
             Index of the classification token in each input sequence.
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **lm_loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Language modeling loss.
+        **mc_loss**: (`optional`, returned when ``multiple_choice_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Multiple choice classification loss.
         **lm_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **mc_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)``
             Prediction scores of the multiplechoice classification head (scores for each choice before SoftMax).
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -524,55 +496,41 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
     Examples::
 
-        import torch
-        from pytorch_transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
-        
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
-        
-        # Add a [CLS] to the vocabulary (we should train it also!)
-        tokenizer.add_special_tokens({'cls_token': '[CLS]'})
-        model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
-        print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
-        
+        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+        tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        encoded_choices = [tokenizer.encode(s) for s in choices]
-        cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
-
-        input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
-
+        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        mc_token_ids = torch.tensor([input_ids.size(-1), input_ids.size(-1)]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, mc_token_ids=mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
     """
     def __init__(self, config, *inputs, **kwargs):
-        super(TFGPT2DoubleHeadsModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFGPT2MainLayer(config, name='transformer')
+        super(TFOpenAIGPTDoubleHeadsModel, self).__init__(config, *inputs, **kwargs)
+        self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
         self.multiple_choice_head = TFSequenceSummary(config, name='multiple_choice_head')
 
     def call(self, inputs, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             input_ids = inputs
-            mc_token_ids, past, attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None, None
+            mc_token_ids, attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None
         elif isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mc_token_ids = inputs[1] if len(inputs) > 1 else None
-            past = inputs[2] if len(inputs) > 2 else None
-            attention_mask = inputs[3] if len(inputs) > 3 else None
-            token_type_ids = inputs[4] if len(inputs) > 4 else None
-            position_ids = inputs[5] if len(inputs) > 5 else None
-            head_mask = inputs[6] if len(inputs) > 6 else None
-            assert len(inputs) <= 7, "Too many inputs."
+            attention_mask = inputs[2] if len(inputs) > 2 else None
+            token_type_ids = inputs[3] if len(inputs) > 3 else None
+            position_ids = inputs[4] if len(inputs) > 4 else None
+            head_mask = inputs[5] if len(inputs) > 5 else None
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs.get('input_ids')
             mc_token_ids = inputs.get('mc_token_ids', None)
-            past = inputs.get('past', None)
             attention_mask = inputs.get('attention_mask', None)
             token_type_ids = inputs.get('token_type_ids', None)
             position_ids = inputs.get('position_ids', None)
             head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 7, "Too many inputs."
+            assert len(inputs) <= 6, "Too many inputs."
 
         input_shapes = shape_list(input_ids)
 
@@ -583,18 +541,18 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
 
-        flat_inputs = [flat_input_ids, past, flat_attention_mask, flat_token_type_ids, flat_position_ids, head_mask]
+        flat_inputs = [flat_input_ids, flat_attention_mask, flat_token_type_ids, flat_position_ids, head_mask]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)
         hidden_states = transformer_outputs[0]
 
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
 
-        lm_logits = self.transformer.wte(hidden_states, mode="linear")
+        lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
         mc_logits = self.multiple_choice_head([hidden_states, mc_token_ids], training=training)
 
         mc_logits = tf.squeeze(mc_logits, axis=-1)
 
         outputs = (lm_logits, mc_logits) + transformer_outputs[1:]
 
-        return outputs  # lm logits, mc logits, presents, (all hidden_states), (attentions)
+        return outputs  # lm logits, mc logits, (all hidden_states), (attentions)
