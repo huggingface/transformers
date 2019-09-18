@@ -394,7 +394,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare DistilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
+@add_start_docstrings("The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
                       DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
 class DistilBertModel(DistilBertPreTrainedModel):
     r"""
