@@ -221,7 +221,7 @@ def main():
             for step, batch in enumerate(tqdm_bar):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, mc_token_ids, lm_labels, mc_labels = batch
-                losses = model(input_ids, mc_token_ids, lm_labels, mc_labels)
+                losses = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
                 loss = args.lm_coef * losses[0] + losses[1]
                 loss.backward()
                 scheduler.step()
@@ -258,7 +258,7 @@ def main():
             batch = tuple(t.to(device) for t in batch)
             input_ids, mc_token_ids, lm_labels, mc_labels = batch
             with torch.no_grad():
-               _, mc_loss, _, mc_logits = model(input_ids, mc_token_ids, lm_labels, mc_labels)
+               _, mc_loss, _, mc_logits = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
 
             mc_logits = mc_logits.detach().cpu().numpy()
             mc_labels = mc_labels.to('cpu').numpy()
