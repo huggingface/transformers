@@ -56,8 +56,6 @@ class XLMConfig(PretrainedConfig):
 
         dropout: The dropout probabilitiy for all fully connected
             layers in the embeddings, encoder, and pooler.
-        dropatt: The dropout ratio for the attention
-            probabilities.
         max_position_embeddings: The maximum sequence length that this model might
             ever be used with. Typically set this to something large just in case
             (e.g., 512 or 1024 or 2048).
@@ -66,7 +64,6 @@ class XLMConfig(PretrainedConfig):
         layer_norm_eps: The epsilon used by LayerNorm.
 
         dropout: float, dropout rate.
-        dropatt: float, dropout rate on attention probabilities.
         init: str, the initialization scheme, either "normal" or "uniform".
         init_range: float, initialize the parameters with a uniform distribution
             in [-init_range, init_range]. Only effective when init="uniform".

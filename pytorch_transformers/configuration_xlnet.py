@@ -49,14 +49,11 @@ class XLNetConfig(PretrainedConfig):
 
         dropout: The dropout probabilitiy for all fully connected
             layers in the embeddings, encoder, and pooler.
-        dropatt: The dropout ratio for the attention
-            probabilities.
         initializer_range: The sttdev of the truncated_normal_initializer for
             initializing all weight matrices.
         layer_norm_eps: The epsilon used by LayerNorm.
 
         dropout: float, dropout rate.
-        dropatt: float, dropout rate on attention probabilities.
         init: str, the initialization scheme, either "normal" or "uniform".
         init_range: float, initialize the parameters with a uniform distribution
             in [-init_range, init_range]. Only effective when init="uniform".
@@ -80,6 +77,7 @@ class XLNetConfig(PretrainedConfig):
                  n_layer=24,
                  n_head=16,
                  d_inner=4096,
+                 max_position_embeddings=512,
                  ff_activation="gelu",
                  untie_r=True,
                  attn_type="bi",
