@@ -707,14 +707,14 @@ class PreTrainedTokenizer(object):
         """
         if text_pair is None:
             if add_special_tokens:
-                sequence_tokens = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+                sequence_tokens = self.convert_tokens_to_ids(self.tokenize(text, **kwargs)) if isinstance(text, str) else text
                 return self.add_special_tokens_single_sequence(sequence_tokens)
             else:
-                ids = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+                ids = self.convert_tokens_to_ids(self.tokenize(text, **kwargs)) if isinstance(text, str) else text
                 return ids
 
-        first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text, **kwargs)]
-        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)]
+        first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text, **kwargs)] if isinstance(text, str) else text
+        second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)] if isinstance(text_pair, str) else text_pair
 
         if add_special_tokens:
             return self.add_special_tokens_sequence_pair(first_sentence_tokens, second_sentence_tokens)
@@ -754,7 +754,7 @@ class PreTrainedTokenizer(object):
         information = {}
 
         if text_pair is None:
-            sequence_tokens = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+            sequence_tokens = self.convert_tokens_to_ids(self.tokenize(text, **kwargs)) if isinstance(text, str) else text
             if add_special_tokens:
                 information = self.prepare_for_model(sequence_tokens, max_length, stride)
             else:
@@ -766,8 +766,8 @@ class PreTrainedTokenizer(object):
             if output_mask:
                 information["mask"] = [0] * len(information["sequence"])
         else:
-            first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text, **kwargs)]
-            second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)]
+            first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text, **kwargs)] if isinstance(text, str) else text
+            second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)] if isinstance(text_pair, str) else text_pair
 
             if add_special_tokens:
                 information = self.prepare_pair_for_model(
