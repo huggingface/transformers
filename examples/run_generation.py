@@ -20,7 +20,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import argparse
 import logging
-from tqdm import trange
+from tqdm import trange, tqdm
 
 import torch
 import torch.nn.functional as F
@@ -145,6 +145,10 @@ def main():
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
+    parser.add_argument('--input_path', type=str, 
+                        help='File path to read inputs from. Each line in file will be used as a prompt. Overrides prompt arg.')
+    parser.add_argument('--output_path', type=str, 
+                        help='File to write outputs to. Alternative to printing to console.')
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -167,29 +171,47 @@ def main():
         args.length = MAX_LENGTH  # avoid infinite loop
 
     print(args)
-    while True:
-        raw_text = args.prompt if args.prompt else input("Model prompt >>> ")
-        if args.model_type in ["transfo-xl", "xlnet"]:
-            # Models with memory likes to have a long prompt for short inputs.
-            raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
-        context_tokens = tokenizer.encode(raw_text)
-        out = sample_sequence(
-            model=model,
-            context=context_tokens,
-            length=args.length,
-            temperature=args.temperature,
-            top_k=args.top_k,
-            top_p=args.top_p,
-            device=args.device,
-            is_xlnet=bool(args.model_type == "xlnet"),
-        )
-        out = out[0, len(context_tokens):].tolist()
-        text = tokenizer.decode(out, clean_up_tokenization_spaces=True)
-        print(text)
-        if args.prompt:
-            break
-    return text
-
+    
+    def generate_per_prompt(prompt):
+      ''' Generate text for single prompt '''
+        while True:
+            raw_text = prompt if prompt else input("Model prompt >>> ")
+            if args.model_type in ["transfo-xl", "xlnet"]:
+                # Models with memory likes to have a long prompt for short inputs.
+                raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
+            context_tokens = tokenizer.encode(raw_text)
+            out = sample_sequence(
+                model=model,
+                context=context_tokens,
+                length=args.length,
+                temperature=args.temperature,
+                top_k=args.top_k,
+                top_p=args.top_p,
+                device=args.device,
+                is_xlnet=bool(args.model_type == "xlnet"),
+            )
+            out = out[0, len(context_tokens):].tolist()
+            text = tokenizer.decode(out, clean_up_tokenization_spaces=True)
+            if prompt:
+                break
+        return text 
+     
+    if args.input_path:
+        with open(args.input_path, 'r') as f_in, open(args.output_path, 'w') as f_out:
+            lines = f_in.readlines()
+            for line in tqdm(lines):
+                text = generate_per_prompt(line.strip())    
+                if args.output_path:        
+                    f_out.write(text + '\n')            
+                else:
+                    print(text)
+    else:
+        text = generate_per_prompt(args.prompt)
+        if args.output_path:
+            with open(args.output_path, 'w') as f_out:
+                f_out.write(text)
+        else:
+            print(text)
 
 if __name__ == '__main__':
     main()
