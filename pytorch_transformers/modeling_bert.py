@@ -440,10 +440,6 @@ class BertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 class RBertClassificationHead(nn.Module):
-    """Bert Model transformer with a sequence classification/regression head on top, making use of
-        entity offsets for relationship classification.
-        See the details in the R-Bert paper https://arxiv.org/pdf/1905.08284.pdf"""
-
     def __init__(self, config):
         """
         :param config: Either an RBertaConfig or a RBertForRobertaConfig.
@@ -888,48 +884,49 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
 
 
-RBERT_INPUTS_DOCSTRING=r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-            Rbert takes a single sequence:
-
-                ``tokens:         [CLS] The most common $ audits $ were about # waste # and recycling . [SEP]
-                
-                ``token_type_ids:  0    0   0    0      0 0      0 0    0     0 0     0 0   0         0  0 
-
-            Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
-            
-            Note the use of the $ and # tokens that delimit the entities of interest. These will be added automatically
-            if you use the RBertTokenizer (or RBertForRobertaTokenizer if using a Roberta model). 
-
-            Indices can be obtained using :class:`pytorch_transformers.BertTokenizer`.
-            See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
-            :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-"""
-
-#
-# @add_start_docstrings("""RBert Model transformer with a relationship classification/regression head on top (a linear layer on top of
-#     the pooled output) e.g. for Semeval 2010 task 8""",
-#     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+@add_start_docstrings(r"""Bert Model transformer with an R-BERT head on top, making use of
+        entity offsets for relationship classification. See the details in the R-Bert paper https://arxiv.org/pdf/1905.08284.pdf""",
+    BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForRelationshipClassification(BertPreTrainedModel):
+    r"""
+        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+        Labels for computing the sequence classification/regression loss.
+        Indices should be in ``[0, ..., config.num_labels - 1]``.
+        If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+        If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification (or regression if config.num_labels==1) loss.
+        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        test_string = "The $ cat $ sat on the # mat # ."
+        ent1_sep_token = '$'
+        ent2_sep_token = '#'
+
+        model_name = 'bert-base-uncased'
+
+        tokenizer = BertTokenizer.from_pretrained(model_name)
+        ent1_sep_token_id = tokenizer.encode(ent1_sep_token)[0]
+        ent2_sep_token_id = tokenizer.encode(ent2_sep_token)[0]
+        config = RBertConfig.from_pretrained(model_name,entity_1_token_id=ent1_sep_token_id, entity_2_token_id=ent2_sep_token_id)
+        model = BertForRelationshipClassification.from_pretrained(model_name, config=config)
+        input_ids = torch.tensor(tokenizer.encode(test_string,add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
+
+    """
     def __init__(self, config):
         super(BertForRelationshipClassification, self).__init__(config)
         self.num_labels = config.num_labels
