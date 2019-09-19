@@ -295,7 +295,10 @@ class Distiller:
             if self.is_master: logger.info(f'--- Ending epoch {self.epoch}/{self.params.n_epoch-1}')
             self.end_epoch()
 
-        if self.is_master: logger.info('Training is finished')
+        if self.is_master:
+            logger.info(f'Save very last checkpoint as `pytorch_model.bin`.')
+            self.save_checkpoint(checkpoint_name=f'pytorch_model.bin')
+            logger.info('Training is finished')
 
     def step(self,
              input_ids: torch.tensor,

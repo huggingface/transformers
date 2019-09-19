@@ -8,7 +8,8 @@ similar API between the different models.
 | [Language Model fine-tuning](#language-model-fine-tuning) | Fine-tuning the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
-| [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                     |
+| [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                  |
+| [Multiple Choice](#multiple choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 
 ## Language model fine-tuning
 
@@ -280,6 +281,40 @@ The results  are the following:
   eval_loss = 0.45516540421714036
   global_step = 18408
   loss = 0.04755385363816904
+```
+
+##Multiple Choice
+
+Based on the script [`run_multiple_choice.py`]().
+
+#### Fine-tuning on SWAG
+Download [swag](https://github.com/rowanz/swagaf/tree/master/data) data
+
+```
+#training on 4 tesla V100(16GB) GPUS
+export SWAG_DIR=/path/to/swag_data_dir
+python ./examples/single_model_scripts/run_multiple_choice.py \
+--model_type roberta \
+--task_name swag \
+--model_name_or_path roberta-base \
+--do_train \
+--do_eval \
+--do_lower_case \
+--data_dir $SWAG_DIR \
+--learning_rate 5e-5 \
+--num_train_epochs 3 \
+--max_seq_length 80 \
+--output_dir models_bert/swag_base \
+--per_gpu_eval_batch_size=16 \
+--per_gpu_train_batch_size=16 \
+--gradient_accumulation_steps 2 \
+--overwrite_output
+```
+Training with the defined hyper-parameters yields the following results:
+```
+***** Eval results *****
+eval_acc = 0.8338998300509847
+eval_loss = 0.44457291918821606
 ```
 
 ## SQuAD

@@ -288,7 +288,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 ### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
-The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
+The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
 
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 

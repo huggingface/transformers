@@ -153,9 +153,11 @@ def main():
     # This loading functions also add new tokens and embeddings called `special tokens`
     # These new embeddings will be fine-tuned on the RocStories dataset
     special_tokens = ['_start_', '_delimiter_', '_classify_']
-    tokenizer = OpenAIGPTTokenizer.from_pretrained(args.model_name, special_tokens=special_tokens)
-    special_tokens_ids = list(tokenizer.convert_tokens_to_ids(token) for token in special_tokens)
-    model = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_name, num_special_tokens=len(special_tokens))
+    tokenizer = OpenAIGPTTokenizer.from_pretrained(args.model_name)
+    tokenizer.add_tokens(special_tokens)
+    special_tokens_ids = tokenizer.convert_tokens_to_ids(special_tokens)
+    model = OpenAIGPTDoubleHeadsModel.from_pretrained(args.model_name)
+    model.resize_token_embeddings(len(tokenizer))
     model.to(device)
 
     # Load and encode the datasets
@@ -221,7 +223,7 @@ def main():
             for step, batch in enumerate(tqdm_bar):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, mc_token_ids, lm_labels, mc_labels = batch
-                losses = model(input_ids, mc_token_ids, lm_labels, mc_labels)
+                losses = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
                 loss = args.lm_coef * losses[0] + losses[1]
                 loss.backward()
                 scheduler.step()
@@ -258,7 +260,7 @@ def main():
             batch = tuple(t.to(device) for t in batch)
             input_ids, mc_token_ids, lm_labels, mc_labels = batch
             with torch.no_grad():
-               _, mc_loss, _, mc_logits = model(input_ids, mc_token_ids, lm_labels, mc_labels)
+               _, mc_loss, _, mc_logits = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
 
             mc_logits = mc_logits.detach().cpu().numpy()
             mc_labels = mc_labels.to('cpu').numpy()
