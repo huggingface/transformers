@@ -405,7 +405,14 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         if ex_index % 10000 == 0:
             logger.info("Writing example %d of %d" % (ex_index, len(examples)))
 
-        input_ids, segment_ids = tokenizer.encode(example.text_a, example.text_b, add_special_tokens=True, output_mask=True)
+        inputs = tokenizer.encode_plus(
+            example.text_a,
+            example.text_b,
+            add_special_tokens=True,
+            output_mask=True,
+            max_length=max_seq_length
+        )
+        input_ids, segment_ids = inputs["sequence"], inputs["mask"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
