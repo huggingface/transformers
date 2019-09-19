@@ -75,7 +75,7 @@ class TextDataset(Dataset):
             tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
 
             while len(tokenized_text) >= block_size:  # Truncate in block of block_size
-                self.examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[:block_size]))
+                self.examples.append(tokenizer.add_special_tokens_single_sequence(tokenized_text[:block_size]))
                 tokenized_text = tokenized_text[block_size:]
             # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
             # If your dataset is small, first you should loook for a bigger one :-) and second you

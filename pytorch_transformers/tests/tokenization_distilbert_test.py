@@ -36,8 +36,8 @@ class DistilBertTokenizationTest(BertTokenizationTest):
         text = tokenizer.encode("sequence builders")
         text_2 = tokenizer.encode("multi-sequence build")
 
-        encoded_sentence = tokenizer.add_special_tokens_single_sentence(text)
-        encoded_pair = tokenizer.add_special_tokens_sentences_pair(text, text_2)
+        encoded_sentence = tokenizer.add_special_tokens_single_sequence(text)
+        encoded_pair = tokenizer.add_special_tokens_sequence_pair(text, text_2)
 
         assert encoded_sentence == text
         assert encoded_pair == text + [102] + text_2
