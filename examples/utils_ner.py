@@ -202,5 +202,12 @@ def convert_examples_to_features(examples,
     return features
 
 
-def get_labels():
-    return ["O", "B-MISC", "I-MISC",  "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC"]
+def get_labels(path):
+    if path:
+        with open(path, "r") as f:
+            labels = f.read().splitlines()
+        if "O" not in labels:
+            labels = ["O"] + labels
+        return labels
+    else:
+        return ["O", "B-MISC", "I-MISC",  "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC"]
