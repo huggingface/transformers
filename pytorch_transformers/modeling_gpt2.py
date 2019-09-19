@@ -314,7 +314,7 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare GPT2 Model transformer outputing raw hidden-states without any specific head on top.",
+@add_start_docstrings("The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
                       GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
 class GPT2Model(GPT2PreTrainedModel):
     r"""

@@ -54,13 +54,13 @@ from .modeling_gpt2 import (GPT2PreTrainedModel, GPT2Model,
                             GPT2LMHeadModel, GPT2DoubleHeadsModel,
                             load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
-                             XLNetForSequenceClassification, XLNetForQuestionAnswering,
+                             XLNetForSequenceClassification, XLNetForQuestionAnswering, XLNetForMultipleChoice,
                              load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
                            XLMWithLMHeadModel, XLMForSequenceClassification,
                            XLMForQuestionAnswering, XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_roberta import (RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
-                               ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
+                               RobertaForMultipleChoice, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
