@@ -81,24 +81,18 @@ class RobertaTokenizer(GPT2Tokenizer):
                                                sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
                                                mask_token=mask_token, **kwargs)
 
-    def add_special_tokens_single_sentence(self, token_ids):
+    def add_special_tokens_single_sequence(self, token_ids):
         """
         Adds special tokens to a sequence for sequence classification tasks.
         A RoBERTa sequence has the following format: <s> X </s>
         """
         return [self.cls_token_id] + token_ids + [self.sep_token_id]
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1, output_mask=False):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
         A RoBERTa sequence pair has the following format: <s> A </s></s> B </s>
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-        if output_mask:
-            return (
-                cls + token_ids_0 + sep + sep + token_ids_1 + sep,
-                [0] * len(cls + token_ids_0 + sep + sep) + [1] * len(token_ids_1 + sep)
-            )
-        else:
-            return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+        return cls + token_ids_0 + sep + sep + token_ids_1 + sep

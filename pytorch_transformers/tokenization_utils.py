@@ -708,7 +708,7 @@ class PreTrainedTokenizer(object):
         if text_pair is None:
             if add_special_tokens:
                 sequence_tokens = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
-                return self.add_special_tokens_single_sentence(sequence_tokens)
+                return self.add_special_tokens_single_sequence(sequence_tokens)
             else:
                 ids = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
                 return ids
@@ -717,7 +717,7 @@ class PreTrainedTokenizer(object):
         second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)]
 
         if add_special_tokens:
-            return self.add_special_tokens_sentences_pair(first_sentence_tokens, second_sentence_tokens)
+            return self.add_special_tokens_sequence_pair(first_sentence_tokens, second_sentence_tokens)
         else:
             logger.warning("No special tokens were added. The two sequences have been concatenated.")
             return first_sentence_tokens + second_sentence_tokens
@@ -747,7 +747,7 @@ class PreTrainedTokenizer(object):
                 if max_length:
                     information["overflowing_tokens"] = sequence_tokens[max_length - n_added_tokens:]
                     sequence_tokens = sequence_tokens[:max_length - n_added_tokens]
-                sequence = self.add_special_tokens_single_sentence(sequence_tokens)
+                sequence = self.add_special_tokens_single_sequence(sequence_tokens)
             else:
                 sequence_tokens = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
                 if max_length:
@@ -774,16 +774,13 @@ class PreTrainedTokenizer(object):
                             information["overflowing_tokens"] = second_sentence_tokens[max_length - f_len - n_added_tokens:]
                             second_sentence_tokens = second_sentence_tokens[:max_length - f_len - n_added_tokens]
 
-                encoded_sequence = self.add_special_tokens_sentences_pair(
+                sequence = self.add_special_tokens_sequence_pair(
                     first_sentence_tokens,
-                    second_sentence_tokens,
-                    output_mask
+                    second_sentence_tokens
                 )
 
-                if output_mask:
-                    sequence, information["mask"] = encoded_sequence
-                else:
-                    sequence = encoded_sequence
+                # if output_mask:
+                #     sequence, information["mask"] = encoded_sequence
 
                 information["sequence"] = sequence
             else:
@@ -800,11 +797,11 @@ class PreTrainedTokenizer(object):
 
         return information
 
-    def add_special_tokens_single_sentence(self, token_ids):
+    def add_special_tokens_single_sequence(self, token_ids):
         logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
         return token_ids
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1, output_mask=False):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
         return token_ids_0 + token_ids_1
 

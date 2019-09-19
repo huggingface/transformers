@@ -181,7 +181,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
         return out_string
 
-    def add_special_tokens_single_sentence(self, token_ids):
+    def add_special_tokens_single_sequence(self, token_ids):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
         An XLNet sequence pair has the following format: A [SEP] B [SEP][CLS]
@@ -190,7 +190,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         cls = [self.cls_token_id]
         return token_ids + sep + cls
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1, output_mask=False):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         """
         Adds special tokens to a sequence for sequence classification tasks.
         An XLNet sequence has the following format: X [SEP][CLS]
@@ -199,13 +199,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
         cls_segment_ids = [2]
-        if output_mask:
-            return (
-                token_ids_0 + sep + token_ids_1 + sep + cls,
-                [0] * len(token_ids_0 + sep) + [1] * len(token_ids_1 + sep) + cls_segment_ids
-            )
-        else:
-            return token_ids_0 + sep + token_ids_1 + sep + cls
+        return token_ids_0 + sep + token_ids_1 + sep + cls
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
