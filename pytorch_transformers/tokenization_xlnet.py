@@ -198,8 +198,20 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-        cls_segment_ids = [2]
         return token_ids_0 + sep + token_ids_1 + sep + cls
+
+    def create_mask_from_sequences(self, sequence_0, sequence_1):
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A BERT sequence pair mask has the following format:
+        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 2
+        | first sequence    | second sequence     | CLS segment ID
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        cls_segment_id = [2]
+
+        return len(self.encode(sequence_0) + sep) * [0] + len(self.encode(sequence_1) + sep) * [1] + cls_segment_id
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file

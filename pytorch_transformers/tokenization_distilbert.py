@@ -64,12 +64,18 @@ class DistilBertTokenizer(BertTokenizer):
     def add_special_tokens_single_sequence(self, token_ids):
         return token_ids
 
-    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1, output_mask=False):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         sep = [self.sep_token_id]
-        if output_mask:
-            return (
-                token_ids_0 + sep + token_ids_1,
-                [0] * len(token_ids_0 + sep) + [1] * len(token_ids_1)
-            )
-        else:
-            return token_ids_0 + sep + token_ids_1
+        return token_ids_0 + sep + token_ids_1
+
+    def create_mask_from_sequences(self, sequence_0, sequence_1):
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A BERT sequence pair mask has the following format:
+        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        return len(self.encode(sequence_0) + sep) * [0] + len(self.encode(sequence_1)) * [1]

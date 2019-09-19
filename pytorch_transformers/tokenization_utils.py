@@ -779,8 +779,8 @@ class PreTrainedTokenizer(object):
                     second_sentence_tokens
                 )
 
-                # if output_mask:
-                #     sequence, information["mask"] = encoded_sequence
+                if output_mask:
+                    information["mask"] = self.create_mask_from_sequences(text, text_pair)
 
                 information["sequence"] = sequence
             else:
@@ -796,6 +796,10 @@ class PreTrainedTokenizer(object):
                 information["sequence"] = sequence
 
         return information
+
+    def create_mask_from_sequences(self, sequence_0, sequence_1):
+        logger.warning("This tokenizer does not make use of special tokens.")
+        return [0] * len(self.encode(sequence_0)) + [1] * len(self.encode(sequence_1))
 
     def add_special_tokens_single_sequence(self, token_ids):
         logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
