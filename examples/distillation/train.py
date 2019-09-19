@@ -204,8 +204,8 @@ def main():
 
     ## STUDENT ##
     if args.from_pretrained_weights is not None:
-        assert os.path.isfile(os.path.join(args.from_pretrained_weights))
-        assert os.path.isfile(os.path.join(args.from_pretrained_config))
+        assert os.path.isfile(args.from_pretrained_weights)
+        assert os.path.isfile(args.from_pretrained_config)
         logger.info(f'Loading pretrained weights from {args.from_pretrained_weights}')
         logger.info(f'Loading pretrained config from {args.from_pretrained_config}')
         stu_architecture_config = DistilBertConfig.from_json_file(args.from_pretrained_config)

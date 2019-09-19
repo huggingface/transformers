@@ -115,7 +115,6 @@ class Distiller:
                                betas=(0.9, 0.98))
 
         warmup_steps = math.ceil(num_train_optimization_steps * params.warmup_prop)
-        logger.info(f'--- Scheduler: {params.scheduler_type}')
         self.scheduler = WarmupLinearSchedule(self.optimizer,
                                                 warmup_steps=warmup_steps,
                                                 t_total=num_train_optimization_steps)
