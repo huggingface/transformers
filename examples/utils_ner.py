@@ -75,7 +75,7 @@ def read_examples_from_file(data_dir, evaluate=False):
             else:
                 splits = line.split(" ")
                 words.append(splits[0])
-                labels.append(splits[-1][:-1])
+                labels.append(splits[-1].replace("\n", ""))
         if words:
             examples.append(InputExample(guid="%s-%d".format(guid_prefix, guid_index),
                                          words=words,
