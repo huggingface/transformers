@@ -173,7 +173,7 @@ def main():
     print(args)
     
     def generate_per_prompt(prompt):
-      ''' Generate text for single prompt '''
+        ''' Generate text for single prompt '''
         while True:
             raw_text = prompt if prompt else input("Model prompt >>> ")
             if args.model_type in ["transfo-xl", "xlnet"]:
