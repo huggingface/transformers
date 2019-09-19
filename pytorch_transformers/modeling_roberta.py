@@ -321,9 +321,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
-@add_start_docstrings("""RBert Model transformer with a relationship classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for Semeval 2010 task 8""",
-    ROBERTA_START_DOCSTRING, RBERT_INPUTS_DOCSTRING)
+
 class RobertaForRelationshipClassification(BertPreTrainedModel):
     config_class = RBertForRobertaConfig
     pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP

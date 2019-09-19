@@ -32,17 +32,20 @@ from tqdm import tqdm, trange
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 from pytorch_transformers import (WEIGHTS_NAME, RBertConfig,
-                                  BertForRelationshipClassification, RBertTokenizer,RBertForRobertaConfig,
-                                  RBertForRobertaTokenizer,RobertaForRelationshipClassification)
-from utils_semeval import (processors, output_modes, convert_examples_to_features,
-                            convert_features_to_dataset, compute_metrics)
+                                  BertForRelationshipClassification,RBertForRobertaConfig,
+                                  RobertaForRelationshipClassification,BertTokenizer,RobertaTokenizer)
+from examples.utils_semeval import (processors, output_modes, convert_examples_to_features,
+                                    convert_features_to_dataset, compute_metrics, RBertUtils,
+                                    get_entity_seperator_token_ids)
 
 logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
-    'bert': (RBertConfig, BertForRelationshipClassification, RBertTokenizer),
-    'roberta': (RBertForRobertaConfig, RobertaForRelationshipClassification, RBertForRobertaTokenizer)
+    'bert': (RBertConfig, BertForRelationshipClassification, BertTokenizer),
+    'roberta': (RBertForRobertaConfig, RobertaForRelationshipClassification, RobertaTokenizer)
 }
+
+RBERT_UTILS = RBertUtils()
 
 def set_seed(args):
     random.seed(args.seed)
@@ -260,7 +263,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             processor.write_dev_examples_to_official_format(args.output_dir,examples=examples)
         else:
             examples = list(processor.get_train_examples(args.data_dir,include_other=args.train_on_other_labels))
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer)
+        features = convert_examples_to_features(examples, label_list,args.max_seq_length, tokenizer,RBERT_UTILS)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -405,10 +408,12 @@ def main():
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case)
 
+    entity_1_token_id,entity_2_token_id = get_entity_seperator_token_ids(RBERT_UTILS, tokenizer)
+
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
                                           num_labels=num_labels, finetuning_task=args.task_name,
-                                          entity_1_token_id=tokenizer.entity_1_token_id,
-                                          entity_2_token_id=tokenizer.entity_2_token_id,
+                                          entity_1_token_id=entity_1_token_id,
+                                          entity_2_token_id=entity_2_token_id,
                                           )
 
     model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)

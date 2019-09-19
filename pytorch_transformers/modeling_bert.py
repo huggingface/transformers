@@ -451,6 +451,7 @@ class RBertClassificationHead(nn.Module):
         super(RBertClassificationHead, self).__init__()
         self.ent_2_index_id = config.entity_2_token_id
         self.ent_1_index_id = config.entity_1_token_id
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.sentence_layer = torch.nn.Sequential(
             self.dropout,
             torch.nn.Linear(config.hidden_size, config.hidden_size),
@@ -462,7 +463,7 @@ class RBertClassificationHead(nn.Module):
             torch.nn.modules.activation.Tanh()
         )
 
-        self.classifier = nn.Linear(config.hidden_size * 3, self.config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size * 3, config.num_labels)
 
     def get_indices_tensor(self,instance_input_ids,entity_char_id):
         index_tensors = (instance_input_ids == entity_char_id).nonzero()
@@ -911,10 +912,10 @@ RBERT_INPUTS_DOCSTRING=r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-
-@add_start_docstrings("""RBert Model transformer with a relationship classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for Semeval 2010 task 8""",
-    BERT_START_DOCSTRING, RBERT_INPUTS_DOCSTRING)
+#
+# @add_start_docstrings("""RBert Model transformer with a relationship classification/regression head on top (a linear layer on top of
+#     the pooled output) e.g. for Semeval 2010 task 8""",
+#     BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class BertForRelationshipClassification(BertPreTrainedModel):
     def __init__(self, config):
         super(BertForRelationshipClassification, self).__init__(config)

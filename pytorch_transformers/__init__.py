@@ -64,7 +64,6 @@ from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
-from .tokenization_rbert import RBertTokenizer, RBertForRobertaTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 # Tokenizer

@@ -27,6 +27,53 @@ from sklearn.metrics import  f1_score
 logger = logging.getLogger(__name__)
 
 
+class RBertUtils:
+    """
+    Utility class to prepare text for RBERT
+
+
+    Args:
+    same as BertTokenizer, apart from
+    replace_conflicting_entity_offset_char: since the forward method of RBert classification models detects
+                                            the special characters that bound each entity, any pre-existing characters
+                                            of this type will cause a conflict. To prevent this, we replace any affected
+                                            characters with this, prior to encoding. Defaults to '|'
+    ent1_sep_token: the char to delimit entity 1. Default is '$'
+    ent2_sep_token: the char to delimit entity 2. Default is '#'
+
+
+    """
+
+    def __init__(self, replace_conflicting_entity_offset_char='|',
+                 ent1_sep_token="$", ent2_sep_token="#", ):
+        self.ent1_sep_token = ent1_sep_token
+        self.ent2_sep_token = ent2_sep_token
+        self.replace_conflicting_entity_offset_char = replace_conflicting_entity_offset_char
+
+    def _clean_special_chars(self, text: str):
+        return text.replace(self.ent1_sep_token,
+                            self.replace_conflicting_entity_offset_char).replace(self.ent2_sep_token,
+                                                                                 self.replace_conflicting_entity_offset_char)
+
+    def _insert_relationship_special_chars(self, text, e1_offset_tup, e2_offset_tup):
+        reverse_ordered_tups = sorted([e1_offset_tup, e2_offset_tup], reverse=True, key=lambda x: x[1])
+        last_token_to_process = True
+        for start, end in reverse_ordered_tups:
+            before = text[:start]
+            during = text[start:end]
+            after = text[end:]
+            if last_token_to_process:
+                text = before + " " + self.ent2_sep_token + " " + during + " " + self.ent2_sep_token + " " + after
+            else:
+                text = before + " " + self.ent1_sep_token + " " + during + " " + self.ent1_sep_token + " " + after
+            last_token_to_process = False
+        return text
+
+    def insert_special_chars_into_text(self, text, e1_offset_tup, e2_offset_tup):
+        text = self._clean_special_chars(text)
+        text = self._insert_relationship_special_chars(text, e1_offset_tup, e2_offset_tup)
+        return text
+
 class InputExample(object):
     """A single SemEval 2010 Task 8 example"""
 
@@ -131,12 +178,12 @@ class SemEval2010Task8DataProcessor():
 
 
 
-def find_entity_indices(id_list, tokenizer):
-    ent1_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_1_token_id]
-    ent1_bounding_id_list = [ent1_bounding_id_list[0], ent1_bounding_id_list[1] + 1]
-    ent2_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_2_token_id]
-    ent2_bounding_id_list = [ent2_bounding_id_list[0], ent2_bounding_id_list[1] + 1]
-    return ent1_bounding_id_list, ent2_bounding_id_list
+# def find_entity_indices(id_list, tokenizer):
+#     ent1_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_1_token_id]
+#     ent1_bounding_id_list = [ent1_bounding_id_list[0], ent1_bounding_id_list[1] + 1]
+#     ent2_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_2_token_id]
+#     ent2_bounding_id_list = [ent2_bounding_id_list[0], ent2_bounding_id_list[1] + 1]
+#     return ent1_bounding_id_list, ent2_bounding_id_list
 
 def mod_text(text, hit):
     before = text[:hit.start()]
@@ -157,30 +204,31 @@ def find_ents_and_modify_string(text):
     return new_text, e1_offsets, e2_offsets
 
 
+def get_entity_seperator_token_ids(rbert_utils, tokenizer):
+    return tokenizer.encode(rbert_utils.ent1_sep_token)[0], tokenizer.encode(rbert_utils.ent2_sep_token)[0]
+
 def convert_examples_to_features(examples, label_list, max_seq_length,
-                                 tokenizer, pad_token=0,
+                                 tokenizer, rbert_utils,pad_token=0,
                                  mask_padding_with_zero=True):
     label_map = {label: i for i, label in enumerate(label_list)}
-
     features = []
     for (ex_index, example) in enumerate(examples):
         if ex_index % 5000 == 0:
             logger.info("Writing example %d" % (ex_index))
 
-        if example.id == '8':
-            pass
-        new_text, e1_offsets, e2_offsets = find_ents_and_modify_string(example.text)
-        input_ids = tokenizer.encode_with_relationship(new_text, e1_offsets, e2_offsets,
-                                                       text_pair=None, add_special_tokens=True)
+
+        text_with_tags_removed, e1_offsets, e2_offsets = find_ents_and_modify_string(example.text)
+        new_text = rbert_utils.insert_special_chars_into_text(text_with_tags_removed,e1_offsets,e2_offsets)
+        input_ids = tokenizer.encode(new_text,text_pair=None, add_special_tokens=True)
+        entity_1_token_id,entity_2_token_id = get_entity_seperator_token_ids(rbert_utils, tokenizer)
 
 
-        special_tokens_ordered = list(filter(lambda n: n in [tokenizer.entity_1_token_id, tokenizer.entity_2_token_id], input_ids))
-
-
-        assert special_tokens_ordered[0] == tokenizer.entity_1_token_id
-        assert special_tokens_ordered[1] == tokenizer.entity_1_token_id
-        assert special_tokens_ordered[2] == tokenizer.entity_2_token_id
-        assert special_tokens_ordered[3] == tokenizer.entity_2_token_id
+        #check that the special tokens have been encoded in the right order
+        special_tokens_ordered = list(filter(lambda n: n in [entity_1_token_id, entity_2_token_id], input_ids))
+        assert special_tokens_ordered[0] == entity_1_token_id
+        assert special_tokens_ordered[1] == entity_1_token_id
+        assert special_tokens_ordered[2] == entity_2_token_id
+        assert special_tokens_ordered[3] == entity_2_token_id
 
         # Account for [CLS] and [SEP] with "- 2"
         if len(input_ids) > max_seq_length - 2:
