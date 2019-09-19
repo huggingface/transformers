@@ -263,3 +263,10 @@ class CommonTestCases:
             assert overflowing_tokens_first_truncated == sequence_0_no_special_tokens[-(2 + stride):]
             assert len(truncated_sequence) == len(sequence) - 2
             assert truncated_sequence == truncated_second_sequence
+
+        def test_tokens_sent_to_encode(self):
+            tokenizer = self.get_tokenizer()
+
+            sequence = "Let's encode this sequence"
+            tokens = tokenizer.encode(sequence)
+            tokenizer.encode(tokens, add_special_tokens=True)
