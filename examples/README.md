@@ -185,6 +185,36 @@ Our test ran on a few seeds with [the original implementation hyper-
 parameters](https://github.com/google-research/bert#sentence-and-sentence-pair-classification-tasks) gave evaluation 
 results between 84% and 88%.
 
+### `run_semeval.py`: relationship classification using R-Bert
+
+This example code fine-tunes BERT on the semeval 2010 Task 8 dataset, to reach a F1 > 90 on the undirected relationship evaluation metric
+ 
+```bash
+python ./examples/run_rbert.py \
+--data_dir $SEMEVAL_DIR \
+--output_dir $RESULTS_DIR \
+--do_train \
+--do_eval \
+--overwrite_output_dir \
+--eval_all_checkpoints \
+--num_train_epochs 15.0 \
+--task_name semeval2010_task8 \
+--per_gpu_train_batch_size 16 \
+--per_gpu_eval_batch_size 16 \
+--learning_rate 2e-5 \
+--include_directionality \
+--max_seq_length 128 \
+--eval_on_other_labels \
+--train_on_other_labels
+
+```
+
+Note, although an F1 score is calculated in the python code, additional files are also written out at the checkpoint intervals ```{global_step}_semeval_results.tsv``` that may be used with the official Semeval evaluation script (supplied with the semeval data)
+The Semeval dataset is available under creative commons and is available [here](http://docs.google.com/leaf?id=0B_jQiLugGTAkMDQ5ZjZiMTUtMzQ1Yy00YWNmLWJlZDYtOWY1ZDMwY2U4YjFk&sort=name&layout=list&num=50). The ```$SEMEVAL_DIR``` should point to the extracted archive.
+
+The ```--include_directionality``` flag trains a classifier using all 18 semeval classes. The ```--train_on_other_labels``` and ```--eval_on_other_labels``` flags also include instances labeled as 'Other' in the training and evaluation respectively. Include all of these to be able to use the official evaluation script.
+Using the ```bert-large-uncased-whole-word-masking``` should give a macro F1 of around 89.xx, whereas using ```bert-base-uncased``` should give around 87.xx. 
+
 #### Using Apex and mixed-precision
 
 Using Apex and 16 bit precision, the fine-tuning on MRPC only takes 27 seconds. First install 
