@@ -212,6 +212,7 @@ def main():
                 f_out.write(text)
         else:
             print(text)
+            return text
 
 if __name__ == '__main__':
     main()
