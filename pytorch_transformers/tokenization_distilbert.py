@@ -76,6 +76,5 @@ class DistilBertTokenizer(BertTokenizer):
         | first sequence    | second sequence
         """
         sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
 
         return len(self.encode(sequence_0) + sep) * [0] + len(self.encode(sequence_1)) * [1]

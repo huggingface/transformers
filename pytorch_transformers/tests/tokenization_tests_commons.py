@@ -217,16 +217,18 @@ class CommonTestCases:
             tokenizer = self.get_tokenizer()
 
             seq_0 = "This is a sentence to be encoded."
+            stride = 2
 
             sequence = tokenizer.encode(seq_0)
             num_added_tokens = tokenizer.num_added_tokens()
             total_length = len(sequence) + num_added_tokens
-            information = tokenizer.encode_plus(seq_0, max_length=total_length - 2, add_special_tokens=True)
+            information = tokenizer.encode_plus(seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride)
 
             truncated_sequence = information["sequence"]
             overflowing_tokens = information["overflowing_tokens"]
 
-            assert len(overflowing_tokens) == 2
+            assert len(overflowing_tokens) == 2 + stride
+            assert overflowing_tokens == sequence[-(2 + stride):]
             assert len(truncated_sequence) == total_length - 2
             assert truncated_sequence == tokenizer.add_special_tokens_single_sequence(sequence[:-2])
 
