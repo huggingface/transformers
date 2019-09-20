@@ -183,8 +183,8 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
     def add_special_tokens_single_sentence(self, token_ids):
         """
-        Adds special tokens to a sequence pair for sequence classification tasks.
-        An XLNet sequence pair has the following format: A [SEP] B [SEP][CLS]
+        Adds special tokens to a sequence for sequence classification tasks.
+        An XLNet sequence has the following format: X [SEP][CLS]
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -192,8 +192,8 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
     def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
         """
-        Adds special tokens to a sequence for sequence classification tasks.
-        An XLNet sequence has the following format: X [SEP][CLS]
+        Adds special tokens to a sequence pair for sequence classification tasks.
+        An XLNet sequence pair has the following format: A [SEP] B [SEP][CLS]
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
