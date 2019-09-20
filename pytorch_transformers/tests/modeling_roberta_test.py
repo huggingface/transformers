@@ -241,7 +241,6 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
             entity_1_token_id = 4
             entity_2_token_id = 8
             # we need to mock the behaviour of a string prepared for RBERT, by inserting enity bounding  characters
@@ -292,7 +291,6 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
                                                                   sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = RobertaForRelationshipClassification(config=config)
-
             model.eval()
             loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
             result = {

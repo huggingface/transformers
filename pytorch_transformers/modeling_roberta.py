@@ -508,9 +508,7 @@ class RobertaForRelationshipClassification(BertPreTrainedModel):
                             attention_mask=attention_mask, head_mask=head_mask)
 
         last_hidden_states = outputs[0]
-
-        logits = self.rbert(input_ids,last_hidden_states)
-
+        logits = self.rbert(input_ids, last_hidden_states)
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         if labels is not None:
