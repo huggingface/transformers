@@ -54,6 +54,7 @@ class RBertConfig(BertConfig):
         self.entity_2_token_id = entity_2_token_id
         self.entity_1_token_id = entity_1_token_id
 
+
 class RBertForRobertaConfig(RobertaConfig):
     r"""
         :class:`~pytorch_transformers.RBertConfig` is a small extension of the BertConfig, required for the
