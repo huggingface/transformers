@@ -31,7 +31,6 @@ from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
 
-
 class BertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
@@ -207,30 +206,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
-        def create_and_check_bert_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask,
-                                                                  sequence_labels, token_labels, choice_labels):
-            config.num_labels = self.num_labels
-            config = RBertConfig(**config.__dict__)
-            config.entity_1_token_id = 4
-            config.entity_2_token_id = 8
-            # we need to mock the behaviour of the RBertTokenizer
-            input_ids[:,0] = config.entity_1_token_id
-            input_ids[:,2] = config.entity_1_token_id
-            input_ids[:,4] = config.entity_2_token_id
-            input_ids[:,6] = config.entity_2_token_id
-            model = BertForRelationshipClassification(config=config)
-
-            model.eval()
-            loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.num_labels])
-            self.check_loss_output(result)
-
 
         def create_and_check_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
@@ -324,10 +299,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_sequence_classification(*config_and_inputs)
-
-    def test_for_relationship_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bert_for_relationship_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
