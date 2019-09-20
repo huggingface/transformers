@@ -27,13 +27,10 @@ logger = logging.getLogger(__name__)
 
 class RBertConfig(BertConfig):
     r"""
-        :class:`~pytorch_transformers.RBertConfig` is a small extension of the BertConfig, required for the
-        :class:`~pytorch_transformers.BertForRelationshipClassification model
+        :class:`~pytorch_transformers.RBertConfig` is a small extension of the `~pytorch_transformers.BertConfig`,
+        required for the :class:`~pytorch_transformers.BertForRelationshipClassification` model
 
-        To ensure the delimiting entity token id's are correct for a given language model,
-        this class should be instantiated after the RBertTokenizer. For example:
-
-        tokenizer = RBertTokenizer.from_pretrained("tokenizer_name")
+        RBERT uses single character tokens to delimit entities in a sentence.
 
         config = RBertConfig.from_pretrained("config_name",
                                           num_labels=num_labels, finetuning_task=args.task_name,
@@ -57,13 +54,10 @@ class RBertConfig(BertConfig):
 
 class RBertForRobertaConfig(RobertaConfig):
     r"""
-        :class:`~pytorch_transformers.RBertConfig` is a small extension of the BertConfig, required for the
-        :class:`~pytorch_transformers.BertForRelationshipClassification model
+        :class:`~pytorch_transformers.RBertForRobertaConfig` is a small extension of the :class
+        `~pytorch_transformers.RobertaConfig`, required for the :class:`~pytorch_transformers.RobertaForRelationshipClassification` model
 
-        To ensure the delimiting entity token id's are correct for a given language model,
-        this class should be instantiated after the RBertTokenizer. For example:
-
-        tokenizer = RBertForRobertaTokenizer.from_pretrained("tokenizer_name")
+        RBERT uses single character tokens to delimit entities in a sentence.
 
         config = RBertForRobertaConfig.from_pretrained("config_name",
                                           num_labels=num_labels, finetuning_task=args.task_name,
@@ -83,4 +77,3 @@ class RBertForRobertaConfig(RobertaConfig):
         super(RBertForRobertaConfig, self).__init__(**kwargs)
         self.entity_2_token_id = entity_2_token_id
         self.entity_1_token_id = entity_1_token_id
-
