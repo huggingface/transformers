@@ -24,8 +24,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu, \
-    RBertClassificationHead
+from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu, RBertClassificationHead
 from .configuration_roberta import RobertaConfig
 from .configuration_rbert import RBertForRobertaConfig
 from .file_utils import add_start_docstrings
@@ -540,4 +539,3 @@ class RobertaClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
-

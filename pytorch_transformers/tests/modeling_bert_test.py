@@ -16,19 +16,20 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import shutil
 import unittest
-
+import shutil
 import pytest
 
-from pytorch_transformers import (BertConfig,RBertConfig, BertModel, BertForMaskedLM,
+from pytorch_transformers import (BertConfig, RBertConfig, BertModel, BertForMaskedLM,
                                   BertForNextSentencePrediction, BertForPreTraining,
                                   BertForQuestionAnswering, BertForSequenceClassification,
                                   BertForTokenClassification, BertForMultipleChoice,
                                   BertForRelationshipClassification)
 from pytorch_transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from .configuration_common_test import ConfigTester
+
 from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .configuration_common_test import ConfigTester
+
 
 
 class BertModelTest(CommonTestCases.CommonModelTester):
