@@ -145,7 +145,6 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
     def _embedding(self, inputs, training=False):
         """Applies embedding based on inputs tensor."""
-        # Create binary mask of size [batch_size, length]
         input_ids, position_ids, token_type_ids = inputs
 
         seq_length = tf.shape(input_ids)[1]
