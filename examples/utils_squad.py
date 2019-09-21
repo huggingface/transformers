@@ -23,7 +23,7 @@ import logging
 import math
 import collections
 from io import open
-
+from tqdm import tqdm
 from pytorch_transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 
 # Required by XLNet evaluation method to compute optimal threshold (see write_predictions_extended() method)
@@ -186,12 +186,19 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
     return examples
 
 
-def convert_examples_to_features(examples, tokenizer, max_seq_length,
+def convert_examples_to_features(examples, max_seq_length,
+                                 tokenizer,
                                  doc_stride, max_query_length, is_training,
                                  cls_token_at_end=False,
-                                 cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
-                                 sequence_a_segment_id=0, sequence_b_segment_id=1,
-                                 cls_token_segment_id=0, pad_token_segment_id=0,
+                                 cls_token='[CLS]',
+                                 cls_token_segment_id=0,
+                                 sep_token='[SEP]',
+                                 sep_token_extra=False,
+                                 pad_on_left=False,
+                                 pad_token=0,
+                                 pad_token_segment_id=0,
+                                 sequence_a_segment_id=0,
+                                 sequence_b_segment_id=1,
                                  mask_padding_with_zero=True):
     """Loads a data file into a list of `InputBatch`s."""
 
@@ -201,7 +208,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     # f = np.zeros((max_N, max_M), dtype=np.float32)
 
     features = []
-    for (example_index, example) in enumerate(examples):
+    for (example_index, example) in tqdm(enumerate(examples)):
 
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
@@ -237,7 +244,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 example.orig_answer_text)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
-        max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
+        if sep_token_extra:
+            max_tokens_for_doc = max_seq_length - len(query_tokens) - 4
+        else:
+            max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
 
         # We can have documents that are longer than the maximum sequence length.
         # To deal with this we do a sliding window approach, where we take chunks
@@ -278,7 +288,14 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 segment_ids.append(sequence_a_segment_id)
                 p_mask.append(1)
 
+
             # SEP token
+            if sep_token_extra:
+                # roberta uses an extra separator b/w pairs of sentences
+                tokens += [sep_token]
+                segment_ids.append(sequence_a_segment_id)
+                p_mask.append(1)
+
             tokens.append(sep_token)
             segment_ids.append(sequence_a_segment_id)
             p_mask.append(1)
@@ -315,11 +332,24 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
 
             # Zero-pad up to the sequence length.
-            while len(input_ids) < max_seq_length:
-                input_ids.append(pad_token)
-                input_mask.append(0 if mask_padding_with_zero else 1)
-                segment_ids.append(pad_token_segment_id)
-                p_mask.append(1)
+            padding_length = max_seq_length - len(input_ids)
+            if pad_on_left:
+                input_ids = ([pad_token] * padding_length) + input_ids
+                input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
+                segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
+                p_mask = ([1] * padding_length) + p_mask
+            else:
+                input_ids = input_ids + ([pad_token] * padding_length)
+                input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+                segment_ids = segment_ids + ([pad_token_segment_id] * padding_length)
+                p_mask = p_mask + ([1] * padding_length)
+
+
+            # while len(input_ids) < max_seq_length:
+            #     input_ids.append(pad_token)
+            #     input_mask.append(0 if mask_padding_with_zero else 1)
+            #     segment_ids.append(pad_token_segment_id)
+            #     p_mask.append(1)
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length

@@ -37,7 +37,8 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   XLMConfig, XLMForQuestionAnswering,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForQuestionAnswering,
-                                  XLNetTokenizer)
+                                  XLNetTokenizer, RobertaConfig, RobertaTokenizer,
+                                  RobertaForQuestionAnswering)
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
@@ -53,12 +54,13 @@ from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
-                  for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
+                  for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
+    'roberta': (RobertaConfig, RobertaForQuestionAnswering, RobertaTokenizer)
 }
 
 def set_seed(args):
@@ -133,7 +135,7 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':       batch[0],
                       'attention_mask':  batch[1], 
-                      'token_type_ids':  None if args.model_type == 'xlm' else batch[2],  
+                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
                       'start_positions': batch[3], 
                       'end_positions':   batch[4]}
             if args.model_type in ['xlnet', 'xlm']:
@@ -217,7 +219,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         with torch.no_grad():
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': None if args.model_type == 'xlm' else batch[2]  # XLM don't use segment_ids
+                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,
                       }
             example_indices = batch[3]
             if args.model_type in ['xlnet', 'xlm']:
@@ -294,7 +296,16 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 max_seq_length=args.max_seq_length,
                                                 doc_stride=args.doc_stride,
                                                 max_query_length=args.max_query_length,
-                                                is_training=not evaluate)
+                                                is_training=not evaluate,
+                                                cls_token_at_end=bool(args.model_type in ['xlnet']),
+                                                cls_token=tokenizer.cls_token,
+                                                cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+                                                sep_token=tokenizer.sep_token,
+                                                sep_token_extra=bool(args.model_type in ['roberta']),
+                                                pad_on_left=bool(args.model_type in ['xlnet']),
+                                                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+                                                pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+                                                )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
