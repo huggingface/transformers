@@ -145,6 +145,8 @@ def main():
                         help="Avoid using CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
+    parser.add_argument('--stop_token', type=str, default=None,
+                        help="Token at which text generation is stopped")
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -185,6 +187,7 @@ def main():
         )
         out = out[0, len(context_tokens):].tolist()
         text = tokenizer.decode(out, clean_up_tokenization_spaces=True)
+        text = text[: text.find(args.stop_token) if args.stop_token else None]
         print(text)
         if args.prompt:
             break
