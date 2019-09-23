@@ -229,24 +229,23 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else None
-            token_type_ids = inputs[2] if len(inputs) > 2 else None
-            position_ids = inputs[3] if len(inputs) > 3 else None
-            head_mask = inputs[4] if len(inputs) > 4 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            head_mask = inputs[4] if len(inputs) > 4 else head_mask
+            assert len(inputs) <= 5, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            token_type_ids = inputs.get('token_type_ids', token_type_ids)
+            position_ids = inputs.get('position_ids', position_ids)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 5, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', None)
-            token_type_ids = inputs.get('token_type_ids', None)
-            position_ids = inputs.get('position_ids', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 5, "Too many inputs."
+            input_ids = inputs
 
         if position_ids is None:
             position_ids = tf.range(shape_list(input_ids)[-1], dtype=tf.int32)[tf.newaxis, :]
@@ -420,8 +419,8 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         super(TFOpenAIGPTModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
 
-    def call(self, inputs, training=False):
-        outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.transformer(inputs, **kwargs)
         return outputs
 
 
@@ -455,8 +454,8 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
         super(TFOpenAIGPTLMHeadModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
@@ -511,26 +510,25 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
         self.multiple_choice_head = TFSequenceSummary(config, name='multiple_choice_head')
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            mc_token_ids, attention_mask, token_type_ids, position_ids, head_mask = None, None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, mc_token_ids=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            mc_token_ids = inputs[1] if len(inputs) > 1 else None
-            attention_mask = inputs[2] if len(inputs) > 2 else None
-            token_type_ids = inputs[3] if len(inputs) > 3 else None
-            position_ids = inputs[4] if len(inputs) > 4 else None
-            head_mask = inputs[5] if len(inputs) > 5 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            head_mask = inputs[4] if len(inputs) > 4 else head_mask
+            mc_token_ids = inputs[5] if len(inputs) > 5 else mc_token_ids
+            assert len(inputs) <= 6, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            token_type_ids = inputs.get('token_type_ids', token_type_ids)
+            position_ids = inputs.get('position_ids', position_ids)
+            head_mask = inputs.get('head_mask', head_mask)
+            mc_token_ids = inputs.get('mc_token_ids', mc_token_ids)
             assert len(inputs) <= 6, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            mc_token_ids = inputs.get('mc_token_ids', None)
-            attention_mask = inputs.get('attention_mask', None)
-            token_type_ids = inputs.get('token_type_ids', None)
-            position_ids = inputs.get('position_ids', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 6, "Too many inputs."
+            input_ids = inputs
 
         input_shapes = shape_list(input_ids)
 

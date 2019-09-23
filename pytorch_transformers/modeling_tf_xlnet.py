@@ -489,31 +489,30 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         return pos_emb
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            (attention_mask, mems, perm_mask, target_mapping,
-            token_type_ids, input_mask, head_mask) = None, None, None, None, None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+            token_type_ids=None, input_mask=None, head_mask=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else None
-            mems = inputs[2] if len(inputs) > 2 else None
-            perm_mask = inputs[3] if len(inputs) > 3 else None
-            target_mapping = inputs[4] if len(inputs) > 4 else None
-            token_type_ids = inputs[5] if len(inputs) > 5 else None
-            input_mask = inputs[6] if len(inputs) > 6 else None
-            head_mask = inputs[7] if len(inputs) > 7 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            mems = inputs[2] if len(inputs) > 2 else mems
+            perm_mask = inputs[3] if len(inputs) > 3 else perm_mask
+            target_mapping = inputs[4] if len(inputs) > 4 else target_mapping
+            token_type_ids = inputs[5] if len(inputs) > 5 else token_type_ids
+            input_mask = inputs[6] if len(inputs) > 6 else input_mask
+            head_mask = inputs[7] if len(inputs) > 7 else head_mask
+            assert len(inputs) <= 8, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            mems = inputs.get('mems', mems)
+            perm_mask = inputs.get('perm_mask', perm_mask)
+            target_mapping = inputs.get('target_mapping', target_mapping)
+            token_type_ids = inputs.get('token_type_ids', token_type_ids)
+            input_mask = inputs.get('input_mask', input_mask)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 8, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', None)
-            mems = inputs.get('mems', None)
-            perm_mask = inputs.get('perm_mask', None)
-            target_mapping = inputs.get('target_mapping', None)
-            token_type_ids = inputs.get('token_type_ids', None)
-            input_mask = inputs.get('input_mask', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 8, "Too many inputs."
+            input_ids = inputs
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -784,8 +783,8 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         super(TFXLNetModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name='transformer')
 
-    def call(self, inputs, training=False):
-        outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.transformer(inputs, **kwargs)
         return outputs
 
 
@@ -829,8 +828,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         self.transformer = TFXLNetMainLayer(config, name='transformer')
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name='lm_loss')
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
         hidden_state = transformer_outputs[0]
         logits = self.lm_loss(hidden_state)
 
@@ -886,8 +885,8 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
         self.sequence_summary = TFSequenceSummary(config, name='sequence_summary')
         self.logits_proj = tf.keras.layers.Dense(config.num_labels, name='logits_proj')
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
         output = transformer_outputs[0]
 
         output = self.sequence_summary(output)
@@ -933,8 +932,8 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
         self.transformer = TFXLNetMainLayer(config, name='transformer')
         self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
 
         sequence_output = transformer_outputs[0]
 

@@ -456,24 +456,23 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
     # def call(self, input_ids, attention_mask=None, token_type_ids=None,
     #          position_ids=None, head_mask=None, training=False):
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            attention_mask, head_mask, position_ids, token_type_ids = None, None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else None
-            token_type_ids = inputs[2] if len(inputs) > 2 else None
-            position_ids = inputs[3] if len(inputs) > 3 else None
-            head_mask = inputs[4] if len(inputs) > 4 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            head_mask = inputs[4] if len(inputs) > 4 else head_mask
+            assert len(inputs) <= 5, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            token_type_ids = inputs.get('token_type_ids', token_type_ids)
+            position_ids = inputs.get('position_ids', position_ids)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 5, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', None)
-            token_type_ids = inputs.get('token_type_ids', None)
-            position_ids = inputs.get('position_ids', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 5, "Too many inputs."
+            input_ids = inputs
 
         if attention_mask is None:
             attention_mask = tf.fill(tf.shape(input_ids), 1)
@@ -637,8 +636,8 @@ class TFBertModel(TFBertPreTrainedModel):
         super(TFBertModel, self).__init__(config, *inputs, **kwargs)
         self.bert = TFBertMainLayer(config, name='bert')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
         return outputs
 
 
@@ -676,11 +675,11 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         self.nsp = TFBertNSPHead(config, name='nsp___cls')
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name='mlm___cls')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.mlm(sequence_output, training=training)
+        prediction_scores = self.mlm(sequence_output, training=kwargs.get('training', False))
         seq_relationship_score = self.nsp(pooled_output)
 
         outputs = (prediction_scores, seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
@@ -718,11 +717,11 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name='mlm___cls')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output = outputs[0]
-        prediction_scores = self.mlm(sequence_output, training=training)
+        prediction_scores = self.mlm(sequence_output, training=kwargs.get('training', False))
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
@@ -761,8 +760,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.nsp = TFBertNSPHead(config, name='nsp___cls')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
 
         pooled_output = outputs[1]
         seq_relationship_score = self.nsp(pooled_output)
@@ -805,12 +804,12 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels, name='classifier')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
 
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=kwargs.get('training', False))
         logits = self.classifier(pooled_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
@@ -852,24 +851,23 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(1, name='classifier')
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            attention_mask, head_mask, position_ids, token_type_ids = None, None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else None
-            token_type_ids = inputs[2] if len(inputs) > 2 else None
-            position_ids = inputs[3] if len(inputs) > 3 else None
-            head_mask = inputs[4] if len(inputs) > 4 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            head_mask = inputs[4] if len(inputs) > 4 else head_mask
+            assert len(inputs) <= 5, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            token_type_ids = inputs.get('token_type_ids', token_type_ids)
+            position_ids = inputs.get('position_ids', position_ids)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 5, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', None)
-            token_type_ids = inputs.get('token_type_ids', None)
-            position_ids = inputs.get('position_ids', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 5, "Too many inputs."
+            input_ids = inputs
 
         num_choices = tf.shape(input_ids)[1]
         seq_length = tf.shape(input_ids)[2]
@@ -927,12 +925,12 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels, name='classifier')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=training)
+        sequence_output = self.dropout(sequence_output, training=kwargs.get('training', False))
         logits = self.classifier(sequence_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
@@ -976,8 +974,8 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
 
-    def call(self, inputs, training=False):
-        outputs = self.bert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output = outputs[0]
 

@@ -447,20 +447,19 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         return new_mems
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            mems, head_mask = None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, mems=None, head_mask=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            mems = inputs[1] if len(inputs) > 1 else None
-            head_mask = inputs[2] if len(inputs) > 2 else None
+            mems = inputs[1] if len(inputs) > 1 else mems
+            head_mask = inputs[2] if len(inputs) > 2 else head_mask
+            assert len(inputs) <= 3, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            mems = inputs.get('mems', mems)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 3, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            mems = inputs.get('mems', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 3, "Too many inputs."
+            input_ids = inputs
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -632,8 +631,8 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         super(TFTransfoXLModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFTransfoXLMainLayer(config, name='transformer')
 
-    def call(self, inputs, training=False, **kwargs):
-        outputs = self.transformer(inputs, training=training, **kwargs)
+    def call(self, inputs, **kwargs):
+        outputs = self.transformer(inputs, **kwargs)
         return outputs
 
 
@@ -694,22 +693,21 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     def init_mems(self, data):
         return self.transformer.init_mems(data)
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            mems, head_mask, labels = None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, mems=None, head_mask=None, labels=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            mems = inputs[1] if len(inputs) > 1 else None
-            head_mask = inputs[2] if len(inputs) > 2 else None
-            labels = inputs[3] if len(inputs) > 3 else None
+            mems = inputs[1] if len(inputs) > 1 else mems
+            head_mask = inputs[2] if len(inputs) > 2 else head_mask
+            labels = inputs[3] if len(inputs) > 3 else labels
+            assert len(inputs) <= 4, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            mems = inputs.get('mems', mems)
+            head_mask = inputs.get('head_mask', head_mask)
+            labels = inputs.get('labels', labels)
             assert len(inputs) <= 4, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            mems = inputs.get('mems', None)
-            head_mask = inputs.get('head_mask', None)
-            labels = inputs.get('labels', None)
-            assert len(inputs) <= 4, "Too many inputs."
+            input_ids = inputs
 
         bsz, tgt_len = shape_list(input_ids)[:2]
 
