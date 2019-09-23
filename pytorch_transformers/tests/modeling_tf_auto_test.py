@@ -23,7 +23,8 @@ import logging
 
 from pytorch_transformers import is_tf_available
 
-if is_tf_available():
+# if is_tf_available():
+if False:
     from pytorch_transformers import (AutoConfig, BertConfig,
                                       TFAutoModel, TFBertModel,
                                       TFAutoModelWithLMHead, TFBertForMaskedLM,
