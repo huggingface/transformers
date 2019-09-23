@@ -418,20 +418,19 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            (attention_mask, head_mask) = None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, head_mask=None, training=False):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else None
-            head_mask = inputs[2] if len(inputs) > 2 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            head_mask = inputs[2] if len(inputs) > 2 else head_mask
+            assert len(inputs) <= 3, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 3, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 3, "Too many inputs."
+            input_ids = inputs
 
         if attention_mask is None:
             attention_mask = tf.ones(shape_list(input_ids)) # (bs, seq_length)
@@ -532,8 +531,8 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         super(TFDistilBertModel, self).__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")   # Embeddings
 
-    def call(self, inputs, training=False):
-        outputs = self.distilbert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.distilbert(inputs, **kwargs)
         return outputs
 
 
@@ -603,18 +602,17 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
-    def call(self, inputs, training=False):
-        dlbrt_output = self.distilbert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        distilbert_output = self.distilbert(inputs, **kwargs)
 
-        hidden_states = dlbrt_output[0]                               # (bs, seq_length, dim)
+        hidden_states = distilbert_output[0]                               # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)       # (bs, seq_length, dim)
         prediction_logits = self.act(prediction_logits)               # (bs, seq_length, dim)
         prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)
 
-        outputs = (prediction_logits, ) + dlbrt_output[1:]
-
-        return outputs # prediction_logits, (all hidden_states), (all attentions)
+        outputs = (prediction_logits,) + distilbert_output[1:]
+        return outputs  # logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings("""DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
@@ -660,12 +658,13 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
-    def call(self, inputs, training=False):
-        distilbert_output = self.distilbert(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        distilbert_output = self.distilbert(inputs, **kwargs)
+
         hidden_state = distilbert_output[0]                    # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]                    # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)   # (bs, dim)
-        pooled_output = self.dropout(pooled_output, training=training)         # (bs, dim)
+        pooled_output = self.dropout(pooled_output, training=kwargs.get('training', False))         # (bs, dim)
         logits = self.classifier(pooled_output)              # (bs, dim)
 
         outputs = (logits,) + distilbert_output[1:]
@@ -720,11 +719,11 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         assert config.num_labels == 2
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
-    def call(self, inputs, training=False):
-        distilbert_output = self.distilbert(inputs, training=training)
-        hidden_states = distilbert_output[0]                                 # (bs, max_query_len, dim)
+    def call(self, inputs, **kwargs):
+        distilbert_output = self.distilbert(inputs, **kwargs)
 
-        hidden_states = self.dropout(hidden_states, training=training)                       # (bs, max_query_len, dim)
+        hidden_states = distilbert_output[0]                                 # (bs, max_query_len, dim)
+        hidden_states = self.dropout(hidden_states, training=kwargs.get('training', False))                       # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)                           # (bs, max_query_len, 2)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)

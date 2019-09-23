@@ -138,7 +138,7 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
             inputs = {'input_ids': input_ids,
                       'attention_mask': input_mask,
                       'token_type_ids': token_type_ids}
-            sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            sequence_output, pooled_output = model(inputs)
 
             inputs = [input_ids, input_mask]
             sequence_output, pooled_output = model(inputs)

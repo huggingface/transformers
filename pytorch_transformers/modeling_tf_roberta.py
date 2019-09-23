@@ -73,21 +73,21 @@ class TFRobertaMainLayer(TFBertMainLayer):
         super(TFRobertaMainLayer, self).__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name='embeddings')
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, **kwargs):
         # Check that input_ids starts with control token
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-        elif isinstance(inputs, (tuple, list)):
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-        else:
+        elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
+        else:
+            input_ids = inputs
 
         if tf.not_equal(tf.reduce_sum(input_ids[:, 0]), 0):
             logger.warning("A sequence with no special tokens has been passed to the RoBERTa model. "
                            "This model requires special tokens in order to work. "
                            "Please specify add_special_tokens=True in your encoding.")
 
-        return super(TFRobertaMainLayer, self).call(inputs, training=training)
+        return super(TFRobertaMainLayer, self).call(inputs, **kwargs)
 
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
@@ -203,8 +203,8 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         super(TFRobertaModel, self).__init__(config, *inputs, **kwargs)
         self.roberta = TFRobertaMainLayer(config, name='roberta')
 
-    def call(self, inputs, training=False):
-        outputs = self.roberta(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.roberta(inputs, **kwargs)
         return outputs
 
 
@@ -277,8 +277,8 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
         self.roberta = TFRobertaMainLayer(config, name="roberta")
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
 
-    def call(self, inputs, training=False):
-        outputs = self.roberta(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.roberta(inputs, **kwargs)
 
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -347,8 +347,9 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         self.roberta = TFRobertaMainLayer(config, name="roberta")
         self.classifier = TFRobertaClassificationHead(config, name="classifier")
     
-    def call(self, inputs, training=False):
-        outputs = self.roberta(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.roberta(inputs, **kwargs)
+
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output, training=training)
 

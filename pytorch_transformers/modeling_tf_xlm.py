@@ -294,31 +294,31 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def call(self, inputs, training=False):  # removed: src_enc=None, src_len=None
-        if not isinstance(inputs, (dict, tuple, list)):
-            input_ids = inputs
-            (attention_mask, langs, token_type_ids, position_ids,
-             lengths, cache, head_mask) = None, None, None, None, None, None, None
-        elif isinstance(inputs, (tuple, list)):
+    def call(self, inputs, attention_mask=None, langs=None, token_type_ids=None,
+             position_ids=None, lengths=None, cache=None, head_mask=None,
+             training=False):  # removed: src_enc=None, src_len=None
+        if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else None
-            langs = inputs[2] if len(inputs) > 2 else None
-            token_type_ids = inputs[3] if len(inputs) > 3 else None
-            position_ids = inputs[4] if len(inputs) > 4 else None
-            lengths = inputs[5] if len(inputs) > 5 else None
-            cache = inputs[6] if len(inputs) > 6 else None
-            head_mask = inputs[7] if len(inputs) > 7 else None
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            langs = inputs[2] if len(inputs) > 2 else langs
+            token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
+            position_ids = inputs[4] if len(inputs) > 4 else position_ids
+            lengths = inputs[5] if len(inputs) > 5 else lengths
+            cache = inputs[6] if len(inputs) > 6 else cache
+            head_mask = inputs[7] if len(inputs) > 7 else head_mask
+            assert len(inputs) <= 8, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get('input_ids')
+            attention_mask = inputs.get('attention_mask', attention_mask)
+            langs = inputs.get('langs', langs)
+            token_type_ids = inputs.get('token_type_ids', token_type_ids)
+            position_ids = inputs.get('position_ids', position_ids)
+            lengths = inputs.get('lengths', lengths)
+            cache = inputs.get('cache', cache)
+            head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 8, "Too many inputs."
         else:
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', None)
-            langs = inputs.get('langs', None)
-            token_type_ids = inputs.get('token_type_ids', None)
-            position_ids = inputs.get('position_ids', None)
-            lengths = inputs.get('lengths', None)
-            cache = inputs.get('cache', None)
-            head_mask = inputs.get('head_mask', None)
-            assert len(inputs) <= 8, "Too many inputs."
+            input_ids = inputs
 
         if lengths is None:
             lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.pad_index), dtype=tf.int32), axis=1)
@@ -538,8 +538,8 @@ class TFXLMModel(TFXLMPreTrainedModel):
         super(TFXLMModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name='transformer')
 
-    def call(self, inputs, training=False):
-        outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        outputs = self.transformer(inputs, **kwargs)
         return outputs
 
 
@@ -619,8 +619,8 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name='pred_layer_._proj')
 
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
 
         output = transformer_outputs[0]
         outputs = self.pred_layer(output)
@@ -670,8 +670,8 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name='transformer')
         self.sequence_summary = TFSequenceSummary(config, name='sequence_summary')
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
         output = transformer_outputs[0]
 
         logits = self.sequence_summary(output)
@@ -731,8 +731,8 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name='transformer')
         self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
 
-    def call(self, inputs, training=False):
-        transformer_outputs = self.transformer(inputs, training=training)
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
 
         sequence_output = transformer_outputs[0]
 

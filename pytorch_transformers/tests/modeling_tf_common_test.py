@@ -29,6 +29,7 @@ from pytorch_transformers import is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
+    import numpy as np
     from pytorch_transformers import TFPreTrainedModel
     # from pytorch_transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
@@ -64,6 +65,22 @@ class TFCommonTestCases:
             #             self.assertIn(param.data.mean().item(), [0.0, 1.0],
             #             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
 
+
+        def test_keyword_and_dict_args(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                outputs_dict = model(inputs_dict)
+
+                inputs_keywords = copy.deepcopy(inputs_dict)
+                input_ids = inputs_keywords.pop('input_ids')
+                outputs_keywords = model(input_ids, **inputs_keywords)
+
+                output_dict = outputs_dict[0].numpy()
+                output_keywords = outputs_keywords[0].numpy()
+
+                self.assertLess(np.sum(np.abs(output_dict - output_keywords)), 1e-6)
 
         def test_attention_outputs(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
