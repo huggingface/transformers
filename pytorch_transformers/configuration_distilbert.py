@@ -37,7 +37,7 @@ class DistilBertConfig(PretrainedConfig):
     def __init__(self,
                  vocab_size_or_config_json_file=30522,
                  max_position_embeddings=512,
-                 sinusoidal_pos_embds=True,
+                 sinusoidal_pos_embds=False,
                  n_layers=6,
                  n_heads=12,
                  dim=768,

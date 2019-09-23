@@ -79,9 +79,9 @@ class TFEmbeddings(tf.keras.layers.Layer):
         super(TFEmbeddings, self).__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.dim = config.dim
-        self.word_embeddings = TFSharedEmbeddings(, name='word_embeddings')  # padding_idx=0)
+        self.word_embeddings = TFSharedEmbeddings(config.vocab_size, config.dim, name='word_embeddings')  # padding_idx=0)
         self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings, config.dim, name='position_embeddings')
-        if config.sinusoidal_embeddings:
+        if config.sinusoidal_pos_embds:
             raise NotImplementedError
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
@@ -94,9 +94,9 @@ class TFEmbeddings(tf.keras.layers.Layer):
             # arbitrarily, and works well.
             self.word_embeddings = self.add_weight(
                 "weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.vocab_size, self.dim],
                 initializer=tf.random_normal_initializer(
-                    mean=0., stddev=self.hidden_size**-0.5))
+                    mean=0., stddev=self.dim**-0.5))
         super(TFEmbeddings, self).build(input_shape)
 
     def call(self, inputs, mode="embedding", training=False):
@@ -133,13 +133,17 @@ class TFEmbeddings(tf.keras.layers.Layer):
         embeddings: torch.tensor(bs, max_seq_length, dim)
             The embedded tokens (plus position embeddings, no token_type embeddings)
         """
-        input_ids, position_ids = inputs
+        if not isinstance(inputs, (tuple, list)):
+            input_ids = inputs
+            position_ids = None
+        else:
+            input_ids, position_ids = inputs
 
         seq_length = tf.shape(input_ids)[1]
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
 
-        words_embeddings = tf.gather(self.word_embeddings, input_ids)
+        word_embeddings = tf.gather(self.word_embeddings, input_ids)
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
         embeddings = word_embeddings + position_embeddings            # (bs, max_seq_length, dim)
@@ -157,7 +161,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         batch_size = tf.shape(inputs)[0]
         length = tf.shape(inputs)[1]
 
-        x = tf.reshape(inputs, [-1, self.hidden_size])
+        x = tf.reshape(inputs, [-1, self.dim])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
 
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
@@ -169,7 +173,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         self.n_heads = config.n_heads
         self.dim = config.dim
-        self.dropout = nn.Dropout(p=config.attention_dropout)
+        self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.output_attentions = config.output_attentions
 
         assert self.dim % self.n_heads == 0
@@ -210,7 +214,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         assert 2 <= len(tf.shape(mask)) <= 3
         causal = (len(tf.shape(mask)) == 3)
-        mask_reshp = [bs, 1, 1, k_length]
+        mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
             """ separate heads """
@@ -327,7 +331,7 @@ class TFTransformer(tf.keras.layers.Layer):
         self.layer = [TFTransformerBlock(config, name='layer_._{}'.format(i))
                       for i in range(config.n_layers)]
 
-    def forward(self, inputs, training=False):
+    def call(self, inputs, training=False):
         """
         Parameters
         ----------
@@ -403,6 +407,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     """
     def __init__(self, config, **kwargs):
         super(TFDistilBertMainLayer, self).__init__(**kwargs)
+        self.num_hidden_layers = config.num_hidden_layers
 
         self.embeddings = TFEmbeddings(config, name="embeddings")   # Embeddings
         self.transformer = TFTransformer(config, name="transformer") # Encoder
@@ -430,6 +435,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.ones(shape_list(input_ids)) # (bs, seq_length)
+        attention_mask = tf.cast(attention_mask, dtype=tf.float32)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -439,15 +445,12 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         if head_mask is not None:
             raise NotImplementedError
         else:
-            head_mask = [None] * self.config.num_hidden_layers
+            head_mask = [None] * self.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids)   # (bs, seq_length, dim)
         tfmr_output = self.transformer([embedding_output, attention_mask, head_mask], training=training)
 
-        hidden_state = tfmr_output[0]
-        output = (hidden_state, ) + tfmr_output[1:]
-
-        return output # last-layer hidden-state, (all hidden_states), (all attentions)
+        return tfmr_output # last-layer hidden-state, (all hidden_states), (all attentions)
 
 
 ### INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL ###
@@ -503,7 +506,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings("The bare DistilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
                       DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
-class DistilBertModel(DistilBertPreTrainedModel):
+class TFDistilBertModel(TFDistilBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
@@ -526,12 +529,34 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     """
     def __init__(self, config, *inputs, **kwargs):
-        super(DistilBertModel, self).__init__(config, *inputs, **kwargs)
+        super(TFDistilBertModel, self).__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")   # Embeddings
 
     def call(self, inputs, training=False):
         outputs = self.distilbert(inputs, training=training)
         return outputs
+
+
+class TFDistilBertLMHead(tf.keras.layers.Layer):
+    def __init__(self, config, input_embeddings, **kwargs):
+        super(TFDistilBertLMHead, self).__init__(**kwargs)
+        self.vocab_size = config.vocab_size
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.input_embeddings = input_embeddings
+
+    def build(self, input_shape):
+        self.bias = self.add_weight(shape=(self.vocab_size,),
+                                    initializer='zeros',
+                                    trainable=True,
+                                    name='bias')
+        super(TFDistilBertLMHead, self).build(input_shape)
+
+    def call(self, hidden_states):
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = hidden_states + self.bias
+        return hidden_states
 
 
 @add_start_docstrings("""DistilBert Model with a `masked language modeling` head on top. """,
@@ -570,27 +595,22 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         super(TFDistilBertForMaskedLM, self).__init__(config, *inputs, **kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.vocab_size = config.vocab_size
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
         self.vocab_transform = tf.keras.layers.Dense(config.dim, name="vocab_transform")
         self.act = tf.keras.layers.Activation(gelu)
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
-        self.vocab_projector_weight = self.distilbert.embeddings
-
-    def build(self, input_shape):
-        self.vocab_projector_bias = self.add_weight(shape=(self.vocab_size,),
-                                    initializer='zeros',
-                                    trainable=True,
-                                    name='vocab_projector_._bias')
-        super(TFDistilBertForMaskedLM, self).build(input_shape)
+        self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def call(self, inputs, training=False):
         dlbrt_output = self.distilbert(inputs, training=training)
-        hidden_states = dlbrt_output[0]                              # (bs, seq_length, dim)
-        prediction_logits = self.vocab_transform(hidden_states)      # (bs, seq_length, dim)
-        prediction_logits = self.act(prediction_logits)                  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_layer_norm(prediction_logits) # (bs, seq_length, dim)
-        prediction_logits = self.vocab_projector_weight(prediction_logits, mode='linear') + self.vocab_projector_bias
+
+        hidden_states = dlbrt_output[0]                               # (bs, seq_length, dim)
+        prediction_logits = self.vocab_transform(hidden_states)       # (bs, seq_length, dim)
+        prediction_logits = self.act(prediction_logits)               # (bs, seq_length, dim)
+        prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
+        prediction_logits = self.vocab_projector(prediction_logits)
 
         outputs = (prediction_logits, ) + dlbrt_output[1:]
 
