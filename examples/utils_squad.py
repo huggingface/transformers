@@ -119,7 +119,7 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
         return False
 
     examples = []
-    for entry in input_data:
+    for entry in input_data[:10]:
         for paragraph in entry["paragraphs"]:
             paragraph_text = paragraph["context"]
             doc_tokens = []
@@ -372,7 +372,10 @@ def convert_examples_to_features(examples, max_seq_length,
                     end_position = 0
                     span_is_impossible = True
                 else:
-                    doc_offset = len(query_tokens) + 2
+                    if not sep_token_extra:
+                        doc_offset = len(query_tokens) + 2
+                    else:
+                        doc_offset = len(query_tokens) + 3
                     start_position = tok_start_position - doc_start + doc_offset
                     end_position = tok_end_position - doc_start + doc_offset
 
