@@ -351,7 +351,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         outputs = self.roberta(inputs, **kwargs)
 
         sequence_output = outputs[0]
-        logits = self.classifier(sequence_output, training=training)
+        logits = self.classifier(sequence_output, training=kwargs.get('training', False))
 
         outputs = (logits,) + outputs[2:]
 
