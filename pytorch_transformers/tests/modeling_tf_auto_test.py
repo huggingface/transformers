@@ -39,46 +39,49 @@ else:
 
 class TFAutoModelTest(unittest.TestCase):
     def test_model_from_pretrained(self):
+        import h5py
+        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
+
         logging.basicConfig(level=logging.INFO)
         for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            config = AutoConfig.from_pretrained(model_name)
+            config = AutoConfig.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModel.from_pretrained(model_name)
+            model = TFAutoModel.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertModel)
 
     def test_lmhead_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            config = AutoConfig.from_pretrained(model_name)
+            config = AutoConfig.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelWithLMHead.from_pretrained(model_name)
+            model = TFAutoModelWithLMHead.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForMaskedLM)
 
     def test_sequence_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            config = AutoConfig.from_pretrained(model_name)
+            config = AutoConfig.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
+            model = TFAutoModelForSequenceClassification.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForSequenceClassification)
 
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            config = AutoConfig.from_pretrained(model_name)
+            config = AutoConfig.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelForQuestionAnswering.from_pretrained(model_name)
+            model = TFAutoModelForQuestionAnswering.from_pretrained(model_name, force_download=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForQuestionAnswering)
 
