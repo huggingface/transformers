@@ -26,7 +26,7 @@ from .configuration_common_test import ConfigTester
 
 from pytorch_transformers import BertConfig, is_tf_available
 
-if is_tf_available():
+if False and is_tf_available():
     import tensorflow as tf
     from pytorch_transformers.modeling_tf_bert import (TFBertModel, TFBertForMaskedLM,
                                                        TFBertForNextSentencePrediction,
