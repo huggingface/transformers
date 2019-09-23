@@ -119,7 +119,7 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
         return False
 
     examples = []
-    for entry in input_data[:10]:
+    for entry in input_data:
         for paragraph in entry["paragraphs"]:
             paragraph_text = paragraph["context"]
             doc_tokens = []
