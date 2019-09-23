@@ -316,7 +316,8 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/pytorch_transformers_test/"
-        for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ['bert-base-uncased']:
             model = TFBertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
