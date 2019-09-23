@@ -113,6 +113,11 @@ if _tf_available:
                                    load_gpt2_pt_weights_in_tf2,
                                    TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_tf_openai import (TFOpenAIGPTPreTrainedModel, TFOpenAIGPTMainLayer,
+                                     TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel,
+                                     load_openai_gpt_pt_weights_in_tf2,
+                                     TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
+
     from .modeling_tf_transfo_xl import (TFTransfoXLPreTrainedModel, TFTransfoXLMainLayer,
                                          TFTransfoXLModel, TFTransfoXLLMHeadModel,
                                          load_transfo_xl_pt_weights_in_tf2,
@@ -131,6 +136,19 @@ if _tf_available:
                                   TFXLMForQuestionAnsweringSimple,
                                   load_xlm_pt_weights_in_tf2,
                                   TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    from .modeling_tf_roberta import (TFRobertaPreTrainedModel, TFRobertaMainLayer,
+                                      TFRobertaModel, TFRobertaLMHead,
+                                      TFRobertaForSequenceClassification,
+                                      load_roberta_pt_weights_in_tf2,
+                                      TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    from .modeling_tf_distilbert import (TFDistilBertPreTrainedModel, TFDistilBertMainLayer,
+                                         TFDistilBertModel, TFDistilBertForMaskedLM,
+                                         TFDistilBertForSequenceClassification,
+                                         TFDistilBertForSequenceClassification,
+                                         load_distilbert_pt_weights_in_tf2,
+                                         TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # Files and general utilities
 from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
