@@ -185,7 +185,7 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
             model.eval()
 
             outputs = model(input_ids)
-            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
+            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = outputs
 
             outputs = model(input_ids, start_positions=sequence_labels,
                                          end_positions=sequence_labels,
