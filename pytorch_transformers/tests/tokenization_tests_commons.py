@@ -196,7 +196,7 @@ class CommonTestCases:
             if tokenizer.add_special_tokens_sequence_pair.__qualname__.split('.')[0] != "PreTrainedTokenizer":
                 seq_0 = "Test this method."
                 seq_1 = "With these inputs."
-                information = tokenizer.encode_plus(seq_0, seq_1, add_special_tokens=True, output_token_type=True)
+                information = tokenizer.encode_plus(seq_0, seq_1, add_special_tokens=True)
                 sequences, mask = information["input_ids"], information["token_type_ids"]
                 assert len(sequences) == len(mask)
 

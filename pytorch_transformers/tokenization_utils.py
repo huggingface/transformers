@@ -704,13 +704,14 @@ class PreTrainedTokenizer(object):
                 to their model.
             **kwargs: passed to the `self.tokenize()` method
         """
-        return self.encode_plus(text, text_pair, add_special_tokens, **kwargs)["input_ids"]
+        encoded_inputs = self.encode_plus(text, text_pair=text_pair, add_special_tokens=add_special_tokens, **kwargs)
+
+        return encoded_inputs["input_ids"]
 
     def encode_plus(self,
                     text,
                     text_pair=None,
                     add_special_tokens=False,
-                    output_token_type=False,
                     max_length=None,
                     stride=0,
                     truncate_first_sequence=True,
@@ -728,8 +729,6 @@ class PreTrainedTokenizer(object):
                 `convert_tokens_to_ids` method)
             add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
                 to their model.
-            output_token_type: if set to ``True``, returns the text pair corresponding mask with 0 for the first sequence,
-                and 1 for the second.
             max_length: if set to a number, will limit the total sequence returned so that it has a maximum length.
                 If there are overflowing tokens, those will be added to the returned dictionary
             stride: if set to a number along with max_length, the overflowing tokens returned will contain some tokens
@@ -739,133 +738,89 @@ class PreTrainedTokenizer(object):
             **kwargs: passed to the `self.tokenize()` method
         """
 
-        information = {}
-
         def get_input_ids(text):
             if isinstance(text, six.string_types):
-                input_ids = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+                return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], six.string_types):
-                input_ids = self.convert_tokens_to_ids(text)
+                return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                input_ids = text
+                return text
             else:
                 raise ValueError("Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers.")
 
-            return input_ids
+        first_ids = get_input_ids(text)
+        second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
-        if text_pair is None:
-            sequence_tokens = get_input_ids(text)
+        return self.prepare_for_model(first_ids,
+                                      pair_ids=second_ids,
+                                      max_length=max_length,
+                                      add_special_tokens=add_special_tokens,
+                                      stride=stride,
+                                      truncate_first_sequence=truncate_first_sequence)
 
-            if add_special_tokens:
-                information = self.prepare_for_model(sequence_tokens, max_length=max_length, stride=stride)
-            else:
-                if max_length:
-                    information["overflowing_tokens"] = sequence_tokens[max_length - stride:]
-                    sequence_tokens = sequence_tokens[:max_length]
-                information["input_ids"] = sequence_tokens
 
-            if output_token_type:
-                information["token_type_ids"] = [0] * len(information["input_ids"])
-        else:
-            first_sentence_tokens = get_input_ids(text)
-            second_sentence_tokens = get_input_ids(text_pair)
-
-            if add_special_tokens:
-                information = self.prepare_pair_for_model(
-                    first_sentence_tokens,
-                    second_sentence_tokens,
-                    max_length=max_length,
-                    truncate_first_sequence=truncate_first_sequence,
-                    stride=stride
-                )
-
-                if output_token_type:
-                    information["token_type_ids"] = self.create_token_type_ids_from_sequences(text, text_pair)
-            else:
-                logger.warning("No special tokens were added. The two sequences have been concatenated.")
-                sequence = first_sentence_tokens + second_sentence_tokens
-
-                if max_length:
-                    information["overflowing_tokens"] = sequence[max_length - stride:]
-                    sequence = sequence[:max_length]
-                if output_token_type:
-                    information["token_type_ids"] = [0] * len(sequence)
-
-                information["input_ids"] = sequence
-
-        return information
-
-    def prepare_for_model(self, ids, max_length=None, stride=0):
+    def prepare_for_model(self, ids, pair_ids=None, max_length=None, add_special_tokens=False, stride=0, truncate_first_sequence=True):
         """
-        Prepares a list of tokenized input ids so that it can be used by the model. It adds special tokens, truncates
+        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
+        It adds special tokens, truncates
         sequences if overflowing while taking into account the special tokens and manages a window stride for
         overflowing tokens
 
         Args:
             ids: list of tokenized input ids. Can be obtained from a string by chaining the
                 `tokenize` and `convert_tokens_to_ids` methods.
+            pair_ids: Optional second list of input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
             max_length: maximum length of the returned list. Will truncate by taking into account the special tokens.
+            add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
+                to their model.
             stride: window stride for overflowing tokens. Can be useful for edge effect removal when using sequential
                 list of inputs.
+            truncate_first_sequence: if set to `True` and an optional second list of input ids is provided,
+                alongside a specified `max_length`, will truncate the first sequence if the total size is superior
+                than the specified `max_length`. If set to `False`, will truncate the second sequence instead.
 
         Return:
             a dictionary containing the `input_ids` as well as the `overflowing_tokens` if a `max_length` was given.
         """
-        information = {}
+        pair = bool(pair_ids is not None)
+        len_ids = len(ids)
+        len_pair_ids = len(pair_ids) if pair else 0
+
+        encoded_inputs = {}
         if max_length:
-            n_added_tokens = self.num_added_tokens()
-            information["overflowing_tokens"] = ids[max_length - n_added_tokens - stride:]
-            ids = ids[:max_length - n_added_tokens]
-        information["input_ids"] = self.add_special_tokens_single_sequence(ids)
-
-        return information
-
-    def prepare_pair_for_model(self, ids_0, ids_1, max_length=None, truncate_first_sequence=True, stride=0):
-        """
-        Prepares a list of tokenized input ids pair so that it can be used by the model. It adds special tokens,
-        truncates sequences if overflowing while taking into account the special tokens and manages a window stride for
-        overflowing tokens
-
-        Args:
-            ids_0: list of tokenized input ids. Can be obtained from a string by chaining the
-                `tokenize` and `convert_tokens_to_ids` methods.
-            ids_1: second list of tokenized input ids. Can be obtained from a string by chaining the
-                `tokenize` and `convert_tokens_to_ids` methods.
-            max_length: maximum length of the returned list. Will truncate by taking into account the special tokens.
-            truncate_first_sequence: if set to `True`, alongside a specified `max_length`, will truncate the first
-                sequence if the total size is superior than the specified `max_length`. If set to `False`, will
-                truncate the second sequence instead.
-            stride: window stride for overflowing tokens. Can be useful for edge effect removal when using sequential
-                list of inputs.
-
-        Return:
-            a dictionary containing the `input_ids` as well as the `overflowing_tokens` if a `max_length` was given.
-        """
-        f_len, s_len = len(ids_0), len(ids_1)
-        information = {}
-
-        if max_length:
-            n_added_tokens = self.num_added_tokens(pair=True)
-            if len(ids_0) + n_added_tokens >= max_length:
+            n_added_tokens = self.num_added_tokens(pair=pair) if add_special_tokens else 0
+            if pair and n_added_tokens + (len_pair_ids if truncate_first_sequence else len_ids) >= max_length:
                 logger.warning(
-                    "The first sequence is longer than the maximum specified length. This sequence will not be truncated.")
+                    "You supplied a pair of sequence in which the sequence that will not be truncated is longer than the maximum specified length."
+                    "This pair of sequences will not be truncated.")
             else:
-                if f_len + s_len + self.num_added_tokens(pair=True) > max_length:
-                    if truncate_first_sequence:
-                        information["overflowing_tokens"] = ids_0[max_length - s_len - n_added_tokens - stride:]
-                        ids_0 = ids_0[:max_length - s_len - n_added_tokens]
+                if n_added_tokens + len_ids + len_pair_ids > max_length:
+                    if truncate_first_sequence or not pair:
+                        encoded_inputs["overflowing_tokens"] = ids[max_length - len_pair_ids - n_added_tokens - stride:]
+                        ids = ids[:max_length - len_pair_ids - n_added_tokens]
+                    elif not truncate_first_sequence and pair:
+                        encoded_inputs["overflowing_tokens"] = pair_ids[max_length - len_ids - n_added_tokens - stride:]
+                        pair_ids = pair_ids[:max_length - len_ids - n_added_tokens]
                     else:
-                        information["overflowing_tokens"] = ids_1[max_length - f_len - n_added_tokens - stride:]
-                        ids_1 = ids_1[:max_length - f_len - n_added_tokens]
+                        logger.warning(
+                            "Cannot truncate second sequence as it is not provided. No truncation.")
 
-        sequence = self.add_special_tokens_sequence_pair(ids_0, ids_1)
-        information["input_ids"] = sequence
+        if add_special_tokens:
+            sequence = self.add_special_tokens_sequence_pair(ids, pair_ids) if pair else self.add_special_tokens_single_sequence(ids)
+            token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids) if pair else [0] * len(sequence)
+        else:
+            sequence = ids + pair_ids if pair else ids
+            token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
 
-        return information
+        encoded_inputs["input_ids"] = sequence
+        encoded_inputs["token_type_ids"] = token_type_ids
 
-    def create_token_type_ids_from_sequences(self, sequence_0, sequence_1):
+        return encoded_inputs
+
+    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1):
         logger.warning("This tokenizer does not make use of special tokens.")
-        return [0] * len(self.encode(sequence_0)) + [1] * len(self.encode(sequence_1))
+        return [0] * len(token_ids_0) + [1] * len(token_ids_1)
 
     def add_special_tokens_single_sequence(self, token_ids):
         logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
