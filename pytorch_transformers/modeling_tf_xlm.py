@@ -449,17 +449,33 @@ XLM_START_DOCSTRING = r"""    The XLM model was proposed in
 
     Original code can be found `here`_.
 
-    This model is a PyTorch `torch.tf.keras.layers.Layer`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
+    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
     .. _`Cross-lingual Language Model Pretraining`:
         https://arxiv.org/abs/1901.07291
 
-    .. _`torch.tf.keras.layers.Layer`:
-        https://pytorch.org/docs/stable/nn.html#module
-
     .. _`here`:
         https://github.com/facebookresearch/XLM
+
+    .. _`tf.keras.Model`:
+        https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
+
+    Note on the model inputs:
+        TF 2.0 models accepts two formats as inputs:
+
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is usefull when using `tf.keras.Model.fit()` method which currently requires having all the tensors in the first argument of the model call function: `model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
+
+        - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+            `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
+            `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
         config (:class:`~pytorch_transformers.XLMConfig`): Model configuration class with all the parameters of the model.
@@ -469,7 +485,7 @@ XLM_START_DOCSTRING = r"""    The XLM model was proposed in
 
 XLM_INPUTS_DOCSTRING = r"""
     Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
 
             XLM is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -478,33 +494,33 @@ XLM_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`pytorch_transformers.XLMTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **langs**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **langs**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are languages ids which can be obtained from the language names by using two conversion mappings
             provided in the configuration of the model (only provided for multilingual models).
             More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
             the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **token_type_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **position_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **lengths**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+        **lengths**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size,)``:
             Length of each sentence that can be used to avoid performing attention on padding token indices.
             You can also use `attention_mask` for the same result (see above), kept here for compatbility.
             Indices selected in ``[0, ..., input_ids.size(-1)]``:
         **cache**:
-            dictionary with ``torch.FloatTensor`` that contains pre-computed
+            dictionary with ``Numpy array`` or ``tf.Tensor`` that contains pre-computed
             hidden-states (key and values in the attention blocks) as computed by the model
             (see `cache` output below). Can be used to speed up sequential decoding.
             The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -515,21 +531,24 @@ XLM_INPUTS_DOCSTRING = r"""
 class TFXLMModel(TFXLMPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
+        **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import XLMTokenizer, TFXLMModel
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        model = TFXLMModel.from_pretrained('xlm-mlm-en-2048')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -584,31 +603,25 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
     XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
 class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
-            All labels set to ``-1`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Language modeling loss.
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+        **prediction_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import XLMTokenizer, TFXLMWithLMHeadModel
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        model = TFXLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -634,33 +647,28 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
 class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
-            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification (or regression if config.num_labels==1) loss.
-        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+        **logits**: ``tf.Tensor`` of shape ``(batch_size, config.num_labels)``
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import XLMTokenizer, TFXLMForSequenceClassification
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
+        model = TFXLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        labels = tf.constant([1])[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        logits = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -685,45 +693,29 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
 class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
     r"""
-        **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        **end_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        **is_impossible**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels whether a question has an answer or no answer (SQuAD 2.0)
-        **cls_index**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
-        **p_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...) 
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        **start_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
+        **start_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
             Span-start scores (before SoftMax).
-        **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
+        **end_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
             Span-end scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import XLMTokenizer, TFXLMForQuestionAnsweringSimple
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss, start_scores, end_scores = outputs[:2]
+        model = TFXLMForQuestionAnsweringSimple.from_pretrained('xlm-mlm-en-2048')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        start_scores, end_scores = outputs[:2]
 
     """
     def __init__(self, config, *inputs, **kwargs):

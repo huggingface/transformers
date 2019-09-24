@@ -74,7 +74,7 @@ class TFPreTrainedModel(tf.keras.Model):
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
                 If not provided or None: return the provided token Embedding Module.
-        Return: ``torch.nn.Embeddings``
+        Return: ``tf.Variable``
             Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
         """
         # if new_num_tokens is None:
@@ -105,9 +105,9 @@ class TFPreTrainedModel(tf.keras.Model):
 
             new_num_tokens: (`optional`) int:
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end. 
-                If not provided or None: does nothing and just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
+                If not provided or None: does nothing and just returns a pointer to the input tokens ``tf.Variable`` Module of the model.
 
-        Return: ``torch.nn.Embeddings``
+        Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
         raise NotImplementedError
