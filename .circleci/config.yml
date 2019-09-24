@@ -91,6 +91,7 @@ workflows:
     version: 2
     build_and_test:
         jobs:
+            - build_py3_torch_and_tf
             - build_py3_torch
             - build_py3_tf
             - build_py2_torch
