@@ -19,6 +19,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import logging
 
 from .modeling_tf_bert import TFBertModel, TFBertForMaskedLM, TFBertForSequenceClassification, TFBertForQuestionAnswering
+from .modeling_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel
+from .modeling_gpt2 import TFGPT2Model, TFGPT2LMHeadModel
+from .modeling_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel
+from .modeling_xlnet import TFXLNetModel, TFXLNetLMHeadModel, TFXLNetForSequenceClassification, TFXLNetForQuestionAnswering
+from .modeling_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple
+from .modeling_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification
+from .modeling_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification
 
 from .file_utils import add_start_docstrings
 
@@ -37,14 +44,14 @@ class TFAutoModel(object):
 
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertModel (DistilBERT model)
-            - contains `roberta`: RobertaModel (RoBERTa model)
+            - contains `distilbert`: TFDistilBertModel (DistilBERT model)
+            - contains `roberta`: TFRobertaModel (RoBERTa model)
             - contains `bert`: TFBertModel (Bert model)
-            - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
-            - contains `gpt2`: GPT2Model (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLModel (Transformer-XL model)
-            - contains `xlnet`: XLNetModel (XLNet model)
-            - contains `xlm`: XLMModel (XLM model)
+            - contains `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
+            - contains `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
+            - contains `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
+            - contains `xlnet`: TFXLNetModel (XLNet model)
+            - contains `xlm`: TFXLMModel (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -59,24 +66,24 @@ class TFAutoModel(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertModel (DistilBERT model)
-            - contains `roberta`: RobertaModel (RoBERTa model)
-            - contains `bert`: TFBertModel (Bert model)
-            - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
-            - contains `gpt2`: GPT2Model (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLModel (Transformer-XL model)
-            - contains `xlnet`: XLNetModel (XLNet model)
-            - contains `xlm`: XLMModel (XLM model)
-
-            The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
-            To train the model, you should first set it back in training mode with `model.train()`
+            - contains `distilbert`: TFDistilBertModel (DistilBERT model)
+            - contains `roberta`: TFRobertaModel (RoBERTa model)
+            - contains `bert`: TFTFBertModel (Bert model)
+            - contains `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
+            - contains `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
+            - contains `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
+            - contains `xlnet`: TFXLNetModel (XLNet model)
+            - contains `xlm`: TFXLMModel (XLM model)
 
         Params:
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
+
+            from_pt: (`Optional`) Boolean
+                Set to True if the Checkpoint is a PyTorch checkpoint.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -121,25 +128,25 @@ class TFAutoModel(object):
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-            model = TFAutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
         if 'distilbert' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFDistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return TFBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFOpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'gpt2' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFGPT2Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'transfo-xl' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFTransfoXLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlnet' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
@@ -158,14 +165,14 @@ class TFAutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
-            - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
+            - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
+            - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
             - contains `bert`: TFBertForMaskedLM (Bert model)
-            - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
-            - contains `gpt2`: GPT2LMHeadModel (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLLMHeadModel (Transformer-XL model)
-            - contains `xlnet`: XLNetLMHeadModel (XLNet model)
-            - contains `xlm`: XLMWithLMHeadModel (XLM model)
+            - contains `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
+            - contains `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
+            - contains `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
+            - contains `xlnet`: TFXLNetLMHeadModel (XLNet model)
+            - contains `xlm`: TFXLMWithLMHeadModel (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -183,24 +190,24 @@ class TFAutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
-            - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
+            - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
+            - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
             - contains `bert`: TFBertForMaskedLM (Bert model)
-            - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
-            - contains `gpt2`: GPT2LMHeadModel (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLLMHeadModel (Transformer-XL model)
-            - contains `xlnet`: XLNetLMHeadModel (XLNet model)
-            - contains `xlm`: XLMWithLMHeadModel (XLM model)
-
-        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
-        To train the model, you should first set it back in training mode with `model.train()`
+            - contains `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
+            - contains `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
+            - contains `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
+            - contains `xlnet`: TFXLNetLMHeadModel (XLNet model)
+            - contains `xlm`: TFXLMWithLMHeadModel (XLM model)
 
         Params:
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
+
+            from_pt: (`Optional`) Boolean
+                Set to True if the Checkpoint is a PyTorch checkpoint.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -245,25 +252,25 @@ class TFAutoModelWithLMHead(object):
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-            model = TFAutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
         if 'distilbert' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFDistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFRobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return TFBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFOpenAIGPTLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'gpt2' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFGPT2LMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'transfo-xl' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFTransfoXLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlnet' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLNetLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLMWithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
@@ -282,11 +289,11 @@ class TFAutoModelForSequenceClassification(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertForSequenceClassification (DistilBERT model)
-            - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
+            - contains `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
+            - contains `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: TFBertForSequenceClassification (Bert model)
-            - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
-            - contains `xlm`: XLMForSequenceClassification (XLM model)
+            - contains `xlnet`: TFXLNetForSequenceClassification (XLNet model)
+            - contains `xlm`: TFXLMForSequenceClassification (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -304,11 +311,11 @@ class TFAutoModelForSequenceClassification(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertForSequenceClassification (DistilBERT model)
-            - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
+            - contains `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
+            - contains `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: TFBertForSequenceClassification (Bert model)
-            - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
-            - contains `xlm`: XLMForSequenceClassification (XLM model)
+            - contains `xlnet`: TFXLNetForSequenceClassification (XLNet model)
+            - contains `xlm`: TFXLMForSequenceClassification (XLM model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -318,7 +325,10 @@ class TFAutoModelForSequenceClassification(object):
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
+
+            from_pt: (`Optional`) Boolean
+                Set to True if the Checkpoint is a PyTorch checkpoint.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -363,19 +373,19 @@ class TFAutoModelForSequenceClassification(object):
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-            model = TFAutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = TFAutoModelForSequenceClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
         if 'distilbert' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFDistilBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFRobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return TFBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlnet' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLNetForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLMForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'xlnet', 'xlm', 'roberta'".format(pretrained_model_name_or_path))
@@ -393,10 +403,10 @@ class TFAutoModelForQuestionAnswering(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertForQuestionAnswering (DistilBERT model)
+            - contains `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
             - contains `bert`: TFBertForQuestionAnswering (Bert model)
-            - contains `xlnet`: XLNetForQuestionAnswering (XLNet model)
-            - contains `xlm`: XLMForQuestionAnswering (XLM model)
+            - contains `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
+            - contains `xlm`: TFXLMForQuestionAnswering (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -414,10 +424,10 @@ class TFAutoModelForQuestionAnswering(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: DistilBertForQuestionAnswering (DistilBERT model)
+            - contains `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
             - contains `bert`: TFBertForQuestionAnswering (Bert model)
-            - contains `xlnet`: XLNetForQuestionAnswering (XLNet model)
-            - contains `xlm`: XLMForQuestionAnswering (XLM model)
+            - contains `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
+            - contains `xlm`: TFXLMForQuestionAnswering (XLM model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -427,7 +437,10 @@ class TFAutoModelForQuestionAnswering(object):
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a path to a `directory` containing model weights saved using :func:`~pytorch_transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
+
+            from_pt: (`Optional`) Boolean
+                Set to True if the Checkpoint is a PyTorch checkpoint.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -472,17 +485,17 @@ class TFAutoModelForQuestionAnswering(object):
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-            model = TFAutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model = TFAutoModelForQuestionAnswering.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
         if 'distilbert' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFDistilBertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return TFBertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlnet' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLNetForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
-            raise NotImplementedError
+            return TFXLMForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'xlnet', 'xlm'".format(pretrained_model_name_or_path))
