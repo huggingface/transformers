@@ -24,7 +24,7 @@ import os
 import tensorflow as tf
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME
+from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -205,38 +205,49 @@ class TFPreTrainedModel(tf.keras.Model):
             model_kwargs = kwargs
 
         # Load model
-        if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-            archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-        elif os.path.isdir(pretrained_model_name_or_path):
-            if from_pt:
-                # Load from a PyTorch checkpoint
-                archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
-            else:
-                archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME)
-        else:
-            archive_file = pretrained_model_name_or_path
-        # redirect to the cache, if necessary
-        try:
-            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
-        except EnvironmentError:
+        if pretrained_model_name_or_path is not None:
             if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained weights.".format(
-                        archive_file))
+                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
+            elif os.path.isdir(pretrained_model_name_or_path):
+                if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
+                    # Load from a TF 2.0 checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
+                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    # Load from a PyTorch checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                else:
+                    raise EnvironmentError("Error no file named {} found in directory {}".format(
+                        tuple(WEIGHTS_NAME, TF2_WEIGHTS_NAME),
+                        pretrained_model_name_or_path))
+            elif os.path.isfile(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
             else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(cls.pretrained_model_archive_map.keys()),
-                        archive_file))
-            return None
-        if resolved_archive_file == archive_file:
-            logger.info("loading weights file {}".format(archive_file))
+                raise EnvironmentError("Error file {} not found".format(pretrained_model_name_or_path))
+
+            # redirect to the cache, if necessary
+            try:
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+            except EnvironmentError as e:
+                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
+                    logger.error(
+                        "Couldn't reach server at '{}' to download pretrained weights.".format(
+                            archive_file))
+                else:
+                    logger.error(
+                        "Model name '{}' was not found in model name list ({}). "
+                        "We assumed '{}' was a path or url but couldn't find any file "
+                        "associated to this path or url.".format(
+                            pretrained_model_name_or_path,
+                            ', '.join(cls.pretrained_model_archive_map.keys()),
+                            archive_file))
+                raise e
+            if resolved_archive_file == archive_file:
+                logger.info("loading weights file {}".format(archive_file))
+            else:
+                logger.info("loading weights file {} from cache at {}".format(
+                    archive_file, resolved_archive_file))
         else:
-            logger.info("loading weights file {} from cache at {}".format(
-                archive_file, resolved_archive_file))
+            resolved_archive_file = None
 
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
