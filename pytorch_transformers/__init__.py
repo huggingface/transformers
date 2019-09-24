@@ -138,7 +138,7 @@ if _tf_available:
                                   TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_roberta import (TFRobertaPreTrainedModel, TFRobertaMainLayer,
-                                      TFRobertaModel, TFRobertaLMHead,
+                                      TFRobertaModel, TFRobertaForMaskedLM,
                                       TFRobertaForSequenceClassification,
                                       load_roberta_pt_weights_in_tf2,
                                       TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
