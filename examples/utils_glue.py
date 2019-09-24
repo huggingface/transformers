@@ -409,8 +409,9 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             example.text_a,
             example.text_b,
             add_special_tokens=True,
-            output_mask=True,
-            max_length=max_seq_length
+            output_token_type=True,
+            max_length=max_seq_length,
+            truncate_first_sequence=True  # We're truncating the first sequence as a priority
         )
         input_ids, segment_ids = inputs["input_ids"], inputs["output_token_type"]
 
