@@ -348,11 +348,15 @@ OPENAI_GPT_START_DOCSTRING = r"""    OpenAI GPT model was proposed in
     .. _`tf.keras.Model`:
         https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
 
-    Important note on the model inputs:
-        The inputs of the TF 2.0 models are slightly different from the PyTorch ones since
-        TF 2.0 Keras doesn't accept named arguments with defaults values for input Tensor.
-        More precisely, input Tensors are gathered in the first arguments of the model call function: `model(inputs)`.
-        There are three possibilities to gather and feed the inputs to the model:
+    Note on the model inputs:
+        TF 2.0 models accepts two formats as inputs:
+
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is usefull when using `tf.keras.Model.fit()` method which currently requires having all the tensors in the first argument of the model call function: `model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -367,25 +371,25 @@ OPENAI_GPT_START_DOCSTRING = r"""    OpenAI GPT model was proposed in
 """
 
 OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             GPT is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
             Indices can be obtained using :class:`pytorch_transformers.BPT2Tokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **token_type_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices)
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **position_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -408,9 +412,12 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import OpenAIGPTTokenizer, TFOpenAIGPTModel
+
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        model = TFOpenAIGPTModel.from_pretrained('openai-gpt')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -429,8 +436,6 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
 class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -443,11 +448,14 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import OpenAIGPTTokenizer, TFOpenAIGPTLMHeadModel
+
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
+        model = TFOpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        logits = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -472,15 +480,11 @@ the classification head takes as input the input of a specified classification t
 """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
 class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     r"""
-        **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
+        **mc_token_ids**: (`optional`, default to index of the last token of the input) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, num_choices)``:
             Index of the classification token in each input sequence.
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **lm_loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Language modeling loss.
-        **mc_loss**: (`optional`, returned when ``multiple_choice_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Multiple choice classification loss.
         **lm_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **mc_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)``
@@ -495,12 +499,22 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
+
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
-        tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
+        model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+        
+        # Add a [CLS] to the vocabulary (we should train it also!)
+        # This option is currently not implemented in TF 2.0
+        raise NotImplementedError
+        tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+        model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+        print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
+
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        mc_token_ids = torch.tensor([input_ids.size(-1), input_ids.size(-1)]).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
+        mc_token_ids = tf.constant([input_ids.size(-1), input_ids.size(-1)])[None, :]  # Batch size 1
         outputs = model(input_ids, mc_token_ids=mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
