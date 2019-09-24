@@ -69,7 +69,8 @@ class TFCommonTestCases:
 
         def test_pt_tf_model_equivalence(self):
             if not is_torch_available():
-                pass
+                return
+
             import pytorch_transformers
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
