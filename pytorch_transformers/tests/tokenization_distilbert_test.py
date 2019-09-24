@@ -39,8 +39,10 @@ class DistilBertTokenizationTest(BertTokenizationTest):
         encoded_sentence = tokenizer.add_special_tokens_single_sequence(text)
         encoded_pair = tokenizer.add_special_tokens_sequence_pair(text, text_2)
 
-        assert encoded_sentence == text
-        assert encoded_pair == text + [102] + text_2
+        assert encoded_sentence == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id]
+        assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + \
+               text_2 + [tokenizer.sep_token_id]
+
 
 if __name__ == '__main__':
     unittest.main()
