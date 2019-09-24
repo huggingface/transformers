@@ -746,8 +746,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``next_sentence_label`` is provided) ``Numpy array`` or ``tf.Tensor`` of shape ``(1,)``:
-            Next sequence prediction (classification) loss.
         **seq_relationship_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, 2)``
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
