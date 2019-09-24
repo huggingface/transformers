@@ -19,13 +19,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import logging
 
 from .modeling_tf_bert import TFBertModel, TFBertForMaskedLM, TFBertForSequenceClassification, TFBertForQuestionAnswering
-from .modeling_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel
-from .modeling_gpt2 import TFGPT2Model, TFGPT2LMHeadModel
-from .modeling_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel
-from .modeling_xlnet import TFXLNetModel, TFXLNetLMHeadModel, TFXLNetForSequenceClassification, TFXLNetForQuestionAnswering
-from .modeling_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple
-from .modeling_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification
-from .modeling_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification
+from .modeling_tf_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel
+from .modeling_tf_gpt2 import TFGPT2Model, TFGPT2LMHeadModel
+from .modeling_tf_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel
+from .modeling_tf_xlnet import TFXLNetModel, TFXLNetLMHeadModel, TFXLNetForSequenceClassification, TFXLNetForQuestionAnswering
+from .modeling_tf_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple
+from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification
+from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification
 
 from .file_utils import add_start_docstrings
 
