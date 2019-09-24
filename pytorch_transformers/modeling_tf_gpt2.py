@@ -362,11 +362,15 @@ GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
     .. _`tf.keras.Model`:
         https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
 
-    Important note on the model inputs:
-        The inputs of the TF 2.0 models are slightly different from the PyTorch ones since
-        TF 2.0 Keras doesn't accept named arguments with defaults values for input Tensor.
-        More precisely, input Tensors are gathered in the first arguments of the model call function: `model(inputs)`.
-        There are three possibilities to gather and feed the inputs to the model:
+    Note on the model inputs:
+        TF 2.0 models accepts two formats as inputs:
+
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is usefull when using `tf.keras.Model.fit()` method which currently requires having all the tensors in the first argument of the model call function: `model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -381,7 +385,7 @@ GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
 """
 
 GPT2_INPUTS_DOCSTRING = r"""    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
@@ -389,21 +393,21 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer):
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **token_type_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **position_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -414,25 +418,28 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
 class TFGPT2Model(TFGPT2PreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
+        **last_hidden_state**: `tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of `tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import GPT2Tokenizer, TFGPT2Model
+
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2Model.from_pretrained('gpt2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        model = TFGPT2Model.from_pretrained('gpt2')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -451,31 +458,31 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
 class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+        **prediction_scores**: `tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of `tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
-        import torch
-        from pytorch_transformers import GPT2Tokenizer, GPT2LMHeadModel
+        import tensorflow as tf
+        from pytorch_transformers import GPT2Tokenizer, TFGPT2LMHeadModel
 
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2LMHeadModel.from_pretrained('gpt2')
+        model = TFGPT2LMHeadModel.from_pretrained('gpt2')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
-        logits = outputs[:2]
+        logits = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -500,36 +507,38 @@ the classification head takes as input the input of a specified classification t
 """, GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
 class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     r"""
-        **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
+        **mc_token_ids**: (`optional`, default to index of the last token of the input) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, num_choices)``:
             Index of the classification token in each input sequence.
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **lm_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length, config.vocab_size)``
+        **lm_prediction_scores**: `tf.Tensor`` of shape ``(batch_size, num_choices, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **mc_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)``
+        **mc_prediction_scores**: `tf.Tensor`` of shape ``(batch_size, num_choices)``
             Prediction scores of the multiplechoice classification head (scores for each choice before SoftMax).
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of `tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
-        import torch
-        from pytorch_transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
-        
+        import tensorflow as tf
+        from pytorch_transformers import GPT2Tokenizer, TFGPT2DoubleHeadsModel
+
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+        model = TFGPT2DoubleHeadsModel.from_pretrained('gpt2')
         
         # Add a [CLS] to the vocabulary (we should train it also!)
+        # This option is currently not implemented in TF 2.0
+        raise NotImplementedError
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})
         model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
         print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
@@ -538,8 +547,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         encoded_choices = [tokenizer.encode(s) for s in choices]
         cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
 
-        input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+        input_ids = tf.constant(encoded_choices)[None, :]  # Batch size: 1, number of choices: 2
+        mc_token_ids = tf.constant([cls_token_location])  # Batch size: 1
 
         outputs = model(input_ids, mc_token_ids=mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
