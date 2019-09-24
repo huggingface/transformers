@@ -541,11 +541,15 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
     .. _`tf.keras.Model`:
         https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
 
-    Important note on the model inputs:
-        The inputs of the TF 2.0 models are slightly different from the PyTorch ones since
-        TF 2.0 Keras doesn't accept named arguments with defaults values for input Tensor.
-        More precisely, input Tensors are gathered in the first arguments of the model call function: `model(inputs)`.
-        There are three possibilities to gather and feed the inputs to the model:
+    Note on the model inputs:
+        TF 2.0 models accepts two formats as inputs:
+
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is usefull when using `tf.keras.Model.fit()` method which currently requires having all the tensors in the first argument of the model call function: `model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -561,7 +565,7 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
 
 BERT_INPUTS_DOCSTRING = r"""
     Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             To match pre-training, BERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
 
@@ -583,19 +587,19 @@ BERT_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`pytorch_transformers.BertTokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **token_type_ids**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
             (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **position_ids**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -606,9 +610,9 @@ BERT_INPUTS_DOCSTRING = r"""
 class TFBertModel(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
+        **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the output of the last layer of the model.
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
+        **pooler_output**: ``tf.Tensor`` of shape ``(batch_size, hidden_size)``
             Last layer hidden-state of the first token of the sequence (classification token)
             further processed by a Linear layer and a Tanh activation function. The Linear
             layer weights are trained from the next sentence prediction (classification)
@@ -616,18 +620,21 @@ class TFBertModel(TFBertPreTrainedModel):
             of the semantic content of the input, you're often better with averaging or pooling
             the sequence of hidden-states for the whole input sequence.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertModel
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertModel.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -647,23 +654,26 @@ class TFBertModel(TFBertPreTrainedModel):
 class TFBertForPreTraining(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+        **prediction_scores**: ```tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **seq_relationship_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, 2)``
+        **seq_relationship_scores**: ```tf.Tensor`` of shape ``(batch_size, sequence_length, 2)``
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ```tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ```tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForPreTraining
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores, seq_relationship_scores = outputs[:2]
 
@@ -692,23 +702,26 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 class TFBertForMaskedLM(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+        **prediction_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForMaskedLM
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForMaskedLM.from_pretrained('bert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
-        prediction_scores = outputs[:2]
+        prediction_scores = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -733,23 +746,26 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``next_sentence_label`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        **loss**: (`optional`, returned when ``next_sentence_label`` is provided) ``Numpy array`` or ``tf.Tensor`` of shape ``(1,)``:
             Next sequence prediction (classification) loss.
-        **seq_relationship_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, 2)``
+        **seq_relationship_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, 2)``
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForNextSentencePrediction
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         seq_relationship_scores = outputs[0]
 
@@ -777,23 +793,26 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 class TFBertForSequenceClassification(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+        **logits**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, config.num_labels)``
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForSequenceClassification
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
-        loss, logits = outputs[:2]
+        logits = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -823,25 +842,28 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
 class TFBertForMultipleChoice(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **classification_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)`` where `num_choices` is the size of the second dimension
+        **classification_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, num_choices)`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above).
             Classification scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForMultipleChoice
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForMultipleChoice.from_pretrained('bert-base-uncased')
+        model = TFBertForMultipleChoice.from_pretrained('bert-base-uncased')
         choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
         outputs = model(input_ids)
-        loss, classification_scores = outputs[:2]
+        classification_scores = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -898,23 +920,26 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
 class TFBertForTokenClassification(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+        **scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
             Classification scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForTokenClassification
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForTokenClassification.from_pretrained('bert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        model = TFBertForTokenClassification.from_pretrained('bert-base-uncased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
-        loss, scores = outputs[:2]
+        scores = outputs[0]
 
     """
     def __init__(self, config, *inputs, **kwargs):
@@ -944,27 +969,30 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
 class TFBertForQuestionAnswering(TFBertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **start_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
+        **start_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
             Span-start scores (before SoftMax).
-        **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
+        **end_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
             Span-end scores (before SoftMax).
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
 
+        import tensorflow as tf
+        from pytorch_transformers import BertTokenizer, TFBertForQuestionAnswering
+
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForQuestionAnswering.from_pretrained('bert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
+        model = TFBertForQuestionAnswering.from_pretrained('bert-base-uncased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        start_positions = tf.constant([1])
+        end_positions = tf.constant([3])
         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss, start_scores, end_scores = outputs[:2]
+        start_scores, end_scores = outputs[:2]
 
     """
     def __init__(self, config, *inputs, **kwargs):
