@@ -765,7 +765,7 @@ class PreTrainedTokenizer(object):
                 information["input_ids"] = sequence_tokens
 
             if output_token_type:
-                information["output_token_type"] = [0] * len(information["input_ids"])
+                information["token_type_ids"] = [0] * len(information["input_ids"])
         else:
             first_sentence_tokens = get_input_ids(text)
             second_sentence_tokens = get_input_ids(text_pair)
@@ -780,7 +780,7 @@ class PreTrainedTokenizer(object):
                 )
 
                 if output_token_type:
-                    information["output_token_type"] = self.create_mask_from_sequences(text, text_pair)
+                    information["token_type_ids"] = self.create_mask_from_sequences(text, text_pair)
             else:
                 logger.warning("No special tokens were added. The two sequences have been concatenated.")
                 sequence = first_sentence_tokens + second_sentence_tokens
@@ -789,7 +789,7 @@ class PreTrainedTokenizer(object):
                     information["overflowing_tokens"] = sequence[max_length - stride:]
                     sequence = sequence[:max_length]
                 if output_token_type:
-                    information["output_token_type"] = [0] * len(sequence)
+                    information["token_type_ids"] = [0] * len(sequence)
 
                 information["input_ids"] = sequence
 

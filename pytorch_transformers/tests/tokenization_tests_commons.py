@@ -197,7 +197,7 @@ class CommonTestCases:
                 seq_0 = "Test this method."
                 seq_1 = "With these inputs."
                 information = tokenizer.encode_plus(seq_0, seq_1, add_special_tokens=True, output_token_type=True)
-                sequences, mask = information["input_ids"], information["output_token_type"]
+                sequences, mask = information["input_ids"], information["token_type_ids"]
                 assert len(sequences) == len(mask)
 
         def test_number_of_added_tokens(self):
