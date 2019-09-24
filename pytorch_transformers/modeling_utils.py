@@ -299,12 +299,12 @@ class PreTrainedModel(nn.Module):
                     archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
                 else:
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+            elif os.path.isfile(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
             else:
-                if from_tf:
-                    # Directly load from a TensorFlow checkpoint
-                    archive_file = pretrained_model_name_or_path + ".index"
-                else:
-                    archive_file = pretrained_model_name_or_path
+                assert from_tf, "Error finding file {}, no file or TF 1.X checkpoint found".format(pretrained_model_name_or_path)
+                archive_file = pretrained_model_name_or_path + ".index"
+
             # redirect to the cache, if necessary
             try:
                 resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
@@ -335,61 +335,72 @@ class PreTrainedModel(nn.Module):
 
         if state_dict is None and not from_tf:
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
-        if from_tf:
-            # Directly load from a TensorFlow checkpoint
-            return cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
 
-        # Convert old format to new format if needed from a PyTorch state_dict
-        old_keys = []
-        new_keys = []
-        for key in state_dict.keys():
-            new_key = None
-            if 'gamma' in key:
-                new_key = key.replace('gamma', 'weight')
-            if 'beta' in key:
-                new_key = key.replace('beta', 'bias')
-            if new_key:
-                old_keys.append(key)
-                new_keys.append(new_key)
-        for old_key, new_key in zip(old_keys, new_keys):
-            state_dict[new_key] = state_dict.pop(old_key)
-
-        # Load from a PyTorch state_dict
         missing_keys = []
         unexpected_keys = []
         error_msgs = []
-        # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
-        state_dict = state_dict.copy()
-        if metadata is not None:
-            state_dict._metadata = metadata
 
-        def load(module, prefix=''):
-            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-            for name, child in module._modules.items():
-                if child is not None:
-                    load(child, prefix + name + '.')
+        if from_tf:
+            if resolved_archive_file.endswith('.index'):
+                # Load from a TensorFlow 1.X checkpoint - provided by original authors
+                model = cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
+            else:
+                # Load from our TensorFlow 2.0 checkpoints
+                try:
+                    from pytorch_transformers import load_tf2_checkpoint_in_pytorch_model
+                    model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
+                except ImportError as e:
+                    logger.error("Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
+                        "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+                    raise e
+        else:
+            # Convert old format to new format if needed from a PyTorch state_dict
+            old_keys = []
+            new_keys = []
+            for key in state_dict.keys():
+                new_key = None
+                if 'gamma' in key:
+                    new_key = key.replace('gamma', 'weight')
+                if 'beta' in key:
+                    new_key = key.replace('beta', 'bias')
+                if new_key:
+                    old_keys.append(key)
+                    new_keys.append(new_key)
+            for old_key, new_key in zip(old_keys, new_keys):
+                state_dict[new_key] = state_dict.pop(old_key)
 
-        # Make sure we are able to load base models as well as derived models (with heads)
-        start_prefix = ''
-        model_to_load = model
-        if not hasattr(model, cls.base_model_prefix) and any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
-            start_prefix = cls.base_model_prefix + '.'
-        if hasattr(model, cls.base_model_prefix) and not any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
-            model_to_load = getattr(model, cls.base_model_prefix)
+            # copy state_dict so _load_from_state_dict can modify it
+            metadata = getattr(state_dict, '_metadata', None)
+            state_dict = state_dict.copy()
+            if metadata is not None:
+                state_dict._metadata = metadata
 
-        load(model_to_load, prefix=start_prefix)
-        if len(missing_keys) > 0:
-            logger.info("Weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, missing_keys))
-        if len(unexpected_keys) > 0:
-            logger.info("Weights from pretrained model not used in {}: {}".format(
-                model.__class__.__name__, unexpected_keys))
-        if len(error_msgs) > 0:
-            raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                               model.__class__.__name__, "\n\t".join(error_msgs)))
+            def load(module, prefix=''):
+                local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+                module._load_from_state_dict(
+                    state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                for name, child in module._modules.items():
+                    if child is not None:
+                        load(child, prefix + name + '.')
+
+            # Make sure we are able to load base models as well as derived models (with heads)
+            start_prefix = ''
+            model_to_load = model
+            if not hasattr(model, cls.base_model_prefix) and any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
+                start_prefix = cls.base_model_prefix + '.'
+            if hasattr(model, cls.base_model_prefix) and not any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
+                model_to_load = getattr(model, cls.base_model_prefix)
+
+            load(model_to_load, prefix=start_prefix)
+            if len(missing_keys) > 0:
+                logger.info("Weights of {} not initialized from pretrained model: {}".format(
+                    model.__class__.__name__, missing_keys))
+            if len(unexpected_keys) > 0:
+                logger.info("Weights from pretrained model not used in {}: {}".format(
+                    model.__class__.__name__, unexpected_keys))
+            if len(error_msgs) > 0:
+                raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
+                                model.__class__.__name__, "\n\t".join(error_msgs)))
 
         if hasattr(model, 'tie_weights'):
             model.tie_weights()  # make sure word embedding weights are still tied

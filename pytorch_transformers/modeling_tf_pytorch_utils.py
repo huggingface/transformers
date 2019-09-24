@@ -61,7 +61,10 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove='')
     return tf_name, transpose
 
 
-def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None):
+#####################
+### PyTorch => TF 2.0
+
+def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
     """ Load pytorch checkpoints in a TF 2.0 model
     """
     try:
@@ -77,18 +80,18 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
 
     pt_state_dict = torch.load(pt_path, map_location='cpu')
 
-    return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs)
+    return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys)
 
 
-def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None):
+def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_missing_keys=False):
     """ Load pytorch checkpoints in a TF 2.0 model
     """
     pt_state_dict = pt_model.state_dict()
 
-    return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs)
+    return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys)
 
 
-def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None):
+def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False):
     """ Load pytorch state_dict in a TF 2.0 model.
     """
     try:
@@ -165,7 +168,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None):
     return tf_model
 
 
-def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None):
+#####################
+### TF 2.0 => PyTorch
+
+def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
     """ Load TF 2.0 HDF5 checkpoint in a PyTorch model
         We use HDF5 to easily do transfer learning
         (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -191,17 +197,17 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     tf_model.load_weights(tf_checkpoint_path, by_name=True)
 
-    return load_tf2_model_in_pytorch_model(pt_model, tf_model)
+    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model):
+def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
     """ Load TF 2.0 model in a pytorch model
     """
     weights = tf_model.weights
 
-    return load_tf2_weights_in_pytorch_model(pt_model, weights)
+    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys)
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights):
+def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False):
     """ Load TF2.0 symbolic weights in a PyTorch model
     """
     try:

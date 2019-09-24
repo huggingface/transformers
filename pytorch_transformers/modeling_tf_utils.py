@@ -129,7 +129,7 @@ class TFPreTrainedModel(tf.keras.Model):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""Instantiate a pretrained pytorch model from a pre-trained model configuration.
+        r"""Instantiate a pretrained TF 2.0 model from a pre-trained model configuration.
 
         The model is set in evaluation mode by default using ``model.eval()`` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with ``model.train()``
@@ -243,7 +243,7 @@ class TFPreTrainedModel(tf.keras.Model):
 
         if from_pt:
             # Load from a PyTorch checkpoint
-            return cls.load_pt_weights(model, config, resolved_archive_file)
+            return cls.load_pt_weights(model, resolved_archive_file)
 
         inputs = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
         ret = model(inputs, training=False)  # build the network with dummy inputs
