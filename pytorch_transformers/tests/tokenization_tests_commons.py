@@ -196,8 +196,8 @@ class CommonTestCases:
             if tokenizer.add_special_tokens_sequence_pair.__qualname__.split('.')[0] != "PreTrainedTokenizer":
                 seq_0 = "Test this method."
                 seq_1 = "With these inputs."
-                information = tokenizer.encode_plus(seq_0, seq_1, add_special_tokens=True, output_mask=True)
-                sequences, mask = information["sequence"], information["mask"]
+                information = tokenizer.encode_plus(seq_0, seq_1, add_special_tokens=True, output_token_type=True)
+                sequences, mask = information["input_ids"], information["output_token_type"]
                 assert len(sequences) == len(mask)
 
         def test_number_of_added_tokens(self):
@@ -224,7 +224,7 @@ class CommonTestCases:
             total_length = len(sequence) + num_added_tokens
             information = tokenizer.encode_plus(seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride)
 
-            truncated_sequence = information["sequence"]
+            truncated_sequence = information["input_ids"]
             overflowing_tokens = information["overflowing_tokens"]
 
             assert len(overflowing_tokens) == 2 + stride
@@ -249,12 +249,12 @@ class CommonTestCases:
             )
 
             information = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2, add_special_tokens=True,
-                                                stride=stride)
+                                                stride=stride, truncate_first_sequence=False)
             information_first_truncated = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2,
                                                                 add_special_tokens=True, stride=stride,
-                                                                truncate_second_sequence_first=False)
+                                                                truncate_first_sequence=True)
 
-            truncated_sequence = information["sequence"]
+            truncated_sequence = information["input_ids"]
             overflowing_tokens = information["overflowing_tokens"]
             overflowing_tokens_first_truncated = information_first_truncated["overflowing_tokens"]
 
