@@ -264,9 +264,14 @@ class CommonTestCases:
             assert len(truncated_sequence) == len(sequence) - 2
             assert truncated_sequence == truncated_second_sequence
 
-        def test_tokens_sent_to_encode(self):
+        def test_encode_input_type(self):
             tokenizer = self.get_tokenizer()
 
             sequence = "Let's encode this sequence"
-            tokens = tokenizer.encode(sequence)
-            tokenizer.encode(tokens, add_special_tokens=True)
+
+            tokens = tokenizer.tokenize(sequence)
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            formatted_input = tokenizer.encode(sequence, add_special_tokens=True)
+
+            assert tokenizer.encode(tokens, add_special_tokens=True) == formatted_input
+            assert tokenizer.encode(input_ids, add_special_tokens=True) == formatted_input

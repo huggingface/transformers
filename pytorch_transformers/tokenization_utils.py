@@ -744,7 +744,7 @@ class PreTrainedTokenizer(object):
         def get_input_ids(text):
             if isinstance(text, six.string_types):
                 input_ids = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], six.string_types):
                 input_ids = self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 input_ids = text
