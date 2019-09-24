@@ -46,7 +46,10 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
-from pytorch_transformers.preprocessing import (compute_metrics, output_modes, processors, convert_examples_to_glue_features)
+from pytorch_transformers import glue_compute_metrics as compute_metrics
+from pytorch_transformers import glue_output_modes as output_modes
+from pytorch_transformers import glue_processors as processors
+from pytorch_transformers import glue_convert_examples_to_features as convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +278,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1] 
         examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-        features = convert_examples_to_glue_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
+        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
             pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
             pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,

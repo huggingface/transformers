@@ -15,12 +15,50 @@
 # limitations under the License.
 """ GLUE processors and helpers """
 
-from .utils import DataProcessor
 import logging
 import os
 
+from .utils import DataProcessor, InputExample, InputFeatures
+
 logger = logging.getLogger(__name__)
 
+GLUE_TASKS_NUM_LABELS = {
+    "cola": 2,
+    "mnli": 3,
+    "mrpc": 2,
+    "sst-2": 2,
+    "sts-b": 1,
+    "qqp": 2,
+    "qnli": 2,
+    "rte": 2,
+    "wnli": 2,
+}
+
+processors = {
+    "cola": ColaProcessor,
+    "mnli": MnliProcessor,
+    "mnli-mm": MnliMismatchedProcessor,
+    "mrpc": MrpcProcessor,
+    "sst-2": Sst2Processor,
+    "sts-b": StsbProcessor,
+    "qqp": QqpProcessor,
+    "qnli": QnliProcessor,
+    "rte": RteProcessor,
+    "wnli": WnliProcessor,
+}
+
+output_modes = {
+    "cola": "classification",
+    "mnli": "classification",
+    "mnli-mm": "classification",
+    "mrpc": "classification",
+    "sst-2": "classification",
+    "sts-b": "regression",
+    "qqp": "classification",
+    "qnli": "classification",
+    "rte": "classification",
+    "wnli": "classification",
+}
 
 def convert_examples_to_glue_features(examples, label_list, max_seq_length,
                                       tokenizer, output_mode,
@@ -89,37 +127,6 @@ def convert_examples_to_glue_features(examples, label_list, max_seq_length,
                               segment_ids=segment_ids,
                               label_id=label_id))
     return features
-
-
-class InputExample(object):
-    """A single training/test example for simple sequence classification."""
-
-    def __init__(self, guid, text_a, text_b=None, label=None):
-        """Constructs a InputExample.
-
-        Args:
-            guid: Unique id for the example.
-            text_a: string. The untokenized text of the first sequence. For single
-            sequence tasks, only this sequence must be specified.
-            text_b: (Optional) string. The untokenized text of the second sequence.
-            Only must be specified for sequence pair tasks.
-            label: (Optional) string. The label of the example. This should be
-            specified for train and dev examples, but not for test examples.
-        """
-        self.guid = guid
-        self.text_a = text_a
-        self.text_b = text_b
-        self.label = label
-
-
-class InputFeatures(object):
-    """A single set of features of data."""
-
-    def __init__(self, input_ids, input_mask, segment_ids, label_id):
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-        self.label_id = label_id
 
 
 class MrpcProcessor(DataProcessor):
@@ -420,15 +427,3 @@ class WnliProcessor(DataProcessor):
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
-
-GLUE_TASKS_NUM_LABELS = {
-    "cola": 2,
-    "mnli": 3,
-    "mrpc": 2,
-    "sst-2": 2,
-    "sts-b": 1,
-    "qqp": 2,
-    "qnli": 2,
-    "rte": 2,
-    "wnli": 2,
-}
