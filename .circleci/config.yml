@@ -1,5 +1,20 @@
 version: 2
 jobs:
+    build_py3_torch_and_tf:
+        working_directory: ~/pytorch-transformers
+        docker:
+            - image: circleci/python:3.5
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install torch
+            - run: sudo pip install tensorflow==2.0.0-rc0
+            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install tensorboardX scikit-learn
+            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: codecov
     build_py3_torch:
         working_directory: ~/pytorch-transformers
         docker:

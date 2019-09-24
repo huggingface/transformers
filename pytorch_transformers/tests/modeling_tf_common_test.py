@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function
 import copy
 import json
 import logging
+import importlib
 import random
 import shutil
 import unittest
@@ -25,7 +26,7 @@ import uuid
 import pytest
 import sys
 
-from pytorch_transformers import is_tf_available
+from pytorch_transformers import is_tf_available, is_torch_available
 
 if is_tf_available():
     import tensorflow as tf
@@ -64,6 +65,24 @@ class TFCommonTestCases:
             #         if param.requires_grad:
             #             self.assertIn(param.data.mean().item(), [0.0, 1.0],
             #             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
+
+
+        def test_pt_tf_model_equivalence(self):
+            if not is_torch_available():
+                pass
+            import pytorch_transformers
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beggining
+                pt_model_class = getattr(pytorch_transformers, pt_model_class_name)
+
+                tf_model = model_class(config)
+                pt_model = pt_model_class(config)
+
+                tf_model = pytorch_transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=inputs_dict)
+                pt_model = pytorch_transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
 
         def test_keyword_and_dict_args(self):

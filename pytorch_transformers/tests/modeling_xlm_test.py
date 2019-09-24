@@ -24,7 +24,7 @@ from pytorch_transformers import is_torch_available
 
 if is_torch_available():
     from pytorch_transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
-                                      XLMForSequenceClassification)
+                                      XLMForSequenceClassification, XLMForQuestionAnsweringSimple)
     from pytorch_transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
     pytestmark = pytest.mark.skip("Require Torch")
@@ -36,7 +36,7 @@ from .configuration_common_test import ConfigTester
 class XLMModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
-                         XLMForSequenceClassification) if is_torch_available() else ()
+                         XLMForSequenceClassification, XLMForQuestionAnsweringSimple) if is_torch_available() else ()
 
 
     class XLMModelTester(object):
@@ -180,6 +180,30 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length, self.vocab_size])
 
 
+        def create_and_check_xlm_simple_qa(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+            model = XLMForQuestionAnsweringSimple(config)
+            model.eval()
+
+            outputs = model(input_ids)
+
+            outputs = model(input_ids, start_positions=sequence_labels,
+                                       end_positions=sequence_labels)
+            loss, start_logits, end_logits = outputs
+
+            result = {
+                "loss": loss,
+                "start_logits": start_logits,
+                "end_logits": end_logits,
+            }
+            self.parent.assertListEqual(
+                list(result["start_logits"].size()),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(result["end_logits"].size()),
+                [self.batch_size, self.seq_length])
+            self.check_loss_output(result)
+
+
         def create_and_check_xlm_qa(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
             model = XLMForQuestionAnswering(config)
             model.eval()
@@ -275,6 +299,10 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
     def test_xlm_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_lm_head(*config_and_inputs)
+
+    def test_xlm_simple_qa(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_simple_qa(*config_and_inputs)
 
     def test_xlm_qa(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
