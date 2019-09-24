@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from glue import (ColaProcessor,
+from .glue import (ColaProcessor,
                   MnliProcessor,
                   MnliMismatchedProcessor,
                   MrpcProcessor,
@@ -27,7 +27,7 @@ from glue import (ColaProcessor,
                   convert_examples_to_glue_features,
                   )
 
-from utils import DataProcessor, simple_accuracy, acc_and_f1, pearson_and_spearman, compute_metrics
+from .utils import DataProcessor, simple_accuracy, acc_and_f1, pearson_and_spearman, compute_metrics
 
 processors = {
     "cola": ColaProcessor,

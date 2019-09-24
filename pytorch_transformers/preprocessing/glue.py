@@ -15,7 +15,7 @@
 # limitations under the License.
 """ GLUE processors and helpers """
 
-from utils import DataProcessor
+from .utils import DataProcessor
 import logging
 import os
 
