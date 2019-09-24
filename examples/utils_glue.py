@@ -413,7 +413,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             max_length=max_seq_length,
             truncate_first_sequence=True  # We're truncating the first sequence as a priority
         )
-        input_ids, segment_ids = inputs["input_ids"], inputs["output_token_type"]
+        input_ids, segment_ids = inputs["input_ids"], inputs["token_type_ids"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
