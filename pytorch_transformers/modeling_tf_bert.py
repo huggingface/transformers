@@ -987,9 +987,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForQuestionAnswering.from_pretrained('bert-base-uncased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        start_positions = tf.constant([1])
-        end_positions = tf.constant([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
     """
