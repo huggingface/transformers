@@ -204,7 +204,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    def create_mask_from_sequences(self, sequence_0, sequence_1):
+    def create_token_type_ids_from_sequences(self, sequence_0, sequence_1):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
         A BERT sequence pair mask has the following format:
