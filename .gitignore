@@ -130,5 +130,5 @@ runs
 examples/runs
 
 # data
-data
+/data
 serialization_dir

@@ -46,8 +46,10 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
-from utils_glue import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors)
+from pytorch_transformers import glue_compute_metrics as compute_metrics
+from pytorch_transformers import glue_output_modes as output_modes
+from pytorch_transformers import glue_processors as processors
+from pytorch_transformers import glue_convert_examples_to_features as convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 
