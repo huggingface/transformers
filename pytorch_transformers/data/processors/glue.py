@@ -22,45 +22,7 @@ from .utils import DataProcessor, InputExample, InputFeatures
 
 logger = logging.getLogger(__name__)
 
-GLUE_TASKS_NUM_LABELS = {
-    "cola": 2,
-    "mnli": 3,
-    "mrpc": 2,
-    "sst-2": 2,
-    "sts-b": 1,
-    "qqp": 2,
-    "qnli": 2,
-    "rte": 2,
-    "wnli": 2,
-}
-
-processors = {
-    "cola": ColaProcessor,
-    "mnli": MnliProcessor,
-    "mnli-mm": MnliMismatchedProcessor,
-    "mrpc": MrpcProcessor,
-    "sst-2": Sst2Processor,
-    "sts-b": StsbProcessor,
-    "qqp": QqpProcessor,
-    "qnli": QnliProcessor,
-    "rte": RteProcessor,
-    "wnli": WnliProcessor,
-}
-
-output_modes = {
-    "cola": "classification",
-    "mnli": "classification",
-    "mnli-mm": "classification",
-    "mrpc": "classification",
-    "sst-2": "classification",
-    "sts-b": "regression",
-    "qqp": "classification",
-    "qnli": "classification",
-    "rte": "classification",
-    "wnli": "classification",
-}
-
-def convert_examples_to_glue_features(examples, label_list, max_seq_length,
+def glue_convert_examples_to_features(examples, label_list, max_seq_length,
                                       tokenizer, output_mode,
                                       pad_on_left=False,
                                       pad_token=0,
@@ -427,3 +389,41 @@ class WnliProcessor(DataProcessor):
             examples.append(
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
+
+glue_tasks_num_labels = {
+    "cola": 2,
+    "mnli": 3,
+    "mrpc": 2,
+    "sst-2": 2,
+    "sts-b": 1,
+    "qqp": 2,
+    "qnli": 2,
+    "rte": 2,
+    "wnli": 2,
+}
+
+glue_processors = {
+    "cola": ColaProcessor,
+    "mnli": MnliProcessor,
+    "mnli-mm": MnliMismatchedProcessor,
+    "mrpc": MrpcProcessor,
+    "sst-2": Sst2Processor,
+    "sts-b": StsbProcessor,
+    "qqp": QqpProcessor,
+    "qnli": QnliProcessor,
+    "rte": RteProcessor,
+    "wnli": WnliProcessor,
+}
+
+glue_output_modes = {
+    "cola": "classification",
+    "mnli": "classification",
+    "mnli-mm": "classification",
+    "mrpc": "classification",
+    "sst-2": "classification",
+    "sts-b": "regression",
+    "qqp": "classification",
+    "qnli": "classification",
+    "rte": "classification",
+    "wnli": "classification",
+}

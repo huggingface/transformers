@@ -76,7 +76,7 @@ from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CAC
 
 from .data import (is_sklearn_available,
                    InputExample, InputFeatures, DataProcessor,
-                   glue_output_modes, glue_convert_examples_to_features, glue_processors)
+                   glue_output_modes, glue_convert_examples_to_features, glue_processors, glue_tasks_num_labels)
 
 if is_sklearn_available():
     from .data import glue_compute_metrics
