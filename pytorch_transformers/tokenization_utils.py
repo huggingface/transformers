@@ -780,7 +780,7 @@ class PreTrainedTokenizer(object):
                 )
 
                 if output_token_type:
-                    information["token_type_ids"] = self.create_mask_from_sequences(text, text_pair)
+                    information["token_type_ids"] = self.create_token_type_ids_from_sequences(text, text_pair)
             else:
                 logger.warning("No special tokens were added. The two sequences have been concatenated.")
                 sequence = first_sentence_tokens + second_sentence_tokens
@@ -863,7 +863,7 @@ class PreTrainedTokenizer(object):
 
         return information
 
-    def create_mask_from_sequences(self, sequence_0, sequence_1):
+    def create_token_type_ids_from_sequences(self, sequence_0, sequence_1):
         logger.warning("This tokenizer does not make use of special tokens.")
         return [0] * len(self.encode(sequence_0)) + [1] * len(self.encode(sequence_1))
 
