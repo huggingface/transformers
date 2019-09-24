@@ -148,8 +148,24 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path):
     """ Load TF 2.0 HDF5 checkpoint in a PyTorch model
         We use HDF5 to easily do transfer learning
         (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
+        Conventions for TF2.0 scopes -> PyTorch attribute names conversions:
+            - '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
+            - '_._' is replaced by a new level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     """
-    raise NotImplementedError
+    try:
+        import tensorflow as tf
+        import torch
+    except ImportError as e:
+        logger.error("Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
+            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+        raise e
+
+    tf_path = os.path.abspath(tf_checkpoint_path)
+    logger.info("Loading TensorFlow weights from {}".format(tf_path))
+
+    tf_state_dict = torch.load(tf_path, map_location='cpu')
+
+    return load_tf2_weights_in_pytorch_model(pt_model, tf_state_dict)
 
 def load_tf2_weights_in_pytorch_model(pt_model, tf_model):
     """ Load TF2.0 symbolic weights in a PyTorch model

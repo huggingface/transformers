@@ -146,7 +146,7 @@ if _tf_available:
     from .modeling_tf_distilbert import (TFDistilBertPreTrainedModel, TFDistilBertMainLayer,
                                          TFDistilBertModel, TFDistilBertForMaskedLM,
                                          TFDistilBertForSequenceClassification,
-                                         TFDistilBertForSequenceClassification,
+                                         TFDistilBertForQuestionAnswering,
                                          load_distilbert_pt_weights_in_tf2,
                                          TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 

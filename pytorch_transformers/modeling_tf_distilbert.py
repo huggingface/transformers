@@ -653,7 +653,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         super(TFDistilBertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.distilbert = TFDistilBertModel(config, name="distilbert")
+        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
         self.pre_classifier = tf.keras.layers.Dense(config.dim, activation='relu', name="pre_classifier")
         self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
@@ -714,8 +714,8 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super(TFDistilBertForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
 
-        self.distilbert = TFDistilBertModel(config, name="distilbert")
-        self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_output')
+        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
         assert config.num_labels == 2
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
