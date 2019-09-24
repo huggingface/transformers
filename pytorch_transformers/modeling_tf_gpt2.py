@@ -385,7 +385,7 @@ GPT2_START_DOCSTRING = r"""    OpenAI GPT-2 model was proposed in
 """
 
 GPT2_INPUTS_DOCSTRING = r"""    Inputs:
-        **input_ids**: ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
@@ -418,18 +418,18 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
 class TFGPT2Model(TFGPT2PreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: `tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
+        **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **past**:
-            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of `tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of `tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
