@@ -770,7 +770,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         cls = [self.cls_token_id]
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    def create_token_type_ids_from_sequences(self, sequence_0, sequence_1):
+    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
         An XLM sequence pair mask has the following format:
@@ -780,7 +780,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
 
-        return len(cls + self.encode(sequence_0) + sep) * [0] + len(self.encode(sequence_1) + sep) * [1]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""
