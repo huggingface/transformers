@@ -849,11 +849,11 @@ class PreTrainedTokenizer(object):
             token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
 
         if return_tensors == 'tf' and is_tf_available():
-            sequence = tf.constant(sequence)
-            token_type_ids = tf.constant(token_type_ids)
+            sequence = tf.constant([sequence])
+            token_type_ids = tf.constant([token_type_ids])
         elif return_tensors == 'pt' and is_torch_available():
-            sequence = torch.tensor(sequence)
-            token_type_ids = torch.tensor(token_type_ids)
+            sequence = torch.tensor([sequence])
+            token_type_ids = torch.tensor([token_type_ids])
         elif return_tensors is not None:
             logger.warning("Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(return_tensors))
 
