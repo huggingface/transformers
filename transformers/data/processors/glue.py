@@ -26,6 +26,7 @@ if is_tf_available():
 
 logger = logging.getLogger(__name__)
 
+
 def glue_convert_examples_to_features(examples, tokenizer,
                                       max_length=512,
                                       task=None,
@@ -36,7 +37,27 @@ def glue_convert_examples_to_features(examples, tokenizer,
                                       pad_token_segment_id=0,
                                       mask_padding_with_zero=True):
     """
-    Loads a data file into a list of `InputBatch`s
+    Loads a data file into a list of ``InputFeatures``
+
+    Args:
+        examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
+        tokenizer: Instance of a tokenizer that will tokenize the examples
+        max_length: Maximum example length
+        task: GLUE task
+        label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
+        output_mode: String indicating the output mode. Either ``regression`` or ``classification``
+        pad_on_left: If set to ``True``, the examples will be padded on the left rather than on the right (default)
+        pad_token: Padding token
+        pad_token_segment_id: The segment ID for the padding token (It is usually 0, but can vary such as for XLNet where it is 4)
+        mask_padding_with_zero: If set to ``True``, the attention mask will be filled by ``1`` for actual values
+            and by ``0`` for padded values. If set to ``False``, inverts it (``1`` for padded values, ``0`` for
+            actual values)
+
+    Returns:
+        If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset``
+        containing the task-specific features. If the input is a list of ``InputExamples``, will return
+        a list of task-specific ``InputFeatures`` which can be fed to the model.
+
     """
     is_tf_dataset = False
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
