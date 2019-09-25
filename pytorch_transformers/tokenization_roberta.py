@@ -81,14 +81,14 @@ class RobertaTokenizer(GPT2Tokenizer):
                                                sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
                                                mask_token=mask_token, **kwargs)
 
-    def add_special_tokens_single_sentence(self, token_ids):
+    def add_special_tokens_single_sequence(self, token_ids):
         """
         Adds special tokens to a sequence for sequence classification tasks.
         A RoBERTa sequence has the following format: <s> X </s>
         """
         return [self.cls_token_id] + token_ids + [self.sep_token_id]
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
         A RoBERTa sequence pair has the following format: <s> A </s></s> B </s>
@@ -96,3 +96,15 @@ class RobertaTokenizer(GPT2Tokenizer):
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+
+    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1):
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A RoBERTa sequence pair mask has the following format:
+        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        return len(cls + token_ids_0 + sep + sep) * [0] + len(token_ids_1 + sep) * [1]

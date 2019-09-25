@@ -13,14 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for question-answering on SQuAD (Bert, XLM, XLNet)."""
-
+"""BERT finetuning runner.
+   Finetuning the library models for multiple choice on SWAG (Bert).
+"""
 from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
+import csv
 import os
 import random
+import sys
 import glob
 
 import numpy as np
@@ -33,35 +36,216 @@ from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
-                                  BertForQuestionAnswering, BertTokenizer,
-                                  XLMConfig, XLMForQuestionAnswering,
-                                  XLMTokenizer, XLNetConfig,
-                                  XLNetForQuestionAnswering,
-                                  XLNetTokenizer,
-                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+                                  BertForMultipleChoice, BertTokenizer)
 
 from pytorch_transformers import AdamW, WarmupLinearSchedule
-
-from utils_squad import (read_squad_examples, convert_examples_to_features,
-                         RawResult, write_predictions,
-                         RawResultExtended, write_predictions_extended)
-
-# The follwing import is the official SQuAD evaluation script (2.0).
-# You can remove it from the dependencies if you are using this script outside of the library
-# We've added it here for automated tests (see examples/test_examples.py file)
-from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
 
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
-                  for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
+                  for conf in [BertConfig]), ())
 
 MODEL_CLASSES = {
-    'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
-    'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
-    'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+    'bert': (BertConfig, BertForMultipleChoice, BertTokenizer),
 }
+
+class SwagExample(object):
+    """A single training/test example for the SWAG dataset."""
+    def __init__(self,
+                 swag_id,
+                 context_sentence,
+                 start_ending,
+                 ending_0,
+                 ending_1,
+                 ending_2,
+                 ending_3,
+                 label = None):
+        self.swag_id = swag_id
+        self.context_sentence = context_sentence
+        self.start_ending = start_ending
+        self.endings = [
+            ending_0,
+            ending_1,
+            ending_2,
+            ending_3,
+        ]
+        self.label = label
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __repr__(self):
+        l = [
+            "swag_id: {}".format(self.swag_id),
+            "context_sentence: {}".format(self.context_sentence),
+            "start_ending: {}".format(self.start_ending),
+            "ending_0: {}".format(self.endings[0]),
+            "ending_1: {}".format(self.endings[1]),
+            "ending_2: {}".format(self.endings[2]),
+            "ending_3: {}".format(self.endings[3]),
+        ]
+
+        if self.label is not None:
+            l.append("label: {}".format(self.label))
+
+        return ", ".join(l)
+
+class InputFeatures(object):
+    def __init__(self,
+                 example_id,
+                 choices_features,
+                 label
+
+    ):
+        self.example_id = example_id
+        self.choices_features = [
+            {
+                'input_ids': input_ids,
+                'input_mask': input_mask,
+                'segment_ids': segment_ids
+            }
+            for _, input_ids, input_mask, segment_ids in choices_features
+        ]
+        self.label = label
+
+def read_swag_examples(input_file, is_training=True):
+    with open(input_file, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        lines = []
+        for line in reader:
+            if sys.version_info[0] == 2:
+                line = list(unicode(cell, 'utf-8') for cell in line)
+            lines.append(line)
+
+    if is_training and lines[0][-1] != 'label':
+        raise ValueError(
+            "For training, the input file must contain a label column."
+        )
+
+    examples = [
+        SwagExample(
+            swag_id = line[2],
+            context_sentence = line[4],
+            start_ending = line[5], # in the swag dataset, the
+                                         # common beginning of each
+                                         # choice is stored in "sent2".
+            ending_0 = line[7],
+            ending_1 = line[8],
+            ending_2 = line[9],
+            ending_3 = line[10],
+            label = int(line[11]) if is_training else None
+        ) for line in lines[1:] # we skip the line with the column names
+    ]
+
+    return examples
+
+def convert_examples_to_features(examples, tokenizer, max_seq_length,
+                                 is_training):
+    """Loads a data file into a list of `InputBatch`s."""
+
+    # Swag is a multiple choice task. To perform this task using Bert,
+    # we will use the formatting proposed in "Improving Language
+    # Understanding by Generative Pre-Training" and suggested by
+    # @jacobdevlin-google in this issue
+    # https://github.com/google-research/bert/issues/38.
+    #
+    # Each choice will correspond to a sample on which we run the
+    # inference. For a given Swag example, we will create the 4
+    # following inputs:
+    # - [CLS] context [SEP] choice_1 [SEP]
+    # - [CLS] context [SEP] choice_2 [SEP]
+    # - [CLS] context [SEP] choice_3 [SEP]
+    # - [CLS] context [SEP] choice_4 [SEP]
+    # The model will output a single value for each input. To get the
+    # final decision of the model, we will run a softmax over these 4
+    # outputs.
+    features = []
+    for example_index, example in tqdm(enumerate(examples)):
+        context_tokens = tokenizer.tokenize(example.context_sentence)
+        start_ending_tokens = tokenizer.tokenize(example.start_ending)
+
+        choices_features = []
+        for ending_index, ending in enumerate(example.endings):
+            # We create a copy of the context tokens in order to be
+            # able to shrink it according to ending_tokens
+            context_tokens_choice = context_tokens[:]
+            ending_tokens = start_ending_tokens + tokenizer.tokenize(ending)
+            # Modifies `context_tokens_choice` and `ending_tokens` in
+            # place so that the total length is less than the
+            # specified length.  Account for [CLS], [SEP], [SEP] with
+            # "- 3"
+            _truncate_seq_pair(context_tokens_choice, ending_tokens, max_seq_length - 3)
+
+            tokens = ["[CLS]"] + context_tokens_choice + ["[SEP]"] + ending_tokens + ["[SEP]"]
+            segment_ids = [0] * (len(context_tokens_choice) + 2) + [1] * (len(ending_tokens) + 1)
+
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            input_mask = [1] * len(input_ids)
+
+            # Zero-pad up to the sequence length.
+            padding = [0] * (max_seq_length - len(input_ids))
+            input_ids += padding
+            input_mask += padding
+            segment_ids += padding
+
+            assert len(input_ids) == max_seq_length
+            assert len(input_mask) == max_seq_length
+            assert len(segment_ids) == max_seq_length
+
+            choices_features.append((tokens, input_ids, input_mask, segment_ids))
+
+        label = example.label
+        if example_index < 5:
+            logger.info("*** Example ***")
+            logger.info("swag_id: {}".format(example.swag_id))
+            for choice_idx, (tokens, input_ids, input_mask, segment_ids) in enumerate(choices_features):
+                logger.info("choice: {}".format(choice_idx))
+                logger.info("tokens: {}".format(' '.join(tokens)))
+                logger.info("input_ids: {}".format(' '.join(map(str, input_ids))))
+                logger.info("input_mask: {}".format(' '.join(map(str, input_mask))))
+                logger.info("segment_ids: {}".format(' '.join(map(str, segment_ids))))
+            if is_training:
+                logger.info("label: {}".format(label))
+
+        features.append(
+            InputFeatures(
+                example_id = example.swag_id,
+                choices_features = choices_features,
+                label = label
+            )
+        )
+
+    return features
+
+def _truncate_seq_pair(tokens_a, tokens_b, max_length):
+    """Truncates a sequence pair in place to the maximum length."""
+
+    # This is a simple heuristic which will always truncate the longer sequence
+    # one token at a time. This makes more sense than truncating an equal percent
+    # of tokens from each, since if one sequence is very short then each token
+    # that's truncated likely contains more information than a longer sequence.
+    while True:
+        total_length = len(tokens_a) + len(tokens_b)
+        if total_length <= max_length:
+            break
+        if len(tokens_a) > len(tokens_b):
+            tokens_a.pop()
+        else:
+            tokens_b.pop()
+
+def accuracy(out, labels):
+    outputs = np.argmax(out, axis=1)
+    return np.sum(outputs == labels)
+
+def select_field(features, field):
+    return [
+        [
+            choice[field]
+            for choice in feature.choices_features
+        ]
+        for feature in features
+    ]
+
 
 def set_seed(args):
     random.seed(args.seed)
@@ -70,9 +254,48 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-def to_list(tensor):
-    return tensor.detach().cpu().tolist()
+def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
+    if args.local_rank not in [-1, 0]:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
+    # Load data features from cache or dataset file
+    input_file = args.predict_file if evaluate else args.train_file
+    cached_features_file = os.path.join(os.path.dirname(input_file), 'cached_{}_{}_{}'.format(
+        'dev' if evaluate else 'train',
+        list(filter(None, args.model_name_or_path.split('/'))).pop(),
+        str(args.max_seq_length)))
+    if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
+        logger.info("Loading features from cached file %s", cached_features_file)
+        features = torch.load(cached_features_file)
+    else:
+        logger.info("Creating features from dataset file at %s", input_file)
+        examples = read_swag_examples(input_file)
+        features = convert_examples_to_features(
+            examples, tokenizer, args.max_seq_length, not evaluate)
+
+        if args.local_rank in [-1, 0]:
+            logger.info("Saving features into cached file %s", cached_features_file)
+            torch.save(features, cached_features_file)
+
+    if args.local_rank == 0:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+    # Convert to Tensors and build dataset
+    all_input_ids = torch.tensor(select_field(features, 'input_ids'), dtype=torch.long)
+    all_input_mask = torch.tensor(select_field(features, 'input_mask'), dtype=torch.long)
+    all_segment_ids = torch.tensor(select_field(features, 'segment_ids'), dtype=torch.long)
+    all_label = torch.tensor([f.label for f in features], dtype=torch.long)
+
+    if evaluate:
+        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
+                                all_label)
+    else:
+        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
+                                all_label)
+
+    if output_examples:
+        return dataset, examples, features
+    return dataset
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
     if args.local_rank in [-1, 0]:
@@ -134,13 +357,13 @@ def train(args, train_dataset, model, tokenizer):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':       batch[0],
-                      'attention_mask':  batch[1], 
-                      'token_type_ids':  None if args.model_type == 'xlm' else batch[2],  
-                      'start_positions': batch[3], 
-                      'end_positions':   batch[4]}
-            if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[5],
-                               'p_mask':       batch[6]})
+                      'attention_mask':  batch[1],
+                      #'token_type_ids':  None if args.model_type == 'xlm' else batch[2],
+                      'token_type_ids': batch[2],
+                      'labels':         batch[3]}
+            # if args.model_type in ['xlnet', 'xlm']:
+            #     inputs.update({'cls_index': batch[5],
+            #                    'p_mask':       batch[6]})
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
@@ -181,6 +404,7 @@ def train(args, train_dataset, model, tokenizer):
                         os.makedirs(output_dir)
                     model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
                     model_to_save.save_pretrained(output_dir)
+                    tokenizer.save_vocabulary(output_dir)
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
 
@@ -195,7 +419,6 @@ def train(args, train_dataset, model, tokenizer):
         tb_writer.close()
 
     return global_step, tr_loss / global_step
-
 
 def evaluate(args, model, tokenizer, prefix=""):
     dataset, examples, features = load_and_cache_examples(args, tokenizer, evaluate=True, output_examples=True)
@@ -212,128 +435,58 @@ def evaluate(args, model, tokenizer, prefix=""):
     logger.info("***** Running evaluation {} *****".format(prefix))
     logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
-    all_results = []
+
+
+    eval_loss, eval_accuracy = 0, 0
+    nb_eval_steps, nb_eval_examples = 0, 0
+
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
         with torch.no_grad():
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': None if args.model_type == 'xlm' else batch[2]  # XLM don't use segment_ids
-                      }
-            example_indices = batch[3]
-            if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[4],
-                               'p_mask':    batch[5]})
+                      # 'token_type_ids': None if args.model_type == 'xlm' else batch[2]  # XLM don't use segment_ids
+                      'token_type_ids': batch[2],
+                      'labels':         batch[3]}
+
+            # if args.model_type in ['xlnet', 'xlm']:
+            #     inputs.update({'cls_index': batch[4],
+            #                    'p_mask':    batch[5]})
             outputs = model(**inputs)
+            tmp_eval_loss, logits = outputs[:2]
+            eval_loss += tmp_eval_loss.mean().item()
 
-        for i, example_index in enumerate(example_indices):
-            eval_feature = features[example_index.item()]
-            unique_id = int(eval_feature.unique_id)
-            if args.model_type in ['xlnet', 'xlm']:
-                # XLNet uses a more complex post-processing procedure
-                result = RawResultExtended(unique_id            = unique_id,
-                                           start_top_log_probs  = to_list(outputs[0][i]),
-                                           start_top_index      = to_list(outputs[1][i]),
-                                           end_top_log_probs    = to_list(outputs[2][i]),
-                                           end_top_index        = to_list(outputs[3][i]),
-                                           cls_logits           = to_list(outputs[4][i]))
-            else:
-                result = RawResult(unique_id    = unique_id,
-                                   start_logits = to_list(outputs[0][i]),
-                                   end_logits   = to_list(outputs[1][i]))
-            all_results.append(result)
+        logits = logits.detach().cpu().numpy()
+        label_ids = inputs['labels'].to('cpu').numpy()
+        tmp_eval_accuracy = accuracy(logits, label_ids)
+        eval_accuracy += tmp_eval_accuracy
 
-    # Compute predictions
-    output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
-    output_nbest_file = os.path.join(args.output_dir, "nbest_predictions_{}.json".format(prefix))
-    if args.version_2_with_negative:
-        output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
-    else:
-        output_null_log_odds_file = None
+        nb_eval_steps += 1
+        nb_eval_examples += inputs['input_ids'].size(0)
 
-    if args.model_type in ['xlnet', 'xlm']:
-        # XLNet uses a more complex post-processing procedure
-        write_predictions_extended(examples, features, all_results, args.n_best_size,
-                        args.max_answer_length, output_prediction_file,
-                        output_nbest_file, output_null_log_odds_file, args.predict_file,
-                        model.config.start_n_top, model.config.end_n_top,
-                        args.version_2_with_negative, tokenizer, args.verbose_logging)
-    else:
-        write_predictions(examples, features, all_results, args.n_best_size,
-                        args.max_answer_length, args.do_lower_case, output_prediction_file,
-                        output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                        args.version_2_with_negative, args.null_score_diff_threshold)
+    eval_loss = eval_loss / nb_eval_steps
+    eval_accuracy = eval_accuracy / nb_eval_examples
+    result = {'eval_loss': eval_loss,
+              'eval_accuracy': eval_accuracy}
 
-    # Evaluate with the official SQuAD script
-    evaluate_options = EVAL_OPTS(data_file=args.predict_file,
-                                 pred_file=output_prediction_file,
-                                 na_prob_file=output_null_log_odds_file)
-    results = evaluate_on_squad(evaluate_options)
-    return results
+    output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+    with open(output_eval_file, "w") as writer:
+        logger.info("***** Eval results *****")
+        for key in sorted(result.keys()):
+            logger.info("%s = %s", key, str(result[key]))
+            writer.write("%s = %s\n" % (key, str(result[key])))
 
-
-def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
-    if args.local_rank not in [-1, 0] and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Load data features from cache or dataset file
-    input_file = args.predict_file if evaluate else args.train_file
-    cached_features_file = os.path.join(os.path.dirname(input_file), 'cached_{}_{}_{}'.format(
-        'dev' if evaluate else 'train',
-        list(filter(None, args.model_name_or_path.split('/'))).pop(),
-        str(args.max_seq_length)))
-    if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
-        logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
-    else:
-        logger.info("Creating features from dataset file at %s", input_file)
-        examples = read_squad_examples(input_file=input_file,
-                                                is_training=not evaluate,
-                                                version_2_with_negative=args.version_2_with_negative)
-        features = convert_examples_to_features(examples=examples,
-                                                tokenizer=tokenizer,
-                                                max_seq_length=args.max_seq_length,
-                                                doc_stride=args.doc_stride,
-                                                max_query_length=args.max_query_length,
-                                                is_training=not evaluate)
-        if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
-
-    if args.local_rank == 0 and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Convert to Tensors and build dataset
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    all_cls_index = torch.tensor([f.cls_index for f in features], dtype=torch.long)
-    all_p_mask = torch.tensor([f.p_mask for f in features], dtype=torch.float)
-    if evaluate:
-        all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                all_example_index, all_cls_index, all_p_mask)
-    else:
-        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
-        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                all_start_positions, all_end_positions,
-                                all_cls_index, all_p_mask)
-
-    if output_examples:
-        return dataset, examples, features
-    return dataset
-
+    return result
 
 def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
     parser.add_argument("--train_file", default=None, type=str, required=True,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
+                        help="SWAG csv for training. E.g., train.csv")
     parser.add_argument("--predict_file", default=None, type=str, required=True,
-                        help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
+                        help="SWAG csv for predictions. E.g., val.csv or test.csv")
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
@@ -346,22 +499,9 @@ def main():
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
                         help="Pretrained tokenizer name or path if not the same as model_name")
-    parser.add_argument("--cache_dir", default="", type=str,
-                        help="Where do you want to store the pre-trained models downloaded from s3")
-
-    parser.add_argument('--version_2_with_negative', action='store_true',
-                        help='If true, the SQuAD examples contain some that do not have an answer.')
-    parser.add_argument('--null_score_diff_threshold', type=float, default=0.0,
-                        help="If null_score - best_non_null is greater than the threshold predict null.")
-
     parser.add_argument("--max_seq_length", default=384, type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
+                        help="The maximum total input sequence length after tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
-    parser.add_argument("--doc_stride", default=128, type=int,
-                        help="When splitting up a long document into chunks, how much stride to take between chunks.")
-    parser.add_argument("--max_query_length", default=64, type=int,
-                        help="The maximum number of tokens for the question. Questions longer than this will "
-                             "be truncated to this length.")
     parser.add_argument("--do_train", action='store_true',
                         help="Whether to run training.")
     parser.add_argument("--do_eval", action='store_true',
@@ -391,14 +531,6 @@ def main():
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
     parser.add_argument("--warmup_steps", default=0, type=int,
                         help="Linear warmup over warmup_steps.")
-    parser.add_argument("--n_best_size", default=20, type=int,
-                        help="The total number of n-best predictions to generate in the nbest_predictions.json output file.")
-    parser.add_argument("--max_answer_length", default=30, type=int,
-                        help="The maximum length of an answer that can be generated. This is needed because the start "
-                             "and end predictions are not conditioned on one another.")
-    parser.add_argument("--verbose_logging", action='store_true',
-                        help="If true, all of the warnings related to data processing will be printed. "
-                             "A number of warnings are expected for a normal SQuAD evaluation.")
 
     parser.add_argument('--logging_steps', type=int, default=50,
                         help="Log every X updates steps.")
@@ -483,7 +615,7 @@ def main():
 
 
     # Save the trained model and the tokenizer
-    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+    if args.local_rank == -1 or torch.distributed.get_rank() == 0:
         # Create output directory if needed
         if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(args.output_dir)
@@ -500,14 +632,19 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = model_class.from_pretrained(args.output_dir)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
         model.to(args.device)
 
 
     # Evaluation - we can ask to evaluate all the checkpoints (sub-directories) in a directory
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        checkpoints = [args.output_dir]
+        if args.do_train:
+            checkpoints = [args.output_dir]
+        else:
+            # if do_train is False and do_eval is true, load model directly from pretrained.
+            checkpoints = [args.model_name_or_path]
+
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
@@ -518,6 +655,7 @@ def main():
             # Reload the model
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
             model = model_class.from_pretrained(checkpoint)
+            tokenizer = tokenizer_class.from_pretrained(checkpoint)
             model.to(args.device)
 
             # Evaluate

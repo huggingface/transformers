@@ -321,11 +321,19 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         if attn_mask is not None and torch.sum(attn_mask).item():
             attn_mask = (attn_mask == 1)  # Switch to bool
             if attn_mask.dim() == 2:
-                attn_score = attn_score.float().masked_fill(
-                    attn_mask[None,:,:,None], -1e30).type_as(attn_score)
+                if next(self.parameters()).dtype == torch.float16:
+                    attn_score = attn_score.float().masked_fill(
+                        attn_mask[None,:,:,None], -65000).type_as(attn_score)
+                else:
+                    attn_score = attn_score.float().masked_fill(
+                        attn_mask[None,:,:,None], -1e30).type_as(attn_score)
             elif attn_mask.dim() == 3:
-                attn_score = attn_score.float().masked_fill(
-                    attn_mask[:,:,:,None], -1e30).type_as(attn_score)
+                if next(self.parameters()).dtype == torch.float16:
+                    attn_score = attn_score.float().masked_fill(
+                        attn_mask[:,:,:,None], -65000).type_as(attn_score)
+                else:
+                    attn_score = attn_score.float().masked_fill(
+                        attn_mask[:,:,:,None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
         attn_prob = F.softmax(attn_score, dim=1)
@@ -383,7 +391,7 @@ class RelPartialLearnableDecoderLayer(nn.Module):
 
 
 class AdaptiveEmbedding(nn.Module):
-    def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, 
+    def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1,
                  sample_softmax=False):
         super(AdaptiveEmbedding, self).__init__()
 
@@ -421,7 +429,7 @@ class AdaptiveEmbedding(nn.Module):
         else:
             param = next(self.parameters())
             inp_flat = inp.view(-1)
-            emb_flat = torch.zeros([inp_flat.size(0), self.d_proj], 
+            emb_flat = torch.zeros([inp_flat.size(0), self.d_proj],
                 dtype=param.dtype, device=param.device)
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
@@ -547,7 +555,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare Bert Model transformer outputing raw hidden-states without any specific head on top.",
+@add_start_docstrings("The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
                       TRANSFO_XL_START_DOCSTRING, TRANSFO_XL_INPUTS_DOCSTRING)
 class TransfoXLModel(TransfoXLPreTrainedModel):
     r"""
@@ -587,7 +595,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.n_head = config.n_head
         self.d_head = config.d_head
 
-        self.word_emb = AdaptiveEmbedding(config.n_token, config.d_embed, config.d_model, config.cutoffs, 
+        self.word_emb = AdaptiveEmbedding(config.n_token, config.d_embed, config.d_model, config.cutoffs,
                                           div_val=config.div_val)
 
         self.drop = nn.Dropout(config.dropout)
@@ -727,7 +735,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         hids = []
         attentions = []
         if self.attn_type == 0: # default
-            pos_seq = torch.arange(klen-1, -1, -1.0, device=word_emb.device, 
+            pos_seq = torch.arange(klen-1, -1, -1.0, device=word_emb.device,
                                    dtype=word_emb.dtype)
             if self.clamp_len > 0:
                 pos_seq.clamp_(max=self.clamp_len)
@@ -815,7 +823,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             self.sampler = LogUniformSampler(config.n_token, config.sample_softmax)
         # use adaptive softmax (including standard softmax)
         else:
-            self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model, 
+            self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model,
                                                     config.cutoffs, div_val=config.div_val)
         self.init_weights()
         self.tie_weights()

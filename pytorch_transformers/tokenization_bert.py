@@ -187,21 +187,34 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
-    def add_special_tokens_single_sentence(self, token_ids):
+    def add_special_tokens_single_sequence(self, token_ids):
         """
         Adds special tokens to the a sequence for sequence classification tasks.
         A BERT sequence has the following format: [CLS] X [SEP]
         """
         return [self.cls_token_id] + token_ids + [self.sep_token_id]
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         """
         Adds special tokens to a sequence pair for sequence classification tasks.
         A BERT sequence pair has the following format: [CLS] A [SEP] B [SEP]
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
+
         return cls + token_ids_0 + sep + token_ids_1 + sep
+
+    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1):
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A BERT sequence pair mask has the following format:
+        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""

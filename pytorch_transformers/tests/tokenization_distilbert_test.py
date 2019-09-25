@@ -36,11 +36,13 @@ class DistilBertTokenizationTest(BertTokenizationTest):
         text = tokenizer.encode("sequence builders")
         text_2 = tokenizer.encode("multi-sequence build")
 
-        encoded_sentence = tokenizer.add_special_tokens_single_sentence(text)
-        encoded_pair = tokenizer.add_special_tokens_sentences_pair(text, text_2)
+        encoded_sentence = tokenizer.add_special_tokens_single_sequence(text)
+        encoded_pair = tokenizer.add_special_tokens_sequence_pair(text, text_2)
 
-        assert encoded_sentence == [101] + text + [102]
-        assert encoded_pair == [101] + text + [102] + text_2 + [102]
+        assert encoded_sentence == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id]
+        assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + \
+               text_2 + [tokenizer.sep_token_id]
+
 
 if __name__ == '__main__':
     unittest.main()
