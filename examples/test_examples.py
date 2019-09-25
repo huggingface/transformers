@@ -131,8 +131,9 @@ class ExamplesTests(unittest.TestCase):
                                   "--model_name_or_path=roberta-base")
         with patch.object(sys, 'argv', testargs + [model_type, model_name]):
             result = run_blue.main()
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.3)
+            for key in result.keys():
+                if key not in ['main_', 'step_']:
+                    self.assertGreaterEqual(result[key], 0.3)
 
 if __name__ == "__main__":
     unittest.main()
