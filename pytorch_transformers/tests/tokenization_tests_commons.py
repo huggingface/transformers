@@ -55,6 +55,22 @@ class CommonTestCases:
         def get_input_output_texts(self):
             raise NotImplementedError
 
+        def test_tokenizers_common_properties(self):
+            tokenizer = self.get_tokenizer()
+            attributes_list = ["bos_token", "eos_token", "unk_token", "sep_token",
+                                "pad_token", "cls_token", "mask_token"]
+            for attr in attributes_list:
+                self.assertTrue(hasattr(tokenizer, attr))
+                self.assertTrue(hasattr(tokenizer, attr + "_id"))
+
+            self.assertTrue(hasattr(tokenizer, "additional_special_tokens"))
+            self.assertTrue(hasattr(tokenizer, 'additional_special_tokens_ids'))
+
+            attributes_list = ["max_len", "init_inputs", "init_kwargs", "added_tokens_encoder",
+                                "added_tokens_decoder"]
+            for attr in attributes_list:
+                self.assertTrue(hasattr(tokenizer, attr))
+
         def test_save_and_load_tokenizer(self):
             # safety check on max_len default value so we are sure the test works
             tokenizer = self.get_tokenizer()
@@ -170,3 +186,92 @@ class CommonTestCases:
 
             for weights_list_2 in weights_lists_2:
                 self.assertListEqual(weights_list, weights_list_2)
+
+        def test_mask_output(self):
+            if sys.version_info <= (3, 0):
+                return
+
+            tokenizer = self.get_tokenizer()
+
+            if tokenizer.add_special_tokens_sequence_pair.__qualname__.split('.')[0] != "PreTrainedTokenizer":
+                seq_0 = "Test this method."
+                seq_1 = "With these inputs."
+                information = tokenizer.encode_plus(seq_0, seq_1, add_special_tokens=True)
+                sequences, mask = information["input_ids"], information["token_type_ids"]
+                assert len(sequences) == len(mask)
+
+        def test_number_of_added_tokens(self):
+            tokenizer = self.get_tokenizer()
+
+            seq_0 = "Test this method."
+            seq_1 = "With these inputs."
+
+            sequences = tokenizer.encode(seq_0, seq_1)
+            attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
+
+            # Method is implemented (e.g. not GPT-2)
+            if len(attached_sequences) != 2:
+                assert tokenizer.num_added_tokens(pair=True) == len(attached_sequences) - len(sequences)
+
+        def test_maximum_encoding_length_single_input(self):
+            tokenizer = self.get_tokenizer()
+
+            seq_0 = "This is a sentence to be encoded."
+            stride = 2
+
+            sequence = tokenizer.encode(seq_0)
+            num_added_tokens = tokenizer.num_added_tokens()
+            total_length = len(sequence) + num_added_tokens
+            information = tokenizer.encode_plus(seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride)
+
+            truncated_sequence = information["input_ids"]
+            overflowing_tokens = information["overflowing_tokens"]
+
+            assert len(overflowing_tokens) == 2 + stride
+            assert overflowing_tokens == sequence[-(2 + stride):]
+            assert len(truncated_sequence) == total_length - 2
+            assert truncated_sequence == tokenizer.add_special_tokens_single_sequence(sequence[:-2])
+
+        def test_maximum_encoding_length_pair_input(self):
+            tokenizer = self.get_tokenizer()
+
+            seq_0 = "This is a sentence to be encoded."
+            seq_1 = "This is another sentence to be encoded."
+            stride = 2
+
+            sequence_0_no_special_tokens = tokenizer.encode(seq_0)
+            sequence_1_no_special_tokens = tokenizer.encode(seq_1)
+
+            sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
+            truncated_second_sequence = tokenizer.add_special_tokens_sequence_pair(
+                tokenizer.encode(seq_0),
+                tokenizer.encode(seq_1)[:-2]
+            )
+
+            information = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2, add_special_tokens=True,
+                                                stride=stride, truncate_first_sequence=False)
+            information_first_truncated = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2,
+                                                                add_special_tokens=True, stride=stride,
+                                                                truncate_first_sequence=True)
+
+            truncated_sequence = information["input_ids"]
+            overflowing_tokens = information["overflowing_tokens"]
+            overflowing_tokens_first_truncated = information_first_truncated["overflowing_tokens"]
+
+            assert len(overflowing_tokens) == 2 + stride
+            assert overflowing_tokens == sequence_1_no_special_tokens[-(2 + stride):]
+            assert overflowing_tokens_first_truncated == sequence_0_no_special_tokens[-(2 + stride):]
+            assert len(truncated_sequence) == len(sequence) - 2
+            assert truncated_sequence == truncated_second_sequence
+
+        def test_encode_input_type(self):
+            tokenizer = self.get_tokenizer()
+
+            sequence = "Let's encode this sequence"
+
+            tokens = tokenizer.tokenize(sequence)
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            formatted_input = tokenizer.encode(sequence, add_special_tokens=True)
+
+            assert tokenizer.encode(tokens, add_special_tokens=True) == formatted_input
+            assert tokenizer.encode(input_ids, add_special_tokens=True) == formatted_input

@@ -290,7 +290,7 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
             Indices of input sequence tokens in the vocabulary.
             GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
-            Indices can be obtained using :class:`pytorch_transformers.BPT2Tokenizer`.
+            Indices can be obtained using :class:`pytorch_transformers.GPT2Tokenizer`.
             See :func:`pytorch_transformers.PreTrainedTokenizer.encode` and
             :func:`pytorch_transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **past**:
@@ -314,7 +314,7 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare GPT2 Model transformer outputing raw hidden-states without any specific head on top.",
+@add_start_docstrings("The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
                       GPT2_START_DOCSTRING, GPT2_INPUTS_DOCSTRING)
 class GPT2Model(GPT2PreTrainedModel):
     r"""

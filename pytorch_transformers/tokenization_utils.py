@@ -165,58 +165,42 @@ class PreTrainedTokenizer(object):
     @property
     def bos_token_id(self):
         """ Id of the beginning of sentence token in the vocabulary. Log an error if used while not having been set. """
-        if self._bos_token is None:
-            logger.error("Using bos_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._bos_token)
+        return self.convert_tokens_to_ids(self.bos_token)
 
     @property
     def eos_token_id(self):
         """ Id of the end of sentence token in the vocabulary. Log an error if used while not having been set. """
-        if self._eos_token is None:
-            logger.error("Using eos_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._eos_token)
+        return self.convert_tokens_to_ids(self.eos_token)
 
     @property
-    def unk_token_is(self):
+    def unk_token_id(self):
         """ Id of the unknown token in the vocabulary. Log an error if used while not having been set. """
-        if self._unk_token is None:
-            logger.error("Using unk_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._unk_token)
+        return self.convert_tokens_to_ids(self.unk_token)
 
     @property
     def sep_token_id(self):
         """ Id of the separation token in the vocabulary. E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
-        if self._sep_token is None:
-            logger.error("Using sep_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._sep_token)
+        return self.convert_tokens_to_ids(self.sep_token)
 
     @property
     def pad_token_id(self):
         """ Id of the padding token in the vocabulary. Log an error if used while not having been set. """
-        if self._pad_token is None:
-            logger.error("Using pad_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._pad_token)
+        return self.convert_tokens_to_ids(self.pad_token)
 
     @property
     def cls_token_id(self):
         """ Id of the classification token in the vocabulary. E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
-        if self._cls_token is None:
-            logger.error("Using cls_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._cls_token)
+        return self.convert_tokens_to_ids(self.cls_token)
 
     @property
     def mask_token_id(self):
         """ Id of the mask token in the vocabulary. E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
-        if self._mask_token is None:
-            logger.error("Using mask_token, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._mask_token)
+        return self.convert_tokens_to_ids(self.mask_token)
 
     @property
     def additional_special_tokens_ids(self):
         """ Ids of all the additional special tokens in the vocabulary (list of integers). Log an error if used while not having been set. """
-        if self._additional_special_tokens is None:
-            logger.error("Using additional_special_tokens, but it is not set yet.")
-        return self.convert_tokens_to_ids(self._additional_special_tokens)
+        return self.convert_tokens_to_ids(self.additional_special_tokens)
 
     def __init__(self, max_len=None, **kwargs):
         self._bos_token = None
@@ -537,6 +521,30 @@ class PreTrainedTokenizer(object):
 
         return len(to_add_tokens)
 
+    def num_added_tokens(self, pair=False):
+        """
+        Returns the number of added tokens when encoding a sequence with special tokens.
+
+        Note:
+            This encodes inputs and checks the number of added tokens, and is therefore not efficient. Do not put this
+            inside your training loop.
+
+        Args:
+            pair: Returns the number of added tokens in the case of a sequence pair if set to True, returns the
+                number of added tokens in the case of a single sequence if set to False.
+
+        Returns:
+            Number of tokens added to sequences
+        """
+
+        if pair:
+            initial_tokens_len = len(self.encode("This is a sequence") + self.encode("This is another"))
+            final_tokens_len = len(self.encode("This is a sequence", "This is another", add_special_tokens=True))
+        else:
+            initial_tokens_len = len(self.encode("This is a sequence"))
+            final_tokens_len = len(self.encode("This is a sequence", add_special_tokens=True))
+
+        return final_tokens_len - initial_tokens_len
 
     def add_special_tokens(self, special_tokens_dict):
         """
@@ -656,6 +664,9 @@ class PreTrainedTokenizer(object):
         """ Converts a single token, or a sequence of tokens, (str/unicode) in a single integer id
             (resp. a sequence of ids), using the vocabulary.
         """
+        if tokens is None:
+            return None
+
         if isinstance(tokens, str) or (six.PY2 and isinstance(tokens, unicode)):
             return self._convert_token_to_id_with_added_voc(tokens)
 
@@ -669,6 +680,9 @@ class PreTrainedTokenizer(object):
         return ids
 
     def _convert_token_to_id_with_added_voc(self, token):
+        if token is None:
+            return None
+
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
         return self._convert_token_to_id(token)
@@ -679,48 +693,143 @@ class PreTrainedTokenizer(object):
     def encode(self, text, text_pair=None, add_special_tokens=False, **kwargs):
         """
         Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
-        
+
         Same as doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
 
         Args:
-            text: The first sequence to be encoded.
-            text_pair: Optional second sequence to be encoded.
+            text: The first sequence to be encoded. This can be a string, a list of strings (tokenized string using
+                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
+                method)
+            text_pair: Optional second sequence to be encoded. This can be a string, a list of strings (tokenized
+                string using the `tokenize` method) or a list of integers (tokenized string ids using the
+                `convert_tokens_to_ids` method)
             add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
                 to their model.
             **kwargs: passed to the `self.tokenize()` method
         """
-        if is_tf_available():
-            is_tf_tensor = False
-            if isinstance(text, tf.Tensor):
-                text = text.numpy()
-                is_tf_tensor = True
-            if isinstance(text, bytes):
-                text = text.decode('utf-8')
+        encoded_inputs = self.encode_plus(text, text_pair=text_pair, add_special_tokens=add_special_tokens, **kwargs)
 
-        if text_pair is None:
-            if add_special_tokens:
-                output = self.add_special_tokens_single_sentence(self.convert_tokens_to_ids(self.tokenize(text, **kwargs)))
+        return encoded_inputs["input_ids"]
+
+    def encode_plus(self,
+                    text,
+                    text_pair=None,
+                    add_special_tokens=False,
+                    max_length=None,
+                    stride=0,
+                    truncate_first_sequence=True,
+                    **kwargs):
+        """
+        Returns a dictionary containing the encoded sequence or sequence pair. Other values can be returned by this
+        method: the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
+
+        Args:
+            text: The first sequence to be encoded. This can be a string, a list of strings (tokenized string using
+                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
+                method)
+            text_pair: Optional second sequence to be encoded. This can be a string, a list of strings (tokenized
+                string using the `tokenize` method) or a list of integers (tokenized string ids using the
+                `convert_tokens_to_ids` method)
+            add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
+                to their model.
+            max_length: if set to a number, will limit the total sequence returned so that it has a maximum length.
+                If there are overflowing tokens, those will be added to the returned dictionary
+            stride: if set to a number along with max_length, the overflowing tokens returned will contain some tokens
+                from the main sequence returned. The value of this argument defined the number of additional tokens.
+            truncate_first_sequence: if there is a specified max_length, this flag will choose which sequence
+                will be truncated.
+            **kwargs: passed to the `self.tokenize()` method
+        """
+
+        def get_input_ids(text):
+            if isinstance(text, six.string_types):
+                return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], six.string_types):
+                return self.convert_tokens_to_ids(text)
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
+                return text
             else:
-                output = self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+                raise ValueError("Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers.")
+
+        first_ids = get_input_ids(text)
+        second_ids = get_input_ids(text_pair) if text_pair is not None else None
+
+        return self.prepare_for_model(first_ids,
+                                      pair_ids=second_ids,
+                                      max_length=max_length,
+                                      add_special_tokens=add_special_tokens,
+                                      stride=stride,
+                                      truncate_first_sequence=truncate_first_sequence)
+
+
+    def prepare_for_model(self, ids, pair_ids=None, max_length=None, add_special_tokens=False, stride=0, truncate_first_sequence=True):
+        """
+        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
+        It adds special tokens, truncates
+        sequences if overflowing while taking into account the special tokens and manages a window stride for
+        overflowing tokens
+
+        Args:
+            ids: list of tokenized input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
+            pair_ids: Optional second list of input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
+            max_length: maximum length of the returned list. Will truncate by taking into account the special tokens.
+            add_special_tokens: if set to ``True``, the sequences will be encoded with the special tokens relative
+                to their model.
+            stride: window stride for overflowing tokens. Can be useful for edge effect removal when using sequential
+                list of inputs.
+            truncate_first_sequence: if set to `True` and an optional second list of input ids is provided,
+                alongside a specified `max_length`, will truncate the first sequence if the total size is superior
+                than the specified `max_length`. If set to `False`, will truncate the second sequence instead.
+
+        Return:
+            a dictionary containing the `input_ids` as well as the `overflowing_tokens` if a `max_length` was given.
+        """
+        pair = bool(pair_ids is not None)
+        len_ids = len(ids)
+        len_pair_ids = len(pair_ids) if pair else 0
+
+        encoded_inputs = {}
+        if max_length:
+            n_added_tokens = self.num_added_tokens(pair=pair) if add_special_tokens else 0
+            if pair and n_added_tokens + (len_pair_ids if truncate_first_sequence else len_ids) >= max_length:
+                logger.warning(
+                    "You supplied a pair of sequence in which the sequence that will not be truncated is longer than the maximum specified length."
+                    "This pair of sequences will not be truncated.")
+            else:
+                if n_added_tokens + len_ids + len_pair_ids > max_length:
+                    if truncate_first_sequence or not pair:
+                        encoded_inputs["overflowing_tokens"] = ids[max_length - len_pair_ids - n_added_tokens - stride:]
+                        ids = ids[:max_length - len_pair_ids - n_added_tokens]
+                    elif not truncate_first_sequence and pair:
+                        encoded_inputs["overflowing_tokens"] = pair_ids[max_length - len_ids - n_added_tokens - stride:]
+                        pair_ids = pair_ids[:max_length - len_ids - n_added_tokens]
+                    else:
+                        logger.warning(
+                            "Cannot truncate second sequence as it is not provided. No truncation.")
+
+        if add_special_tokens:
+            sequence = self.add_special_tokens_sequence_pair(ids, pair_ids) if pair else self.add_special_tokens_single_sequence(ids)
+            token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids) if pair else [0] * len(sequence)
         else:
-            first_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text, **kwargs)]
-            second_sentence_tokens = [self._convert_token_to_id(token) for token in self.tokenize(text_pair, **kwargs)]
+            sequence = ids + pair_ids if pair else ids
+            token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
 
-            if add_special_tokens:
-                output = self.add_special_tokens_sentences_pair(first_sentence_tokens, second_sentence_tokens)
-            else:
-                output = first_sentence_tokens, second_sentence_tokens
+        encoded_inputs["input_ids"] = sequence
+        encoded_inputs["token_type_ids"] = token_type_ids
 
-        if is_tf_available() and is_tf_tensor:
-            output = tf.constant(output)
+        return encoded_inputs
 
-        return output
+    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1):
+        logger.warning("This tokenizer does not make use of special tokens.")
+        return [0] * len(token_ids_0) + [1] * len(token_ids_1)
 
-    def add_special_tokens_single_sentence(self, token_ids):
+    def add_special_tokens_single_sequence(self, token_ids):
         logger.warning("This tokenizer does not make use of special tokens. The sequence has been returned with no modification.")
         return token_ids
 
-    def add_special_tokens_sentences_pair(self, token_ids_0, token_ids_1):
+    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
         logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
         return token_ids_0 + token_ids_1
 
