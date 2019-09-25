@@ -53,3 +53,6 @@ Additionally, the following method  can be used to load values from a data file 
 
 Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+An example using these processors is given in the
+`run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py>` script.
