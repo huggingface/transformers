@@ -224,8 +224,8 @@ class TFPreTrainedModel(tf.keras.Model):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
-                    raise EnvironmentError("Error no file named {} found in directory {}".format(
-                        tuple(WEIGHTS_NAME, TF2_WEIGHTS_NAME),
+                    raise EnvironmentError("Error no file named {} found in directory {} or `from_pt` set to False".format(
+                        [WEIGHTS_NAME, TF2_WEIGHTS_NAME],
                         pretrained_model_name_or_path))
             elif os.path.isfile(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path

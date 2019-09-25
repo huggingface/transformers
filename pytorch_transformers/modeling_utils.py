@@ -304,7 +304,7 @@ class PreTrainedModel(nn.Module):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
-                    raise EnvironmentError("Error no file named {} found in directory {}".format(
+                    raise EnvironmentError("Error no file named {} found in directory {} or `from_tf` set to False".format(
                         [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
                         pretrained_model_name_or_path))
             elif os.path.isfile(pretrained_model_name_or_path):
