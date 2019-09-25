@@ -27,7 +27,7 @@ from .file_utils import cached_path, is_tf_available, is_torch_available
 
 if is_tf_available():
     import tensorflow as tf
-if is_torch_available()
+if is_torch_available():
     import torch
 
 logger = logging.getLogger(__name__)

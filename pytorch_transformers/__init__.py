@@ -56,8 +56,6 @@ from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CO
 
 # Modeling
 if is_torch_available():
-    logger.info("PyTorch version {} available.".format(torch.__version__))
-
     from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
     from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
                                 AutoModelWithLMHead)
@@ -96,8 +94,6 @@ if is_torch_available():
 
 # TensorFlow
 if is_tf_available():
-    logger.info("TensorFlow version {} available.".format(tf.__version__))
-
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
                                    TFAutoModelWithLMHead)
