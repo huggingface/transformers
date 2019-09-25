@@ -62,8 +62,8 @@ XLM
     :members:
 
 
-``TFXLMForQuestionAnswering``
+``TFXLMForQuestionAnsweringSimple``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLMForQuestionAnswering
+.. autoclass:: pytorch_transformers.TFXLMForQuestionAnsweringSimple
     :members:
