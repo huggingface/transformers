@@ -67,6 +67,7 @@ class PretrainedConfig(object):
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
         self.to_json_file(output_config_file)
+        logger.info("Configuration saved in {}".format(output_config_file))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):

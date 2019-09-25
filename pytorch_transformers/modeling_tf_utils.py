@@ -132,8 +132,8 @@ class TFPreTrainedModel(tf.keras.Model):
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
-
         self.save_weights(output_model_file)
+        logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
