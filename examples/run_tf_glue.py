@@ -111,8 +111,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         logger.info("  Num examples = %d", len(list(evaluation_x)))
         logger.info("  Batch size = %d", args.per_gpu_eval_batch_size)
 
-        # predictions = model.predict(evaluation_x.batch(args.per_gpu_eval_batch_size))
-        predictions = model(list(evaluation_x.batch(3))[0])
+        predictions = model.predict(evaluation_x.batch(args.per_gpu_eval_batch_size))
         np_predictions = np.argmax(predictions, axis=1)
         result = compute_metrics(args.task_name, np_predictions, evaluation_y.numpy())
         results.update(result)
@@ -233,6 +232,7 @@ def main():
 
     logger.info("Training/evaluation parameters %s", args)
 
+    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate, decay=args.learning_rate/(args.num_train_epochs + 1))
     model.compile(loss='categorical_crossentropy', optimize='adam')
 
     # Training
