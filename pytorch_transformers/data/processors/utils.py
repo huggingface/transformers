@@ -17,6 +17,7 @@
 import csv
 import sys
 import copy
+import json
 
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
