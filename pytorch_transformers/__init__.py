@@ -157,3 +157,8 @@ if is_tf_available() and is_torch_available():
                                             load_tf2_checkpoint_in_pytorch_model,
                                             load_tf2_weights_in_pytorch_model,
                                             load_tf2_model_in_pytorch_model)
+
+if not is_tf_available() and not is_torch_available():
+    logger.warning("Neither PyTorch nor TensorFlow >= 2.0 have been found."
+                   "Models won't be available and only tokenizers, configuration"
+                   "and file/data utilities can be used.")
