@@ -64,8 +64,8 @@ XLNet
     :members:
 
 
-``TFXLNetForQuestionAnswering``
+``TFXLNetForQuestionAnsweringSimple``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLNetForQuestionAnswering
+.. autoclass:: pytorch_transformers.TFXLNetForQuestionAnsweringSimple
     :members:
