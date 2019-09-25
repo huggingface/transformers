@@ -199,13 +199,13 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = tf.keras.layers.Dense(self.all_head_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            name='query')
         self.key = tf.keras.layers.Dense(self.all_head_size,
-                                         kernel_initializer=get_initializer(self.config.initializer_range),
+                                         kernel_initializer=get_initializer(config.initializer_range),
                                          name='key')
         self.value = tf.keras.layers.Dense(self.all_head_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            name='value')
 
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
@@ -260,7 +260,7 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFBertSelfOutput, self).__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.hidden_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            name='dense')
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -296,7 +296,7 @@ class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFBertIntermediate, self).__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.intermediate_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            name='dense')
         if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -313,7 +313,7 @@ class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFBertOutput, self).__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.hidden_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            name='dense')
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='LayerNorm')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -383,7 +383,7 @@ class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFBertPooler, self).__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.hidden_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            activation='tanh',
                                            name='dense')
 
@@ -399,7 +399,7 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFBertPredictionHeadTransform, self).__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(config.hidden_size,
-                                           kernel_initializer=get_initializer(self.config.initializer_range),
+                                           kernel_initializer=get_initializer(config.initializer_range),
                                            name='dense')
         if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
             self.transform_act_fn = ACT2FN[config.hidden_act]
@@ -452,7 +452,7 @@ class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFBertNSPHead, self).__init__(**kwargs)
         self.seq_relationship = tf.keras.layers.Dense(2,
-                                                      kernel_initializer=get_initializer(self.config.initializer_range),
+                                                      kernel_initializer=get_initializer(config.initializer_range),
                                                       name='seq_relationship')
 
     def call(self, pooled_output):
@@ -843,7 +843,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(self.config.initializer_range),
+                                                kernel_initializer=get_initializer(config.initializer_range),
                                                 name='classifier')
 
     def call(self, inputs, **kwargs):
@@ -895,7 +895,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(1,
-                                                kernel_initializer=get_initializer(self.config.initializer_range),
+                                                kernel_initializer=get_initializer(config.initializer_range),
                                                 name='classifier')
 
     def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
@@ -974,7 +974,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name='bert')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(self.config.initializer_range),
+                                                kernel_initializer=get_initializer(config.initializer_range),
                                                 name='classifier')
 
     def call(self, inputs, **kwargs):
@@ -1026,7 +1026,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
 
         self.bert = TFBertMainLayer(config, name='bert')
         self.qa_outputs = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(self.config.initializer_range),
+                                                kernel_initializer=get_initializer(config.initializer_range),
                                                 name='qa_outputs')
 
     def call(self, inputs, **kwargs):
