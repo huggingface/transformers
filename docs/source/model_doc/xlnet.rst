@@ -41,3 +41,31 @@ XLNet
 
 .. autoclass:: transformers.XLNetForQuestionAnswering
     :members:
+
+
+``TFXLNetModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLNetModel
+    :members:
+
+
+``TFXLNetLMHeadModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLNetLMHeadModel
+    :members:
+
+
+``TFXLNetForSequenceClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLNetForSequenceClassification
+    :members:
+
+
+``TFXLNetForQuestionAnswering``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLNetForQuestionAnswering
+    :members:

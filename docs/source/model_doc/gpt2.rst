@@ -34,3 +34,24 @@ OpenAI GPT2
 
 .. autoclass:: transformers.GPT2DoubleHeadsModel
     :members:
+
+
+``TFGPT2Model``
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFGPT2Model
+    :members:
+
+
+``TFGPT2LMHeadModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFGPT2LMHeadModel
+    :members:
+
+
+``TFGPT2DoubleHeadsModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFGPT2DoubleHeadsModel
+    :members:

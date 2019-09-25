@@ -34,3 +34,24 @@ RoBERTa
 
 .. autoclass:: transformers.RobertaForSequenceClassification
     :members:
+
+
+``TFRobertaModel``
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFRobertaModel
+    :members:
+
+
+``TFRobertaForMaskedLM``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFRobertaForMaskedLM
+    :members:
+
+
+``TFRobertaForSequenceClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFRobertaForSequenceClassification
+    :members:

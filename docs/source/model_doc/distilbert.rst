@@ -41,3 +41,30 @@ DistilBERT
 
 .. autoclass:: transformers.DistilBertForQuestionAnswering
     :members:
+
+``TFDistilBertModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFDistilBertModel
+    :members:
+
+
+``TFDistilBertForMaskedLM``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFDistilBertForMaskedLM
+    :members:
+
+
+``TFDistilBertForSequenceClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFDistilBertForSequenceClassification
+    :members:
+
+
+``TFDistilBertForQuestionAnswering``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFDistilBertForQuestionAnswering
+    :members:

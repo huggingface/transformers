@@ -39,3 +39,31 @@ XLM
 
 .. autoclass:: transformers.XLMForQuestionAnswering
     :members:
+
+
+``TFXLMModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLMModel
+    :members:
+
+
+``TFXLMWithLMHeadModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLMWithLMHeadModel
+    :members:
+
+
+``TFXLMForSequenceClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLMForSequenceClassification
+    :members:
+
+
+``TFXLMForQuestionAnswering``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFXLMForQuestionAnswering
+    :members:
