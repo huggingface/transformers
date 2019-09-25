@@ -125,7 +125,8 @@ class ExamplesTests(unittest.TestCase):
                     "--max_steps=10",
                     "--warmup_steps=2",
                     "--overwrite_output_dir",
-                    "--seed=42"]
+                    "--seed=42",
+                    "--eval_all_checkpoints"]
         model_type, model_name = ("--model_type=roberta",
                                   "--model_name_or_path=roberta-base")
         with patch.object(sys, 'argv', testargs + [model_type, model_name]):
