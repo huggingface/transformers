@@ -9,13 +9,19 @@ Processors
 
 All processors follow the same architecture which is that of the
 :class:`~pytorch_transformers.data.processors.utils.DataProcessor`. The processor returns a list
-of :class:`~pytorch_transformers.data.processors.utils.InputExample`.
+of :class:`~pytorch_transformers.data.processors.utils.InputExample`. These
+:class:`~pytorch_transformers.data.processors.utils.InputExample` can be converted to
+:class:`~pytorch_transformers.data.processors.utils.InputFeatures` in order to be fed to the model.
 
 .. autoclass:: pytorch_transformers.data.processors.utils.DataProcessor
     :members:
 
 
 .. autoclass:: pytorch_transformers.data.processors.utils.InputExample
+    :members:
+
+
+.. autoclass:: pytorch_transformers.data.processors.utils.InputFeatures
     :members:
 
 
