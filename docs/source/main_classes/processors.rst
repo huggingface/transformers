@@ -55,4 +55,4 @@ Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An example using these processors is given in the
-`run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py>` script.
+`run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py>`__ script.
