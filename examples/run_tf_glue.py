@@ -27,7 +27,8 @@ tf_model.save_pretrained('./runs/')
 pt_model = BertForSequenceClassification.from_pretrained('./runs/')
 
 # Quickly inspect a few predictions
-
+inputs = tokenizer.encode_plus("I said the company is doing great", "The company has good results", add_special_tokens=True)
+pred = pt_model(torch.tensor([tokens]))
 
 # Divers
 import torch
