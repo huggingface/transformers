@@ -67,6 +67,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     main_classes/model
     main_classes/tokenizer
     main_classes/optimizer_schedules
+    main_classes/processors
 
 .. toctree::
     :maxdepth: 2
