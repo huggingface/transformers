@@ -24,6 +24,20 @@ import requests
 from tqdm import tqdm
 
 try:
+    import tensorflow as tf
+    assert int(tf.__version__[0]) >= 2
+    _tf_available = True  # pylint: disable=invalid-name
+except (ImportError, AssertionError):
+    _tf_available = False  # pylint: disable=invalid-name
+
+try:
+    import torch
+    _torch_available = True  # pylint: disable=invalid-name
+except ImportError:
+    _torch_available = False  # pylint: disable=invalid-name
+
+
+try:
     from torch.hub import _get_torch_home
     torch_cache_home = _get_torch_home()
 except ImportError:
@@ -54,6 +68,12 @@ TF_WEIGHTS_NAME = 'model.ckpt'
 CONFIG_NAME = "config.json"
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+def is_torch_available():
+    return _torch_available
+
+def is_tf_available():
+    return _tf_available
 
 if not six.PY2:
     def add_start_docstrings(*docstr):

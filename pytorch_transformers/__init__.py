@@ -163,10 +163,5 @@ if _tf_available and _torch_available:
 # Files and general utilities
 from .file_utils import (PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
                          cached_path, add_start_docstrings, add_end_docstrings,
-                         WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME)
-
-def is_torch_available():
-    return _torch_available
-
-def is_tf_available():
-    return _tf_available
+                         WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME,
+                         is_tf_available, is_torch_available)
