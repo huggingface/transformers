@@ -13,17 +13,20 @@ Features
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
 
-State-of-the-art NLP for everyone
+State-of-the-art NLP for everyone:
+
 - Deep learning researchers
 - Hands-on practitioners
 - AI/ML/NLP teachers and educators
 
-Lower compute costs, smaller carbon footprint
+Lower compute costs, smaller carbon footprint:
+
 - Researchers can share trained models instead of always retraining
 - Practitioners can reduce compute time and production costs
 - 8 architectures with over 30 pretrained models, some in more than 100 languages
 
-Choose the right framework for every part of a model's lifetime
+Choose the right framework for every part of a model's lifetime:
+
 - Train state-of-the-art models in 3 lines of code
 - Deep interoperability between TensorFlow 2.0 and PyTorch models
 - Move a single model between TF2.0/PyTorch frameworks at will
