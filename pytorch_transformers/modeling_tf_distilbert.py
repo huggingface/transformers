@@ -29,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, get_initializer
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
@@ -79,8 +79,15 @@ class TFEmbeddings(tf.keras.layers.Layer):
         super(TFEmbeddings, self).__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.dim = config.dim
-        self.word_embeddings = TFSharedEmbeddings(config.vocab_size, config.dim, name='word_embeddings')  # padding_idx=0)
-        self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings, config.dim, name='position_embeddings')
+        self.initializer_range = config.initializer_range
+        self.word_embeddings = TFSharedEmbeddings(config.vocab_size,
+                                                  config.dim,
+                                                  initializer_range=config.initializer_range,
+                                                  name='word_embeddings')  # padding_idx=0)
+        self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings,
+                                                             config.dim,
+                                                             embeddings_initializer=get_initializer(config.initializer_range),
+                                                             name='position_embeddings')
         if config.sinusoidal_pos_embds:
             raise NotImplementedError
 
@@ -95,8 +102,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
             self.word_embeddings = self.add_weight(
                 "weight",
                 shape=[self.vocab_size, self.dim],
-                initializer=tf.random_normal_initializer(
-                    mean=0., stddev=self.dim**-0.5))
+                initializer=get_initializer(self.initializer_range))
         super(TFEmbeddings, self).build(input_shape)
 
     def call(self, inputs, mode="embedding", training=False):
@@ -178,10 +184,18 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = tf.keras.layers.Dense(config.dim, name="q_lin")
-        self.k_lin = tf.keras.layers.Dense(config.dim, name="k_lin")
-        self.v_lin = tf.keras.layers.Dense(config.dim, name="v_lin")
-        self.out_lin = tf.keras.layers.Dense(config.dim, name="out_lin")
+        self.q_lin = tf.keras.layers.Dense(config.dim,
+                                           kernel_initializer=get_initializer(config.initializer_range),
+                                           name="q_lin")
+        self.k_lin = tf.keras.layers.Dense(config.dim,
+                                           kernel_initializer=get_initializer(config.initializer_range),
+                                           name="k_lin")
+        self.v_lin = tf.keras.layers.Dense(config.dim,
+                                           kernel_initializer=get_initializer(config.initializer_range),
+                                           name="v_lin")
+        self.out_lin = tf.keras.layers.Dense(config.dim,
+                                           kernel_initializer=get_initializer(config.initializer_range),
+                                           name="out_lin")
 
         self.pruned_heads = set()
 
@@ -254,8 +268,12 @@ class TFFFN(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFFFN, self).__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.lin1 = tf.keras.layers.Dense(config.hidden_dim, name="lin1")
-        self.lin2 = tf.keras.layers.Dense(config.dim, name="lin2")
+        self.lin1 = tf.keras.layers.Dense(config.hidden_dim,
+                                          kernel_initializer=get_initializer(config.initializer_range),
+                                          name="lin1")
+        self.lin2 = tf.keras.layers.Dense(config.dim,
+                                          kernel_initializer=get_initializer(config.initializer_range),
+                                          name="lin2")
         assert config.activation in ['relu', 'gelu'], "activation ({}) must be in ['relu', 'gelu']".format(config.activation)
         self.activation = tf.keras.layers.Activation(gelu) if config.activation=='gelu' else tf.keras.activations.relu
 
@@ -596,7 +614,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.vocab_transform = tf.keras.layers.Dense(config.dim, name="vocab_transform")
+        self.vocab_transform = tf.keras.layers.Dense(config.dim,
+                                                     kernel_initializer=get_initializer(config.initializer_range),
+                                                     name="vocab_transform")
         self.act = tf.keras.layers.Activation(gelu)
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
@@ -647,8 +667,13 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.pre_classifier = tf.keras.layers.Dense(config.dim, activation='relu', name="pre_classifier")
-        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
+        self.pre_classifier = tf.keras.layers.Dense(config.dim,
+                                                    kernel_initializer=get_initializer(config.initializer_range),
+                                                    activation='relu',
+                                                    name="pre_classifier")
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name="classifier")
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
     def call(self, inputs, **kwargs):
@@ -700,7 +725,9 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         super(TFDistilBertForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
+        self.qa_outputs = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='qa_outputs')
         assert config.num_labels == 2
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 

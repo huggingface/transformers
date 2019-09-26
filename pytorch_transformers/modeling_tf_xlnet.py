@@ -28,7 +28,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlnet import XLNetConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
@@ -87,7 +87,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def build(self, input_shape):
-        initializer = tf.random_normal_initializer(mean=0., stddev=self.initializer_range)
+        initializer = get_initializer(self.initializer_range)
         self.q = self.add_weight(shape=(self.d_model, self.n_head, self.d_head),
                                  initializer=initializer,
                                  trainable=True, name='q')
@@ -104,13 +104,13 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                                  initializer=initializer,
                                  trainable=True, name='r')
         self.r_r_bias = self.add_weight(shape=(self.n_head, self.d_head),
-                                        initializer=initializer,
+                                        initializer='zeros',
                                         trainable=True, name='r_r_bias')
         self.r_s_bias = self.add_weight(shape=(self.n_head, self.d_head),
-                                        initializer=initializer,
+                                        initializer='zeros',
                                         trainable=True, name='r_s_bias')
         self.r_w_bias = self.add_weight(shape=(self.n_head, self.d_head),
-                                        initializer=initializer,
+                                        initializer='zeros',
                                         trainable=True, name='r_w_bias')
         self.seg_embed = self.add_weight(shape=(2, self.n_head, self.d_head),
                                         initializer=initializer,
@@ -294,8 +294,12 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFXLNetFeedForward, self).__init__(**kwargs)
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm')
-        self.layer_1 = tf.keras.layers.Dense(config.d_inner, name='layer_1')
-        self.layer_2 = tf.keras.layers.Dense(config.d_model, name='layer_2')
+        self.layer_1 = tf.keras.layers.Dense(config.d_inner,
+                                             kernel_initializer=get_initializer(config.initializer_range),
+                                             name='layer_1')
+        self.layer_2 = tf.keras.layers.Dense(config.d_model,
+                                             kernel_initializer=get_initializer(config.initializer_range),
+                                             name='layer_2')
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         if isinstance(config.ff_activation, str) or \
                 (sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)):
@@ -375,7 +379,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def build(self, input_shape):
-        initializer = tf.random_normal_initializer(mean=0., stddev=self.initializer_range)
+        initializer = get_initializer(self.initializer_range)
         self.mask_emb = self.add_weight(shape=(1, 1, self.d_model),
                                  initializer=initializer,
                                  trainable=True, name='mask_emb')
@@ -900,8 +904,10 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.transformer = TFXLNetMainLayer(config, name='transformer')
-        self.sequence_summary = TFSequenceSummary(config, name='sequence_summary')
-        self.logits_proj = tf.keras.layers.Dense(config.num_labels, name='logits_proj')
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name='sequence_summary')
+        self.logits_proj = tf.keras.layers.Dense(config.num_labels,
+                                                 kernel_initializer=get_initializer(config.initializer_range),
+                                                 name='logits_proj')
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -949,7 +955,9 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name='transformer')
-        self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
+        self.qa_outputs = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='qa_outputs')
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)

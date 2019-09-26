@@ -277,20 +277,20 @@ class TFPreTrainedModel(tf.keras.Model):
         return model
 
 class TFConv1D(tf.keras.layers.Layer):
-    def __init__(self, nf, nx, *inputs, **kwargs):
+    def __init__(self, nf, nx, *inputs, initializer_range=0.02, **kwargs):
         """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
             Basically works like a Linear layer but the weights are transposed
         """
         super(TFConv1D, self).__init__(*inputs, **kwargs)
         self.nf = nf
         self.nx = nx
+        self.initializer_range = initializer_range
 
     def build(self, input_shape):
         self.weight = self.add_weight(
             "weight",
             shape=[self.nx, self.nf],
-            initializer=tf.random_normal_initializer(
-                mean=0., stddev=0.02))
+            initializer=get_initializer(self.initializer_range))
         self.bias = self.add_weight(
             "bias",
             shape=[1, self.nf],
@@ -314,19 +314,17 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super(TFSharedEmbeddings, self).__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
+        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """Build shared word embedding layer
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
-        initializer_range = self.hidden_size**-0.5 if self.initializer_range is None else self.initializer_range
         self.weight = self.add_weight(
             "weight",
             shape=[self.vocab_size, self.hidden_size],
-            initializer=tf.random_normal_initializer(
-                mean=0., stddev=initializer_range))
+            initializer=get_initializer(self.initializer_range))
         super(TFSharedEmbeddings, self).build(input_shape)
 
     def call(self, inputs, mode="embedding"):
@@ -385,7 +383,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             summary_first_dropout: Add a dropout before the projection and activation
             summary_last_dropout: Add a dropout after the projection and activation
     """
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, initializer_range=0.02, **kwargs):
         super(TFSequenceSummary, self).__init__(**kwargs)
 
         self.summary_type = config.summary_type if hasattr(config, 'summary_use_proj') else 'last'
@@ -401,7 +399,9 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 num_classes = config.num_labels
             else:
                 num_classes = config.hidden_size
-            self.summary = tf.keras.layers.Dense(num_classes, name='summary')
+            self.summary = tf.keras.layers.Dense(num_classes,
+                                                 kernel_initializer=get_initializer(initializer_range),
+                                                 name='summary')
 
         self.activation = None
         if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':

@@ -30,7 +30,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFConv1D, TFSequenceSummary, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFConv1D, TFSequenceSummary, shape_list, get_initializer
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
@@ -66,16 +66,21 @@ class TFPositionalEmbedding(tf.keras.layers.Layer):
 
 
 class TFPositionwiseFF(tf.keras.layers.Layer):
-    def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5, **kwargs):
+    def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5, init_std=0.02, **kwargs):
         super(TFPositionwiseFF, self).__init__(**kwargs)
 
         self.d_model = d_model
         self.d_inner = d_inner
         self.dropout = dropout
 
-        self.layer_1 = tf.keras.layers.Dense(d_inner, activation=tf.nn.relu, name='CoreNet_._0')
+        self.layer_1 = tf.keras.layers.Dense(d_inner,
+                                             kernel_initializer=get_initializer(init_std),
+                                             activation=tf.nn.relu,
+                                             name='CoreNet_._0')
         self.drop_1 = tf.keras.layers.Dropout(dropout)
-        self.layer_2 = tf.keras.layers.Dense(d_model, name='CoreNet_._3')
+        self.layer_2 = tf.keras.layers.Dense(d_model,
+                                             kernel_initializer=get_initializer(init_std),
+                                             name='CoreNet_._3')
         self.drop_2 = tf.keras.layers.Dropout(dropout)
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name='layer_norm')
@@ -110,7 +115,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
     def __init__(self, n_head, d_model, d_head, dropout, dropatt=0,
                  tgt_len=None, ext_len=None, mem_len=None, pre_lnorm=False,
                  r_r_bias=None, r_w_bias=None, output_attentions=False, 
-                 layer_norm_epsilon=1e-5, **kwargs):
+                 layer_norm_epsilon=1e-5, init_std=0.02, **kwargs):
         super(TFRelPartialLearnableMultiHeadAttn, self).__init__(**kwargs)
 
         self.output_attentions = output_attentions
@@ -119,11 +124,17 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         self.d_head = d_head
         self.dropout = dropout
 
-        self.qkv_net = tf.keras.layers.Dense(3 * n_head * d_head, use_bias=False, name='qkv_net')
+        self.qkv_net = tf.keras.layers.Dense(3 * n_head * d_head,
+                                             kernel_initializer=get_initializer(init_std),
+                                             use_bias=False,
+                                             name='qkv_net')
 
         self.drop = tf.keras.layers.Dropout(dropout)
         self.dropatt = tf.keras.layers.Dropout(dropatt)
-        self.o_net = tf.keras.layers.Dense(d_model, use_bias=False, name='o_net')
+        self.o_net = tf.keras.layers.Dense(d_model,
+                                           kernel_initializer=get_initializer(init_std),
+                                           use_bias=False,
+                                           name='o_net')
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name='layer_norm')
 
@@ -138,14 +149,19 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             self.r_r_bias = None
             self.r_w_bias = None
 
-        self.r_net = tf.keras.layers.Dense(self.n_head * self.d_head, use_bias=False, name='r_net')
+        self.r_net = tf.keras.layers.Dense(self.n_head * self.d_head,
+                                           kernel_initializer=get_initializer(init_std),
+                                           use_bias=False,
+                                           name='r_net')
 
     def build(self, input_shape):
         if self.r_r_bias is None or self.r_w_bias is None: # Biases are not shared
             self.r_r_bias = self.add_weight(shape=(self.n_head, self.d_head),
+                                            initializer='zeros',
                                             trainable=True,
                                             name='r_r_bias')
             self.r_w_bias = self.add_weight(shape=(self.n_head, self.d_head),
+                                            initializer='zeros',
                                             trainable=True,
                                             name='r_w_bias')
         super(TFRelPartialLearnableMultiHeadAttn, self).build(input_shape)
@@ -249,17 +265,18 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
                  r_r_bias=None,
                  output_attentions=False,
                  layer_norm_epsilon=1e-5,
+                 init_std=0.02,
                  **kwargs):
         super(TFRelPartialLearnableDecoderLayer, self).__init__(**kwargs)
 
         self.dec_attn = TFRelPartialLearnableMultiHeadAttn(n_head, d_model,
                             d_head, dropout, tgt_len=tgt_len, ext_len=ext_len,
                             mem_len=mem_len, dropatt=dropatt, pre_lnorm=pre_lnorm,
-                            r_w_bias=r_w_bias, r_r_bias=r_r_bias,
+                            r_w_bias=r_w_bias, r_r_bias=r_r_bias, init_std=init_std,
                             output_attentions=output_attentions,
                             layer_norm_epsilon=layer_norm_epsilon, name='dec_attn')
         self.pos_ff = TFPositionwiseFF(d_model, d_inner, dropout, 
-                                       pre_lnorm=pre_lnorm,
+                                       pre_lnorm=pre_lnorm, init_std=init_std,
                                        layer_norm_epsilon=layer_norm_epsilon,
                                        name='pos_ff')
 
@@ -275,12 +292,13 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
 
 
 class TFAdaptiveEmbedding(tf.keras.layers.Layer):
-    def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, 
+    def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, init_std=0.02,
                  sample_softmax=False, **kwargs):
         super(TFAdaptiveEmbedding, self).__init__(**kwargs)
 
         self.n_token = n_token
         self.d_embed = d_embed
+        self.init_std = init_std
 
         self.cutoffs = cutoffs + [n_token]
         self.div_val = div_val
@@ -298,12 +316,16 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i+1]
                 d_emb_i = d_embed // (div_val ** i)
-                self.emb_layers.append(tf.keras.layers.Embedding(r_idx-l_idx, d_emb_i, name='emb_layers_._{}'.format(i)))
+                self.emb_layers.append(tf.keras.layers.Embedding(r_idx-l_idx,
+                                                                 d_emb_i,
+                                                                 embeddings_initializer=get_initializer(init_std),
+                                                                 name='emb_layers_._{}'.format(i)))
 
     def build(self, input_shape):
         for i in range(len(self.cutoffs)):
             d_emb_i = self.d_embed // (self.div_val ** i)
             self.emb_projs.append(self.add_weight(shape=(d_emb_i, self.d_proj),
+                                                  initializer=get_initializer(self.init_std),
                                                   trainable=True,
                                                   name='emb_projs_._{}'.format(i)))
         super(TFAdaptiveEmbedding, self).build(input_shape)
@@ -349,7 +371,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         self.untie_r = config.untie_r
 
         self.word_emb = TFAdaptiveEmbedding(config.n_token, config.d_embed, config.d_model, config.cutoffs, 
-                                            div_val=config.div_val, name='word_emb')
+                                            div_val=config.div_val, init_std=config.init_std, name='word_emb')
 
         self.drop = tf.keras.layers.Dropout(config.dropout)
 
@@ -374,6 +396,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                         r_r_bias=None if self.untie_r else self.r_r_bias,
                         output_attentions=self.output_attentions,
                         layer_norm_epsilon=config.layer_norm_epsilon,
+                        init_std=config.init_std,
                         name='layers_._{}'.format(i))
                 )
         else: # learnable embeddings and absolute embeddings
