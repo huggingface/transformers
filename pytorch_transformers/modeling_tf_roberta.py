@@ -24,7 +24,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
-from .modeling_tf_utils import TFPreTrainedModel
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
@@ -232,7 +232,9 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super(TFRobertaLMHead, self).__init__(**kwargs)
         self.vocab_size = config.vocab_size
-        self.dense = tf.keras.layers.Dense(config.hidden_size, name='dense')
+        self.dense = tf.keras.layers.Dense(config.hidden_size,
+                                           kernel_initializer=get_initializer(config.initializer_range),
+                                           name='dense')
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm')
         self.act = tf.keras.layers.Activation(gelu)
 
@@ -315,9 +317,14 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super(TFRobertaClassificationHead, self).__init__(config, **kwargs)
-        self.dense = tf.keras.layers.Dense(config.hidden_size, activation='tanh', name="dense")
+        self.dense = tf.keras.layers.Dense(config.hidden_size,
+                                           kernel_initializer=get_initializer(config.initializer_range),
+                                           activation='tanh',
+                                           name="dense")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.out_proj = tf.keras.layers.Dense(config.num_labels, name="out_proj")
+        self.out_proj = tf.keras.layers.Dense(config.num_labels,
+                                              kernel_initializer=get_initializer(config.initializer_range),
+                                              name="out_proj")
 
     def call(self, features, training=False):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])

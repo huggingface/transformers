@@ -25,7 +25,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
@@ -119,10 +119,10 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         self.n_heads = n_heads
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = tf.keras.layers.Dense(dim, name='q_lin')
-        self.k_lin = tf.keras.layers.Dense(dim, name='k_lin')
-        self.v_lin = tf.keras.layers.Dense(dim, name='v_lin')
-        self.out_lin = tf.keras.layers.Dense(dim, name='out_lin')
+        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='q_lin')
+        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='k_lin')
+        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='v_lin')
+        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='out_lin')
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.pruned_heads = set()
 
@@ -199,8 +199,8 @@ class TFTransformerFFN(tf.keras.layers.Layer):
 
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super(TFTransformerFFN, self).__init__(**kwargs)
-        self.lin1 = tf.keras.layers.Dense(dim_hidden, name='lin1')
-        self.lin2 = tf.keras.layers.Dense(out_dim, name='lin2')
+        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name='lin1')
+        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name='lin2')
         self.act = tf.keras.layers.Activation(gelu) if config.gelu_activation else tf.keras.activations.relu
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
@@ -249,13 +249,19 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.attention_dropout = tf.keras.layers.Dropout(config.attention_dropout)
 
-        self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings, self.dim, name='position_embeddings')
+        self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings,
+                                                             self.dim,
+                                                             embeddings_initializer=get_initializer(config.embed_init_std),
+                                                             name='position_embeddings')
         if config.sinusoidal_embeddings:
             raise NotImplementedError
             # create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
         if config.n_langs > 1 and config.use_lang_emb:
-            self.lang_embeddings = tf.keras.layers.Embedding(self.n_langs, self.dim, name='lang_embeddings')
-        self.embeddings = TFSharedEmbeddings(self.n_words, self.dim, name='embeddings')  # padding_idx=self.pad_index)
+            self.lang_embeddings = tf.keras.layers.Embedding(self.n_langs,
+                                                             self.dim,
+                                                             embeddings_initializer=get_initializer(config.embed_init_std),
+                                                             name='lang_embeddings')
+        self.embeddings = TFSharedEmbeddings(self.n_words, self.dim, initializer_range=config.embed_init_std, name='embeddings')  # padding_idx=self.pad_index)
         self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm_emb')
 
         # transformer layers
@@ -676,7 +682,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.transformer = TFXLMMainLayer(config, name='transformer')
-        self.sequence_summary = TFSequenceSummary(config, name='sequence_summary')
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name='sequence_summary')
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -721,7 +727,9 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLMForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name='transformer')
-        self.qa_outputs = tf.keras.layers.Dense(config.num_labels, name='qa_outputs')
+        self.qa_outputs = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.init_std),
+                                                name='qa_outputs')
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)

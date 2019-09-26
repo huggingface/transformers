@@ -29,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 
 from .modeling_tf_utils import (TFPreTrainedModel, TFConv1D, TFSharedEmbeddings,
-                                TFSequenceSummary, shape_list)
+                                TFSequenceSummary, shape_list, get_initializer)
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
@@ -83,8 +83,8 @@ class TFAttention(tf.keras.layers.Layer):
         self.split_size = n_state
         self.scale = scale
 
-        self.c_attn = TFConv1D(n_state * 3, nx, name='c_attn')
-        self.c_proj = TFConv1D(n_state, nx, name='c_proj')
+        self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name='c_attn')
+        self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name='c_proj')
         self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
         self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
         self.pruned_heads = set()
@@ -168,8 +168,8 @@ class TFMLP(tf.keras.layers.Layer):
     def __init__(self, n_state, config, **kwargs):
         super(TFMLP, self).__init__(**kwargs)
         nx = config.n_embd
-        self.c_fc = TFConv1D(n_state, nx, name='c_fc')
-        self.c_proj = TFConv1D(nx, n_state, name='c_proj')
+        self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name='c_fc')
+        self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name='c_proj')
         self.act = gelu
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
 
@@ -212,8 +212,14 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
 
-        self.tokens_embed = TFSharedEmbeddings(config.vocab_size, config.n_embd, name='tokens_embed')
-        self.positions_embed = tf.keras.layers.Embedding(config.n_positions, config.n_embd, name='positions_embed')
+        self.tokens_embed = TFSharedEmbeddings(config.vocab_size,
+                                               config.n_embd,
+                                               initializer_range=config.initializer_range,
+                                               name='tokens_embed')
+        self.positions_embed = tf.keras.layers.Embedding(config.n_positions,
+                                                         config.n_embd,
+                                                         embeddings_initializer=get_initializer(config.initializer_range),
+                                                         name='positions_embed')
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx,
                           config,
@@ -522,7 +528,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super(TFOpenAIGPTDoubleHeadsModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
-        self.multiple_choice_head = TFSequenceSummary(config, name='multiple_choice_head')
+        self.multiple_choice_head = TFSequenceSummary(config, initializer_range=config.initializer_range, name='multiple_choice_head')
 
     def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, mc_token_ids=None, training=False):
         if isinstance(inputs, (tuple, list)):
