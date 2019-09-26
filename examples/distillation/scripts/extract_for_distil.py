@@ -15,7 +15,7 @@
 """
 Preprocessing script before training DistilBERT.
 """
-from pytorch_transformers import BertForMaskedLM, RobertaForMaskedLM
+from transformers import BertForMaskedLM, RobertaForMaskedLM
 import torch
 import argparse
 

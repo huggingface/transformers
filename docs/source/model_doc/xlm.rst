@@ -4,38 +4,38 @@ XLM
 ``XLMConfig``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.XLMConfig
+.. autoclass:: transformers.XLMConfig
     :members:
 
 ``XLMTokenizer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.XLMTokenizer
+.. autoclass:: transformers.XLMTokenizer
     :members:
 
 ``XLMModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.XLMModel
+.. autoclass:: transformers.XLMModel
     :members:
 
 
 ``XLMWithLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.XLMWithLMHeadModel
+.. autoclass:: transformers.XLMWithLMHeadModel
     :members:
 
 
 ``XLMForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.XLMForSequenceClassification
+.. autoclass:: transformers.XLMForSequenceClassification
     :members:
 
 
 ``XLMForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.XLMForQuestionAnswering
+.. autoclass:: transformers.XLMForQuestionAnswering
     :members:

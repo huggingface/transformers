@@ -26,12 +26,12 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from pytorch_transformers import GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig
+from transformers import GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig
 
-from pytorch_transformers import GPT2LMHeadModel, GPT2Tokenizer
-from pytorch_transformers import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer
-from pytorch_transformers import XLNetLMHeadModel, XLNetTokenizer
-from pytorch_transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from transformers import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer
+from transformers import XLNetLMHeadModel, XLNetTokenizer
+from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
