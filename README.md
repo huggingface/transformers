@@ -1,10 +1,62 @@
 # 🤗 Transformers
 
-[![CircleCI](https://circleci.com/gh/huggingface/transformers.svg?style=svg)](https://circleci.com/gh/huggingface/transformers)
+<p align="center">
+    <br>
+    <img src="https://raw.githubusercontent.com/huggingface/transformers/master/assets/transformers_logo.png" width="400"/>
+    <br>
+<p>
+<p align="center">
+    <a href="https://github.com/huggingface/transformers/blob/master/LICENSE">
+        <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformer?style=flat-square">
+    </a>
+    <a href="https://github.com/huggingface/transformers/blob/master/LICENSE">
+        <img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue&style=flat-square">
+    </a>
+    <a href="https://huggingface.co/transformers/index.html">
+        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/transformers/index.html.svg?down_color=red&down_message=offline&style=flat-square&up_message=online">
+    </a>
+    <a href="https://github.com/huggingface/transformers/releases">
+        <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/transformers.svg?style=flat-square">
+    </a>
+</p>
 
-Transformers (formerly known as `pytorch-pretrained-bert`) is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) is a state-of-the-art Natural Language Processing (NLP) library for TensorFlow 2.0 and PyTorch.
 
-The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
+🤗 Transformers provides general-purpose architectures (BERT, GPT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with more than 32+ pretrained checkpoints, some of them available in 100+ languages.
+
+The best of both worlds
+- As easy to use as pytorch-transformers
+- As powerful and concise as Keras
+- High performance on NLU and NLG tasks
+- Low barrier to entry for educators and practitioners
+
+State-of-the-art NLP for everyone
+- Deep learning researchers
+- Hands-on practitioners
+- AI/ML/NLP teachers and educators
+
+Lower compute costs, smaller carbon footprint
+- Researchers can share trained models instead of always retraining
+- Practitioners can reduce compute time and production costs
+- 8 architectures with over 30 pretrained models, some in more than 100 languages
+
+Choose the right framework for every part of a model's lifetime
+- Train state-of-the-art models in 3 lines of code
+- Move a single model between frameworks at will
+- Seamlessly pick the right framework for training, evaluation, production
+
+
+| Section | Description |
+|-|-|
+| [Model architectures](#model-architectures) | Architectures (with pretrained weights) |
+| [Installation](#installation) | How to install the package |
+| [Online demo](#online-demo) | Experimenting with this repo’s text generation capabilities |
+| [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
+| [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
+| [Migrating from pytorch-pretrained-bert to transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
+| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
+
+## Model architectures
 
 1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
@@ -17,15 +69,6 @@ The library currently contains PyTorch implementations, pre-trained model weight
 ) by Victor Sanh, Lysandre Debut and Thomas Wolf.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
-
-| Section | Description |
-|-|-|
-| [Installation](#installation) | How to install the package |
-| [Online demo](#online-demo) | Experimenting with this repo’s text generation capabilities |
-| [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
-| [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
-| [Migrating from pytorch-pretrained-bert to transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
 
 ## Installation
 
@@ -89,13 +132,14 @@ from transformers import *
 # Transformers has a unified API
 # for 7 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
-MODELS = [(BertModel,       BertTokenizer,      'bert-base-uncased'),
-          (OpenAIGPTModel,  OpenAIGPTTokenizer, 'openai-gpt'),
-          (GPT2Model,       GPT2Tokenizer,      'gpt2'),
-          (TransfoXLModel,  TransfoXLTokenizer, 'transfo-xl-wt103'),
-          (XLNetModel,      XLNetTokenizer,     'xlnet-base-cased'),
-          (XLMModel,        XLMTokenizer,       'xlm-mlm-enfr-1024'),
-          (RobertaModel,    RobertaTokenizer,   'roberta-base')]
+MODELS = [(BertModel,       BertTokenizer,       'bert-base-uncased'),
+          (OpenAIGPTModel,  OpenAIGPTTokenizer,  'openai-gpt'),
+          (GPT2Model,       GPT2Tokenizer,       'gpt2'),
+          (TransfoXLModel,  TransfoXLTokenizer,  'transfo-xl-wt103'),
+          (XLNetModel,      XLNetTokenizer,      'xlnet-base-cased'),
+          (XLMModel,        XLMTokenizer,        'xlm-mlm-enfr-1024'),
+          (DistilBertModel, DistilBertTokenizer, 'distilbert-base-uncased'),
+          (RobertaModel,    RobertaTokenizer,    'roberta-base')]
 
 # Let's encode some text in a sequence of hidden-states using each model:
 for model_class, tokenizer_class, pretrained_weights in MODELS:
