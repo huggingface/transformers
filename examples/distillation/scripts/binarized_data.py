@@ -20,7 +20,7 @@ import pickle
 import random
 import time
 import numpy as np
-from transformers import BertTokenizer
+from transformers import BertTokenizer, RobertaTokenizer
 import logging
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -32,16 +32,21 @@ def main():
     parser = argparse.ArgumentParser(description="Preprocess the data to avoid re-doing it several times by (tokenization + token_to_ids).")
     parser.add_argument('--file_path', type=str, default='data/dump.txt',
                         help='The path to the data.')
-    parser.add_argument('--bert_tokenizer', type=str, default='bert-base-uncased',
+    parser.add_argument('--tokenizer_type', type=str, default='bert', choices=['bert', 'roberta'])
+    parser.add_argument('--tokenizer_name', type=str, default='bert-base-uncased',
                         help="The tokenizer to use.")
     parser.add_argument('--dump_file', type=str, default='data/dump',
                         help='The dump file prefix.')
     args = parser.parse_args()
 
 
-    logger.info(f'Loading Tokenizer ({args.bert_tokenizer})')
-    bert_tokenizer = BertTokenizer.from_pretrained(args.bert_tokenizer)
-
+    logger.info(f'Loading Tokenizer ({args.tokenizer_name})')
+    if args.tokenizer_type == 'bert':
+        tokenizer = BertTokenizer.from_pretrained(args.tokenizer_name)
+    elif args.tokenizer_type == 'roberta':
+        tokenizer = RobertaTokenizer.from_pretrained(args.tokenizer_name)
+    bos = tokenizer.special_tokens_map['bos_token'] # `[CLS]` for bert, `<s>` for roberta
+    sep = tokenizer.special_tokens_map['sep_token'] # `[SEP]` for bert, `</s>` for roberta
 
     logger.info(f'Loading text from {args.file_path}')
     with open(args.file_path, 'r', encoding='utf8') as fp:
@@ -56,8 +61,8 @@ def main():
     interval = 10000
     start = time.time()
     for text in data:
-        text = f'[CLS] {text.strip()} [SEP]'
-        token_ids = bert_tokenizer.encode(text)
+        text = f'{bos} {text.strip()} {sep}'
+        token_ids = tokenizer.encode(text)
         rslt.append(token_ids)
 
         iter += 1
@@ -69,7 +74,7 @@ def main():
     logger.info(f'{len(data)} examples processed.')
 
 
-    dp_file = f'{args.dump_file}.{args.bert_tokenizer}.pickle'
+    dp_file = f'{args.dump_file}.{args.tokenizer_name}.pickle'
     rslt_ = [np.uint16(d) for d in rslt]
     random.shuffle(rslt_)
     logger.info(f'Dump to {dp_file}')
