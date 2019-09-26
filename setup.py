@@ -25,7 +25,7 @@ To create the package for pypi.
    (pypi suggest using twine as other methods upload files via plaintext.)
 
    Check that you can install it in a virtualenv by running:
-   pip install -i https://testpypi.python.org/pypi pytorch-transformers
+   pip install -i https://testpypi.python.org/pypi transformers
 
 6. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
@@ -37,8 +37,8 @@ from io import open
 from setuptools import find_packages, setup
 
 setup(
-    name="pytorch_transformers",
-    version="1.2.0",
+    name="transformers",
+    version="2.0.0",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors",
     author_email="thomas@huggingface.co",
     description="Repository of pre-trained NLP Transformer models: BERT & RoBERTa, GPT & GPT-2, Transformer-XL, XLNet and XLM",
@@ -46,7 +46,7 @@ setup(
     long_description_content_type="text/markdown",
     keywords='NLP deep learning transformer pytorch BERT GPT GPT-2 google openai CMU',
     license='Apache',
-    url="https://github.com/huggingface/pytorch-transformers",
+    url="https://github.com/huggingface/transformers",
     packages=find_packages(exclude=["*.tests", "*.tests.*",
                                     "tests.*", "tests"]),
     install_requires=['numpy',
@@ -58,7 +58,7 @@ setup(
                       'sacremoses'],
     entry_points={
       'console_scripts': [
-        "pytorch_transformers=pytorch_transformers.__main__:main",
+        "transformers=transformers.__main__:main",
       ]
     },
     # python_requires='>=3.5.0',

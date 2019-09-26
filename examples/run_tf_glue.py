@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_datasets
-from pytorch_transformers import *
+from transformers import *
 
 # Load dataset, tokenizer, model from pretrained model/vocabulary
 tokenizer = BertTokenizer.from_pretrained('bert-base-cased')

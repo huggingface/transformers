@@ -1,8 +1,8 @@
-# 👾 PyTorch-Transformers
+# 🤗 Transformers
 
-[![CircleCI](https://circleci.com/gh/huggingface/pytorch-transformers.svg?style=svg)](https://circleci.com/gh/huggingface/pytorch-transformers)
+[![CircleCI](https://circleci.com/gh/huggingface/transformers.svg?style=svg)](https://circleci.com/gh/huggingface/transformers)
 
-PyTorch-Transformers (formerly known as `pytorch-pretrained-bert`) is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
+Transformers (formerly known as `pytorch-pretrained-bert`) is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
 
 The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
 
@@ -13,10 +13,10 @@ The library currently contains PyTorch implementations, pre-trained model weight
 5. **[XLNet](https://github.com/zihangdai/xlnet/)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
 7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), released together with the paper a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
-8. **[DistilBERT](https://github.com/huggingface/pytorch-transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the blogpost [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5
+8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the blogpost [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5
 ) by Victor Sanh, Lysandre Debut and Thomas Wolf.
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/pytorch-transformers/examples.html).
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
 | Section | Description |
 |-|-|
@@ -24,8 +24,8 @@ These implementations have been tested on several datasets (see the example scri
 | [Online demo](#online-demo) | Experimenting with this repo’s text generation capabilities |
 | [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
-| [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-pytorch-transformers) | Migrating your code from pytorch-pretrained-bert to pytorch-transformers |
-| [Documentation](https://huggingface.co/pytorch-transformers/) | Full API documentation and more |
+| [Migrating from pytorch-pretrained-bert to transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
+| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
 
 ## Installation
 
@@ -33,10 +33,10 @@ This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3
 
 ### With pip
 
-PyTorch-Transformers can be installed by pip as follows:
+Transformers can be installed by pip as follows:
 
 ```bash
-pip install pytorch-transformers
+pip install transformers
 ```
 
 ### From source
@@ -49,14 +49,14 @@ pip install [--editable] .
 
 ### Tests
 
-A series of tests is included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/pytorch-transformers/tree/master/pytorch_transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/pytorch-transformers/tree/master/examples).
+A series of tests is included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 These tests can be run using `pytest` (install pytest if needed with `pip install pytest`).
 
 You can run the tests from the root of the cloned repository with the commands:
 
 ```bash
-python -m pytest -sv ./pytorch_transformers/tests/
+python -m pytest -sv ./transformers/tests/
 python -m pytest -sv ./examples/
 ```
 
@@ -80,13 +80,13 @@ You can use it to experiment with completions generated by `GPT2Model`, `Transfo
 
 ## Quick tour
 
-Let's do a very quick overview of PyTorch-Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/pytorch-transformers/).
+Let's do a very quick overview of Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/transformers/).
 
 ```python
 import torch
-from pytorch_transformers import *
+from transformers import *
 
-# PyTorch-Transformers has a unified API
+# Transformers has a unified API
 # for 7 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
 MODELS = [(BertModel,       BertTokenizer,      'bert-base-uncased'),
@@ -299,19 +299,19 @@ python ./examples/run_generation.py \
     --model_name_or_path=gpt2 \
 ```
 
-## Migrating from pytorch-pretrained-bert to pytorch-transformers
+## Migrating from pytorch-pretrained-bert to transformers
 
-Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `pytorch-transformers`
+Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `transformers`
 
 ### Models always output `tuples`
 
-The main breaking change when migrating from `pytorch-pretrained-bert` to `pytorch-transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
+The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
-The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/pytorch-transformers/).
+The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
-Here is a `pytorch-pretrained-bert` to `pytorch-transformers` conversion example for a `BertForSequenceClassification` classification model:
+Here is a `pytorch-pretrained-bert` to `transformers` conversion example for a `BertForSequenceClassification` classification model:
 
 ```python
 # Let's load our model
@@ -320,11 +320,11 @@ model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 # If you used to have this line in pytorch-pretrained-bert:
 loss = model(input_ids, labels=labels)
 
-# Now just use this line in pytorch-transformers to extract the loss from the output tuple:
+# Now just use this line in transformers to extract the loss from the output tuple:
 outputs = model(input_ids, labels=labels)
 loss = outputs[0]
 
-# In pytorch-transformers you can also have access to the logits:
+# In transformers you can also have access to the logits:
 loss, logits = outputs[:2]
 
 # And even the attention weights if you configure the model to output them (and other outputs too, see the docstrings and documentation)
@@ -339,7 +339,7 @@ Breaking change in the `from_pretrained()`method:
 
 1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
 
-2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead which can break derived model classes build based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/pytorch-transformers/pull/866) by forwarding the the model `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuration class attributes.
+2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead which can break derived model classes build based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/transformers/pull/866) by forwarding the the model `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuration class attributes.
 
 Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other serialization method before.
 
@@ -396,7 +396,7 @@ for batch in train_data:
     loss.backward()
     optimizer.step()
 
-### In PyTorch-Transformers, optimizer and schedules are splitted and instantiated like this:
+### In Transformers, optimizer and schedules are splitted and instantiated like this:
 optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
 scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, t_total=num_total_steps)  # PyTorch scheduler
 ### and used like this:
@@ -411,4 +411,4 @@ for batch in train_data:
 
 ## Citation
 
-At the moment, there is no paper associated to PyTorch-Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
+At the moment, there is no paper associated to Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
