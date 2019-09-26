@@ -39,19 +39,19 @@ RoBERTa
 ``TFRobertaModel``
 ~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFRobertaModel
+.. autoclass:: transformers.TFRobertaModel
     :members:
 
 
 ``TFRobertaForMaskedLM``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFRobertaForMaskedLM
+.. autoclass:: transformers.TFRobertaForMaskedLM
     :members:
 
 
 ``TFRobertaForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFRobertaForSequenceClassification
+.. autoclass:: transformers.TFRobertaForSequenceClassification
     :members:

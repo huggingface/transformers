@@ -39,19 +39,19 @@ OpenAI GPT2
 ``TFGPT2Model``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFGPT2Model
+.. autoclass:: transformers.TFGPT2Model
     :members:
 
 
 ``TFGPT2LMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFGPT2LMHeadModel
+.. autoclass:: transformers.TFGPT2LMHeadModel
     :members:
 
 
 ``TFGPT2DoubleHeadsModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFGPT2DoubleHeadsModel
+.. autoclass:: transformers.TFGPT2DoubleHeadsModel
     :members:

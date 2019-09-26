@@ -39,19 +39,19 @@ OpenAI GPT
 ``TFOpenAIGPTModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFOpenAIGPTModel
+.. autoclass:: transformers.TFOpenAIGPTModel
     :members:
 
 
 ``TFOpenAIGPTLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFOpenAIGPTLMHeadModel
+.. autoclass:: transformers.TFOpenAIGPTLMHeadModel
     :members:
 
 
 ``TFOpenAIGPTDoubleHeadsModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFOpenAIGPTDoubleHeadsModel
+.. autoclass:: transformers.TFOpenAIGPTDoubleHeadsModel
     :members:

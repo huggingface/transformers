@@ -46,26 +46,26 @@ XLNet
 ``TFXLNetModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLNetModel
+.. autoclass:: transformers.TFXLNetModel
     :members:
 
 
 ``TFXLNetLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLNetLMHeadModel
+.. autoclass:: transformers.TFXLNetLMHeadModel
     :members:
 
 
 ``TFXLNetForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLNetForSequenceClassification
+.. autoclass:: transformers.TFXLNetForSequenceClassification
     :members:
 
 
 ``TFXLNetForQuestionAnsweringSimple``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLNetForQuestionAnsweringSimple
+.. autoclass:: transformers.TFXLNetForQuestionAnsweringSimple
     :members:

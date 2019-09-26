@@ -17,5 +17,5 @@ The base class ``PreTrainedModel`` implements the common methods for loading/sav
 ``TFPreTrainedModel``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFPreTrainedModel
+.. autoclass:: transformers.TFPreTrainedModel
     :members:
