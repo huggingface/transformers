@@ -4,33 +4,33 @@ OpenAI GPT2
 ``GPT2Config``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.GPT2Config
+.. autoclass:: transformers.GPT2Config
     :members:
 
 
 ``GPT2Tokenizer``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.GPT2Tokenizer
+.. autoclass:: transformers.GPT2Tokenizer
     :members:
 
 
 ``GPT2Model``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.GPT2Model
+.. autoclass:: transformers.GPT2Model
     :members:
 
 
 ``GPT2LMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.GPT2LMHeadModel
+.. autoclass:: transformers.GPT2LMHeadModel
     :members:
 
 
 ``GPT2DoubleHeadsModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.GPT2DoubleHeadsModel
+.. autoclass:: transformers.GPT2DoubleHeadsModel
     :members:

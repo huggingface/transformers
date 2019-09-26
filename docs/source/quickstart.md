@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-PyTorch-Transformers is an opinionated library built for NLP researchers seeking to use/study/extend large-scale transformers models.
+Transformers is an opinionated library built for NLP researchers seeking to use/study/extend large-scale transformers models.
 
 The library was designed with two strong goals in mind:
 
@@ -39,7 +39,7 @@ The library is build around three type of classes for each models:
 
 All these classes can be instantiated from pretrained instances and saved locally using two methods:
 
-- `from_pretrained()` let you instantiate a model/configuration/tokenizer from a pretrained version either provided by the library itself (currently 27 models are provided as listed [here](https://huggingface.co/pytorch-transformers/pretrained_models.html)) or stored locally (or on a server) by the user,
+- `from_pretrained()` let you instantiate a model/configuration/tokenizer from a pretrained version either provided by the library itself (currently 27 models are provided as listed [here](https://huggingface.co/transformers/pretrained_models.html)) or stored locally (or on a server) by the user,
 - `save_pretrained()` let you save a model/configuration/tokenizer locally so that it can be reloaded using `from_pretrained()`.
 
 We'll finish this quickstart tour by going through a few simple quick-start examples to see how we can instantiate and use these classes. The rest of the documentation is organized in two parts:
@@ -59,7 +59,7 @@ Let's start by preparing a tokenized input (a list of token embeddings indices t
 
 ```python
 import torch
-from pytorch_transformers import BertTokenizer, BertModel, BertForMaskedLM
+from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 # OPTIONAL: if you want to have more information on what's happening under the hood, activate the logger as follows
 import logging
@@ -106,7 +106,7 @@ model.to('cuda')
 with torch.no_grad():
     # See the models docstrings for the detail of the inputs
     outputs = model(tokens_tensor, token_type_ids=segments_tensors)
-    # PyTorch-Transformers models always output tuples.
+    # Transformers models always output tuples.
     # See the models docstrings for the detail of all the outputs
     # In our case, the first element is the hidden state of the last layer of the Bert model
     encoded_layers = outputs[0]
@@ -145,7 +145,7 @@ First let's prepare a tokenized input from our text string using `GPT2Tokenizer`
 
 ```python
 import torch
-from pytorch_transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
 import logging

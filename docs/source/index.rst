@@ -1,7 +1,7 @@
-Pytorch-Transformers
+Transformers
 ================================================================================================================================================
 
-PyTorch-Transformers is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
+Transformers is a library of state-of-the-art pre-trained models for Natural Language Processing (NLP).
 
 The library currently contains PyTorch implementations, pre-trained model weights, usage scripts and conversion utilities for the following models:
 
@@ -12,7 +12,7 @@ The library currently contains PyTorch implementations, pre-trained model weight
 5. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 6. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
 7. `RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_ (from Facebook), released together with the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_ by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
-8. `DistilBERT <https://huggingface.co/pytorch-transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together with the blog post `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`_ by Victor Sanh, Lysandre Debut and Thomas Wolf.
+8. `DistilBERT <https://huggingface.co/transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together with the blog post `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`_ by Victor Sanh, Lysandre Debut and Thomas Wolf.
 
 .. toctree::
     :maxdepth: 2
