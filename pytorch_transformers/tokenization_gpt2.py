@@ -173,9 +173,15 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text):
-        """ Tokenize a string. """
-        text = ' ' + text  # GPT-2 (and RoBERTa) tokenizers need at least one space to begin the sentence with.
+    def _tokenize(self, text, add_prefix_space=False):
+        """ Tokenize a string.
+            Args:
+                - add_prefix_space (boolean, default False):
+                    Begin the sentence with at least one space toto get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
+        """
+        if add_prefix_space:
+            text = ' ' + text
+
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             if sys.version_info[0] == 2:
