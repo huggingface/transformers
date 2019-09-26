@@ -52,14 +52,14 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     def get_input_output_texts(self):
         input_text = u"lower newer"
-        output_text = u" lower newer"
+        output_text = u"lower newer"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = GPT2Tokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text)
+        tokens = tokenizer.tokenize(text, add_prefix_space=True)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
