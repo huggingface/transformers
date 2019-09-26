@@ -1,5 +1,3 @@
-# 🤗 Transformers
-
 <p align="center">
     <br>
     <img src="https://raw.githubusercontent.com/huggingface/transformers/master/docs/source/imgs/transformers_logo_name.png" width="400"/>
@@ -20,11 +18,11 @@
     </a>
 </p>
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) is a state-of-the-art Natural Language Processing (NLP) library for TensorFlow 2.0 and PyTorch.
+State-of-the-art Natural Language Processing (NLP) for TensorFlow 2.0 and PyTorch.
 
-🤗 Transformers provides general-purpose architectures (BERT, GPT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with more than 32+ pretrained checkpoints, some of them available in 100+ languages.
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose architectures (BERT, GPT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with more than 32+ pretrained checkpoints in 100+ languages.
 
-The best of both worlds
+Features
 - As easy to use as pytorch-transformers
 - As powerful and concise as Keras
 - High performance on NLU and NLG tasks
@@ -42,33 +40,22 @@ Lower compute costs, smaller carbon footprint
 
 Choose the right framework for every part of a model's lifetime
 - Train state-of-the-art models in 3 lines of code
-- Move a single model between frameworks at will
+- Deep interoperability between TensorFlow 2.0 and PyTorch models
+- Move a single model between TF2.0/PyTorch frameworks at will
 - Seamlessly pick the right framework for training, evaluation, production
 
 
 | Section | Description |
 |-|-|
-| [Model architectures](#model-architectures) | Architectures (with pretrained weights) |
 | [Installation](#installation) | How to install the package |
+| [Model architectures](#model-architectures) | Architectures (with pretrained weights) |
 | [Online demo](#online-demo) | Experimenting with this repo’s text generation capabilities |
 | [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
+| [Quick tour: TF 2.0 and PyTorch ](#Quick-tour-TF-2.0-training-and-PyTorch-interoperability) | Train a TF 2.0 model in 10 lines of code, load it in PyTorch |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
-| [Migrating from pytorch-pretrained-bert to transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
+| [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
+| [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
 | [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
-
-## Model architectures
-
-1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
-2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
-3. **[GPT-2](https://blog.openai.com/better-language-models/)** (from OpenAI) released with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
-4. **[Transformer-XL](https://github.com/kimiyoung/transformer-xl)** (from Google/CMU) released with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-5. **[XLNet](https://github.com/zihangdai/xlnet/)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
-7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), released together with the paper a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
-8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the blogpost [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5
-) by Victor Sanh, Lysandre Debut and Thomas Wolf.
-
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
 ## Installation
 
@@ -112,6 +99,22 @@ It contains an example of a conversion script from a Pytorch trained Transformer
 At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models in PyTorch to productizing them in CoreML,
 or prototype a model or an app in CoreML then research its hyperparameters or architecture from PyTorch. Super exciting!
 
+## Model architectures
+
+🤗 Transformers currently provides 8 NLU/NLG architectures:
+
+1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
+2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
+3. **[GPT-2](https://blog.openai.com/better-language-models/)** (from OpenAI) released with the paper [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/) by Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever**.
+4. **[Transformer-XL](https://github.com/kimiyoung/transformer-xl)** (from Google/CMU) released with the paper [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
+5. **[XLNet](https://github.com/zihangdai/xlnet/)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
+7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), released together with the paper a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
+8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the blogpost [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5
+) by Victor Sanh, Lysandre Debut and Thomas Wolf.
+
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
+
 ## Online demo
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team at transformer.huggingface.co, is the official demo of this repo’s text generation capabilities.
@@ -123,14 +126,14 @@ You can use it to experiment with completions generated by `GPT2Model`, `Transfo
 
 ## Quick tour
 
-Let's do a very quick overview of Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/transformers/).
+Let's do a very quick overview of the model architectures in 🤗 Transformers. Detailed examples for each model architecture (Bert, GPT, GPT-2, Transformer-XL, XLNet and XLM) can be found in the [full documentation](https://huggingface.co/transformers/).
 
 ```python
 import torch
 from transformers import *
 
 # Transformers has a unified API
-# for 7 transformer architectures and 30 pretrained weights.
+# for 8 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
 MODELS = [(BertModel,       BertTokenizer,       'bert-base-uncased'),
           (OpenAIGPTModel,  OpenAIGPTTokenizer,  'openai-gpt'),
@@ -140,6 +143,8 @@ MODELS = [(BertModel,       BertTokenizer,       'bert-base-uncased'),
           (XLMModel,        XLMTokenizer,        'xlm-mlm-enfr-1024'),
           (DistilBertModel, DistilBertTokenizer, 'distilbert-base-uncased'),
           (RobertaModel,    RobertaTokenizer,    'roberta-base')]
+
+# To use TensorFlow 2.0 versions of the models, simply prefix the class names with 'TF', e.g. `TFRobertaModel` is the TF 2.0 counterpart of the PyTorch model `RobertaModel`
 
 # Let's encode some text in a sequence of hidden-states using each model:
 for model_class, tokenizer_class, pretrained_weights in MODELS:
@@ -183,6 +188,53 @@ tokenizer.save_pretrained('./directory/to/save/')  # save
 tokenizer = tokenizer_class.from_pretrained('./directory/to/save/')  # re-load
 
 # SOTA examples for GLUE, SQUAD, text generation...
+```
+
+## Quick tour TF 2.0 training and PyTorch interoperability
+
+Let's do a quick example of how a TensorFlow 2.0 model can be trained in 12 lines of code with 🤗 Transformers and then loaded in PyTorch for fast inspection/tests.
+
+```python
+import tensorflow as tf
+import tensorflow_datasets
+from pytorch_transformers import *
+
+# Load dataset, tokenizer, model from pretrained model/vocabulary
+tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+model = TFBertForSequenceClassification.from_pretrained('bert-base-cased')
+data = tensorflow_datasets.load('glue/mrpc')
+
+# Prepare dataset for GLUE as a tf.data.Dataset instance
+train_dataset = glue_convert_examples_to_features(data['train'], tokenizer, 128, 'mrpc')
+valid_dataset = glue_convert_examples_to_features(data['validation'], tokenizer, 128, 'mrpc')
+train_dataset = train_dataset.shuffle(100).batch(32).repeat(2)
+valid_dataset = valid_dataset.batch(64)
+
+# Prepare training: Compile tf.keras model with optimizer, loss and learning rate schedule 
+optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
+model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+# Train and evaluate using tf.keras.Model.fit()
+history = model.fit(train_dataset, epochs=2, steps_per_epoch=115,
+                    validation_data=valid_dataset, validation_steps=7)
+
+# Load the TensorFlow model in PyTorch for inspection
+model.save_pretrained('./save/')
+pytorch_model = BertForSequenceClassification.from_pretrained('./save/', from_tf=True)
+
+# Quickly test a few predictions - MRPC is a paraphrasing task, let's see if our model learned the task
+sentence_0 = "This research was consistent with his findings."
+sentence_1 = "His findings were compatible with this research."
+sentence_2 = "His findings were not compatible with this research."
+inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
+inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
+
+pred_1 = pytorch_model(**inputs_1)[0].argmax().item()
+pred_2 = pytorch_model(**inputs_2)[0].argmax().item()
+print("sentence_1 is", "a paraphrase" if pred_1 else "not a paraphrase", "of sentence_0")
+print("sentence_2 is", "a paraphrase" if pred_2 else "not a paraphrase", "of sentence_0")
 ```
 
 ## Quick tour of the fine-tuning/usage scripts
@@ -343,9 +395,22 @@ python ./examples/run_generation.py \
     --model_name_or_path=gpt2 \
 ```
 
+## Migrating from pytorch-transformers to transformers
+
+Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to `transformers`.
+
+### Positional order of some models' keywords inputs (`attention_mask`, `token_type_ids`...) changed
+
+To be able to use Torchscript (see #1010, #1204 and #1195) the specific order of some models **keywords inputs** (`attention_mask`, `token_type_ids`...) has been changed.
+
+If you used to call the models with keyword names for keyword arguments, e.g. `model(inputs_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)`, this should not cause any change.
+
+If you used to call the models with positional inputs for keyword arguments, e.g. `model(inputs_ids, attention_mask, token_type_ids)`, you may have to double check the exact order of input arguments.
+
+
 ## Migrating from pytorch-pretrained-bert to transformers
 
-Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `transformers`
+Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `transformers`.
 
 ### Models always output `tuples`
 
