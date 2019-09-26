@@ -5,24 +5,27 @@
 <p>
 <p align="center">
     <a href="https://github.com/huggingface/transformers/blob/master/LICENSE">
-        <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformer?style=flat-square">
+        <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/master">
     </a>
     <a href="https://github.com/huggingface/transformers/blob/master/LICENSE">
-        <img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue&style=flat-square">
+        <img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue">
     </a>
     <a href="https://huggingface.co/transformers/index.html">
-        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/transformers/index.html.svg?down_color=red&down_message=offline&style=flat-square&up_message=online">
+        <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/transformers/index.html.svg?down_color=red&down_message=offline&up_message=online">
     </a>
     <a href="https://github.com/huggingface/transformers/releases">
-        <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/transformers.svg?style=flat-square">
+        <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/transformers.svg">
     </a>
 </p>
 
-State-of-the-art Natural Language Processing (NLP) for TensorFlow 2.0 and PyTorch.
+<h3 align="center">
+<p>State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch
+</h3>
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose architectures (BERT, GPT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with more than 32+ pretrained checkpoints in 100+ languages.
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
 
-Features
+### Features
+
 - As easy to use as pytorch-transformers
 - As powerful and concise as Keras
 - High performance on NLU and NLG tasks
