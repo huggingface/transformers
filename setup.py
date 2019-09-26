@@ -13,11 +13,11 @@ To create the package for pypi.
 4. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
-   For the wheel, run: "python setup.py bdist_wheel" in the top level allennlp directory.
+   For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
    (this will build a wheel for the python version you use to build it - make sure you use python 3.x).
 
    For the sources, run: "python setup.py sdist"
-   You should now have a /dist directory with both .whl and .tar.gz source versions of allennlp.
+   You should now have a /dist directory with both .whl and .tar.gz source versions.
 
 5. Check that everything looks correct by uploading the package to the pypi test server:
 
