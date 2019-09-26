@@ -70,3 +70,59 @@ BERT
 .. autoclass:: transformers.BertForQuestionAnswering
     :members:
 
+
+``TFBertModel``
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertModel
+    :members:
+
+
+``TFBertForPreTraining``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForPreTraining
+    :members:
+
+
+``TFBertForMaskedLM``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForMaskedLM
+    :members:
+
+
+``TFBertForNextSentencePrediction``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForNextSentencePrediction
+    :members:
+
+
+``TFBertForSequenceClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForSequenceClassification
+    :members:
+
+
+``TFBertForMultipleChoice``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForMultipleChoice
+    :members:
+
+
+``TFBertForTokenClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForTokenClassification
+    :members:
+
+
+``TFBertForQuestionAnswering``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: pytorch_transformers.TFBertForQuestionAnswering
+    :members:
+
