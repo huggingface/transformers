@@ -1,7 +1,7 @@
 version: 2
 jobs:
     build_py3_torch_and_tf:
-        working_directory: ~/pytorch-transformers
+        working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
         resource_class: xlarge
@@ -13,10 +13,10 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     build_py3_torch:
-        working_directory: ~/pytorch-transformers
+        working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
         resource_class: xlarge
@@ -27,11 +27,11 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
             - run: codecov
     build_py3_tf:
-        working_directory: ~/pytorch-transformers
+        working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
         resource_class: xlarge
@@ -42,10 +42,10 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     build_py2_torch:
-        working_directory: ~/pytorch-transformers
+        working_directory: ~/transformers
         resource_class: large
         parallelism: 1
         docker:
@@ -55,10 +55,10 @@ jobs:
             - run: sudo pip install torch
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     build_py2_tf:
-        working_directory: ~/pytorch-transformers
+        working_directory: ~/transformers
         resource_class: large
         parallelism: 1
         docker:
@@ -68,10 +68,10 @@ jobs:
             - run: sudo pip install tensorflow==2.0.0-rc0
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     deploy_doc:
-        working_directory: ~/pytorch-transformers
+        working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
         steps:

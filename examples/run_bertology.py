@@ -32,7 +32,7 @@ from torch.utils.data import DataLoader, SequentialSampler, TensorDataset, Subse
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from pytorch_transformers import (WEIGHTS_NAME,
+from transformers import (WEIGHTS_NAME,
                                   BertConfig, BertForSequenceClassification, BertTokenizer,
                                   XLMConfig, XLMForSequenceClassification, XLMTokenizer,
                                   XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer)

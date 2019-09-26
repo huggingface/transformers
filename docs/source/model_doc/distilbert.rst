@@ -4,40 +4,40 @@ DistilBERT
 ``DistilBertConfig``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.DistilBertConfig
+.. autoclass:: transformers.DistilBertConfig
     :members:
 
 
 ``DistilBertTokenizer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.DistilBertTokenizer
+.. autoclass:: transformers.DistilBertTokenizer
     :members:
 
 
 ``DistilBertModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.DistilBertModel
+.. autoclass:: transformers.DistilBertModel
     :members:
 
 
 ``DistilBertForMaskedLM``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.DistilBertForMaskedLM
+.. autoclass:: transformers.DistilBertForMaskedLM
     :members:
 
 
 ``DistilBertForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.DistilBertForSequenceClassification
+.. autoclass:: transformers.DistilBertForSequenceClassification
     :members:
 
 
 ``DistilBertForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.DistilBertForQuestionAnswering
+.. autoclass:: transformers.DistilBertForQuestionAnswering
     :members:

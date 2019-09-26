@@ -15,7 +15,7 @@
 """
 Preprocessing script before training DistilBERT.
 """
-from pytorch_transformers import BertForPreTraining
+from transformers import BertForPreTraining
 import torch
 import argparse
 
