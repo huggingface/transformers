@@ -277,11 +277,11 @@ class TFPreTrainedModel(tf.keras.Model):
         return model
 
 class TFConv1D(tf.keras.layers.Layer):
-    def __init__(self, nf, nx, *inputs, initializer_range=0.02, **kwargs):
+    def __init__(self, nf, nx, initializer_range=0.02, **kwargs):
         """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
             Basically works like a Linear layer but the weights are transposed
         """
-        super(TFConv1D, self).__init__(*inputs, **kwargs)
+        super(TFConv1D, self).__init__(**kwargs)
         self.nf = nf
         self.nx = nx
         self.initializer_range = initializer_range
