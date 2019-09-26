@@ -62,11 +62,14 @@ Choose the right framework for every part of a model's lifetime
 
 ## Installation
 
-This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 1.0.0+
+This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+), PyTorch 1.0.0+ and TensorFlow 2.0.0-rc1
 
 ### With pip
 
-Transformers can be installed by pip as follows:
+First you need to install one of, or both, TensorFlow 2.0 and PyTorch.
+Please refere to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
+
+When TensorFlow 2.0 and/or PyTorch has been installed, 🤗 Transformers can be installed using pip as follows:
 
 ```bash
 pip install transformers
@@ -74,7 +77,10 @@ pip install transformers
 
 ### From source
 
-Clone the repository and run:
+Here also, you first need to install one of, or both, TensorFlow 2.0 and PyTorch.
+Please refere to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
+
+When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and runing:
 
 ```bash
 pip install [--editable] .
@@ -85,6 +91,8 @@ pip install [--editable] .
 A series of tests is included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 These tests can be run using `pytest` (install pytest if needed with `pip install pytest`).
+
+Depending on which framework is installed (TensorFlow 2.0 and/or PyTorch), the irrelevant tests will be skipped. Ensure that both frameworks are installed if you want to execute all tests.
 
 You can run the tests from the root of the cloned repository with the commands:
 
@@ -99,8 +107,7 @@ You should check out our [`swift-coreml-transformers`](https://github.com/huggin
 
 It contains an example of a conversion script from a Pytorch trained Transformer model (here, `GPT-2`) to a CoreML model that runs on iOS devices.
 
-At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models in PyTorch to productizing them in CoreML,
-or prototype a model or an app in CoreML then research its hyperparameters or architecture from PyTorch. Super exciting!
+At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models to productizing them in CoreML, or prototype a model or an app in CoreML then research its hyperparameters or architecture from TensorFlow 2.0 and/or PyTorch. Super exciting!
 
 ## Model architectures
 
