@@ -18,15 +18,18 @@
 import os
 import math
 import psutil
+import time
 from tensorboardX import SummaryWriter
 from tqdm import trange, tqdm
 import numpy as np
+import psutil
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim import AdamW
 
-from transformers import AdamW, WarmupLinearSchedule
+from transformers import WarmupLinearSchedule
 
 from utils import logger
 from dataset import Dataset
@@ -58,10 +61,12 @@ class Distiller:
         self.alpha_ce = params.alpha_ce
         self.alpha_mlm = params.alpha_mlm
         self.alpha_mse = params.alpha_mse
+        self.alpha_cos = params.alpha_cos
         assert self.alpha_ce >= 0.
         assert self.alpha_mlm >= 0.
         assert self.alpha_mse >= 0.
-        assert self.alpha_ce + self.alpha_mlm + self.alpha_mse > 0.
+        assert self.alpha_cos >= 0.
+        assert self.alpha_ce + self.alpha_mlm + self.alpha_mse + self.alpha_cos > 0.
 
         self.mlm_mask_prop = params.mlm_mask_prop
         assert 0.0 <= self.mlm_mask_prop <= 1.0
@@ -81,17 +86,21 @@ class Distiller:
         self.last_loss = 0
         self.last_loss_ce = 0
         self.last_loss_mlm = 0
-        self.last_loss_mse = 0
+        if self.alpha_mse > 0.: self.last_loss_mse = 0
+        if self.alpha_cos > 0.: self.last_loss_cos = 0
+        self.last_log = 0
 
         self.ce_loss_fct = nn.KLDivLoss(reduction='batchmean')
         self.mlm_loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
-        self.mse_loss_fct = nn.MSELoss(reduction='sum')
+        if self.alpha_mse > 0.:
+            self.mse_loss_fct = nn.MSELoss(reduction='sum')
+        if self.alpha_cos > 0.:
+            self.cosine_loss_fct = nn.CosineEmbeddingLoss(reduction='mean')
 
         logger.info('--- Initializing model optimizer')
         assert params.gradient_accumulation_steps >= 1
         self.num_steps_epoch = int(len(self.dataloader) / params.batch_size) + 1
         num_train_optimization_steps = int(self.num_steps_epoch / params.gradient_accumulation_steps * params.n_epoch) + 1
-        warmup_steps = math.ceil(num_train_optimization_steps * params.warmup_prop)
 
         no_decay = ['bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
@@ -104,9 +113,11 @@ class Distiller:
                                lr=params.learning_rate,
                                eps=params.adam_epsilon,
                                betas=(0.9, 0.98))
+
+        warmup_steps = math.ceil(num_train_optimization_steps * params.warmup_prop)
         self.scheduler = WarmupLinearSchedule(self.optimizer,
-                                              warmup_steps=warmup_steps,
-                                              t_total=num_train_optimization_steps)
+                                                warmup_steps=warmup_steps,
+                                                t_total=num_train_optimization_steps)
 
         if self.fp16:
             try:
@@ -272,11 +283,14 @@ class Distiller:
         The real training loop.
         """
         if self.is_master: logger.info('Starting training')
+        self.last_log = time.time()
         self.student.train()
         self.teacher.eval()
 
         for _ in range(self.params.n_epoch):
             if self.is_master: logger.info(f'--- Starting epoch {self.epoch}/{self.params.n_epoch-1}')
+            if self.multi_gpu:
+                torch.distributed.barrier()
 
             iter_bar = trange(self.num_steps_epoch, desc="-Iter", disable=self.params.local_rank not in [-1, 0])
             for __ in range(self.num_steps_epoch):
@@ -314,9 +328,9 @@ class Distiller:
         attention_mask: `torch.tensor(bs, seq_length)` - The attention mask for self attention.
         mlm_labels: `torch.tensor(bs, seq_length)` - The masked language modeling labels.
         """
-        s_logits = self.student(input_ids=input_ids, attention_mask=attention_mask)[0]     # (bs, seq_length, voc_size)
+        s_logits, s_hidden_states = self.student(input_ids=input_ids, attention_mask=attention_mask)     # (bs, seq_length, voc_size)
         with torch.no_grad():
-            t_logits = self.teacher(input_ids=input_ids, attention_mask=attention_mask)[0] # (bs, seq_length, voc_size)
+            t_logits, t_hidden_states = self.teacher(input_ids=input_ids, attention_mask=attention_mask) # (bs, seq_length, voc_size)
         assert s_logits.size() == t_logits.size()
 
         #https://github.com/peterliht/knowledge-distillation-pytorch/blob/master/model/net.py#L100
@@ -340,6 +354,22 @@ class Distiller:
         if self.alpha_mse > 0.:
             loss_mse = self.mse_loss_fct(s_logits_slct, t_logits_slct)/s_logits_slct.size(0) # Reproducing batchmean reduction
             loss += self.alpha_mse * loss_mse
+        
+        if self.alpha_cos > 0.:
+            s_hidden_states = s_hidden_states[-1]                              # (bs, seq_length, dim)
+            t_hidden_states = t_hidden_states[-1]                              # (bs, seq_length, dim)
+            mask = attention_mask.unsqueeze(-1).expand_as(s_hidden_states)     # (bs, seq_length, dim)
+            assert s_hidden_states.size() == t_hidden_states.size()
+            dim = s_hidden_states.size(-1)
+            
+            s_hidden_states_slct = torch.masked_select(s_hidden_states, mask)        # (bs * seq_length * dim)
+            s_hidden_states_slct = s_hidden_states_slct.view(-1, dim)                # (bs * seq_length, dim)
+            t_hidden_states_slct = torch.masked_select(t_hidden_states, mask)        # (bs * seq_length * dim)
+            t_hidden_states_slct = t_hidden_states_slct.view(-1, dim)                # (bs * seq_length, dim)
+        
+            target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1) # (bs * seq_length,)
+            loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
+            loss += self.alpha_cos * loss_cos
 
         self.total_loss_epoch += loss.item()
         self.last_loss = loss.item()
@@ -348,6 +378,8 @@ class Distiller:
             self.last_loss_mlm = loss_mlm.item()
         if self.alpha_mse > 0.:
             self.last_loss_mse = loss_mse.item()
+        if self.alpha_cos > 0.:
+            self.last_loss_cos = loss_cos.item()
 
         self.optimize(loss)
 
@@ -396,6 +428,7 @@ class Distiller:
 
         if self.n_total_iter % self.params.log_interval == 0:
             self.log_tensorboard()
+            self.last_log = time.time()
         if self.n_total_iter % self.params.checkpoint_interval == 0:
             self.save_checkpoint()
 
@@ -421,9 +454,12 @@ class Distiller:
             self.tensorboard.add_scalar(tag="losses/loss_mlm", scalar_value=self.last_loss_mlm, global_step=self.n_total_iter)
         if self.alpha_mse > 0.:
             self.tensorboard.add_scalar(tag="losses/loss_mse", scalar_value=self.last_loss_mse, global_step=self.n_total_iter)
+        if self.alpha_cos > 0.:
+            self.tensorboard.add_scalar(tag="losses/loss_cos", scalar_value=self.last_loss_cos, global_step=self.n_total_iter)
         self.tensorboard.add_scalar(tag="learning_rate/lr", scalar_value=self.scheduler.get_lr()[0], global_step=self.n_total_iter)
         
         self.tensorboard.add_scalar(tag="global/memory_usage", scalar_value=psutil.virtual_memory()._asdict()['used']/1_000_000, global_step=self.n_total_iter)
+        self.tensorboard.add_scalar(tag="global/speed", scalar_value=time.time()-self.last_log, global_step=self.n_total_iter)
 
     def end_epoch(self):
         """

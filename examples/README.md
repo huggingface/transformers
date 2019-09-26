@@ -97,20 +97,20 @@ Fine-tuning the library models for sequence classification on the GLUE benchmark
 Evaluation](https://gluebenchmark.com/). This script can fine-tune the following models: BERT, XLM, XLNet and RoBERTa. 
 
 GLUE is made up of a total of 9 different tasks. We get the following results on the dev set of the benchmark with an
-uncased  BERT base model (the checkpoint `bert-base-uncased`). All experiments ran on 8  V100 GPUs with a total train
+uncased  BERT base model (the checkpoint `bert-base-uncased`). All experiments ran on 8 V100 GPUs with a total train
 batch size of 24. Some of these tasks have a small dataset and training can lead to high variance in the results
 between different runs. We report the median on 5 runs (with different seeds) for each of the metrics.
 
 | Task  | Metric                       | Result      |
 |-------|------------------------------|-------------|
-| CoLA  | Matthew's corr               | 55.75       |
-| SST-2 | Accuracy                     | 92.09       |
-| MRPC  | F1/Accuracy                  | 90.48/86.27 |
-| STS-B | Person/Spearman corr.        | 89.03/88.64 |
-| QQP   | Accuracy/F1                  | 90.92/87.72 |
-| MNLI  | Matched acc./Mismatched acc. | 83.74/84.06 |
-| QNLI  | Accuracy                     | 91.07       |
-| RTE   | Accuracy                     | 68.59       |
+| CoLA  | Matthew's corr               | 48.87       |
+| SST-2 | Accuracy                     | 91.74       |
+| MRPC  | F1/Accuracy                  | 90.70/86.27 |
+| STS-B | Person/Spearman corr.        | 91.39/91.04 |
+| QQP   | Accuracy/F1                  | 90.79/87.66 |
+| MNLI  | Matched acc./Mismatched acc. | 83.70/84.83 |
+| QNLI  | Accuracy                     | 89.31       |
+| RTE   | Accuracy                     | 71.43       |
 | WNLI  | Accuracy                     | 43.66       |
 
 Some of these results are significantly different from the ones reported on the test set
