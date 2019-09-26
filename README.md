@@ -207,7 +207,7 @@ Let's do a quick example of how a TensorFlow 2.0 model can be trained in 12 line
 ```python
 import tensorflow as tf
 import tensorflow_datasets
-from pytorch_transformers import *
+from transformers import *
 
 # Load dataset, tokenizer, model from pretrained model/vocabulary
 tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
@@ -215,8 +215,8 @@ model = TFBertForSequenceClassification.from_pretrained('bert-base-cased')
 data = tensorflow_datasets.load('glue/mrpc')
 
 # Prepare dataset for GLUE as a tf.data.Dataset instance
-train_dataset = glue_convert_examples_to_features(data['train'], tokenizer, 128, 'mrpc')
-valid_dataset = glue_convert_examples_to_features(data['validation'], tokenizer, 128, 'mrpc')
+train_dataset = glue_convert_examples_to_features(data['train'], tokenizer, max_length=128, task='mrpc')
+valid_dataset = glue_convert_examples_to_features(data['validation'], tokenizer, max_length=128, task='mrpc')
 train_dataset = train_dataset.shuffle(100).batch(32).repeat(2)
 valid_dataset = valid_dataset.batch(64)
 
