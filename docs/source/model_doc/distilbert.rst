@@ -45,26 +45,26 @@ DistilBERT
 ``TFDistilBertModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFDistilBertModel
+.. autoclass:: transformers.TFDistilBertModel
     :members:
 
 
 ``TFDistilBertForMaskedLM``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFDistilBertForMaskedLM
+.. autoclass:: transformers.TFDistilBertForMaskedLM
     :members:
 
 
 ``TFDistilBertForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFDistilBertForSequenceClassification
+.. autoclass:: transformers.TFDistilBertForSequenceClassification
     :members:
 
 
 ``TFDistilBertForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFDistilBertForQuestionAnswering
+.. autoclass:: transformers.TFDistilBertForQuestionAnswering
     :members:

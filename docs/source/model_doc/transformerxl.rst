@@ -33,12 +33,12 @@ Transformer XL
 ``TFTransfoXLModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFTransfoXLModel
+.. autoclass:: transformers.TFTransfoXLModel
     :members:
 
 
 ``TFTransfoXLLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFTransfoXLLMHeadModel
+.. autoclass:: transformers.TFTransfoXLLMHeadModel
     :members:

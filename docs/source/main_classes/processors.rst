@@ -8,20 +8,20 @@ Processors
 ~~~~~~~~~~~~~~~~~~~~~
 
 All processors follow the same architecture which is that of the
-:class:`~pytorch_transformers.data.processors.utils.DataProcessor`. The processor returns a list
-of :class:`~pytorch_transformers.data.processors.utils.InputExample`. These
-:class:`~pytorch_transformers.data.processors.utils.InputExample` can be converted to
-:class:`~pytorch_transformers.data.processors.utils.InputFeatures` in order to be fed to the model.
+:class:`~transformers.data.processors.utils.DataProcessor`. The processor returns a list
+of :class:`~transformers.data.processors.utils.InputExample`. These
+:class:`~transformers.data.processors.utils.InputExample` can be converted to
+:class:`~transformers.data.processors.utils.InputFeatures` in order to be fed to the model.
 
-.. autoclass:: pytorch_transformers.data.processors.utils.DataProcessor
+.. autoclass:: transformers.data.processors.utils.DataProcessor
     :members:
 
 
-.. autoclass:: pytorch_transformers.data.processors.utils.InputExample
+.. autoclass:: transformers.data.processors.utils.InputExample
     :members:
 
 
-.. autoclass:: pytorch_transformers.data.processors.utils.InputFeatures
+.. autoclass:: transformers.data.processors.utils.InputFeatures
     :members:
 
 
@@ -36,20 +36,20 @@ This library hosts a total of 10 processors for the following tasks: MRPC, MNLI,
 CoLA, SST2, STSB, QQP, QNLI, RTE and WNLI.
 
 Those processors are:
-    - :class:`~pytorch_transformers.data.processors.utils.MrpcProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.MnliProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.MnliMismatchedProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.Sst2Processor`
-    - :class:`~pytorch_transformers.data.processors.utils.StsbProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.QqpProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.QnliProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.RteProcessor`
-    - :class:`~pytorch_transformers.data.processors.utils.WnliProcessor`
+    - :class:`~transformers.data.processors.utils.MrpcProcessor`
+    - :class:`~transformers.data.processors.utils.MnliProcessor`
+    - :class:`~transformers.data.processors.utils.MnliMismatchedProcessor`
+    - :class:`~transformers.data.processors.utils.Sst2Processor`
+    - :class:`~transformers.data.processors.utils.StsbProcessor`
+    - :class:`~transformers.data.processors.utils.QqpProcessor`
+    - :class:`~transformers.data.processors.utils.QnliProcessor`
+    - :class:`~transformers.data.processors.utils.RteProcessor`
+    - :class:`~transformers.data.processors.utils.WnliProcessor`
 
 Additionally, the following method  can be used to load values from a data file and convert them to a list of
-:class:`~pytorch_transformers.data.processors.utils.InputExample`.
+:class:`~transformers.data.processors.utils.InputExample`.
 
-.. automethod:: pytorch_transformers.data.processors.glue.glue_convert_examples_to_features
+.. automethod:: transformers.data.processors.glue.glue_convert_examples_to_features
 
 Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^
