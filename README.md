@@ -4,7 +4,7 @@
     <br>
 <p>
 <p align="center">
-    <a href="https://github.com/huggingface/transformers/blob/master/LICENSE">
+    <a href="https://circleci.com/gh/huggingface/transformers">
         <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/master">
     </a>
     <a href="https://github.com/huggingface/transformers/blob/master/LICENSE">
