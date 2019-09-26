@@ -44,7 +44,7 @@ XLM
 ``TFXLMModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TFXLMModel
+.. autoclass:: transformers.TFXLMModel
     :members:
 
 
