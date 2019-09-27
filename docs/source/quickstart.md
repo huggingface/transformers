@@ -19,12 +19,12 @@ The library was designed with two strong goals in mind:
 
 A few other goals:
 
-- expose the models internals as consistently as possible:
+- expose the models' internals as consistently as possible:
 
   - we give access, using a single API to the full hidden-states and attention weights,
   - tokenizer and base model's API are standardized to easily switch between models.
 
-- incorporate a subjective selection of promising tools for fine-tuning/investiguating these models:
+- incorporate a subjective selection of promising tools for fine-tuning/investigating these models:
 
   - a simple/consistent way to add new tokens to the vocabulary and embeddings for fine-tuning,
   - simple ways to mask and prune transformer heads.
@@ -51,7 +51,7 @@ We'll finish this quickstart tour by going through a few simple quick-start exam
 
 Here are two examples showcasing a few `Bert` and `GPT2` classes and pre-trained models.
 
-See full API reference for examples for each model classe.
+See full API reference for examples for each model class.
 
 ### BERT example
 
