@@ -430,7 +430,7 @@ class PreTrainedTokenizer(object):
                 - tokenizer instantiation positional and keywords inputs (e.g. do_lower_case for Bert).
 
             This won't save modifications other than (added tokens and special token mapping) you may have
-            applied to the tokenizer after the instantion (e.g. modifying tokenizer.do_lower_case after creation).
+            applied to the tokenizer after the instantiation (e.g. modifying tokenizer.do_lower_case after creation).
 
             This method make sure the full tokenizer can then be re-loaded using the :func:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
         """
