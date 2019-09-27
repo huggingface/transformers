@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_datasets
-from transformers import *
+from transformers import BertTokenizer, TFBertForSequenceClassification, glue_convert_examples_to_features, BertForSequenceClassification
 
 # Load dataset, tokenizer, model from pretrained model/vocabulary
 tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
