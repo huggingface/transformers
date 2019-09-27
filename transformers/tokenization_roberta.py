@@ -81,6 +81,8 @@ class RobertaTokenizer(GPT2Tokenizer):
                                                bos_token=bos_token, eos_token=eos_token, unk_token=unk_token,
                                                sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
                                                mask_token=mask_token, **kwargs)
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
     def add_special_tokens_single_sequence(self, token_ids):
         """
