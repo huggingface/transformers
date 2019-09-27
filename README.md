@@ -452,6 +452,10 @@ outputs = model(input_ids, labels=labels)
 loss, logits, attentions = outputs
 ```
 
+### Using hidden states
+
+By enabling the configuration option `output_hidden_states`, it was possible to retrieve the last hidden states of the encoder. In `pytorch-transformers` as well as `transformers` the return value has changed slightly: `all_hidden_states` now also includes the hidden state of the embeddings in addition to those of the encoding layers. This allows users to easily access the embeddings final state.
+
 ### Serialization
 
 Breaking change in the `from_pretrained()`method:
