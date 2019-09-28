@@ -25,6 +25,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .modeling_utils import ACT2FN
+
 # CUDA_MAJOR = int(torch.version.cuda.split('.')[0])
 # CUDA_MINOR = int(torch.version.cuda.split('.')[1])
 
@@ -114,10 +116,10 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             logit = self._compute_logit(hidden, self.out_layers[0].weight,
                                         self.out_layers[0].bias, self.out_projs[0])
             if labels is not None:
-                out = -F.log_softmax(logit, dim=-1) \
+                out = -ACT2FN['log_softmax'](logit, dim=-1) \
                         .gather(1, labels.unsqueeze(1)).squeeze(1)
             else:
-                out = F.log_softmax(logit, dim=-1)
+                out = ACT2FN['log_softmax'](logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []
@@ -142,7 +144,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             head_weight, head_bias, head_proj = weights[0], biases[0], self.out_projs[0]
 
             head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
-            head_logprob = F.log_softmax(head_logit, dim=1)
+            head_logprob = ACT2FN['log_softmax'](head_logit, dim=1)
 
             if labels is None:
                 out = hidden.new_empty((head_logit.size(0), self.n_token))
@@ -176,7 +178,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
                     tail_logit_i = self._compute_logit(hidden_i, weight_i, bias_i, proj_i)
-                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
+                    tail_logprob_i = ACT2FN['log_softmax'](tail_logit_i, dim=1)
                     cluster_prob_idx = self.cutoffs[0] + i - 1  # No probability for the head cluster
                     if labels is not None:
                         logprob_i = head_logprob_i[:, cluster_prob_idx] \
@@ -211,7 +213,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
         if self.n_clusters == 0:
             logit = self._compute_logit(hidden, self.out_layers[0].weight,
                                         self.out_layers[0].bias, self.out_projs[0])
-            return F.log_softmax(logit, dim=-1)
+            return ACT2FN['log_softmax'](logit, dim=-1)
         else:
             # construct weights and biases
             weights, biases = [], []
@@ -237,7 +239,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             head_logit = self._compute_logit(hidden, head_weight, head_bias, head_proj)
 
             out = hidden.new_empty((head_logit.size(0), self.n_token))
-            head_logprob = F.log_softmax(head_logit, dim=1)
+            head_logprob = ACT2FN['log_softmax'](head_logit, dim=1)
 
             cutoff_values = [0] + self.cutoffs
             for i in range(len(cutoff_values) - 1):
@@ -249,7 +251,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                     weight_i, bias_i, proj_i = weights[i], biases[i], self.out_projs[i]
 
                     tail_logit_i = self._compute_logit(hidden, weight_i, bias_i, proj_i)
-                    tail_logprob_i = F.log_softmax(tail_logit_i, dim=1)
+                    tail_logprob_i = ACT2FN['log_softmax'](tail_logit_i, dim=1)
 
                     logprob_i = head_logprob[:, -i] + tail_logprob_i
                     out[:, start_idx, stop_idx] = logprob_i

@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer, SequenceSummary, SQuADHead
+from .modeling_utils import ACT2FN, PreTrainedModel, prune_linear_layer, SequenceSummary, SQuADHead
 from .configuration_xlm import XLMConfig
 from .file_utils import add_start_docstrings
 
@@ -56,17 +56,6 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
     out.requires_grad = False
-
-
-def gelu(x):
-    """
-    GELU activation
-    https://arxiv.org/abs/1606.08415
-    https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/model_pytorch.py#L14
-    https://github.com/huggingface/transformers/blob/master/modeling.py
-    """
-    # return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-    return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def get_masks(slen, lengths, causal, padding_mask=None):
@@ -182,7 +171,7 @@ class MultiHeadAttention(nn.Module):
         mask = (mask == 0).view(mask_reshape).expand_as(scores)               # (bs, n_heads, qlen, klen)
         scores.masked_fill_(mask, -float('inf'))                              # (bs, n_heads, qlen, klen)
 
-        weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
+        weights = ACT2FN['softmax'](scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
         weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
@@ -205,7 +194,7 @@ class TransformerFFN(nn.Module):
         self.dropout = config.dropout
         self.lin1 = nn.Linear(in_dim, dim_hidden)
         self.lin2 = nn.Linear(dim_hidden, out_dim)
-        self.act = gelu if config.gelu_activation else F.relu
+        self.act = ACT2FN['gelu'] if config.gelu_activation else ACT2FN['relu']
 
     def forward(self, input):
         x = self.lin1(input)

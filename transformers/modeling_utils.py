@@ -21,6 +21,7 @@ from __future__ import (absolute_import, division, print_function,
 import copy
 import json
 import logging
+import math
 import os
 from io import open
 
@@ -49,6 +50,41 @@ except ImportError:
         def forward(self, input):
             return input
 
+
+# Set activation functions
+def gelu_new(x):
+    """ Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT).
+        Also see https://arxiv.org/abs/1606.08415
+    """
+    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+
+
+def swish(x):
+    return x * torch.sigmoid(x)
+
+
+ACT2FN = {"gelu_new": gelu_new,
+          "log_softmax": F.log_softmax,
+          "relu": F.relu,
+          "softmax": F.softmax,
+          "swish": swish,
+          "tanh": torch.tanh}
+
+try:
+    from torch.nn.functional import gelu
+except AttributeError:
+    def gelu(x):
+        """ Original Implementation of the gelu activation function in Google Bert repo when initialy created.
+            For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+            0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+            Also see https://arxiv.org/abs/1606.08415
+        """
+        return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+ACT2FN['gelu'] = gelu
+
+
+# Base utility classes
 class PreTrainedModel(nn.Module):
     r""" Base class for all models.
 
@@ -471,7 +507,7 @@ class PoolerEndLogits(nn.Module):
     def __init__(self, config):
         super(PoolerEndLogits, self).__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.activation = ACT2FN['tanh']
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense_1 = nn.Linear(config.hidden_size, 1)
 
@@ -511,7 +547,7 @@ class PoolerAnswerClass(nn.Module):
     def __init__(self, config):
         super(PoolerAnswerClass, self).__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.activation = ACT2FN['tanh']
         self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
 
     def forward(self, hidden_states, start_states=None, start_positions=None, cls_index=None):
@@ -694,6 +730,8 @@ class SequenceSummary(nn.Module):
 
         self.activation = Identity()
         if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':
+            # Can't use the function here (so can't use ACT2FN)
+            # Expects a module
             self.activation = nn.Tanh()
 
         self.first_dropout = Identity()

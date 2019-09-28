@@ -31,7 +31,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .modeling_utils import ACT2FN, PreTrainedModel, prune_linear_layer
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings
 
@@ -46,9 +46,6 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 
 ### UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE ###
-def gelu(x):
-    return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
-
 def create_sinusoidal_embeddings(n_pos, dim, out):
     position_enc = np.array([
         [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
@@ -196,6 +193,7 @@ class MultiHeadSelfAttention(nn.Module):
         else:
             return (context,)
 
+
 class FFN(nn.Module):
     def __init__(self, config):
         super(FFN, self).__init__()
@@ -203,7 +201,7 @@ class FFN(nn.Module):
         self.lin1 = nn.Linear(in_features=config.dim, out_features=config.hidden_dim)
         self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
         assert config.activation in ['relu', 'gelu'], "activation ({}) must be in ['relu', 'gelu']".format(config.activation)
-        self.activation = gelu if config.activation == 'gelu' else nn.ReLU()
+        self.activation = ACT2FN['gelu'] if config.activation == 'gelu' else ACT2FN['relu']
 
     def forward(self, input):
         x = self.lin1(input)
@@ -530,7 +528,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
                                        head_mask=head_mask)
         hidden_states = dlbrt_output[0]                              # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)      # (bs, seq_length, dim)
-        prediction_logits = gelu(prediction_logits)                  # (bs, seq_length, dim)
+        prediction_logits = ACT2FN['gelu'](prediction_logits)                  # (bs, seq_length, dim)
         prediction_logits = self.vocab_layer_norm(prediction_logits) # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
 
@@ -595,7 +593,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         hidden_state = distilbert_output[0]                    # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]                    # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)   # (bs, dim)
-        pooled_output = nn.ReLU()(pooled_output)             # (bs, dim)
+        pooled_output = ACT2FN['relu'](pooled_output)             # (bs, dim)
         pooled_output = self.dropout(pooled_output)         # (bs, dim)
         logits = self.classifier(pooled_output)              # (bs, dim)
 

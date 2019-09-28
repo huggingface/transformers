@@ -30,7 +30,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
+from .modeling_utils import ACT2FN, PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings
 
@@ -112,18 +112,6 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
-
-
-def gelu(x):
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-
-
-def swish(x):
-    return x * torch.sigmoid(x)
-
-
-ACT_FNS = {"relu": nn.ReLU, "swish": swish, "gelu": gelu}
-
 
 class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
@@ -225,7 +213,8 @@ class MLP(nn.Module):
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
-        self.act = ACT_FNS[config.afn]
+        # gelu activation for openai refers to the 'new' gelu version
+        self.act = ACT2FN["gelu_new"] if config.afn == "gelu" else ACT2FN[config.afn]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):

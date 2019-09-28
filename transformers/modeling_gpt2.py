@@ -30,7 +30,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
+from .modeling_utils import ACT2FN, PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings
 
@@ -94,10 +94,6 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     return model
 
 
-def gelu(x):
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-
-
 class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
         super(Attention, self).__init__()
@@ -151,7 +147,7 @@ class Attention(nn.Module):
             # Apply the attention mask
             w = w + attention_mask
 
-        w = nn.Softmax(dim=-1)(w)
+        w = ACT2FN['softmax'](w, dim=-1)
         w = self.attn_dropout(w)
 
         # Mask heads if we want to
@@ -205,7 +201,7 @@ class MLP(nn.Module):
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
-        self.act = gelu
+        self.act = ACT2FN['gelu_new']
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
@@ -590,10 +586,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
         import torch
         from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
-        
+
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
-        
+
         # Add a [CLS] to the vocabulary (we should train it also!)
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})
         model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size

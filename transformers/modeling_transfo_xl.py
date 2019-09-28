@@ -34,7 +34,7 @@ import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
+from .modeling_utils import ACT2FN, PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
 from .file_utils import add_start_docstrings
@@ -202,7 +202,8 @@ class PositionwiseFF(nn.Module):
         self.dropout = dropout
 
         self.CoreNet = nn.Sequential(
-            nn.Linear(d_model, d_inner), nn.ReLU(inplace=True),
+            nn.Linear(d_model, d_inner),
+            nn.ReLU(inplace=True),
             nn.Dropout(dropout),
             nn.Linear(d_inner, d_model),
             nn.Dropout(dropout),
@@ -336,7 +337,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
                         attn_mask[:,:,:,None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
-        attn_prob = F.softmax(attn_score, dim=1)
+        attn_prob = ACT2FN['softmax'](attn_score, dim=1)
         attn_prob = self.dropatt(attn_prob)
 
         # Mask heads if we want to

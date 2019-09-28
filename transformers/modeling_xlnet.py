@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer, SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits
+from .modeling_utils import ACT2FN, PreTrainedModel, prune_linear_layer, SequenceSummary, PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings
 
@@ -172,22 +172,6 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
     return model
 
 
-def gelu(x):
-    """ Implementation of the gelu activation function.
-        XLNet is using OpenAI GPT's gelu (not exactly the same as BERT)
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-    return x * cdf
-
-
-def swish(x):
-    return x * torch.sigmoid(x)
-
-
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
-
-
 try:
     from apex.normalization.fused_layer_norm import FusedLayerNorm as XLNetLayerNorm
 except (ImportError, AttributeError) as e:
@@ -266,7 +250,7 @@ class XLNetRelativeAttention(nn.Module):
                 attn_score = attn_score - 1e30 * attn_mask
 
         # attention probability
-        attn_prob = F.softmax(attn_score, dim=1)
+        attn_prob = ACT2FN['softmax'](attn_score, dim=1)
         attn_prob = self.dropout(attn_prob)
 
         # Mask heads if we want to
@@ -395,7 +379,8 @@ class XLNetFeedForward(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         if isinstance(config.ff_activation, str) or \
                 (sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)):
-            self.activation_function = ACT2FN[config.ff_activation]
+            # # gelu activation for xlnet refers to the 'new' gelu version
+            self.activation_function = ACT2FN["gelu_new"] if config.ff_activation == "gelu" else ACT2FN[config.ff_activation]
         else:
             self.activation_function = config.ff_activation
 
@@ -1319,7 +1304,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = F.softmax(start_logits, dim=-1) # shape (bsz, slen)
+            start_log_probs = ACT2FN['softmax'](start_logits, dim=-1) # shape (bsz, slen)
 
             start_top_log_probs, start_top_index = torch.topk(start_log_probs, self.start_n_top, dim=-1) # shape (bsz, start_n_top)
             start_top_index_exp = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
@@ -1329,7 +1314,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(start_states) # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = F.softmax(end_logits, dim=1) # shape (bsz, slen, start_n_top)
+            end_log_probs = ACT2FN['softmax'](end_logits, dim=1) # shape (bsz, slen, start_n_top)
 
             end_top_log_probs, end_top_index = torch.topk(end_log_probs, self.end_n_top, dim=1) # shape (bsz, end_n_top, start_n_top)
             end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)

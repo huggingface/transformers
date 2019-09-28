@@ -24,7 +24,8 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
+from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel
+from .modeling_utils import ACT2FN
 from .configuration_roberta import RobertaConfig
 from .file_utils import add_start_docstrings
 
@@ -261,7 +262,7 @@ class RobertaLMHead(nn.Module):
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
-        x = gelu(x)
+        x = ACT2FN['gelu'](x)
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
