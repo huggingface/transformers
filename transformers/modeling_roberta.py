@@ -41,11 +41,16 @@ class RobertaEmbeddings(BertEmbeddings):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
     def __init__(self, config):
-        super(RobertaEmbeddings, self).__init__(config)
         self.padding_idx = 1
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size,
                                                 padding_idx=self.padding_idx)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, position_ids=None):
         seq_length = input_ids.size(1)
