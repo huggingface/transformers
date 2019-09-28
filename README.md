@@ -180,24 +180,24 @@ for model_class in BERT_MODEL_CLASSES:
     # Load pretrained model/tokenizer
     model = model_class.from_pretrained('bert-base-uncased')
 
-# Models can return full list of hidden-states & attentions weights at each layer
-model = model_class.from_pretrained(pretrained_weights,
-                                    output_hidden_states=True,
-                                    output_attentions=True)
-input_ids = torch.tensor([tokenizer.encode("Let's see all hidden-states and attentions on this text")])
-all_hidden_states, all_attentions = model(input_ids)[-2:]
+    # Models can return full list of hidden-states & attentions weights at each layer
+    model = model_class.from_pretrained(pretrained_weights,
+                                        output_hidden_states=True,
+                                        output_attentions=True)
+    input_ids = torch.tensor([tokenizer.encode("Let's see all hidden-states and attentions on this text")])
+    all_hidden_states, all_attentions = model(input_ids)[-2:]
 
-# Models are compatible with Torchscript
-model = model_class.from_pretrained(pretrained_weights, torchscript=True)
-traced_model = torch.jit.trace(model, (input_ids,))
+    # Models are compatible with Torchscript
+    model = model_class.from_pretrained(pretrained_weights, torchscript=True)
+    traced_model = torch.jit.trace(model, (input_ids,))
 
-# Simple serialization for models and tokenizers
-model.save_pretrained('./directory/to/save/')  # save
-model = model_class.from_pretrained('./directory/to/save/')  # re-load
-tokenizer.save_pretrained('./directory/to/save/')  # save
-tokenizer = tokenizer_class.from_pretrained('./directory/to/save/')  # re-load
+    # Simple serialization for models and tokenizers
+    model.save_pretrained('./directory/to/save/')  # save
+    model = model_class.from_pretrained('./directory/to/save/')  # re-load
+    tokenizer.save_pretrained('./directory/to/save/')  # save
+    tokenizer = BertTokenizer.from_pretrained('./directory/to/save/')  # re-load
 
-# SOTA examples for GLUE, SQUAD, text generation...
+    # SOTA examples for GLUE, SQUAD, text generation...
 ```
 
 ## Quick tour TF 2.0 training and PyTorch interoperability
