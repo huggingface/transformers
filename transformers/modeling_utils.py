@@ -62,14 +62,6 @@ def gelu_new(x):
 def swish(x):
     return x * torch.sigmoid(x)
 
-
-ACT2FN = {"gelu_new": gelu_new,
-          "log_softmax": F.log_softmax,
-          "relu": F.relu,
-          "softmax": F.softmax,
-          "swish": swish,
-          "tanh": torch.tanh}
-
 try:
     from torch.nn.functional import gelu
 except AttributeError:
@@ -81,7 +73,13 @@ except AttributeError:
         """
         return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
-ACT2FN['gelu'] = gelu
+ACT2FN = {"gelu": gelu,
+          "gelu_new": gelu_new,
+          "log_softmax": F.log_softmax,
+          "relu": F.relu,
+          "softmax": F.softmax,
+          "swish": swish,
+          "tanh": torch.tanh}
 
 
 # Base utility classes
