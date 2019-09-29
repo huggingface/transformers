@@ -35,7 +35,8 @@ def glue_convert_examples_to_features(examples, tokenizer,
                                       pad_on_left=False,
                                       pad_token=0,
                                       pad_token_segment_id=0,
-                                      mask_padding_with_zero=True):
+                                      mask_padding_with_zero=True,
+                                      truncate_first_sequence=True):
     """
     Loads a data file into a list of ``InputFeatures``
 
@@ -86,7 +87,7 @@ def glue_convert_examples_to_features(examples, tokenizer,
             example.text_b,
             add_special_tokens=True,
             max_length=max_length,
-            truncate_first_sequence=True  # We're truncating the first sequence in priority
+            truncate_first_sequence=truncate_first_sequence  # We're truncating the first sequence in priority
         )
         input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
