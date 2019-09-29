@@ -227,9 +227,9 @@ class PreTrainedTokenizer(object):
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == 'additional_special_tokens':
-                    assert isinstance(value, (list, tuple)) and all(isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value)
+                    assert isinstance(value, (list, tuple)) and all(isinstance(t, six.string_types) for t in value)
                 else:
-                    assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))
+                    assert isinstance(value, six.string_types)
                 setattr(self, key, value)
 
 
@@ -510,9 +510,9 @@ class PreTrainedTokenizer(object):
 
         to_add_tokens = []
         for token in new_tokens:
-            assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))
-            if token != self.unk_token and \
-                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token):
+            assert isinstance(token, six.string_types)
+            if (token != self.unk_token and
+                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)):
                 to_add_tokens.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
@@ -592,10 +592,10 @@ class PreTrainedTokenizer(object):
         for key, value in special_tokens_dict.items():
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES
             if key == 'additional_special_tokens':
-                assert isinstance(value, (list, tuple)) and all(isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value)
+                assert isinstance(value, (list, tuple)) and all(isinstance(t, six.string_types) for t in value)
                 added_tokens += self.add_tokens(value)
             else:
-                assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))
+                assert isinstance(value, six.string_types)
                 added_tokens += self.add_tokens([value])
             logger.info("Assigning %s to the %s key of the tokenizer", value, key)
             setattr(self, key, value)
@@ -663,13 +663,13 @@ class PreTrainedTokenizer(object):
         raise NotImplementedError
 
     def convert_tokens_to_ids(self, tokens):
-        """ Converts a single token, or a sequence of tokens, (str/unicode) in a single integer id
+        """ Converts a single token, or a sequence of tokens, (six.string_types) in a single integer id
             (resp. a sequence of ids), using the vocabulary.
         """
         if tokens is None:
             return None
 
-        if isinstance(tokens, str) or (six.PY2 and isinstance(tokens, unicode)):
+        if isinstance(tokens, six.string_types):
             return self._convert_token_to_id_with_added_voc(tokens)
 
         ids = []
@@ -876,7 +876,7 @@ class PreTrainedTokenizer(object):
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         """ Converts a single index or a sequence of indices (integers) in a token "
-            (resp.) a sequence of tokens (str/unicode), using the vocabulary and added tokens.
+            (resp.) a sequence of tokens (six.string_types), using the vocabulary and added tokens.
 
             Args:
                 skip_special_tokens: Don't decode special tokens (self.all_special_tokens). Default: False
