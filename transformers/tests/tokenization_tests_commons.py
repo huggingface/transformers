@@ -321,4 +321,16 @@ class CommonTestCases:
             filtered_sequence = [x for x in filtered_sequence if x is not None]
             assert encoded_sequence == filtered_sequence
 
+            # Testing with already existing special tokens
+            if tokenizer.cls_token_id == tokenizer.unk_token_id and tokenizer.cls_token_id == tokenizer.unk_token_id:
+                tokenizer.add_special_tokens({'cls_token': '</s>', 'sep_token': '<s>'})
+            encoded_sequence_dict = tokenizer.encode_plus(sequence_0, add_special_tokens=True)
+            encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
+            sequence_ids_orig = encoded_sequence_dict["sequence_ids"]
+            sequence_ids = tokenizer.get_sequence_ids(encoded_sequence_w_special, special_tokens_present=True)
+            assert len(sequence_ids) == len(encoded_sequence_w_special)
+            print(sequence_ids_orig, sequence_ids)
+            assert sequence_ids_orig == sequence_ids
+
+
 
