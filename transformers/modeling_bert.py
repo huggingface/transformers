@@ -478,7 +478,9 @@ class RBertClassificationHead(nn.Module):
             lookup_tensor = self.get_indices_tensor(instance_input_ids, entity_char_id)
             average_of_entity_vectors = torch.index_select(instance_hidden_state, 0, lookup_tensor).unsqueeze(0).mean(1)
             batch_return_list.append(average_of_entity_vectors)
-        return torch.cat(batch_return_list)
+        return_tensor = torch.cat(batch_return_list)
+        return_tensor[return_tensor.ne(return_tensor)] = 0 #set any nan's created by mean operation to 0
+        return return_tensor
 
     def forward(self, input_ids, last_hidden_states):
         cls_tensor = self.sentence_layer(
@@ -943,8 +945,8 @@ class BertForRelationshipClassification(BertPreTrainedModel):
         self.rbert = RBertClassificationHead(config)
         self.init_weights()
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
-                position_ids=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
+                position_ids=None, head_mask=None, labels=None):
 
         outputs = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
                             attention_mask=attention_mask, head_mask=head_mask)
