@@ -837,7 +837,8 @@ class PreTrainedTokenizer(object):
                         copy.deepcopy(pair_ids),
                         max_length=max_length - n_added_tokens
                     )
-                    encoded_inputs["overflowing_tokens"] = ids[- (len_ids - len(tokens_a)):] + pair_ids[- (len_pair_ids - len(tokens_b)):]
+                    truncated_tokens = ids[- (len_ids - len(tokens_a)):] + pair_ids[- (len_pair_ids - len(tokens_b)):]
+                    encoded_inputs["num_truncated_tokens"] = len(truncated_tokens)
                     ids = tokens_a
                     pair_ids = tokens_b
                 elif pair and n_added_tokens + (len_pair_ids if truncate_first_sequence else len_ids) >= max_length:
