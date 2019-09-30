@@ -30,8 +30,8 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler)
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from pytorch_transformers import AdamW, WarmupLinearSchedule
-from pytorch_transformers import (WEIGHTS_NAME, RBertConfig,
+from transformers import AdamW, WarmupLinearSchedule
+from transformers import (WEIGHTS_NAME, RBertConfig,
                                   BertForRelationshipClassification,RBertForRobertaConfig,
                                   RobertaForRelationshipClassification,BertTokenizer,RobertaTokenizer)
 from examples.utils_semeval import (processors, output_modes, convert_examples_to_features,
@@ -286,7 +286,7 @@ def main():
     parser.add_argument("--model_type", default='bert', type=str)
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
-    parser.add_argument("--task_name", default='euadr', type=str)
+    parser.add_argument("--task_name", default='semeval2010_task8', type=str)
     ## Other parameters
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
@@ -351,9 +351,9 @@ def main():
                         help="For distributed training: local_rank")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
-    parser.add_argument("--include_directionality", action='store_true',help='train on all 19 classes. Exclude this flag to train on the 9 relation labels only')
-    parser.add_argument("--train_on_other_labels", action='store_true',help='Do not include instances with the label "Other" in the training data')
-    parser.add_argument("--eval_on_other_labels", action='store_true',help='Do not include instances with the label "Other" in the evaluation data')
+    parser.add_argument("--include_directionality", action='store_true',help='train on all 19 classes for semeval 2010 task 8. Exclude this flag to train on the 9 relation labels only')
+    parser.add_argument("--train_on_other_labels", action='store_true',help='For semeval 2010 task 8, do not include instances with the label "Other" in the training data')
+    parser.add_argument("--eval_on_other_labels", action='store_true',help='For semeval 2010 task 8, Do not include instances with the label "Other" in the evaluation data')
 
     args = parser.parse_args()
 
