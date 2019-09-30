@@ -21,6 +21,7 @@ import logging
 from .tokenization_bert import BertTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 from .tokenization_xlm import XLMTokenizer
@@ -45,6 +46,7 @@ class AutoTokenizer(object):
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
             - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
@@ -67,6 +69,7 @@ class AutoTokenizer(object):
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
             - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
@@ -114,7 +117,8 @@ class AutoTokenizer(object):
             return XLNetTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
+        elif 'ctrl' in pretrained_model_name_or_path:
+            return CTRLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
