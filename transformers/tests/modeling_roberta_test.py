@@ -188,12 +188,8 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
             self.assertIsNotNone(model)
 
 class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
-    """
-    Note, R-Bert requires the input ID's to follow a specific pattern, which means we need a new
-    prepare_config_and_inputs method. This precludes us from reusing the RobertaModelTest class, as otherwise it will
-    fail the common test cases
-    """
-    all_model_classes = (RobertaForRelationshipClassification, )
+
+    all_model_classes = (RobertaForRelationshipClassification, ) if is_torch_available() else ()
 
     class RobertaModelTester(object):
 
@@ -247,13 +243,12 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             entity_1_token_id = 4
-            entity_2_token_id = 8
+            entity_2_token_id = 6
             # we need to mock the behaviour of a string prepared for RBERT, by inserting enity bounding  characters
             input_ids[:,0] = entity_1_token_id
             input_ids[:,2] = entity_1_token_id
             input_ids[:,4] = entity_2_token_id
             input_ids[:,6] = entity_2_token_id
-
             input_mask = None
             if self.use_input_mask:
                 input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
@@ -269,6 +264,8 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
                 sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
+
+
 
             config = RBertForRobertaConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
@@ -292,19 +289,19 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
                 list(result["loss"].size()),
                 [])
 
-        def create_and_check_rbert_for_roberta_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask,
-                                                                  sequence_labels, token_labels, choice_labels):
-            config.num_labels = self.num_labels
+        def create_and_check_rbert_for_roberta_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
+                                                   token_labels, choice_labels):
+            config.num_labels = self.num_choices
             model = RobertaForRelationshipClassification(config=config)
             model.eval()
-            loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
+            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=choice_labels)
             result = {
                 "loss": loss,
                 "logits": logits,
             }
             self.parent.assertListEqual(
                 list(result["logits"].size()),
-                [self.batch_size, self.num_labels])
+                [self.batch_size, self.num_choices])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
@@ -316,7 +313,7 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
 
     def setUp(self):
         self.model_tester = RBertForRobertaModelTest.RobertaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RBertForRobertaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -324,6 +321,14 @@ class RBertForRobertaModelTest(CommonTestCases.CommonModelTester):
     def test_for_relationship_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_rbert_for_roberta_for_relationship_classification(*config_and_inputs)
+
+    @pytest.mark.slow
+    def test_model_from_pretrained(self):
+        cache_dir = "/tmp/transformers_test/"
+        for model_name in list(ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = RobertaModel.from_pretrained(model_name, cache_dir=cache_dir)
+            shutil.rmtree(cache_dir)
+            self.assertIsNotNone(model)
 
 class RobertaModelIntegrationTest(unittest.TestCase):
 
