@@ -380,7 +380,7 @@ class RBertModelTest(CommonTestCases.CommonModelTester):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             entity_1_token_id = 4
             entity_2_token_id = 8
-            # we need to mock the behaviour of a string prepared for RBERT, by inserting enity bounding  characters
+            # we need to mock the behaviour of a string prepared for RBERT, by inserting entity bounding characters
             input_ids[:, 0] = entity_1_token_id
             input_ids[:, 2] = entity_1_token_id
             input_ids[:, 4] = entity_2_token_id
@@ -430,7 +430,8 @@ class RBertModelTest(CommonTestCases.CommonModelTester):
             config.num_labels = self.num_labels
             model = BertForRelationshipClassification(config=config)
             model.eval()
-            loss, logits = model(input_ids, token_type_ids, input_mask, sequence_labels)
+            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
+                                 labels=sequence_labels)
             result = {
                 "loss": loss,
                 "logits": logits,
