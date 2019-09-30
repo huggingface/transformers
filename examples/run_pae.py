@@ -118,20 +118,33 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
 
     decoder_hidden = bert_output_pooled.unsqueeze(0) # (bs, hidden_size) -> (1, bs, hidden_size)
     decoder_input = torch.LongTensor([CLS_token] * batch_size) # (bs)
+    
+    #print('***decoder_hidden: ***')
+    #print(decoder_hidden)
 
     for i in range(args.max_seq_length):
         #decoder_output: (bs, n_vocab)
         #decoder_hidden[0]: (1, bs, hidden_size)
+        
+        #print('***decoder_hidden: ***')
+        #print(decoder_hidden)
+        
         decoder_output, decoder_hidden, predicted_labels, out_label_v = decoder(decoder_input, decoder_hidden, labels, mode, decoder_lang, i, device=args.device, temperature=args.temp) 
         
-        if i == 1:
-            predict_label_dsn = out_label_v
+        if i == 0:
+            first_prediction = predicted_labels
+            first_predict_label_dsn = out_label_v
+            
+        #if i == 1:
+            #predict_label_dsn = out_label_v
 
         generated_expl[i] = decoder_output   
         topv, topi = decoder_output.topk(1) 
         decoder_input = (target_expl_index[i] if args.teacher_force else topi.squeeze(1)) # fix dimension
 
-    return generated_expl, target_expl_index, predict_label_dsn, labels, predicted_labels
+    #print('***first_prediction:***')
+    #print(first_prediction)
+    return generated_expl, target_expl_index, first_predict_label_dsn, labels, first_prediction
 
 def get_loss(prob_dsn, correct_indices): 
     '''
@@ -188,7 +201,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
         {'params': [p for n, p in encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     encoder_optimizer = AdamW(encoder_grouped_params, lr=args.learning_rate, eps=args.adam_epsilon)
-    decoder_optimizer = AdamW(decoder.parameters(), lr=0.001, eps=args.adam_epsilon)
+    decoder_optimizer = AdamW(decoder.parameters(), lr=0.0001, eps=args.adam_epsilon)
     
     encoder_scheduler = WarmupLinearSchedule(encoder_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     decoder_scheduler = WarmupLinearSchedule(decoder_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
@@ -236,18 +249,21 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     for _ in train_iterator:
         num_epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        if num_epoch % 2 == 0:
-            print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
-            if global_step!=0: print('average loss: ', tr_loss/global_step)
+        
+        print('average loss last epoch: ', epoch_loss/len(epoch_iterator))
+        if global_step!=0: print('average loss: ', tr_loss/global_step)
+            
         epoch_loss = 0 
         for step, batch in enumerate(epoch_iterator):
             if num_epoch <= 3 and args.freeze:
                 encoder.train()
-            decoder.train()
             
+            decoder.train()
             batch = tuple(t.to(args.device) for t in batch)
             
             bert_output_pooled = get_encoder_output(batch, encoder)
+            #print('***bert_output_pooled: ***')
+            #print(bert_output_pooled)
             generated_expl, target_expl_index, predict_label_dsn, target_labels, pred_labels = get_decoder_output(args, batch,\
                                                                                                      decoder, \
                                                                                                      bert_output_pooled, \
@@ -258,12 +274,15 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             
             # sanity check on generated explanations
             generated_expl_index = get_index(generated_expl) 
-            if num_epoch % 20 == 0 or num_epoch == args.num_train_epochs:
-                print('train generated expl', get_text(decoder_lang, generated_expl_index)) 
-                print('train target expl', get_text(decoder_lang, target_expl_index)) 
-                print('train target_labels', target_labels) 
-                print('train pred_labels', pred_labels) 
+            #if num_epoch % 20 == 0 or num_epoch == args.num_train_epochs:
+                #print('train generated expl', get_text(decoder_lang, generated_expl_index)) 
+                #print('train target expl', get_text(decoder_lang, target_expl_index)) 
+                #print('train target_labels', target_labels) 
+                #print('train pred_labels', pred_labels) 
                 
+            #print(pred_labels)
+            #print(target_labels)
+            
             predict_label_dsn = predict_label_dsn.squeeze(0) # (1, bs, 3) -> (bs, 3)
             label_loss = get_loss(predict_label_dsn, target_labels)
             loss = args.alpha*label_loss + (1-args.alpha)*expl_loss #will this affect the multi-gpu training loss?
@@ -579,7 +598,7 @@ def main():
                         help = 'softmax temperature')
     parser.add_argument('--min_freq', type=int, default=10, \
                         help = 'min freq required for a word to be in decoder dictionary')
-    parser.add_argument('--alpha', type=float, default=0.6, \
+    parser.add_argument('--alpha', type=float, default=0.9, \
                         help = 'loss = alpha*label_loss + (1-alpha)*expl_loss')
     
     args = parser.parse_args()
@@ -723,7 +742,6 @@ def main():
         results.update(result)
 
     return results
-
 
 if __name__ == "__main__":
     main()
