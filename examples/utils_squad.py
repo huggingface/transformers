@@ -192,7 +192,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
                                  sequence_a_segment_id=0, sequence_b_segment_id=1,
                                  cls_token_segment_id=0, pad_token_segment_id=0,
-                                 mask_padding_with_zero=True):
+                                 mask_padding_with_zero=True, sep_token_extra=False):
     """Loads a data file into a list of `InputBatch`s."""
 
     unique_id = 1000000000
@@ -237,7 +237,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 example.orig_answer_text)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
-        max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
+        special_tokens_count = 4 if sep_token_extra else 3
+        max_tokens_for_doc = max_seq_length - len(query_tokens) - special_tokens_count
 
         # We can have documents that are longer than the maximum sequence length.
         # To deal with this we do a sliding window approach, where we take chunks
@@ -282,6 +283,11 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             tokens.append(sep_token)
             segment_ids.append(sequence_a_segment_id)
             p_mask.append(1)
+            
+            if sep_token_extra:
+                tokens.append(sep_token)
+                segment_ids.append(sequence_a_segment_id)
+                p_mask.append(1)
 
             # Paragraph
             for i in range(doc_span.length):
@@ -342,7 +348,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     end_position = 0
                     span_is_impossible = True
                 else:
-                    doc_offset = len(query_tokens) + 2
+                    doc_offset = len(query_tokens) + special_tokens_count - 1
                     start_position = tok_start_position - doc_start + doc_offset
                     end_position = tok_end_position - doc_start + doc_offset
 

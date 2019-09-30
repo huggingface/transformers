@@ -32,13 +32,11 @@ from tqdm import tqdm, trange
 
 from tensorboardX import SummaryWriter
 
-from transformers import (WEIGHTS_NAME, BertConfig,
-                                  BertForQuestionAnswering, BertTokenizer,
-                                  XLMConfig, XLMForQuestionAnswering,
-                                  XLMTokenizer, XLNetConfig,
-                                  XLNetForQuestionAnswering,
-                                  XLNetTokenizer,
-                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+from transformers import (WEIGHTS_NAME, BertConfig, BertForQuestionAnswering, BertTokenizer,
+                          RobertaConfig, RobertaForQuestionAnswering, RobertaTokenizer,
+                          XLMConfig, XLMForQuestionAnswering, XLMTokenizer,
+                          XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer,
+                          DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
 
 from transformers import AdamW, WarmupLinearSchedule
 
@@ -58,6 +56,7 @@ ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
+    'roberta': (RobertaConfig, RobertaForQuestionAnswering, RobertaTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
@@ -296,7 +295,17 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 max_seq_length=args.max_seq_length,
                                                 doc_stride=args.doc_stride,
                                                 max_query_length=args.max_query_length,
-                                                is_training=not evaluate)
+                                                is_training=not evaluate,
+                                                cls_token_at_end=bool(args.model_type in ['xlnet']), # xlnet has a cls token at the end
+                                                cls_token=tokenizer.cls_token,
+                                                sep_token=tokenizer.sep_token,
+                                                pad_token=5 if args.model_type in ['xlnet'] else 0,
+                                                sequence_a_segment_id=0,
+                                                sequence_b_segment_id=0 if args.model_type in ['roberta'] else 1,
+                                                cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+                                                pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+                                                sep_token_extra=bool(args.model_type in ['roberta']))
+        
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
