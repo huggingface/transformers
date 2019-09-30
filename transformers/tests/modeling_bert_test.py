@@ -325,7 +325,7 @@ class RBertModelTest(CommonTestCases.CommonModelTester):
     fail the common test cases
     """
 
-    all_model_classes = (BertForRelationshipClassification,)
+    all_model_classes = (BertForRelationshipClassification, ) if is_torch_available() else ()
 
     class BertModelTester(object):
 
