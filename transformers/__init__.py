@@ -74,15 +74,15 @@ if is_torch_available():
                                 GPT2LMHeadModel, GPT2DoubleHeadsModel,
                                 load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
-                                XLNetForSequenceClassification, XLNetForMultipleChoice,
-                                XLNetForQuestionAnsweringSimple, XLNetForQuestionAnswering,
+                                XLNetForSequenceClassification, XLNetForQuestionAnsweringSimple,
+                                XLNetForQuestionAnswering,
                                 load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
                             XLMWithLMHeadModel, XLMForSequenceClassification,
                             XLMForQuestionAnswering, XLMForQuestionAnsweringSimple,
                             XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
-    from .modeling_roberta import (RobertaForMaskedLM, RobertaModel,
-                                RobertaForSequenceClassification, RobertaForMultipleChoice,
+    from .modeling_roberta import (RobertaForMaskedLM, RobertaModel, RobertaForSequenceClassification,
+                                RobertaForQuestionAnswering,
                                 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
