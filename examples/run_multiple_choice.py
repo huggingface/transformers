@@ -306,14 +306,14 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
         else:
             examples = processor.get_train_examples(args.data_dir)
         logger.info("Training number: %s", str(len(examples)))
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer,
-            cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
-            cls_token=tokenizer.cls_token,
-            sep_token=tokenizer.sep_token,
-            sep_token_extra=bool(args.model_type in ['roberta']),
-            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+        features = convert_examples_to_features(
+            examples,
+            label_list,
+            args.max_seq_length,
+            tokenizer,
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0)
+            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0
+        )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -362,7 +362,7 @@ def main():
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--do_test", action='store_true', help='Whether to run test on the test set')
     parser.add_argument("--evaluate_during_training", action='store_true',
-                        help="Rul evaluation during training at each logging step.")
+                        help="Run evaluation during training at each logging step.")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
