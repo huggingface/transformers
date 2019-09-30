@@ -100,7 +100,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         cls = [self.cls_token_id]
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
-    def get_sequence_ids(self, token_ids_0, token_ids_1=None):
+    def get_sequence_ids(self, token_ids_0, token_ids_1=None, special_tokens_present=False):
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
@@ -113,6 +113,10 @@ class RobertaTokenizer(GPT2Tokenizer):
         Returns:
             A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
         """
+
+        if special_tokens_present:
+            return list(map(lambda x: 0 if x in [self.sep_token_id, self.cls_token_id] else 1, token_ids_0))
+
         if token_ids_1:
             return [0] + ([1] * len(token_ids_0)) + [0, 0] + ([1] * len(token_ids_1)) + [0]
         else:

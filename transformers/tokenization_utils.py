@@ -908,7 +908,7 @@ class PreTrainedTokenizer(object):
         logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
         return token_ids_0 + token_ids_1
 
-    def get_sequence_ids(self, token_ids_0, token_ids_1=None):
+    def get_sequence_ids(self, token_ids_0, token_ids_1=None, special_tokens_present=False):
         return [1] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
