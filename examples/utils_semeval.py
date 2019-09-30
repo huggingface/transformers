@@ -176,15 +176,6 @@ class SemEval2010Task8DataProcessor():
     def get_labels(self):
         return self.all_labels
 
-
-
-# def find_entity_indices(id_list, tokenizer):
-#     ent1_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_1_token_id]
-#     ent1_bounding_id_list = [ent1_bounding_id_list[0], ent1_bounding_id_list[1] + 1]
-#     ent2_bounding_id_list = [i for i, e in enumerate(id_list) if e == tokenizer.entity_2_token_id]
-#     ent2_bounding_id_list = [ent2_bounding_id_list[0], ent2_bounding_id_list[1] + 1]
-#     return ent1_bounding_id_list, ent2_bounding_id_list
-
 def mod_text(text, hit):
     before = text[:hit.start()]
     during = hit.group(2)
