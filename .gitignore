@@ -132,3 +132,6 @@ examples/runs
 # data
 /data
 serialization_dir
+
+# emacs
+*.*~

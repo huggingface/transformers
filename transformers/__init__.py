@@ -37,6 +37,7 @@ from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -49,7 +50,9 @@ from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_transfo_xl import TransfoXLConfig, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_gpt2 import GPT2Config, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlnet import XLNetConfig, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlm import XLMConfig, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -73,6 +76,9 @@ if is_torch_available():
     from .modeling_gpt2 import (GPT2PreTrainedModel, GPT2Model,
                                 GPT2LMHeadModel, GPT2DoubleHeadsModel,
                                 load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_ctrl import (CTRLPreTrainedModel, CTRLModel,
+                                CTRLLMHeadModel,
+                                CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
                                 XLNetForSequenceClassification, XLNetForMultipleChoice,
                                 XLNetForQuestionAnsweringSimple, XLNetForQuestionAnswering,
