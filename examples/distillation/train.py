@@ -23,8 +23,8 @@ import shutil
 import numpy as np
 import torch
 
-from pytorch_transformers import BertTokenizer, BertForMaskedLM, RobertaTokenizer, RobertaForMaskedLM
-from pytorch_transformers import DistilBertForMaskedLM, DistilBertConfig
+from transformers import BertTokenizer, BertForMaskedLM, RobertaTokenizer, RobertaForMaskedLM
+from transformers import DistilBertForMaskedLM, DistilBertConfig
 
 from distiller import Distiller
 from utils import git_log, logger, init_gpu_params, set_seed

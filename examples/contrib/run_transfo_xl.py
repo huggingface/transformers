@@ -28,7 +28,7 @@ import math
 
 import torch
 
-from pytorch_transformers import TransfoXLLMHeadModel, TransfoXLCorpus, TransfoXLTokenizer
+from transformers import TransfoXLLMHeadModel, TransfoXLCorpus, TransfoXLTokenizer
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
