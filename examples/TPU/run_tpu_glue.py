@@ -31,6 +31,12 @@ print('Fetched & created dataset.')
 strategy, _ = get_tpu()
 print('TPUStrategy obtained.')
 
+dataset_options = tf.data.Options()
+dataset_options.experimental_distribute.auto_shard = False
+
+train_dataset = train_dataset.with_options(dataset_options)
+test_dataset = test_dataset.with_options(dataset_options)
+
 with strategy.scope():
     # Crashes here
     train_distributed_dataset = strategy.experimental_distribute_dataset(train_dataset)
