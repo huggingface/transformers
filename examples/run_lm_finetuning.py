@@ -108,7 +108,12 @@ def mask_tokens(inputs, tokenizer, args):
     """ Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. """
     labels = inputs.clone()
     # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-    masked_indices = torch.bernoulli(torch.full(labels.shape, args.mlm_probability)).bool()
+    probability_matrix = torch.full(labels.shape, args.mlm_probability)
+    probability_matrix *= torch.tensor(
+        [tokenizer.get_sequence_ids(val, special_tokens_present=True) for val in labels.tolist()],
+        dtype=torch.float
+    )
+    masked_indices = torch.bernoulli(probability_matrix).bool()
     labels[~masked_indices] = -1  # We only compute loss on masked tokens
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
