@@ -134,7 +134,7 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':       batch[0],
                       'attention_mask':  batch[1], 
-                      'token_type_ids':  None if args.model_type == 'xlm' else batch[2],  
+                      'token_type_ids':  None if args.model_type in ['xlm', 'roberta'] else batch[2],  
                       'start_positions': batch[3], 
                       'end_positions':   batch[4]}
             if args.model_type in ['xlnet', 'xlm']:
@@ -218,7 +218,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         with torch.no_grad():
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': None if args.model_type == 'xlm' else batch[2]  # XLM don't use segment_ids
+                      'token_type_ids': None if args.model_type in ['xlm', 'roberta'] else batch[2]  # XLM don't use segment_ids
                       }
             example_indices = batch[3]
             if args.model_type in ['xlnet', 'xlm']:
@@ -300,8 +300,6 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 cls_token=tokenizer.cls_token,
                                                 sep_token=tokenizer.sep_token,
                                                 pad_token=5 if args.model_type in ['xlnet'] else 0,
-                                                sequence_a_segment_id=0,
-                                                sequence_b_segment_id=0 if args.model_type in ['roberta'] else 1,
                                                 cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
                                                 pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
                                                 sep_token_extra=bool(args.model_type in ['roberta']))
