@@ -24,6 +24,8 @@ import torch
 from torch.utils.data import (TensorDataset)
 from sklearn.metrics import  f1_score
 
+from transformers import RobertaTokenizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -194,9 +196,24 @@ def find_ents_and_modify_string(text):
 
     return new_text, e1_offsets, e2_offsets
 
+def get_entity_seperator_token_ids(rbert_utils,tokenizer):
+    if isinstance(tokenizer, RobertaTokenizer):
+        entity_1_token_id = \
+        tokenizer.encode(rbert_utils.ent1_sep_token, text_pair=None, add_special_tokens=True, add_prefix_space=True)[1]
+        entity_2_token_id = \
+        tokenizer.encode(rbert_utils.ent2_sep_token, text_pair=None, add_special_tokens=True, add_prefix_space=True)[1]
+    else:
+        entity_1_token_id = tokenizer.encode(rbert_utils.ent1_sep_token)[0]
+        entity_2_token_id = tokenizer.encode(rbert_utils.ent2_sep_token)[0]
 
-def get_entity_seperator_token_ids(rbert_utils, tokenizer):
-    return tokenizer.encode(rbert_utils.ent1_sep_token)[0], tokenizer.encode(rbert_utils.ent2_sep_token)[0]
+    return entity_1_token_id, entity_2_token_id
+
+def get_input_ids(text, tokenizer):
+    if isinstance(tokenizer, RobertaTokenizer):
+        input_ids = tokenizer.encode(text, text_pair=None, add_special_tokens=True, add_prefix_space=True)
+    else:
+        input_ids = tokenizer.encode(text, text_pair=None, add_special_tokens=True)
+    return input_ids
 
 def convert_examples_to_features(examples, label_list, max_seq_length,
                                  tokenizer, rbert_utils,pad_token=0,
@@ -210,8 +227,11 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
 
         text_with_tags_removed, e1_offsets, e2_offsets = find_ents_and_modify_string(example.text)
         new_text = rbert_utils.insert_special_chars_into_text(text_with_tags_removed,e1_offsets,e2_offsets)
-        input_ids = tokenizer.encode(new_text,text_pair=None, add_special_tokens=True)
-        entity_1_token_id,entity_2_token_id = get_entity_seperator_token_ids(rbert_utils, tokenizer)
+
+        entity_1_token_id, entity_2_token_id = get_entity_seperator_token_ids(rbert_utils,tokenizer)
+        input_ids = get_input_ids(new_text,tokenizer)
+
+
 
 
         #check that the special tokens have been encoded in the right order
