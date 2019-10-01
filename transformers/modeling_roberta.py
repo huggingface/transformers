@@ -47,7 +47,7 @@ class RobertaEmbeddings(BertEmbeddings):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size,
                                                 padding_idx=self.padding_idx)
 
-    def forward(self, input_ids, token_type_ids=None, position_ids=None):
+    def forward(self, input_ids, position_ids=None):
         seq_length = input_ids.size(1)
         if position_ids is None:
             # Position numbers begin at padding_idx+1. Padding symbols are ignored.
@@ -55,7 +55,6 @@ class RobertaEmbeddings(BertEmbeddings):
             position_ids = torch.arange(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
         return super(RobertaEmbeddings, self).forward(input_ids,
-                                                      token_type_ids=token_type_ids,
                                                       position_ids=position_ids)
 
 
@@ -111,13 +110,6 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional` need to be trained) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Optional segment token indices to indicate first and second portions of the inputs.
-            This embedding matrice is not trained (not pretrained during RoBERTa pretraining), you will have to train it
-            during finetuning.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1[``.
@@ -168,14 +160,13 @@ class RobertaModel(BertModel):
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, position_ids=None, head_mask=None):
         if input_ids[:, 0].sum().item() != 0:
             logger.warning("A sequence with no special tokens has been passed to the RoBERTa model. "
                            "This model requires special tokens in order to work. "
                            "Please specify add_special_tokens=True in your encoding.")
         return super(RobertaModel, self).forward(input_ids,
                                                  attention_mask=attention_mask,
-                                                 token_type_ids=token_type_ids,
                                                  position_ids=position_ids,
                                                  head_mask=head_mask)
 
@@ -231,11 +222,10 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         """
         self._tie_or_clone_weights(self.lm_head.decoder, self.roberta.embeddings.word_embeddings)
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids, attention_mask=None, position_ids=None, head_mask=None,
                 masked_lm_labels=None):
         outputs = self.roberta(input_ids,
                                attention_mask=attention_mask,
-                               token_type_ids=token_type_ids,
                                position_ids=position_ids,
                                head_mask=head_mask)
         sequence_output = outputs[0]
@@ -318,11 +308,10 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         self.roberta = RobertaModel(config)
         self.classifier = RobertaClassificationHead(config)
     
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids, attention_mask=None, position_ids=None, head_mask=None,
                 labels=None):
         outputs = self.roberta(input_ids,
                                attention_mask=attention_mask,
-                               token_type_ids=token_type_ids,
                                position_ids=position_ids,
                                head_mask=head_mask)
         sequence_output = outputs[0]
@@ -356,21 +345,13 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] [SEP] no it is not . [SEP]``
 
-                ``token_type_ids:   0   0  0    0    0     0       0   0   0     1  1  1  1   1   1``
-
             (b) For single sequences:
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
 
-                ``token_type_ids:   0   0   0   0  0     0   0``
-
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
-            Segment token indices to indicate first and second portions of the inputs.
-            The second dimension of the input (`num_choices`) indicates the number of choices to score.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             The second dimension of the input (`num_choices`) indicates the number of choices to score.
@@ -423,16 +404,15 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
+    def forward(self, input_ids, attention_mask=None, labels=None,
                 position_ids=None, head_mask=None):
         num_choices = input_ids.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
         flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        outputs = self.roberta(flat_input_ids, position_ids=flat_position_ids, token_type_ids=flat_token_type_ids,
-                            attention_mask=flat_attention_mask, head_mask=head_mask)
+        outputs = self.roberta(flat_input_ids, position_ids=flat_position_ids,
+                               attention_mask=flat_attention_mask, head_mask=head_mask)
         pooled_output = outputs[1]
 
         pooled_output = self.dropout(pooled_output)

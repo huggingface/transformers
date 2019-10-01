@@ -56,13 +56,13 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
 
     def _embedding(self, inputs, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids = inputs
+        input_ids, position_ids = inputs
 
         seq_length = tf.shape(input_ids)[1]
         if position_ids is None:
             position_ids = tf.range(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=tf.int32)[tf.newaxis, :]
 
-        return super(TFRobertaEmbeddings, self)._embedding([input_ids, position_ids, token_type_ids], training=training)
+        return super(TFRobertaEmbeddings, self)._embedding([input_ids, position_ids, None], training=training)  # None is the input for token type embeddings (not in RoBERTa)
 
 
 class TFRobertaMainLayer(TFBertMainLayer):
@@ -132,9 +132,9 @@ ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
 
         - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-            `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+            `model([input_ids, attention_mask])` or `model([input_ids, attention_mask])`
         - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
-            `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+            `model({'input_ids': input_ids, 'attention_mask': attention_mask})`
 
     Parameters:
         config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the 
@@ -168,13 +168,6 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional` need to be trained) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
-            Optional segment token indices to indicate first and second portions of the inputs.
-            This embedding matrice is not trained (not pretrained during RoBERTa pretraining), you will have to train it
-            during finetuning.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
         **position_ids**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1[``.
