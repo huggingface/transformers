@@ -482,8 +482,8 @@ class RobertaForRelationshipClassification(BertPreTrainedModel):
         model_name = 'roberta-large'
 
         tokenizer = RobertaTokenizer.from_pretrained(model_name)
-        ent1_sep_token_id = tokenizer.encode(ent1_sep_token)[0]
-        ent2_sep_token_id = tokenizer.encode(ent2_sep_token)[0]
+        ent1_sep_token_id = tokenizer.encode(ent1_sep_token, text_pair=None, add_special_tokens=True, add_prefix_space=True)[1]
+        ent2_sep_token_id = tokenizer.encode(ent2_sep_token, text_pair=None, add_special_tokens=True, add_prefix_space=True)[1]
         config = RBertForRobertaConfig.from_pretrained(model_name,entity_1_token_id=ent1_sep_token_id, entity_2_token_id=ent2_sep_token_id)
         model = RobertaForRelationshipClassification.from_pretrained(model_name, config=config)
         input_ids = torch.tensor(tokenizer.encode(test_string,add_special_tokens=True)).unsqueeze(0)  # Batch size 1
