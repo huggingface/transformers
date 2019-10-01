@@ -933,20 +933,11 @@ class PreTrainedTokenizer(object):
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
         text = ''.join(sub_texts)
 
-        if self._sep_token is not None and self._sep_token in text:
-            text = text.replace(self._cls_token, self._sep_token)
-            split_text = list(filter(lambda sentence: len(sentence) > 0, text.split(self._sep_token)))
-            if clean_up_tokenization_spaces:
-                clean_text = [self.clean_up_tokenization(text) for text in split_text]
-                return clean_text
-            else:
-                return split_text
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
         else:
-            if clean_up_tokenization_spaces:
-                clean_text = self.clean_up_tokenization(text)
-                return clean_text
-            else:
-                return text
+            return text
 
     @property
     def special_tokens_map(self):
