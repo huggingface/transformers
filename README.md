@@ -80,7 +80,7 @@ pip install transformers
 Here also, you first need to install one of, or both, TensorFlow 2.0 and PyTorch.
 Please refere to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
 
-When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and runing:
+When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and running:
 
 ```bash
 pip install [--editable] .
@@ -88,7 +88,7 @@ pip install [--editable] .
 
 ### Tests
 
-A series of tests is included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 These tests can be run using `pytest` (install pytest if needed with `pip install pytest`).
 
@@ -394,7 +394,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 ### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
-The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
+The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by Aman Rusia to get high-quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
 
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
@@ -426,7 +426,7 @@ Here is a quick summary of what you should take care of when migrating from `pyt
 
 The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
-The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
+The exact content of the tuples for each model is detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
@@ -458,7 +458,7 @@ By enabling the configuration option `output_hidden_states`, it was possible to 
 
 ### Serialization
 
-Breaking change in the `from_pretrained()`method:
+Breaking change in the `from_pretrained()` method:
 
 1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
 
@@ -534,4 +534,4 @@ for batch in train_data:
 
 ## Citation
 
-At the moment, there is no paper associated to Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
+At the moment, there is no paper associated with Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
