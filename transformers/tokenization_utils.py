@@ -820,7 +820,7 @@ class PreTrainedTokenizer(object):
                 {
                     input_ids: list[int],
                     overflowing_tokens: list[int] if a ``max_length`` is specified, else None
-                    sequence_ids: list[int] if ``add_special_tokens`` if set to ``True``
+                    special_tokens_mask: list[int] if ``add_special_tokens`` if set to ``True``
                 }
 
             With the fields:
@@ -828,7 +828,7 @@ class PreTrainedTokenizer(object):
 
                 ``overflowing_tokens``: list of overflowing tokens if a max length is specified.
 
-                ``sequence_ids``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
+                ``special_tokens_mask``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
                 tokens and 1 specifying sequence tokens.
         """
         pair = bool(pair_ids is not None)
@@ -857,7 +857,7 @@ class PreTrainedTokenizer(object):
         if add_special_tokens:
             sequence = self.add_special_tokens_sequence_pair(ids, pair_ids) if pair else self.add_special_tokens_single_sequence(ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids) if pair else [0] * len(sequence)
-            encoded_inputs["sequence_ids"] = self.get_sequence_ids(ids, pair_ids)
+            encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
@@ -877,6 +877,7 @@ class PreTrainedTokenizer(object):
         if max_length and len(encoded_inputs["input_ids"]) > max_length:
             encoded_inputs["input_ids"] = encoded_inputs["input_ids"][:max_length]
             encoded_inputs["token_type_ids"] = encoded_inputs["token_type_ids"][:max_length]
+            encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"][:max_length]
 
         return encoded_inputs
 
@@ -892,7 +893,7 @@ class PreTrainedTokenizer(object):
         logger.warning("This tokenizer does not make use of special tokens. The two sequences have been concatenated.")
         return token_ids_0 + token_ids_1
 
-    def get_sequence_ids(self, token_ids_0, token_ids_1=None, special_tokens_present=False):
+    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, special_tokens_present=False):
         return [1] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):

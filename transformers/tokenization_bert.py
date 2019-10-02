@@ -204,7 +204,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    def get_sequence_ids(self, token_ids_0, token_ids_1=None, special_tokens_present=False):
+    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, special_tokens_present=False):
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
