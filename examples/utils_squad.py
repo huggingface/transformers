@@ -192,7 +192,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
                                  sequence_a_segment_id=0, sequence_b_segment_id=1,
                                  cls_token_segment_id=0, pad_token_segment_id=0,
-                                 mask_padding_with_zero=True, sep_token_extra=False):
+                                 mask_padding_with_zero=True, sep_token_extra=False, add_prefix_space=False):
     """Loads a data file into a list of `InputBatch`s."""
 
     unique_id = 1000000000
@@ -206,7 +206,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
 
-        query_tokens = tokenizer.tokenize(example.question_text)
+        if add_prefix_space:
+            query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=True)
+        else:
+            query_tokens = tokenizer.tokenize(example.question_text)
 
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
@@ -216,7 +219,12 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         all_doc_tokens = []
         for (i, token) in enumerate(example.doc_tokens):
             orig_to_tok_index.append(len(all_doc_tokens))
-            sub_tokens = tokenizer.tokenize(token)
+            
+            if add_prefix_space:
+                sub_tokens = tokenizer.tokenize(token, add_prefix_space=True)
+            else:
+                sub_tokens = tokenizer.tokenize(token)
+            
             for sub_token in sub_tokens:
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
@@ -234,7 +242,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tok_end_position = len(all_doc_tokens) - 1
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-                example.orig_answer_text)
+                example.orig_answer_text, add_prefix_space)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         special_tokens_count = 4 if sep_token_extra else 3
@@ -404,7 +412,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
-                         orig_answer_text):
+                         orig_answer_text, add_prefix_space=False):
     """Returns tokenized answer spans that better match the annotated answer."""
 
     # The SQuAD annotations are character based. We first project them to
@@ -429,7 +437,10 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
     # the word "Japanese". Since our WordPiece tokenizer does not split
     # "Japanese", we just use "Japanese" as the annotation. This is fairly rare
     # in SQuAD, but does happen.
-    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
+    if add_prefix_space:
+        tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=True))
+    else:
+        tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
@@ -483,7 +494,7 @@ RawResult = collections.namedtuple("RawResult",
 def write_predictions(all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
                       output_nbest_file, output_null_log_odds_file, verbose_logging,
-                      version_2_with_negative, null_score_diff_threshold):
+                      version_2_with_negative, null_score_diff_threshold, tokenizer=None):
     """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
     logger.info("Writing nbest to: %s" % (output_nbest_file))
@@ -579,11 +590,15 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 orig_doc_start = feature.token_to_orig_map[pred.start_index]
                 orig_doc_end = feature.token_to_orig_map[pred.end_index]
                 orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
-                tok_text = " ".join(tok_tokens)
+                
+                if tokenizer is not None:
+                    tok_text = tokenizer.convert_tokens_to_string(tok_tokens)
+                else:
+                    tok_text = " ".join(tok_tokens)
 
-                # De-tokenize WordPieces that have been split off.
-                tok_text = tok_text.replace(" ##", "")
-                tok_text = tok_text.replace("##", "")
+                    # De-tokenize WordPieces that have been split off.
+                    tok_text = tok_text.replace(" ##", "")
+                    tok_text = tok_text.replace("##", "")
 
                 # Clean whitespace
                 tok_text = tok_text.strip()
