@@ -6,7 +6,7 @@ A command-line interface is provided to convert original Bert/GPT/GPT-2/Transfor
 BERT
 ^^^^
 
-You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google <https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the `convert_tf_checkpoint_to_pytorch.py <https://github.com/huggingface/pytorch-transformers/blob/master/pytorch_transformers/convert_tf_checkpoint_to_pytorch.py>`_ script.
+You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google <https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the `convert_tf_checkpoint_to_pytorch.py <https://github.com/huggingface/transformers/blob/master/transformers/convert_tf_checkpoint_to_pytorch.py>`_ script.
 
 This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``\ ) and the associated configuration file (\ ``bert_config.json``\ ), and creates a PyTorch model for this configuration, loads the weights from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can be imported using ``torch.load()`` (see examples in `run_bert_extract_features.py <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_extract_features.py>`_\ , `run_bert_classifier.py <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_classifier.py>`_ and `run_bert_squad.py <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_squad.py>`_\ ).
 
@@ -20,7 +20,7 @@ Here is an example of the conversion process for a pre-trained ``BERT-Base Uncas
 
    export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
-   pytorch_transformers bert \
+   transformers bert \
      $BERT_BASE_DIR/bert_model.ckpt \
      $BERT_BASE_DIR/bert_config.json \
      $BERT_BASE_DIR/pytorch_model.bin
@@ -36,7 +36,7 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT model,
 
    export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
 
-   pytorch_transformers gpt \
+   transformers gpt \
      $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
      $PYTORCH_DUMP_OUTPUT \
      [OPENAI_GPT_CONFIG]
@@ -50,7 +50,7 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT-2 mode
 
    export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
 
-   pytorch_transformers gpt2 \
+   transformers gpt2 \
      $OPENAI_GPT2_CHECKPOINT_PATH \
      $PYTORCH_DUMP_OUTPUT \
      [OPENAI_GPT2_CONFIG]
@@ -64,7 +64,7 @@ Here is an example of the conversion process for a pre-trained Transformer-XL mo
 
    export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
 
-   pytorch_transformers transfo_xl \
+   transformers transfo_xl \
      $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
      $PYTORCH_DUMP_OUTPUT \
      [TRANSFO_XL_CONFIG]
@@ -80,7 +80,7 @@ Here is an example of the conversion process for a pre-trained XLNet model, fine
    export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
    export TRANSFO_XL_CONFIG_PATH=/path/to/xlnet/config
 
-   pytorch_transformers xlnet \
+   transformers xlnet \
      $TRANSFO_XL_CHECKPOINT_PATH \
      $TRANSFO_XL_CONFIG_PATH \
      $PYTORCH_DUMP_OUTPUT \
@@ -96,6 +96,6 @@ Here is an example of the conversion process for a pre-trained XLM model:
 
    export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
 
-   pytorch_transformers xlm \
+   transformers xlm \
      $XLM_CHECKPOINT_PATH \
      $PYTORCH_DUMP_OUTPUT \

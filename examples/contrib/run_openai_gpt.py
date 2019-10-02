@@ -39,7 +39,7 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 
-from pytorch_transformers import (OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer,
+from transformers import (OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer,
                                      AdamW, cached_path, WEIGHTS_NAME, CONFIG_NAME,
                                      WarmupLinearSchedule)
 

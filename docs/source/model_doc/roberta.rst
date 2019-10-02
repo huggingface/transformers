@@ -4,33 +4,54 @@ RoBERTa
 ``RobertaConfig``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.RobertaConfig
+.. autoclass:: transformers.RobertaConfig
     :members:
 
 
 ``RobertaTokenizer``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.RobertaTokenizer
+.. autoclass:: transformers.RobertaTokenizer
     :members:
 
 
 ``RobertaModel``
 ~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.RobertaModel
+.. autoclass:: transformers.RobertaModel
     :members:
 
 
 ``RobertaForMaskedLM``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.RobertaForMaskedLM
+.. autoclass:: transformers.RobertaForMaskedLM
     :members:
 
 
 ``RobertaForSequenceClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.RobertaForSequenceClassification
+.. autoclass:: transformers.RobertaForSequenceClassification
+    :members:
+
+
+``TFRobertaModel``
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRobertaModel
+    :members:
+
+
+``TFRobertaForMaskedLM``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRobertaForMaskedLM
+    :members:
+
+
+``TFRobertaForSequenceClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRobertaForSequenceClassification
     :members:

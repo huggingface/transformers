@@ -31,7 +31,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
 
-from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
+from transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
                                   RobertaConfig,
                                   RobertaForSequenceClassification,
@@ -39,12 +39,17 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
-                                  XLNetTokenizer)
+                                  XLNetTokenizer,
+                                  DistilBertConfig,
+                                  DistilBertForSequenceClassification,
+                                  DistilBertTokenizer)
 
-from pytorch_transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, WarmupLinearSchedule
 
-from utils_glue import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors)
+from transformers import glue_compute_metrics as compute_metrics
+from transformers import glue_output_modes as output_modes
+from transformers import glue_processors as processors
+from transformers import glue_convert_examples_to_features as convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +60,7 @@ MODEL_CLASSES = {
     'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
+    'distilbert': (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer)
 }
 
 
@@ -128,10 +134,11 @@ def train(args, train_dataset, model, tokenizer):
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
-                      'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
                       'labels':         batch[3]}
+            if args.model_type != 'distilbert':
+                inputs['token_type_ids'] = batch[2] if args.model_type in ['bert', 'xlnet'] else None  # XLM, DistilBERT and RoBERTa don't use segment_ids
             outputs = model(**inputs)
-            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -148,8 +155,8 @@ def train(args, train_dataset, model, tokenizer):
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
-                scheduler.step()  # Update learning rate schedule
                 optimizer.step()
+                scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
                 global_step += 1
 
@@ -218,8 +225,9 @@ def evaluate(args, model, tokenizer, prefix=""):
             with torch.no_grad():
                 inputs = {'input_ids':      batch[0],
                           'attention_mask': batch[1],
-                          'token_type_ids': batch[2] if args.model_type in ['bert', 'xlnet'] else None,  # XLM and RoBERTa don't use segment_ids
                           'labels':         batch[3]}
+                if args.model_type != 'distilbert':
+                    inputs['token_type_ids'] = batch[2] if args.model_type in ['bert', 'xlnet'] else None  # XLM, DistilBERT and RoBERTa don't use segment_ids
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
@@ -272,15 +280,14 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1] 
         examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer, output_mode,
-            cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
-            cls_token=tokenizer.cls_token,
-            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
-            sep_token=tokenizer.sep_token,
-            sep_token_extra=bool(args.model_type in ['roberta']),           # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-            pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+        features = convert_examples_to_features(examples,
+                                                tokenizer,
+                                                label_list=label_list,
+                                                max_length=args.max_seq_length,
+                                                output_mode=output_mode,
+                                                pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
+                                                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+                                                pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -291,14 +298,14 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
 
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+    all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+    all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
     if output_mode == "classification":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.long)
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
     elif output_mode == "regression":
-        all_label_ids = torch.tensor([f.label_id for f in features], dtype=torch.float)
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
 
 
@@ -478,7 +485,7 @@ def main():
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
-            logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
