@@ -35,11 +35,12 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
 
-from pytorch_transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
+from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
                                   BertConfig, BertForMaskedLM, BertTokenizer,
                                   GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
                                   OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
-                                  RobertaConfig, RobertaForMaskedLM, RobertaTokenizer)
+                                  RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
+                                  DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,8 @@ MODEL_CLASSES = {
     'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
-    'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer)
+    'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
+    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
 }
 
 
@@ -57,7 +59,7 @@ class TextDataset(Dataset):
     def __init__(self, tokenizer, file_path='train', block_size=512):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{filename}')
+        cached_features_file = os.path.join(directory, 'cached_lm_{}_{}'.format(block_size, filename))
 
         if os.path.exists(cached_features_file):
             logger.info("Loading features from cached file %s", cached_features_file)
@@ -72,9 +74,8 @@ class TextDataset(Dataset):
 
             tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
 
-            while len(tokenized_text) >= block_size:  # Truncate in block of block_size
-                self.examples.append(tokenizer.add_special_tokens_single_sentence(tokenized_text[:block_size]))
-                tokenized_text = tokenized_text[block_size:]
+            for i in range(0, len(tokenized_text)-block_size+1, block_size): # Truncate in block of block_size
+                self.examples.append(tokenizer.add_special_tokens_single_sequence(tokenized_text[i:i+block_size]))
             # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
             # If your dataset is small, first you should loook for a bigger one :-) and second you
             # can change this behavior by adding (model specific) padding.
@@ -186,7 +187,7 @@ def train(args, train_dataset, model, tokenizer):
             labels = labels.to(args.device)
             model.train()
             outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
-            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -380,7 +381,7 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
 
-    if args.model_type in ["bert", "roberta"] and not args.mlm:
+    if args.model_type in ["bert", "roberta", "distilbert"] and not args.mlm:
         raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
                          "flag (masked language modeling).")
     if args.eval_data_file is None and args.do_eval:
@@ -479,7 +480,7 @@ def main():
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
-            logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
