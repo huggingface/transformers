@@ -8,6 +8,12 @@ def get_tpu():
         print(e)
         tpu = None
 
+    try:
+        tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://192.168.31.2:8470")
+    except ValueError as e:
+        print(e)
+        tpu = None
+
     # Select appropriate distribution strategy
     if tpu:
         # TF 2.0 change here: experimental_connect_to_cluster and initialize_tpu_system are now necessary

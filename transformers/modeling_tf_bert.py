@@ -494,13 +494,20 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             position_ids = inputs.get('position_ids', position_ids)
             head_mask = inputs.get('head_mask', head_mask)
             assert len(inputs) <= 5, "Too many inputs."
+
+            if input_ids is None:
+                input_ids = inputs.get('input_word_ids')
+                token_type_ids = inputs.get('input_type_ids')
+                attention_mask = inputs.get('input_mask')
         else:
             input_ids = inputs
 
+
+        # TPUs have sharded objects
         if attention_mask is None:
-            attention_mask = tf.fill(tf.shape(input_ids), 1)
+            attention_mask = tf.fill(tf.shape(input_ids.primary if hasattr(input_ids, 'primary') else input_ids), 1)
         if token_type_ids is None:
-            token_type_ids = tf.fill(tf.shape(input_ids), 0)
+            token_type_ids = tf.fill(tf.shape(input_ids.primary if hasattr(input_ids, 'primary') else input_ids), 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]

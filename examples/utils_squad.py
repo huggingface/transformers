@@ -256,6 +256,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
             start_offset += min(length, doc_stride)
 
         for (doc_span_index, doc_span) in enumerate(doc_spans):
+            tokens_ = tokenizer.encode(query_tokens, )
             tokens = []
             token_to_orig_map = {}
             token_is_max_context = {}
