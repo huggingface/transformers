@@ -508,14 +508,12 @@ class PreTrainedTokenizer(object):
         if not new_tokens:
             return 0
 
-        if len(new_tokens) != len(set(new_tokens)):
-            raise ValueError("The provided list of tokens contains duplicates.")
-
         to_add_tokens = []
         for token in new_tokens:
             assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))
             if token != self.unk_token and \
-                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token):
+                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token) and \
+                    token not in to_add_tokens:
                 to_add_tokens.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
