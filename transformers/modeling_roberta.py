@@ -26,7 +26,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu, RBertClassificationHead
 from .configuration_roberta import RobertaConfig
-from .configuration_rbert import RBertForRobertaConfig
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -484,16 +483,13 @@ class RobertaForRelationshipClassification(BertPreTrainedModel):
         tokenizer = RobertaTokenizer.from_pretrained(model_name)
         ent1_sep_token_id = tokenizer.encode(ent1_sep_token, text_pair=None, add_special_tokens=True, add_prefix_space=True)[1]
         ent2_sep_token_id = tokenizer.encode(ent2_sep_token, text_pair=None, add_special_tokens=True, add_prefix_space=True)[1]
-        config = RBertForRobertaConfig.from_pretrained(model_name,entity_1_token_id=ent1_sep_token_id, entity_2_token_id=ent2_sep_token_id)
+        config = RobertaConfig.from_pretrained(model_name,entity_1_token_id=ent1_sep_token_id, entity_2_token_id=ent2_sep_token_id)
         model = RobertaForRelationshipClassification.from_pretrained(model_name, config=config)
         input_ids = torch.tensor(tokenizer.encode(test_string,add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, logits = outputs[:2]
     """
-    config_class = RBertForRobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = "roberta"
     def __init__(self, config):
         super(RobertaForRelationshipClassification, self).__init__(config)
 

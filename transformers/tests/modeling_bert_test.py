@@ -97,6 +97,8 @@ class BertModelTest(CommonTestCases.CommonModelTester):
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+            assert self.seq_length >= 7
             # we need to mock the behaviour of a string prepared for RBERT, by inserting entity bounding characters
             input_ids[:, 0] = self.entity_1_token_id
             input_ids[:, 2] = self.entity_1_token_id

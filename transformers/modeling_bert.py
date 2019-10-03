@@ -447,7 +447,7 @@ class BertPreTrainingHeads(nn.Module):
 class RBertClassificationHead(nn.Module):
     def __init__(self, config):
         """
-        :param config: Either an RBertaConfig or a RBertForRobertaConfig.
+        :param config: a BertConfig or aRobertaConfig.
         """
         super(RBertClassificationHead, self).__init__()
         self.ent_2_index_id = config.entity_2_token_id
