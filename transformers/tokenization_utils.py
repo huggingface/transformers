@@ -512,7 +512,8 @@ class PreTrainedTokenizer(object):
         for token in new_tokens:
             assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))
             if token != self.unk_token and \
-                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token):
+                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token) and \
+                    token not in to_add_tokens:
                 to_add_tokens.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
