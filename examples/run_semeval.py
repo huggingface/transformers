@@ -31,9 +31,9 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from transformers import AdamW, WarmupLinearSchedule
-from transformers import (WEIGHTS_NAME, RBertConfig,
-                                  BertForRelationshipClassification,RBertForRobertaConfig,
-                                  RobertaForRelationshipClassification,BertTokenizer,RobertaTokenizer)
+from transformers import (WEIGHTS_NAME, BertConfig, RobertaConfig,
+                          BertForRelationshipClassification,RBertForRobertaConfig,
+                          RobertaForRelationshipClassification,BertTokenizer,RobertaTokenizer)
 from examples.utils_semeval import (processors, output_modes, convert_examples_to_features,
                                     convert_features_to_dataset, compute_metrics, RBertUtils,
                                     get_entity_seperator_token_ids)
@@ -41,8 +41,8 @@ from examples.utils_semeval import (processors, output_modes, convert_examples_t
 logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
-    'bert': (RBertConfig, BertForRelationshipClassification, BertTokenizer),
-    'roberta': (RBertForRobertaConfig, RobertaForRelationshipClassification, RobertaTokenizer)
+    'bert': (BertConfig, BertForRelationshipClassification, BertTokenizer),
+    'roberta': (RobertaConfig, RobertaForRelationshipClassification, RobertaTokenizer)
 }
 
 RBERT_UTILS = RBertUtils()
