@@ -603,7 +603,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids)
         prediction_scores = outputs[0]
 
     """
@@ -715,9 +715,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        start_positions = tf.constant([1])
-        end_positions = tf.constant([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
     """
