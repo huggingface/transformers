@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-PyTorch-Transformers is an opinionated library built for NLP researchers seeking to use/study/extend large-scale transformers models.
+Transformers is an opinionated library built for NLP researchers seeking to use/study/extend large-scale transformers models.
 
 The library was designed with two strong goals in mind:
 
@@ -19,12 +19,12 @@ The library was designed with two strong goals in mind:
 
 A few other goals:
 
-- expose the models internals as consistently as possible:
+- expose the models' internals as consistently as possible:
 
   - we give access, using a single API to the full hidden-states and attention weights,
   - tokenizer and base model's API are standardized to easily switch between models.
 
-- incorporate a subjective selection of promising tools for fine-tuning/investiguating these models:
+- incorporate a subjective selection of promising tools for fine-tuning/investigating these models:
 
   - a simple/consistent way to add new tokens to the vocabulary and embeddings for fine-tuning,
   - simple ways to mask and prune transformer heads.
@@ -33,13 +33,13 @@ A few other goals:
 
 The library is build around three type of classes for each models:
 
-- **model classes** which are PyTorch models (`torch.nn.Modules`) of the 6 models architectures currently provided in the library, e.g. `BertModel`
+- **model classes** which are PyTorch models (`torch.nn.Modules`) of the 8 models architectures currently provided in the library, e.g. `BertModel`
 - **configuration classes** which store all the parameters required to build a model, e.g. `BertConfig`. You don't always need to instantiate these your-self, in particular if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model)
 - **tokenizer classes** which store the vocabulary for each model and provide methods for encoding/decoding strings in list of token embeddings indices to be fed to a model, e.g. `BertTokenizer`
 
 All these classes can be instantiated from pretrained instances and saved locally using two methods:
 
-- `from_pretrained()` let you instantiate a model/configuration/tokenizer from a pretrained version either provided by the library itself (currently 27 models are provided as listed [here](https://huggingface.co/pytorch-transformers/pretrained_models.html)) or stored locally (or on a server) by the user,
+- `from_pretrained()` let you instantiate a model/configuration/tokenizer from a pretrained version either provided by the library itself (currently 27 models are provided as listed [here](https://huggingface.co/transformers/pretrained_models.html)) or stored locally (or on a server) by the user,
 - `save_pretrained()` let you save a model/configuration/tokenizer locally so that it can be reloaded using `from_pretrained()`.
 
 We'll finish this quickstart tour by going through a few simple quick-start examples to see how we can instantiate and use these classes. The rest of the documentation is organized in two parts:
@@ -51,7 +51,7 @@ We'll finish this quickstart tour by going through a few simple quick-start exam
 
 Here are two examples showcasing a few `Bert` and `GPT2` classes and pre-trained models.
 
-See full API reference for examples for each model classe.
+See full API reference for examples for each model class.
 
 ### BERT example
 
@@ -59,7 +59,7 @@ Let's start by preparing a tokenized input (a list of token embeddings indices t
 
 ```python
 import torch
-from pytorch_transformers import BertTokenizer, BertModel, BertForMaskedLM
+from transformers import BertTokenizer, BertModel, BertForMaskedLM
 
 # OPTIONAL: if you want to have more information on what's happening under the hood, activate the logger as follows
 import logging
@@ -93,8 +93,8 @@ Let's see how we can use `BertModel` to encode our inputs in hidden-states:
 # Load pre-trained model (weights)
 model = BertModel.from_pretrained('bert-base-uncased')
 
-# Set the model in evaluation mode to desactivate the DropOut modules
-# This is IMPORTANT to have reproductible results during evaluation!
+# Set the model in evaluation mode to deactivate the DropOut modules
+# This is IMPORTANT to have reproducible results during evaluation!
 model.eval()
 
 # If you have a GPU, put everything on cuda
@@ -106,7 +106,7 @@ model.to('cuda')
 with torch.no_grad():
     # See the models docstrings for the detail of the inputs
     outputs = model(tokens_tensor, token_type_ids=segments_tensors)
-    # PyTorch-Transformers models always output tuples.
+    # Transformers models always output tuples.
     # See the models docstrings for the detail of all the outputs
     # In our case, the first element is the hidden state of the last layer of the Bert model
     encoded_layers = outputs[0]
@@ -145,7 +145,7 @@ First let's prepare a tokenized input from our text string using `GPT2Tokenizer`
 
 ```python
 import torch
-from pytorch_transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
 import logging
@@ -168,8 +168,8 @@ Let's see how to use `GPT2LMHeadModel` to generate the next token following our 
 # Load pre-trained model (weights)
 model = GPT2LMHeadModel.from_pretrained('gpt2')
 
-# Set the model in evaluation mode to desactivate the DropOut modules
-# This is IMPORTANT to have reproductible results during evaluation!
+# Set the model in evaluation mode to deactivate the DropOut modules
+# This is IMPORTANT to have reproducible results during evaluation!
 model.eval()
 
 # If you have a GPU, put everything on cuda
