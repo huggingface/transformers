@@ -266,7 +266,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         write_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                        args.version_2_with_negative, args.null_score_diff_threshold)
+                        args.version_2_with_negative, args.null_score_diff_threshold, tokenizer, model_type=args.model_type)
 
     # Evaluate with the official SQuAD script
     evaluate_options = EVAL_OPTS(data_file=args.predict_file,
@@ -308,6 +308,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 pad_on_left=bool(args.model_type in ['xlnet']),
                                                 pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
                                                 pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+                                                add_prefix_space=True if args.model_type == 'roberta' else False,
                                                 )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)

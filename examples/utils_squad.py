@@ -199,7 +199,8 @@ def convert_examples_to_features(examples, max_seq_length,
                                  pad_token_segment_id=0,
                                  sequence_a_segment_id=0,
                                  sequence_b_segment_id=1,
-                                 mask_padding_with_zero=True):
+                                 mask_padding_with_zero=True,
+                                 add_prefix_space=False):
     """Loads a data file into a list of `InputBatch`s."""
 
     unique_id = 1000000000
@@ -213,7 +214,7 @@ def convert_examples_to_features(examples, max_seq_length,
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
 
-        query_tokens = tokenizer.tokenize(example.question_text)
+        query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=add_prefix_space)
 
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
@@ -223,7 +224,7 @@ def convert_examples_to_features(examples, max_seq_length,
         all_doc_tokens = []
         for (i, token) in enumerate(example.doc_tokens):
             orig_to_tok_index.append(len(all_doc_tokens))
-            sub_tokens = tokenizer.tokenize(token)
+            sub_tokens = tokenizer.tokenize(token, add_prefix_space=add_prefix_space)
             for sub_token in sub_tokens:
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
@@ -241,7 +242,7 @@ def convert_examples_to_features(examples, max_seq_length,
                 tok_end_position = len(all_doc_tokens) - 1
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-                example.orig_answer_text)
+                example.orig_answer_text, add_prefix_space=add_prefix_space)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         if sep_token_extra:
@@ -431,7 +432,7 @@ def convert_examples_to_features(examples, max_seq_length,
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
-                         orig_answer_text):
+                         orig_answer_text, add_prefix_space=False):
     """Returns tokenized answer spans that better match the annotated answer."""
 
     # The SQuAD annotations are character based. We first project them to
@@ -456,7 +457,7 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
     # the word "Japanese". Since our WordPiece tokenizer does not split
     # "Japanese", we just use "Japanese" as the annotation. This is fairly rare
     # in SQuAD, but does happen.
-    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
+    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=add_prefix_space))
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):
@@ -510,7 +511,7 @@ RawResult = collections.namedtuple("RawResult",
 def write_predictions(all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
                       output_nbest_file, output_null_log_odds_file, verbose_logging,
-                      version_2_with_negative, null_score_diff_threshold):
+                      version_2_with_negative, null_score_diff_threshold, tokenizer, model_type='bert'):
     """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
     logger.info("Writing nbest to: %s" % (output_nbest_file))
@@ -608,16 +609,22 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
                 orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
                 tok_text = " ".join(tok_tokens)
 
-                # De-tokenize WordPieces that have been split off.
-                tok_text = tok_text.replace(" ##", "")
-                tok_text = tok_text.replace("##", "")
+                if model_type == 'roberta':
+                    tok_text = tokenizer.convert_tokens_to_string(tok_tokens)
+                    tok_text = " ".join(tok_text.strip().split())
+                    orig_text = " ".join(orig_tokens)
+                    final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
+                else:
+                    # De-tokenize WordPieces that have been split off.
+                    tok_text = tok_text.replace(" ##", "")
+                    tok_text = tok_text.replace("##", "")
 
-                # Clean whitespace
-                tok_text = tok_text.strip()
-                tok_text = " ".join(tok_text.split())
-                orig_text = " ".join(orig_tokens)
+                    # Clean whitespace
+                    tok_text = tok_text.strip()
+                    tok_text = " ".join(tok_text.split())
+                    orig_text = " ".join(orig_tokens)
 
-                final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
+                    final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
                 if final_text in seen_predictions:
                     continue
 
