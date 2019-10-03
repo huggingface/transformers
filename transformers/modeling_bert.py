@@ -928,7 +928,7 @@ class BertForRelationshipClassification(BertPreTrainedModel):
         tokenizer = BertTokenizer.from_pretrained(model_name)
         ent1_sep_token_id = tokenizer.encode(ent1_sep_token)[0]
         ent2_sep_token_id = tokenizer.encode(ent2_sep_token)[0]
-        config = RBertConfig.from_pretrained(model_name,entity_1_token_id=ent1_sep_token_id, entity_2_token_id=ent2_sep_token_id)
+        config = BertConfig.from_pretrained(model_name, entity_1_token_id=ent1_sep_token_id, entity_2_token_id=ent2_sep_token_id)
         model = BertForRelationshipClassification.from_pretrained(model_name, config=config)
         input_ids = torch.tensor(tokenizer.encode(test_string,add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1

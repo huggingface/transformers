@@ -26,11 +26,11 @@ from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
 if is_torch_available():
-    from transformers import (BertConfig, RBertConfig, BertModel, BertForMaskedLM,
-                                        BertForNextSentencePrediction, BertForPreTraining,
-                                        BertForQuestionAnswering, BertForSequenceClassification,
-                                        BertForTokenClassification, BertForMultipleChoice,
-                                        BertForRelationshipClassification)
+    from transformers import (BertConfig, BertModel, BertForMaskedLM,
+                                BertForNextSentencePrediction, BertForPreTraining,
+                                BertForQuestionAnswering, BertForSequenceClassification,
+                                BertForTokenClassification, BertForMultipleChoice,
+                                BertForRelationshipClassification)
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
     pytestmark = pytest.mark.skip("Require Torch")
@@ -66,6 +66,8 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                      initializer_range=0.02,
                      num_labels=3,
                      num_choices=4,
+                     entity_1_token_id=4,
+                     entity_2_token_id=8,
                      scope=None,
                     ):
             self.parent = parent
@@ -89,10 +91,17 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             self.initializer_range = initializer_range
             self.num_labels = num_labels
             self.num_choices = num_choices
+            self.entity_1_token_id = entity_1_token_id
+            self.entity_2_token_id = entity_2_token_id
             self.scope = scope
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            # we need to mock the behaviour of a string prepared for RBERT, by inserting entity bounding characters
+            input_ids[:, 0] = self.entity_1_token_id
+            input_ids[:, 2] = self.entity_1_token_id
+            input_ids[:, 4] = self.entity_2_token_id
+            input_ids[:, 6] = self.entity_2_token_id
 
             input_mask = None
             if self.use_input_mask:
@@ -121,7 +130,9 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range)
+                initializer_range=self.initializer_range,
+                entity_1_token_id=self.entity_1_token_id,
+                entity_2_token_id=self.entity_2_token_id)
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
@@ -263,6 +274,23 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             self.check_loss_output(result)
 
 
+        def create_and_check_bert_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask,
+                                                                  sequence_labels, token_labels, choice_labels):
+            config.num_labels = self.num_labels
+            model = BertForRelationshipClassification(config=config)
+            model.eval()
+            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
+                                 labels=sequence_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()),
+                [self.batch_size, self.num_labels])
+            self.check_loss_output(result)
+
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, token_type_ids, input_mask,
@@ -309,6 +337,10 @@ class BertModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
 
+    def test_for_relationship_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_for_relationship_classification(*config_and_inputs)
+
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
@@ -316,149 +348,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
-
-
-class RBertModelTest(CommonTestCases.CommonModelTester):
-    """
-    Note, R-Bert requires the input ID's to follow a specific pattern, which means we need a new
-    prepare_config_and_inputs method. This precludes us from reusing the BertModelTest class, as otherwise it will
-    fail the common test cases
-    """
-
-    all_model_classes = (BertForRelationshipClassification, ) if is_torch_available() else ()
-
-    class BertModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_input_mask=True,
-                     use_token_type_ids=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     intermediate_size=37,
-                     hidden_act="gelu",
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
-                     scope=None,
-                    ):
-            self.parent = parent
-            self.batch_size = batch_size
-            self.seq_length = seq_length
-            self.is_training = is_training
-            self.use_input_mask = use_input_mask
-            self.use_token_type_ids = use_token_type_ids
-            self.use_labels = use_labels
-            self.vocab_size = vocab_size
-            self.hidden_size = hidden_size
-            self.num_hidden_layers = num_hidden_layers
-            self.num_attention_heads = num_attention_heads
-            self.intermediate_size = intermediate_size
-            self.hidden_act = hidden_act
-            self.hidden_dropout_prob = hidden_dropout_prob
-            self.attention_probs_dropout_prob = attention_probs_dropout_prob
-            self.max_position_embeddings = max_position_embeddings
-            self.type_vocab_size = type_vocab_size
-            self.type_sequence_label_size = type_sequence_label_size
-            self.initializer_range = initializer_range
-            self.num_labels = num_labels
-            self.num_choices = num_choices
-            self.scope = scope
-
-        def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            entity_1_token_id = 4
-            entity_2_token_id = 8
-            # we need to mock the behaviour of a string prepared for RBERT, by inserting entity bounding characters
-            input_ids[:, 0] = entity_1_token_id
-            input_ids[:, 2] = entity_1_token_id
-            input_ids[:, 4] = entity_2_token_id
-            input_ids[:, 6] = entity_2_token_id
-
-            input_mask = None
-            if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-            token_type_ids = None
-            if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-            sequence_labels = None
-            token_labels = None
-            choice_labels = None
-            if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-
-            config = RBertConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
-                hidden_size=self.hidden_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                intermediate_size=self.intermediate_size,
-                hidden_act=self.hidden_act,
-                hidden_dropout_prob=self.hidden_dropout_prob,
-                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-                max_position_embeddings=self.max_position_embeddings,
-                type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range,
-                entity_1_token_id=entity_1_token_id,
-                entity_2_token_id=entity_2_token_id)
-
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-        def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-
-        def create_and_check_bert_for_relationship_classification(self, config, input_ids, token_type_ids, input_mask,
-                                                                  sequence_labels, token_labels, choice_labels):
-            config.num_labels = self.num_labels
-            model = BertForRelationshipClassification(config=config)
-            model.eval()
-            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
-                                 labels=sequence_labels)
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.num_labels])
-            self.check_loss_output(result)
-
-
-        def prepare_config_and_inputs_for_common(self):
-            config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, token_type_ids, input_mask,
-             sequence_labels, token_labels, choice_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
-            return config, inputs_dict
-
-    def setUp(self):
-        self.model_tester = RBertModelTest.BertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RBertConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_for_relationship_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bert_for_relationship_classification(*config_and_inputs)
 
 
 if __name__ == "__main__":
