@@ -503,6 +503,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
 
+
+
+
         # TPUs have sharded objects
         if attention_mask is None:
             attention_mask = tf.fill(tf.shape(input_ids.primary if hasattr(input_ids, 'primary') else input_ids), 1)

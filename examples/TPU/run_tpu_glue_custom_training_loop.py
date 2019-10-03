@@ -151,8 +151,7 @@ def run_customized_training_loop(
 def run_customized_training(
         tokenizer,
         strategy,
-        train_data_path,
-        eval_data_path,
+        dataset_path,
         max_sequence_length,
         train_batch_size,
         eval_batch_size,
@@ -167,7 +166,7 @@ def run_customized_training(
     train_input_fn = functools.partial(
         create_dataset,
         tokenizer,
-        train_data_path,
+        dataset_path,
         max_sequence_length,
         train_batch_size
     )
@@ -175,9 +174,10 @@ def run_customized_training(
     eval_input_fn = functools.partial(
         create_dataset,
         tokenizer,
-        eval_data_path,
+        dataset_path,
         max_sequence_length,
-        eval_batch_size
+        eval_batch_size,
+        evaluate=True
     )
 
     def model_fn():
@@ -212,8 +212,7 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
     input_meta_data_path = "gs://huggingface-bucket/transformers/outputs/MNLI_meta_data"
-    train_data_path = "/home/lysandre/transformers/examples/TPU/glue_data/MNLI"  # "gs://huggingface-bucket/transformers/outputs/MNLI_train.tf_record"
-    eval_data_path = "test"  # "gs://huggingface-bucket/transformers/outputs/MNLI_eval.tf_record"
+    dataset_path = "/home/lysandre/transformers/examples/TPU/glue_data/MNLI"
 
     with tf.io.gfile.GFile(input_meta_data_path, 'rb') as reader:
         input_meta_data = json.loads(reader.read().decode('utf-8'))
@@ -234,8 +233,7 @@ if __name__ == "__main__":
     trained_model = run_customized_training(
         tokenizer,
         strategy,
-        train_data_path,
-        eval_data_path,
+        dataset_path,
         max_sequence_length,
         train_batch_size,
         eval_batch_size,

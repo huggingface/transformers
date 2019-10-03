@@ -9,7 +9,7 @@ def get_tpu():
         tpu = None
 
     try:
-        tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://192.168.31.2:8470")
+        tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://192.168.32.2:8470")
     except ValueError as e:
         print(e)
         tpu = None
