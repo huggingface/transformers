@@ -119,11 +119,14 @@ Here is the full list of the currently provided pretrained models together with 
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | DistilBERT        | ``distilbert-base-uncased``                                | | 6-layer, 768-hidden, 12-heads, 66M parameters                                                                                       |
 |                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-uncased` checkpoint                                                   |
-|                   |                                                            | (see `details <https://medium.com/huggingface/distilbert-8cf3380435b5>`__)                                                            |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``distilbert-base-uncased-distilled-squad``                | | 6-layer, 768-hidden, 12-heads, 66M parameters                                                                                       |
 |                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-uncased` checkpoint, with an additional linear layer.                 |
-|                   |                                                            | (see `details <https://medium.com/huggingface/distilbert-8cf3380435b5>`__)                                                            |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``distilbert-base-uncased-distilled-squad``                | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
+|                   |                                                            | | The DistilGPT2 model distilled from the GPT2 model `gpt2` checkpoint.                                                               |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-
 .. <https://huggingface.co/transformers/examples.html>`__
