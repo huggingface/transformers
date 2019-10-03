@@ -62,7 +62,7 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer),
     'roberta': (RobertaConfig, RobertaForQuestionAnswering, RobertaTokenizer)
 }
 
