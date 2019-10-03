@@ -263,7 +263,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         write_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                        args.version_2_with_negative, args.null_score_diff_threshold, tokenizer, args.model_type)
+                        args.version_2_with_negative, args.null_score_diff_threshold)
 
     # Evaluate with the official SQuAD script
     evaluate_options = EVAL_OPTS(data_file=args.predict_file,
@@ -296,7 +296,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 max_seq_length=args.max_seq_length,
                                                 doc_stride=args.doc_stride,
                                                 max_query_length=args.max_query_length,
-                                                is_training=not evaluate, add_prefix_space=True if args.model_type == 'roberta' else False)
+                                                is_training=not evaluate)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
