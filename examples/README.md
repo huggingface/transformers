@@ -13,7 +13,7 @@ similar API between the different models.
 
 ## Language model fine-tuning
 
-Based on the script [`run_lm_finetuning.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_lm_finetuning.py).
+Based on the script [`run_lm_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_lm_finetuning.py).
 
 Fine-tuning the library models for language modeling on a text dataset for GPT, GPT-2, BERT and RoBERTa (DistilBERT 
 to be added soon). GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa 
@@ -75,7 +75,7 @@ python run_lm_finetuning.py \
 
 ## Language generation
 
-Based on the script [`run_generation.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_generation.py).
+Based on the script [`run_generation.py`](https://github.com/huggingface/transformers/blob/master/examples/run_generation.py).
 
 Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.
 A similar script is used for our official demo [Write With Transfomer](https://transformer.huggingface.co), where you
@@ -91,7 +91,7 @@ python run_generation.py \
 
 ## GLUE
 
-Based on the script [`run_glue.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py).
+Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/run_glue.py).
 
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding 
 Evaluation](https://gluebenchmark.com/). This script can fine-tune the following models: BERT, XLM, XLNet and RoBERTa. 
@@ -319,7 +319,7 @@ eval_loss = 0.44457291918821606
 
 ## SQuAD
 
-Based on the script [`run_squad.py`](https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_squad.py).
+Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py).
 
 #### Fine-tuning on SQuAD
 

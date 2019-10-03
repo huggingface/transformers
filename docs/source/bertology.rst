@@ -15,4 +15,4 @@ In order to help this new field develop, we have included a few additional featu
 * accessing all the attention weights for each head of BERT/GPT/GPT-2,
 * retrieving heads output values and gradients to be able to compute head importance score and prune head as explained in https://arxiv.org/abs/1905.10650.
 
-To help you understand and use these features, we have added a specific example script: `bertology.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_bertology.py>`_ while extract information and prune a model pre-trained on GLUE.
+To help you understand and use these features, we have added a specific example script: `bertology.py <https://github.com/huggingface/transformers/blob/master/examples/run_bertology.py>`_ while extract information and prune a model pre-trained on GLUE.
