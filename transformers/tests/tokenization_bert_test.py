@@ -118,13 +118,13 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertEqual(added_toks, len(new_toks))
         self.assertEqual(all_size_2, all_size + len(new_toks))
 
-        tokens = tokenizer.encode("ant want running", split_additional_on_word_boundaries=True)
+        tokens = tokenizer.encode("ant want running", additional_tokens_as_full_words_only=True)
         out_string = tokenizer.decode(tokens)
         self.assertGreaterEqual(len(tokens), 3)
         self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
         self.assertLess(tokens[-2], tokenizer.vocab_size - 1)
         
-        tokens = tokenizer.encode("ant want running", split_additional_on_word_boundaries=False)
+        tokens = tokenizer.encode("ant want running", additional_tokens_as_full_words_only=False)
         out_string = tokenizer.decode(tokens)
         self.assertGreaterEqual(len(tokens), 4)
         self.assertGreater(tokens[0], tokenizer.vocab_size - 1)

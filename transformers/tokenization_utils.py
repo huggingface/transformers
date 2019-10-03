@@ -610,7 +610,7 @@ class PreTrainedTokenizer(object):
 
         return added_tokens
 
-    def tokenize(self, text, split_additional_on_word_boundaries=False, **kwargs):
+    def tokenize(self, text, additional_tokens_as_full_words_only=False, **kwargs):
         """ Converts a string in a sequence of tokens (string), using the tokenizer.
             Split in words for word-based vocabulary or sub-words for sub-word-based
             vocabularies (BPE/SentencePieces/WordPieces).
@@ -618,7 +618,7 @@ class PreTrainedTokenizer(object):
             Take care of added tokens.
             
             Args:
-                split_additional_on_word_boundaries: (`optional`) boolean, default False:
+                additional_tokens_as_full_words_only: (`optional`) boolean, default False:
                     When splitting text with additional tokens, try to split only at word
                     boundaries ([^A-Za-z0-9_] in regular expression). Otherwise when an 
                     additional token is part of a token in the pretrained vocabulary, for 
@@ -643,7 +643,7 @@ class PreTrainedTokenizer(object):
 
         def split_on_token(tok, text):
             result = []
-            if split_additional_on_word_boundaries:
+            if additional_tokens_as_full_words_only:
                 split_text = re.split(r'\b%s\b' %tok, text)
             else:
                 split_text = text.split(tok)
