@@ -2,7 +2,7 @@
 
 This folder contains the original code used to train Distil* as well as examples showcasing how to use DistilBERT and DistilGPT2.
 
-**2019, October 3rd - Update** We release our [NeurIPS workshop paper](TODO LINK) explaining our approach on DistilBERT. It includes updated results and further experiments. We applied the same method to GPT2 and release the weights of DistilGPT2. DistilGPT2 is two times faster and 33% smaller than GPT2.
+**2019, October 3rd - Update** We release our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108) explaining our approach on **DistilBERT**. It includes updated results and further experiments. We applied the same method to GPT2 and release the weights of **DistilGPT2**. DistilGPT2 is two times faster and 33% smaller than GPT2.
 
 **2019, September 19th - Update:** We fixed bugs in the code and released an upadted version of the weights trained with a modification of the distillation loss. DistilBERT now reaches 97% of `BERT-base`'s performance on GLUE, and 86.9 F1 score on SQuAD v1.1 dev set (compared to 88.5 for `BERT-base`). We will publish a formal write-up of our approach in the near future!
 
@@ -12,7 +12,7 @@ Distil* is a class of compressed models that started with DistilBERT. DistilBERT
 
 We have applied the same method to GPT2 and release the weights of the compressed model. On the [WikiText-103](https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/) benchmark, GPT2 reaches a perplexity on the test of 15.84 compared to 19.91 for DistilGPT2 (after fine-tuning on the train set).
 
-For more information on DistilBERT, please refer to our [NeurIPS workshop paper](TODO LINK). The paper superseeds our [previous blogpost](https://medium.com/huggingface/distilbert-8cf3380435b5) with a different distillation loss and better performances.
+For more information on DistilBERT, please refer to our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108). The paper superseeds our [previous blogpost](https://medium.com/huggingface/distilbert-8cf3380435b5) with a different distillation loss and better performances.
 
 Here are the results on the dev sets of GLUE:
 
@@ -88,7 +88,7 @@ python train.py \
     --student_config training_configs/distilbert-base-uncased.json \
     --teacher_type bert \
     --teacher_name bert-base-uncased \
-    --alpha_ce 0.33 --alpha_mlm 0.33 --alpha_cos 0.33 --mlm \
+    --alpha_ce 5.0 --alpha_mlm 2.0 --alpha_cos 1.0 --mlm \
     --freeze_pos_embs \
     --dump_path serialization_dir/my_first_training \
     --data_file data/binarized_text.bert-base-uncased.pickle \
