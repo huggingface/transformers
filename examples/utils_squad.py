@@ -259,6 +259,7 @@ def example_to_feature(example, max_seq_length=384,
             break
         start_offset += min(length, doc_stride)
 
+    example_features = []
     for (doc_span_index, doc_span) in enumerate(doc_spans):
         tokens = []
         token_to_orig_map = {}
@@ -374,22 +375,25 @@ def example_to_feature(example, max_seq_length=384,
         if is_training and span_is_impossible:
             start_position = cls_index
             end_position = cls_index
-    return          InputFeatures(
-                    unique_id=0,
-                    example_index=0,
-                    doc_span_index=doc_span_index,
-                    tokens=tokens,
-                    token_to_orig_map=token_to_orig_map,
-                    token_is_max_context=token_is_max_context,
-                    input_ids=input_ids,
-                    input_mask=input_mask,
-                    segment_ids=segment_ids,
-                    cls_index=cls_index,
-                    p_mask=p_mask,
-                    paragraph_len=paragraph_len,
-                    start_position=start_position,
-                    end_position=end_position,
-                    is_impossible=span_is_impossible)
+        example_features.append(
+            InputFeatures(
+                unique_id=0,
+                example_index=0,
+                doc_span_index=doc_span_index,
+                tokens=tokens,
+                token_to_orig_map=token_to_orig_map,
+                token_is_max_context=token_is_max_context,
+                input_ids=input_ids,
+                input_mask=input_mask,
+                segment_ids=segment_ids,
+                cls_index=cls_index,
+                p_mask=p_mask,
+                paragraph_len=paragraph_len,
+                start_position=start_position,
+                end_position=end_position,
+                is_impossible=span_is_impossible)
+        )
+    return example_features
 
 def convert_examples_to_features(examples, max_seq_length,
                                  tokenizer,
@@ -425,11 +429,14 @@ def convert_examples_to_features(examples, max_seq_length,
                                  mask_padding_with_zero=mask_padding_with_zero)
         features_initial = list(tqdm(p.imap(annotate, examples, chunksize=64), total=len(examples), desc='is_training_' + str(is_training).lower() + '_convert_features'))
     features = []
-    for index, feature in enumerate(features_initial):
-        feature.unique_id = unique_id
-        unique_id += 1
-        feature.example_index = index
-        features.append(feature)
+    for example_index, example_features in enumerate(features_initial):
+        if not example_features:
+            logger.info('Attention: meet wrong example!')
+        for feature in example_features:
+            feature.unique_id = unique_id
+            unique_id += 1
+            feature.example_index = example_index
+            features.append(feature)
     return features
 
 def convert_examples_to_features1(examples, max_seq_length,
