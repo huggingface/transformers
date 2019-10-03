@@ -247,8 +247,10 @@ class XLNetRelativeAttention(nn.Module):
         x = x[:, :, 1:, :]
         x = x.reshape(x_size[0], x_size[1], x_size[2], x_size[3]-1)
         # Note: the tensor-slice form was faster in my testing than torch.index_select
-        # x = torch.index_select(x, 2, torch.arange(klen, device=x.device, dtype=torch.long))
-        x = x[:, :, :, :klen]
+        #       However, tracing doesn't like the nature of the slice, and if klen changes
+        #       during the run then it'll fail, whereas index_select will be fine.
+        x = torch.index_select(x, 3, torch.arange(klen, device=x.device, dtype=torch.long))
+        # x = x[:, :, :, :klen]
 
         return x
 
@@ -290,7 +292,7 @@ class XLNetRelativeAttention(nn.Module):
         attn_vec = torch.einsum('bnij,jbnd->ibnd', attn_prob, v_head_h)
 
         if self.output_attentions:
-            return attn_vec, attn_prob
+            return attn_vec, torch.einsum('bnij->ijbn', attn_prob)
 
         return attn_vec
 
