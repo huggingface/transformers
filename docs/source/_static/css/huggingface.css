@@ -1,5 +1,3 @@
-huggingface.css
-
 /* The literal code blocks */
 .rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
     color: #6670FF;
@@ -44,11 +42,11 @@ huggingface.css
 /* The text items on the toc tree */
 .wy-menu-vertical a {
     color: #FFFFDD;
-    font-family: Calibre-Light;
+    font-family: Calibre-Light, sans-serif;
 }
 .wy-menu-vertical header, .wy-menu-vertical p.caption{
     color: white;
-    font-family: Calibre-Light;
+    font-family: Calibre-Light, sans-serif;
 }
 
 /* The color inside the selected toc tree block */
@@ -85,7 +83,7 @@ a {
     border-right: solid 2px #FB8D68;
     border-left: solid 2px #FB8D68;
     color: #FB8D68;
-    font-family: Calibre-Light;
+    font-family: Calibre-Light, sans-serif;
     border-top: none;
     font-style: normal !important;
 }
@@ -136,14 +134,14 @@ a {
 
 /* class and method names in doc */
 .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) tt.descclassname, .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) code.descname, .rst-content dl:not(.docutils) tt.descclassname, .rst-content dl:not(.docutils) code.descclassname{
-    font-family: Calibre;
+    font-family: Calibre, sans-serif;
     font-size: 20px !important;
 }
 
 /* class name in doc*/
 .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) code.descname{
     margin-right: 10px;
-    font-family: Calibre-Medium;
+    font-family: Calibre-Medium, sans-serif;
 }
 
 /* Method and class parameters */
@@ -160,17 +158,17 @@ a {
 
 /* FONTS */
 body{
-    font-family: Calibre;
+    font-family: Calibre, sans-serif;
     font-size: 16px;
 }
 
 h1 {
-    font-family: Calibre-Thin;
+    font-family: Calibre-Thin, sans-serif;
     font-size: 70px;
 }
 
 h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
-    font-family: Calibre-Medium;
+    font-family: Calibre-Medium, sans-serif;
 }
 
 @font-face {
@@ -196,4 +194,3 @@ h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
     src: url(./Calibre-Thin.otf);
     font-weight:400;
 }
-
