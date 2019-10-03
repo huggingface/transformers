@@ -52,7 +52,7 @@ from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
-                  for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
+                  for conf in (BertConfig, RobertaConfig, XLNetConfig, XLMConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
@@ -258,16 +258,11 @@ def evaluate(args, model, tokenizer, prefix=""):
                         output_nbest_file, output_null_log_odds_file, args.predict_file,
                         model.config.start_n_top, model.config.end_n_top,
                         args.version_2_with_negative, tokenizer, args.verbose_logging)
-    elif args.model_type in ['roberta']:
-        write_predictions(examples, features, all_results, args.n_best_size,
-                        args.max_answer_length, args.do_lower_case, output_prediction_file,
-                        output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                        args.version_2_with_negative, args.null_score_diff_threshold, tokenizer)
     else:
         write_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                        args.version_2_with_negative, args.null_score_diff_threshold)
+                        args.version_2_with_negative, args.null_score_diff_threshold, tokenizer)
 
     # Evaluate with the official SQuAD script
     evaluate_options = EVAL_OPTS(data_file=args.predict_file,
@@ -295,21 +290,22 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
         examples = read_squad_examples(input_file=input_file,
                                                 is_training=not evaluate,
                                                 version_2_with_negative=args.version_2_with_negative)
-        features = convert_examples_to_features(examples=examples,
-                                                tokenizer=tokenizer,
-                                                max_seq_length=args.max_seq_length,
-                                                doc_stride=args.doc_stride,
-                                                max_query_length=args.max_query_length,
-                                                is_training=not evaluate,
-                                                cls_token_at_end=bool(args.model_type in ['xlnet']), # xlnet has a cls token at the end
-                                                cls_token=tokenizer.cls_token,
-                                                sep_token=tokenizer.sep_token,
-                                                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-                                                cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
-                                                pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
-                                                sep_token_extra=bool(args.model_type in ['roberta']),
-                                                add_prefix_space=bool(args.model_type in ['roberta']))
-        
+        features = convert_examples_to_features(
+            examples=examples,
+            tokenizer=tokenizer,
+            max_seq_length=args.max_seq_length,
+            doc_stride=args.doc_stride,
+            max_query_length=args.max_query_length,
+            is_training=not evaluate,
+            cls_token_at_end=bool(args.model_type in ['xlnet']), # xlnet has a cls token at the end
+            cls_token=tokenizer.cls_token,
+            sep_token=tokenizer.sep_token,
+            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
+            sep_token_extra=bool(args.model_type in ['roberta']),
+        )
+
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
