@@ -32,15 +32,17 @@ from tqdm import tqdm, trange
 
 from tensorboardX import SummaryWriter
 
-from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
+from transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForQuestionAnswering, BertTokenizer,
                                   XLMConfig, XLMForQuestionAnswering,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForQuestionAnswering,
-                                  XLNetTokenizer, RobertaConfig, RobertaTokenizer,
+                                  XLNetTokenizer,
+                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+                                  RobertaConfig, RobertaTokenizer,
                                   RobertaForQuestionAnswering)
 
-from pytorch_transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, WarmupLinearSchedule
 
 from utils_squad import (read_squad_examples, convert_examples_to_features,
                          RawResult, write_predictions,
@@ -60,6 +62,7 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
+    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
     'roberta': (RobertaConfig, RobertaForQuestionAnswering, RobertaTokenizer)
 }
 
@@ -142,7 +145,7 @@ def train(args, train_dataset, model, tokenizer):
                 inputs.update({'cls_index': batch[5],
                                'p_mask':       batch[6]})
             outputs = model(**inputs)
-            loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu parallel (not distributed) training
@@ -519,7 +522,7 @@ def main():
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
-            logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
