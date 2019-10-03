@@ -82,7 +82,7 @@ if is_torch_available():
                             XLMForQuestionAnswering, XLMForQuestionAnsweringSimple,
                             XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_roberta import (RobertaForMaskedLM, RobertaModel,
-                                RobertaForSequenceClassification, RobertaForMultipleChoice,
+                                RobertaForSequenceClassification, RobertaForMultipleChoice, RobertaForQuestionAnswering,
                                 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,

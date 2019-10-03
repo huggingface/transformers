@@ -38,7 +38,7 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForQuestionAnswering,
                                   XLNetTokenizer,
-                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer,
                                   RobertaConfig, RobertaTokenizer,
                                   RobertaForQuestionAnswering)
 
@@ -56,7 +56,7 @@ from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
-                  for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig)), ())
+                  for conf in (BertConfig, XLNetConfig, XLMConfig, DistilBertConfig, RobertaConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
