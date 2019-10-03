@@ -177,7 +177,8 @@ def main():
     while True:
         xlm_lang = None
         # XLM Language usage detailed in the issues #1414
-        if args.model_type in ["xlm"] and hasattr(tokenizer, 'lang2id'):
+        if args.model_type in ["xlm"] and hasattr(tokenizer, 'lang2id') and hasattr(model.config, 'use_lang_emb') \
+                and model.config.use_lang_emb:
             if args.xlm_lang:
                 language = args.xlm_lang
             else:
