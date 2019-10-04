@@ -490,6 +490,10 @@ class RobertaForRelationshipClassification(BertPreTrainedModel):
         outputs = model(input_ids, labels=labels)
         loss, logits = outputs[:2]
     """
+    config_class = RobertaConfig
+    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "roberta"
+
     def __init__(self, config):
         super(RobertaForRelationshipClassification, self).__init__(config)
 

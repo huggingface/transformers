@@ -129,7 +129,9 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range)
+                initializer_range=self.initializer_range,
+                entity_1_token_id=self.entity_1_token_id,
+                entity_2_token_id=self.entity_2_token_id)
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
