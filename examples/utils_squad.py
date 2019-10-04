@@ -212,7 +212,8 @@ def example_to_feature(example, max_seq_length=384,
                                  sequence_a_segment_id=0,
                                  sequence_b_segment_id=1,
                                  mask_padding_with_zero=True,
-                                 add_prefix_space=False):
+                                 add_prefix_space=False,
+                                 negtive_sample_probability=1.0):
 
     query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=add_prefix_space)
     if len(query_tokens) > max_query_length:
@@ -399,7 +400,14 @@ def example_to_feature(example, max_seq_length=384,
                 end_position=end_position,
                 is_impossible=span_is_impossible)
         )
-    return example_features
+    example_features_selected = []
+    for example_feature in example_features:
+        if is_training and example_feature.is_impossible and random.random() > negtive_sample_probability:
+            continue
+        example_features_selected.append(example_feature)
+    if not example_features_selected and example_features:
+        example_features_selected = [example_features[0]]
+    return example_features_selected
 
 def convert_examples_to_features(examples, max_seq_length,
                                  tokenizer,
@@ -435,7 +443,8 @@ def convert_examples_to_features(examples, max_seq_length,
                                  sequence_a_segment_id=sequence_a_segment_id,
                                  sequence_b_segment_id=sequence_b_segment_id,
                                  mask_padding_with_zero=mask_padding_with_zero,
-                                 add_prefix_space=add_prefix_space)
+                                 add_prefix_space=add_prefix_space,
+                                 negtive_sample_probability=negtive_sample_probability)
         example_chunks = [examples[start:start+50000] for start in range(0, len(examples), 50000)]
         logger.info('total chunks: {}'.format(len(example_chunks)))
         for chunk_id, examples_part in enumerate(example_chunks):
@@ -448,10 +457,10 @@ def convert_examples_to_features(examples, max_seq_length,
         if not example_features:
             logger.info('Attention: meet wrong example!')
         for feature in example_features:
-            if feature.is_impossible:
-                if is_training and random.random() > negtive_sample_probability:
-                    drop_negative_num += 1
-                    continue
+            # if feature.is_impossible:
+            #     if is_training and random.random() > negtive_sample_probability:
+            #         drop_negative_num += 1
+            #         continue
             feature.unique_id = unique_id
             unique_id += 1
             feature.example_index = example_index
