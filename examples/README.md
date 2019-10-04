@@ -9,7 +9,7 @@ similar API between the different models.
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
 | [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                  |
-| [Multiple Choice](#multiple choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
+| [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 
 ## Language model fine-tuning
 
@@ -283,17 +283,17 @@ The results  are the following:
   loss = 0.04755385363816904
 ```
 
-##Multiple Choice
+## Multiple Choice
 
 Based on the script [`run_multiple_choice.py`]().
 
 #### Fine-tuning on SWAG
 Download [swag](https://github.com/rowanz/swagaf/tree/master/data) data
 
-```
+```bash
 #training on 4 tesla V100(16GB) GPUS
 export SWAG_DIR=/path/to/swag_data_dir
-python ./examples/single_model_scripts/run_multiple_choice.py \
+python ./examples/run_multiple_choice.py \
 --model_type roberta \
 --task_name swag \
 --model_name_or_path roberta-base \
