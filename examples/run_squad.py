@@ -309,6 +309,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
                                                 pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
                                                 add_prefix_space=True if args.model_type == 'roberta' else False,
+                                                negtive_sample_probability=args.nsp,
                                                 )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -437,6 +438,7 @@ def main():
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument('--nsp', type=float, default=1.0, help='negtive examples sample probability')
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:

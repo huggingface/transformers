@@ -31,7 +31,7 @@ Thread_num = cpu_count()
 import multiprocessing
 from multiprocessing import Pool
 from functools import partial
-
+import random
 
 # Required by XLNet evaluation method to compute optimal threshold (see write_predictions_extended() method)
 from utils_squad_evaluate import find_all_best_thresh_v2, make_qid_to_has_ans, get_raw_scores
@@ -114,88 +114,87 @@ class InputFeatures(object):
         self.end_position = end_position
         self.is_impossible = is_impossible
 
-def entry2examples(entry, is_training=False, version_2_with_negative=False):
-    entry_examples = []
+def paragraphs2examples(paragraph, is_training=False, version_2_with_negative=False):
+    paragraph_examples = []
     def is_whitespace(c):
         if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
             return True
         return False
 
-    for paragraph in entry["paragraphs"]:
-        paragraph_text = paragraph["context"]
-        doc_tokens = []
-        char_to_word_offset = []
-        prev_is_whitespace = True
-        for c in paragraph_text:
-            if is_whitespace(c):
-                prev_is_whitespace = True
+    paragraph_text = paragraph["context"]
+    doc_tokens = []
+    char_to_word_offset = []
+    prev_is_whitespace = True
+    for c in paragraph_text:
+        if is_whitespace(c):
+            prev_is_whitespace = True
+        else:
+            if prev_is_whitespace:
+                doc_tokens.append(c)
             else:
-                if prev_is_whitespace:
-                    doc_tokens.append(c)
-                else:
-                    doc_tokens[-1] += c
-                prev_is_whitespace = False
-            char_to_word_offset.append(len(doc_tokens) - 1)
+                doc_tokens[-1] += c
+            prev_is_whitespace = False
+        char_to_word_offset.append(len(doc_tokens) - 1)
 
-        for qa in paragraph["qas"]:
-            qas_id = qa["id"]
-            question_text = qa["question"]
-            start_position = None
-            end_position = None
-            orig_answer_text = None
-            is_impossible = False
-            if is_training:
-                if version_2_with_negative:
-                    is_impossible = qa["is_impossible"]
-                if (len(qa["answers"]) != 1) and (not is_impossible):
-                    raise ValueError(
-                        "For training, each question should have exactly 1 answer.")
-                if not is_impossible:
-                    answer = qa["answers"][0]
-                    orig_answer_text = answer["text"]
-                    answer_offset = answer["answer_start"]
-                    answer_length = len(orig_answer_text)
-                    start_position = char_to_word_offset[answer_offset]
-                    end_position = char_to_word_offset[answer_offset + answer_length - 1]
-                    # Only add answers where the text can be exactly recovered from the
-                    # document. If this CAN'T happen it's likely due to weird Unicode
-                    # stuff so we will just skip the example.
-                    #
-                    # Note that this means for training mode, every example is NOT
-                    # guaranteed to be preserved.
-                    actual_text = " ".join(doc_tokens[start_position:(end_position + 1)])
-                    cleaned_answer_text = " ".join(
-                        whitespace_tokenize(orig_answer_text))
-                    if actual_text.find(cleaned_answer_text) == -1:
-                        logger.warning("Could not find answer: '%s' vs. '%s'",
-                                       actual_text, cleaned_answer_text)
-                        continue
-                else:
-                    start_position = -1
-                    end_position = -1
-                    orig_answer_text = ""
+    for qa in paragraph["qas"]:
+        qas_id = qa["id"]
+        question_text = qa["question"]
+        start_position = None
+        end_position = None
+        orig_answer_text = None
+        is_impossible = False
+        if is_training:
+            if version_2_with_negative:
+                is_impossible = qa["is_impossible"]
+            if (len(qa["answers"]) != 1) and (not is_impossible):
+                raise ValueError(
+                    "For training, each question should have exactly 1 answer.")
+            if not is_impossible:
+                answer = qa["answers"][0]
+                orig_answer_text = answer["text"]
+                answer_offset = answer["answer_start"]
+                answer_length = len(orig_answer_text)
+                start_position = char_to_word_offset[answer_offset]
+                end_position = char_to_word_offset[answer_offset + answer_length - 1]
+                # Only add answers where the text can be exactly recovered from the
+                # document. If this CAN'T happen it's likely due to weird Unicode
+                # stuff so we will just skip the example.
+                #
+                # Note that this means for training mode, every example is NOT
+                # guaranteed to be preserved.
+                actual_text = " ".join(doc_tokens[start_position:(end_position + 1)])
+                cleaned_answer_text = " ".join(
+                    whitespace_tokenize(orig_answer_text))
+                if actual_text.find(cleaned_answer_text) == -1:
+                    logger.warning("Could not find answer: '%s' vs. '%s'",
+                                   actual_text, cleaned_answer_text)
+                    continue
+            else:
+                start_position = -1
+                end_position = -1
+                orig_answer_text = ""
 
-            example = SquadExample(
-                qas_id=qas_id,
-                question_text=question_text,
-                doc_tokens=doc_tokens,
-                orig_answer_text=orig_answer_text,
-                start_position=start_position,
-                end_position=end_position,
-                is_impossible=is_impossible)
-            entry_examples.append(example)
-    return entry_examples
+        example = SquadExample(
+            qas_id=qas_id,
+            question_text=question_text,
+            doc_tokens=doc_tokens,
+            orig_answer_text=orig_answer_text,
+            start_position=start_position,
+            end_position=end_position,
+            is_impossible=is_impossible)
+        paragraph_examples.append(example)
+    return paragraph_examples
 
 def read_squad_examples(input_file, is_training, version_2_with_negative):
     """Read a SQuAD json file into a list of SquadExample."""
     with open(input_file, "r", encoding='utf-8') as reader:
         input_data = json.load(reader)["data"]
-
+    paragraphs = [paragraph for entry in input_data for paragraph in entry['paragraphs']]
     examples = []
     with Pool(Thread_num) as p:
-        annotate = partial(entry2examples, is_training=is_training, version_2_with_negative=version_2_with_negative)
-        examples = list(tqdm(p.imap(annotate, input_data, chunksize=64), total=len(input_data),
-                                     desc='is_training_' + str(is_training).lower() + '_entry2examples'))
+        annotate = partial(paragraphs2examples, is_training=is_training, version_2_with_negative=version_2_with_negative)
+        examples = list(tqdm(p.imap(annotate, paragraphs, chunksize=64), total=len(paragraphs),
+                                     desc='is_training_' + str(is_training).lower() + '_paragraphs2examples'))
     examples = [example for entry_examples in examples for example in entry_examples]
     return examples
 
@@ -212,9 +211,10 @@ def example_to_feature(example, max_seq_length=384,
                                  pad_token_segment_id=0,
                                  sequence_a_segment_id=0,
                                  sequence_b_segment_id=1,
-                                 mask_padding_with_zero=True):
+                                 mask_padding_with_zero=True,
+                                 add_prefix_space=False):
 
-    query_tokens = tokenizer.tokenize(example.question_text)
+    query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=add_prefix_space)
     if len(query_tokens) > max_query_length:
         query_tokens = query_tokens[0:max_query_length]
 
@@ -223,7 +223,7 @@ def example_to_feature(example, max_seq_length=384,
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        sub_tokens = tokenizer.tokenize(token)
+        sub_tokens = tokenizer.tokenize(token, add_prefix_space=add_prefix_space)
         for sub_token in sub_tokens:
             tok_to_orig_index.append(i)
             all_doc_tokens.append(sub_token)
@@ -241,7 +241,7 @@ def example_to_feature(example, max_seq_length=384,
             tok_end_position = len(all_doc_tokens) - 1
         (tok_start_position, tok_end_position) = _improve_answer_span(
             all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-            example.orig_answer_text)
+            example.orig_answer_text, add_prefix_space=add_prefix_space)
 
     # The -3 accounts for [CLS], [SEP] and [SEP]
     if sep_token_extra:
@@ -415,10 +415,11 @@ def convert_examples_to_features(examples, max_seq_length,
                                  sequence_a_segment_id=0,
                                  sequence_b_segment_id=1,
                                  mask_padding_with_zero=True,
-                                 add_prefix_space=False):
+                                 add_prefix_space=False,
+                                 negtive_sample_probability=1.0):
     logger.info('Multiprocessing!')
     unique_id = 1000000000
-    features_initial = 0
+    features_initial = []
     with Pool(Thread_num) as p:
         annotate = partial(example_to_feature, max_seq_length=max_seq_length,
                                  tokenizer=tokenizer,
@@ -433,17 +434,29 @@ def convert_examples_to_features(examples, max_seq_length,
                                  pad_token_segment_id=pad_token_segment_id,
                                  sequence_a_segment_id=sequence_a_segment_id,
                                  sequence_b_segment_id=sequence_b_segment_id,
-                                 mask_padding_with_zero=mask_padding_with_zero)
-        features_initial = list(tqdm(p.imap(annotate, examples, chunksize=64), total=len(examples), desc='is_training_' + str(is_training).lower() + '_convert_features'))
+                                 mask_padding_with_zero=mask_padding_with_zero,
+                                 add_prefix_space=add_prefix_space)
+        example_chunks = [examples[start:start+50000] for start in range(0, len(examples), 50000)]
+        logger.info('total chunks: {}'.format(len(example_chunks)))
+        for chunk_id, examples_part in enumerate(example_chunks):
+            features_partial = list(tqdm(p.imap(annotate, examples_part, chunksize=64), total=len(examples_part), desc='is_training_' + str(is_training).lower() + '_convert_features'))
+            features_initial.extend(features_partial)
+            logger.info('processing chunk {}'.format(chunk_id))
     features = []
-    for example_index, example_features in enumerate(features_initial):
+    drop_negative_num = 0
+    for example_index, example_features in tqdm(enumerate(features_initial), desc='post processing fetures'):
         if not example_features:
             logger.info('Attention: meet wrong example!')
         for feature in example_features:
+            if feature.is_impossible:
+                if is_training and random.random() > negtive_sample_probability:
+                    drop_negative_num += 1
+                    continue
             feature.unique_id = unique_id
             unique_id += 1
             feature.example_index = example_index
             features.append(feature)
+    logger.info('Is training: {} features num: {}, drop negative num: {}'.format(str(is_training), len(features), drop_negative_num))
     return features
 
 def convert_examples_to_features1(examples, max_seq_length,
