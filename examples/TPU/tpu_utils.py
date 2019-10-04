@@ -2,17 +2,17 @@ import tensorflow as tf
 
 
 def get_tpu():
+    tpu = None
+
     try:
         tpu = tf.distribute.cluster_resolver.TPUClusterResolver()  # TPU detection
     except ValueError as e:
         print(e)
-        tpu = None
 
     try:
         tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://192.168.32.2:8470")
     except ValueError as e:
         print(e)
-        tpu = None
 
     # Select appropriate distribution strategy
     if tpu:
