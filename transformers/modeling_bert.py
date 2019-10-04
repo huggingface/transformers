@@ -378,6 +378,26 @@ class BertPooler(nn.Module):
         return pooled_output
 
 
+class ConcatAvgMaxBertPooler(nn.Module):
+    def __init__(self, config):
+        super(ConcatAvgMaxBertPooler, self).__init__()
+        self.dense = nn.Linear(config.hidden_size * 2, config.hidden_size)
+        self.activation = nn.Tanh()
+
+        self._pooling_kwargs = dict(output_size=1)
+
+    def forward(self, hidden_states):
+
+        output = hidden_states[:, :].permute(0, 2, 1)
+        output = torch.cat((
+            nn.functional.adaptive_avg_pool1d(output, **self._pooling_kwargs),
+            nn.functional.adaptive_max_pool1d(output, **self._pooling_kwargs),
+        ), dim=1).squeeze(2)
+        output = self.dense(output)
+        return self.activation(output)
+
+
+
 class BertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super(BertPredictionHeadTransform, self).__init__()
@@ -484,7 +504,7 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -498,13 +518,13 @@ BERT_INPUTS_DOCSTRING = r"""
             (a) For sequence pairs:
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-                
+
                 ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
 
             (b) For single sequences:
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
-                
+
                 ``token_type_ids:   0   0   0   0  0     0   0``
 
             Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -567,7 +587,13 @@ class BertModel(BertPreTrainedModel):
 
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)
-        self.pooler = BertPooler(config)
+
+        pooler = getattr(config, 'pooler', None)
+
+        if not pooler or 'default' in pooler.lower():
+            self.pooler = BertPooler(config)
+        elif 'concatavgmax' in pooler.lower():
+            self.pooler = ConcatAvgMaxBertPooler(config)
 
         self.init_weights()
 
@@ -694,7 +720,7 @@ class BertForPreTraining(BertPreTrainedModel):
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
+                            position_ids=position_ids,
                             head_mask=head_mask)
 
         sequence_output, pooled_output = outputs[:2]
@@ -766,7 +792,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
+                            position_ids=position_ids,
                             head_mask=head_mask)
 
         sequence_output = outputs[0]
@@ -827,7 +853,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
+                            position_ids=position_ids,
                             head_mask=head_mask)
 
         pooled_output = outputs[1]
@@ -893,7 +919,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
+                            position_ids=position_ids,
                             head_mask=head_mask)
 
         pooled_output = outputs[1]
@@ -1039,7 +1065,7 @@ class BertForTokenClassification(BertPreTrainedModel):
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
+                            position_ids=position_ids,
                             head_mask=head_mask)
 
         sequence_output = outputs[0]
@@ -1122,7 +1148,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
+                            position_ids=position_ids,
                             head_mask=head_mask)
 
         sequence_output = outputs[0]

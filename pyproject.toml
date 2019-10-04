@@ -1,0 +1,45 @@
+[tool.poetry]
+name = "transformers"
+version = "0.1.0"
+description = ""
+authors = ["Grzegorz <suszka.grzegorz@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+tqdm = "^4.36.1"
+boto3 = "^1.9.242"
+requests = "^2.22.0"
+regex = "^2019.8.19"
+sentencepiece = "^0.1.83"
+sacremoses = "^0.0.35"
+torch = {version = "^1.2.0", allows-prereleases = true}
+
+[tool.poetry.dev-dependencies]
+black = {version = "^19.3b0", allows-prereleases = true}
+rope = {version = "^0.14.0", allows-prereleases = true}
+
+[tool.black]
+line-length = 192
+target-version = ['py37']
+include = '\.pyi?$'
+exclude = "generated"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
+
+[mypy]
+python_version = 3.7
+show_column_numbers = true
+follow_imports = "normal"
+ignore_missing_imports = true
+disallow_untyped_calls = false
+warn_return_any = true
+strict_optional = true
+warn_no_return = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+no_incremental = false
+
