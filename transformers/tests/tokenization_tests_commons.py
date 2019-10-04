@@ -249,10 +249,10 @@ class CommonTestCases:
             )
 
             information = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2, add_special_tokens=True,
-                                                stride=stride, truncate_first_sequence=False)
+                                                stride=stride, truncation_strategy='only_second')
             information_first_truncated = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2,
                                                                 add_special_tokens=True, stride=stride,
-                                                                truncate_first_sequence=True)
+                                                                truncation_strategy='only_first')
 
             truncated_sequence = information["input_ids"]
             overflowing_tokens = information["overflowing_tokens"]

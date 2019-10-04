@@ -336,7 +336,6 @@ def convert_examples_to_features(
                 text_b,
                 add_special_tokens=True,
                 max_length=max_length,
-                truncate_both_sequences=True
             )
             if 'num_truncated_tokens' in inputs and inputs['num_truncated_tokens'] > 0:
                 logger.info('Attention! you are cropping tokens (swag task is ok). '
