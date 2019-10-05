@@ -649,7 +649,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss, start_scores, end_scores = outputs[:2]
+        loss, start_scores, end_scores = outputs[:3]
 
     """
     def __init__(self, config):
