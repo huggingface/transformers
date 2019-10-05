@@ -213,9 +213,12 @@ def example_to_feature(example, max_seq_length=384,
                                  sequence_b_segment_id=1,
                                  mask_padding_with_zero=True,
                                  add_prefix_space=False,
-                                 negtive_sample_probability=1.0):
-
-    query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=add_prefix_space)
+                                 negtive_sample_probability=1.0,
+                                 model_type='bert'):
+    if model_type == 'roberta':
+        query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=add_prefix_space)
+    else:
+        query_tokens = tokenizer.tokenize(example.question_text)
     if len(query_tokens) > max_query_length:
         query_tokens = query_tokens[0:max_query_length]
 
@@ -224,7 +227,10 @@ def example_to_feature(example, max_seq_length=384,
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        sub_tokens = tokenizer.tokenize(token, add_prefix_space=add_prefix_space)
+        if model_type == 'roberta':
+            sub_tokens = tokenizer.tokenize(token, add_prefix_space=add_prefix_space)
+        else:
+            sub_tokens = tokenizer.tokenize(token)
         for sub_token in sub_tokens:
             tok_to_orig_index.append(i)
             all_doc_tokens.append(sub_token)
@@ -242,7 +248,7 @@ def example_to_feature(example, max_seq_length=384,
             tok_end_position = len(all_doc_tokens) - 1
         (tok_start_position, tok_end_position) = _improve_answer_span(
             all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-            example.orig_answer_text, add_prefix_space=add_prefix_space)
+            example.orig_answer_text, add_prefix_space=add_prefix_space, model_type=model_type)
 
     # The -3 accounts for [CLS], [SEP] and [SEP]
     if sep_token_extra:
@@ -424,7 +430,8 @@ def convert_examples_to_features(examples, max_seq_length,
                                  sequence_b_segment_id=1,
                                  mask_padding_with_zero=True,
                                  add_prefix_space=False,
-                                 negtive_sample_probability=1.0):
+                                 negtive_sample_probability=1.0,
+                                 model_type='bert'):
     logger.info('Multiprocessing!')
     unique_id = 1000000000
     features_initial = []
@@ -444,7 +451,8 @@ def convert_examples_to_features(examples, max_seq_length,
                                  sequence_b_segment_id=sequence_b_segment_id,
                                  mask_padding_with_zero=mask_padding_with_zero,
                                  add_prefix_space=add_prefix_space,
-                                 negtive_sample_probability=negtive_sample_probability)
+                                 negtive_sample_probability=negtive_sample_probability,
+                                 model_type=model_type)
         example_chunks = [examples[start:start+50000] for start in range(0, len(examples), 50000)]
         logger.info('total chunks: {}'.format(len(example_chunks)))
         for chunk_id, examples_part in enumerate(example_chunks):
@@ -495,7 +503,7 @@ def convert_examples_to_features1(examples, max_seq_length,
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
 
-        query_tokens = tokenizer.tokenize(example.question_text, add_prefix_space=add_prefix_space)
+        query_tokens = tokenizer.tokenize(example.question_text)
 
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
@@ -505,7 +513,7 @@ def convert_examples_to_features1(examples, max_seq_length,
         all_doc_tokens = []
         for (i, token) in enumerate(example.doc_tokens):
             orig_to_tok_index.append(len(all_doc_tokens))
-            sub_tokens = tokenizer.tokenize(token, add_prefix_space=add_prefix_space)
+            sub_tokens = tokenizer.tokenize(token)
             for sub_token in sub_tokens:
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
@@ -523,7 +531,7 @@ def convert_examples_to_features1(examples, max_seq_length,
                 tok_end_position = len(all_doc_tokens) - 1
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-                example.orig_answer_text, add_prefix_space=add_prefix_space)
+                example.orig_answer_text)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         if sep_token_extra:
@@ -713,7 +721,7 @@ def convert_examples_to_features1(examples, max_seq_length,
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
-                         orig_answer_text, add_prefix_space=False):
+                         orig_answer_text, add_prefix_space=False, model_type='bert'):
     """Returns tokenized answer spans that better match the annotated answer."""
 
     # The SQuAD annotations are character based. We first project them to
@@ -738,7 +746,12 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
     # the word "Japanese". Since our WordPiece tokenizer does not split
     # "Japanese", we just use "Japanese" as the annotation. This is fairly rare
     # in SQuAD, but does happen.
-    tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=add_prefix_space))
+    assert (model_type == 'roberta' and add_prefix_space) is True
+    assert (model_type != 'roberta' and not add_prefix_space) is True
+    if model_type == 'roberta':
+        tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=add_prefix_space))
+    else:
+        tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text))
 
     for new_start in range(input_start, input_end + 1):
         for new_end in range(input_end, new_start - 1, -1):

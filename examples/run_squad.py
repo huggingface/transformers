@@ -310,6 +310,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0,
                                                 add_prefix_space=True if args.model_type == 'roberta' else False,
                                                 negtive_sample_probability=args.nsp,
+                                                model_type=args.model_type,
                                                 )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
