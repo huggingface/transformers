@@ -746,8 +746,10 @@ def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
     # the word "Japanese". Since our WordPiece tokenizer does not split
     # "Japanese", we just use "Japanese" as the annotation. This is fairly rare
     # in SQuAD, but does happen.
-    assert (model_type == 'roberta' and add_prefix_space) is True
-    assert (model_type != 'roberta' and not add_prefix_space) is True
+    if model_type == 'roberta':
+        assert (model_type == 'roberta' and add_prefix_space) is True
+    else:
+        assert (model_type != 'roberta' and not add_prefix_space) is True
     if model_type == 'roberta':
         tok_answer_text = " ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=add_prefix_space))
     else:
