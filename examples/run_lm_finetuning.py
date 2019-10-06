@@ -224,24 +224,6 @@ def train(args, train_dataset, model, tokenizer):
                     logging_loss = tr_loss
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    if args.save_total_limit and args.save_total_limit > 0:
-                        # Check if we should delete older checkpoint(s)
-                        glob_checkpoints = glob.glob(os.path.join(args.output_dir, 'checkpoint-*'))
-                        if len(glob_checkpoints) + 1 > args.save_total_limit:
-                            checkpoints_sorted = []
-                            for path in glob_checkpoints:
-                                regex_match = re.match('.*checkpoint-([0-9]+)', path)
-                                if regex_match and regex_match.groups():
-                                    checkpoints_sorted.append((int(regex_match.groups()[0]), path))
-
-                            checkpoints_sorted = sorted(checkpoints_sorted)
-                            checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
-                            number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) + 1 - args.save_total_limit)
-                            checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
-                            for checkpoint in checkpoints_to_be_deleted:
-                                logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
-                                shutil.rmtree(checkpoint)
-
                     # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                     if not os.path.exists(output_dir):
@@ -250,6 +232,24 @@ def train(args, train_dataset, model, tokenizer):
                     model_to_save.save_pretrained(output_dir)
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
+
+                    if args.save_total_limit and args.save_total_limit > 0:
+                        # Check if we should delete older checkpoint(s)
+                        glob_checkpoints = glob.glob(os.path.join(args.output_dir, 'checkpoint-*'))
+                        if len(glob_checkpoints) > args.save_total_limit:
+                            checkpoints_sorted = []
+                            for path in glob_checkpoints:
+                                regex_match = re.match('.*checkpoint-([0-9]+)', path)
+                                if regex_match and regex_match.groups():
+                                    checkpoints_sorted.append((int(regex_match.groups()[0]), path))
+
+                            checkpoints_sorted = sorted(checkpoints_sorted)
+                            checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
+                            number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - args.save_total_limit)
+                            checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
+                            for checkpoint in checkpoints_to_be_deleted:
+                                logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
+                                shutil.rmtree(checkpoint)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
