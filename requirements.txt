@@ -10,4 +10,3 @@ regex
 sentencepiece
 # For XLM
 sacremoses
-lqq
