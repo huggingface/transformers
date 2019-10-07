@@ -423,7 +423,7 @@ Here is a quick summary of what you should take care of when migrating from `pyt
 
 ### Models always output `tuples`
 
-The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that the model's forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
+The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that every model's forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
 The exact content of the tuples for each model is detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
 
