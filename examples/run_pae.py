@@ -99,7 +99,7 @@ def get_encoder_output(batch, encoder):
     return bert_output_pooled
 
 
-def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl, mode=None):
+def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, all_expl, mode=None, label_classifier=None):
     labels = batch[3]
     expl_idx = batch[4]
     batch_size = len(expl_idx)
@@ -129,14 +129,10 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
         #print('***decoder_hidden: ***')
         #print(decoder_hidden)
         
-        decoder_output, decoder_hidden, predicted_labels, out_label_v = decoder(decoder_input, decoder_hidden, labels, mode, decoder_lang, i, device=args.device, temperature=args.temp) 
-        
         if i == 0:
-            first_prediction = predicted_labels
-            first_predict_label_dsn = out_label_v
+            pred_labels, pred_label_dsn, decoder_hidden = label_classifier(decoder_hidden)
             
-        #if i == 1:
-            #predict_label_dsn = out_label_v
+        decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, labels, mode, decoder_lang, i, pred_labels, device=args.device, temperature=args.temp) 
 
         generated_expl[i] = decoder_output   
         topv, topi = decoder_output.topk(1) 
@@ -144,7 +140,7 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
 
     #print('***first_prediction:***')
     #print(first_prediction)
-    return generated_expl, target_expl_index, first_predict_label_dsn, labels, first_prediction
+    return generated_expl, target_expl_index, pred_label_dsn, labels, pred_labels
 
 def get_loss(prob_dsn, correct_indices): 
     '''
@@ -193,6 +189,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     
     # initialize decoder
     decoder = LabelAndExplDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
+    label_classifier = LabelPrediction(hidden_size=hidden_size)
     
     # prepare optimizers
     no_decay = ['bias', 'LayerNorm.weight']
@@ -286,8 +283,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             predict_label_dsn = predict_label_dsn.squeeze(0) # (1, bs, 3) -> (bs, 3)
             label_loss = get_loss(predict_label_dsn, target_labels)
             loss = args.alpha*label_loss + (1-args.alpha)*expl_loss #will this affect the multi-gpu training loss?
-            #print('label_loss: ', label_loss)
-            #print('expl_loss: ', expl_loss)
+            print('label_loss: ', label_loss)
+            print('expl_loss: ', expl_loss)
             #print('loss: ', loss)
             epoch_loss += loss
 

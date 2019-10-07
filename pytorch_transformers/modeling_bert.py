@@ -1378,16 +1378,8 @@ class DecoderRNN(nn.Module):
         return prediction, hidden
 
 
-class LabelAndExplDecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size):
-        super(LabelAndExplDecoderRNN, self).__init__()
-        self.hidden_size = hidden_size
-        self.embedding = nn.Embedding(output_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size, 1)
-        self.out = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
-        self.resize = nn.Linear(768, self.hidden_size)
-        
+class LabelPrediction(nn.Module):
+    def __init__(self, hidden_size):
         self.dpout_fc = 0 #according to esnli
         self.inputdim = hidden_size #take bert pooled output as input
         self.fc_dim = 512 #according to esnli
@@ -1402,37 +1394,58 @@ class LabelAndExplDecoderRNN(nn.Module):
             nn.Dropout(p=self.dpout_fc),
             nn.Linear(self.fc_dim, self.n_classes),
             )
+        self.resize = nn.Linear(768, self.hidden_size)
+        
+    def forward(self, hidden):
+        if hidden.size(2) != self.hidden_size:
+            hidden = self.resize(hidden)
+        
+        # predict label with MLP
+        out_label = self.MLP(hidden) # (1, bs, 3) 3 is num classes
+        
+        #print('***hidden in forward:***')
+        #print(hidden)
+        #print('***out_label in forward:***')
+        #print(out_label)
+        
+        out_label_v, out_label_i = out_label.max(2) # (1, bs)
+        out_label_i = out_label_i.squeeze(0) # (bs)
+        
+        #later used to generate embeddings for labels
+        predicted_labels = [LABEL_DICT[out_one_label.item()] for out_one_label in out_label_i] 
+        
+        return predicted_labels, out_label, hidden
+
+
+class LabelAndExplDecoderRNN(nn.Module):
+    def __init__(self, hidden_size, output_size):
+        super(LabelAndExplDecoderRNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.embedding = nn.Embedding(output_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, 1)
+        self.out = nn.Linear(hidden_size, output_size)
+        self.softmax = nn.LogSoftmax(dim=1)
+        self.resize = nn.Linear(768, self.hidden_size)
+ 
         self.proj_inp_dec = nn.Linear(self.hidden_size + self.hidden_size, self.hidden_size)
 
-    def forward(self, decoder_input, hidden, labels, mode, decoder_lang, time, device='cuda:1', temperature=1):
-        #print('***hidden in forward before resize:***')
-        #print(hidden)
+    def forward(self, decoder_input, hidden, labels, mode, decoder_lang, time, predicted_labels, device='cuda:1', temperature=1):
         if hidden.size(2) != self.hidden_size:
             hidden = self.resize(hidden)
         embedded = self.embedding(decoder_input.to(device)) # (bs, hidden_size)
         embedded = embedded.unsqueeze(0) # (1, bs, hidden_size)
         
-        # predict label with MLP
-        out_label = self.MLP(hidden) # (1, bs, 3) 3 is num classes
-        #print('***hidden in forward:***')
-        #print(hidden)
-        #print('***out_label in forward:***')
-        #print(out_label)
-        out_label_v, out_label_i = out_label.max(2) # (1, bs)
-        out_label_i = out_label_i.squeeze(0) # (bs)
-        predicted_labels = [LABEL_DICT[out_one_label.item()] for out_one_label in out_label_i] #later used to generate embeddings for labels
-        
-        if time == 0: #first time step
+        if time == 0: #first time step 
             if mode == 'train': 
                 label_indices = labels # (bs) 
             elif mode == 'eval': 
-                label_indices = torch.tensor(predicted_labels, dtype=torch.long) # (bs)
+                label_indices = torch.tensor(predicted_labels, dtype=torch.long) # (bs) 
             else: 
                 print('mode has to be train or eval') 
                 return 
-            label_emb = self.embedding(label_indices.to(device)) # (bs, hidden_size)
-            label_emb = label_emb.unsqueeze(0) # (1, bs, hidden_size)
-            embedded = self.proj_inp_dec(torch.cat([label_emb, embedded], 2)) # (1, bs, hidden_size)
+            label_emb = self.embedding(label_indices.to(device)) # (bs, hidden_size) 
+            label_emb = label_emb.unsqueeze(0) # (1, bs, hidden_size) 
+            embedded = self.proj_inp_dec(torch.cat([label_emb, embedded], 2)) # (1, bs, hidden_size) 
         
         import torch.nn.functional as F
         embedded = F.relu(embedded)
@@ -1442,7 +1455,7 @@ class LabelAndExplDecoderRNN(nn.Module):
         prediction = self.softmax(output)
  
         predicted_labels_update = [(index-4) for index in predicted_labels]
-        return prediction, hidden, predicted_labels_update, out_label
+        return prediction, hidden
 
     
 class BertForESNLI(BertPreTrainedModel):
