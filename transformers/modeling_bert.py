@@ -331,6 +331,14 @@ class BertEncoderLayer(nn.Module):
         return outputs
 
 
+class BertDecoderLayer(nn.Module):
+    def __init__(self, config):
+        raise NotImplementedError
+
+    def forward(self, hidden_state, encoder_output):
+        raise NotImplementedError
+
+
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super(BertEncoder, self).__init__()
@@ -361,6 +369,14 @@ class BertEncoder(nn.Module):
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+
+
+class BertDecoder(nn.Module):
+    def __init__(self, config):
+        raise NotImplementedError
+
+    def forward(self, encoder_output):
+        raise NotImplementedError
 
 
 class BertPooler(nn.Module):
