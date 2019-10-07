@@ -358,7 +358,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
-    return global_step, tr_loss / global_step, decoder, decoder_lang # global steps, average training loss, decoder
+    return global_step, tr_loss / global_step, decoder, decoder_lang, label_classifier # global steps, average training loss, decoder
 
 
 def evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, prefix="", do_print=False):
@@ -662,7 +662,7 @@ def main():
     if args.do_train:
         all_expl = None
         train_dataset, all_expl = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss, decoder, decoder_lang = train_enc_dec(args, train_dataset, model, tokenizer, all_expl)
+        global_step, tr_loss, decoder, decoder_lang, label_classifier = train_enc_dec(args, train_dataset, model, tokenizer, all_expl)
         encoder = model
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
@@ -688,15 +688,19 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.output_dir)
         model.to(args.device)
         
-        # do the same for decoder
-        if args.expl:
-            decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder # Take care of distributed/parallel training
-            torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
-            decoder = decoder_to_save
-            decoder.to(args.device)
-            # save decoder_lang using pickle
-            filehandler = open(args.output_dir+'decoder_lang.obj', 'wb') 
-            pickle.dump(decoder_lang, filehandler)
+        # save decoder
+        decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder # Take care of distributed/parallel training
+        torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
+        decoder = decoder_to_save
+        decoder.to(args.device)
+        
+        # save label classifier
+        torch.save(label_classifier.state_dict(), args.output_dir+'label_classifier_state_dict.pt')
+        label_classifier.to(args.device)
+        
+        # save decoder_lang using pickle
+        filehandler = open(args.output_dir+'decoder_lang.obj', 'wb') 
+        pickle.dump(decoder_lang, filehandler)
 
     # Evaluation
     results = {}
@@ -714,7 +718,7 @@ def main():
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
             
-    if args.expl and args.do_eval:
+    if args.do_eval:
         dir1 = args.output_dir
         
         if not args.do_train:
@@ -724,9 +728,11 @@ def main():
             decoder_lang = pickle.load(filehandler)
             decoder = LabelAndExplDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words)
             decoder.load_state_dict(torch.load(dir1+'decoder_state_dict.pt'))
+            label_classifier.load_state_dict(torch.load(dir1+'label_classifier_state_dict.pt'))
 
         encoder.to(args.device)
         decoder.to(args.device)
+        label_classifier.to(args.device)
         result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, do_print=True)
         result = dict((k + '_{}'.format(""), v) for k, v in result.items())
         results.update(result)
