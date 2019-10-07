@@ -16,13 +16,13 @@
 """ Finetuning the library models for question-answering on SQuAD (Bert, XLM, XLNet)."""
 
 from __future__ import absolute_import, division, print_function
-
+import pickle
 import argparse
 import logging
 import os
 import random
 import glob
-
+import json
 import numpy as np
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
@@ -43,13 +43,13 @@ from transformers import (WEIGHTS_NAME, BertConfig,
 from transformers import AdamW, WarmupLinearSchedule
 
 from utils_squad import (read_squad_examples, convert_examples_to_features,
-                         RawResult, write_predictions,
+                         RawResult, write_predictions,write_nq_predictions,
                          RawResultExtended, write_predictions_extended)
 
 # The follwing import is the official SQuAD evaluation script (2.0).
 # You can remove it from the dependencies if you are using this script outside of the library
 # We've added it here for automated tests (see examples/test_examples.py file)
-from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
+from utlis_nq_eval2 import EVAL_OPTS_NQ, main as evaluate_on_nq
 
 logger = logging.getLogger(__name__)
 
@@ -244,13 +244,21 @@ def evaluate(args, model, tokenizer, prefix=""):
                                    end_logits   = to_list(outputs[1][i]))
             all_results.append(result)
 
-    # Compute predictions
+    # # # Compute predictions
     output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
     output_nbest_file = os.path.join(args.output_dir, "nbest_predictions_{}.json".format(prefix))
     if args.version_2_with_negative:
         output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
     else:
         output_null_log_odds_file = None
+
+    # examples = pickle.load(open("/mnt/pkdata/examples.pk","rb"))
+    # features = pickle.load(open("/mnt/pkdata/features.pk","rb"))
+    # all_results = pickle.load(open("/mnt/pkdata/all_results.pk","rb"))
+    pickle.dump(examples,open("/mnt/pkdata/examples.pk","wb"))
+    pickle.dump(features,open("/mnt/pkdata/features.pk","wb"))
+    pickle.dump(all_results,open("/mnt/pkdata/all_results.pk","wb"))
+    print("LQ: Dump example, features, allresults")
 
     if args.model_type in ['xlnet', 'xlm']:
         # XLNet uses a more complex post-processing procedure
@@ -260,17 +268,16 @@ def evaluate(args, model, tokenizer, prefix=""):
                         model.config.start_n_top, model.config.end_n_top,
                         args.version_2_with_negative, tokenizer, args.verbose_logging)
     else:
-        write_predictions(examples, features, all_results, args.n_best_size,
+        write_nq_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
                         args.version_2_with_negative, args.null_score_diff_threshold)
-
-    # Evaluate with the official SQuAD script
-    evaluate_options = EVAL_OPTS(data_file=args.predict_file,
-                                 pred_file=output_prediction_file,
-                                 na_prob_file=output_null_log_odds_file)
-    results = evaluate_on_squad(evaluate_options)
-    return results
+    print("LQ:finished, and writed to {}".format(output_prediction_file))
+    # Evaluate with the official NQ script
+    evaluate_options = EVAL_OPTS_NQ(gold_path = args.eval_gzip_path,
+                                 pred_path=output_prediction_file)
+    metric = evaluate_on_nq(evaluate_options)
+    return metric
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
@@ -340,7 +347,8 @@ def main():
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
-
+    parser.add_argument("--eval_gzip_path", default=None, type=str, required=True,
+                        help="NQ gzip for predictions")#lqq added
     ## Other parameters
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
@@ -519,14 +527,12 @@ def main():
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-
             # Evaluate
+            print("LQ: eval {}".format(checkpoints))
             result = evaluate(args, model, tokenizer, prefix=global_step)
-
             result = dict((k + ('_{}'.format(global_step) if global_step else ''), v) for k, v in result.items())
             results.update(result)
-
-    logger.info("Results: {}".format(results))
+            print(json.dumps(results, indent=2))
 
     return results
 
