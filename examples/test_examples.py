@@ -16,10 +16,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import sys
-import unittest
 import argparse
 import logging
+import sys
+import unittest
 
 try:
     # python 3.4+ can use builtin unittest.mock instead of mock package
@@ -36,11 +36,13 @@ logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
 
+
 def get_setup_file():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f')
     args = parser.parse_args()
     return args.f
+
 
 class ExamplesTests(unittest.TestCase):
 
@@ -134,6 +136,7 @@ class ExamplesTests(unittest.TestCase):
             for key in result.keys():
                 if key not in ['main_', 'step_']:
                     self.assertGreaterEqual(result[key], 0.3)
+
 
 if __name__ == "__main__":
     unittest.main()
