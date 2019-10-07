@@ -81,6 +81,89 @@ A world-class feature request addresses the following points:
 If your issue is well-written we're already 80% of the way there by the time you
 post it.
 
-## Contributing code
+## Start contributing! (Pull Requests)
 
-## Contributing examples
+Before writing code, we strongly advise you to search through the exising PRs or
+issues to make sure that nobody is already working on the same thing. It is
+always a good idea to open an issue to get some feedback.
+
+You will need basic `git` proficiency to be able to contribute to
+`transformers`. `git` is not the easiest tool to use but it has the greatest
+manual. Type `git --help` in a shell and enjoy. If you prefer books, [Pro
+Git](https://git-scm.com/book/en/v2) is a very good reference.
+
+Follow these steps to start contributing:
+
+1. Fork the [repository](https://github.com/huggingface/transformers) by
+   clicking on the 'Fork' button. This creates a copy of the code
+   under your github user account.
+2. Clone your fork to your local disk, and add the base repository as a remote:
+   
+   ```bash
+   $ git clone git@github.com:<your Github handle>/transformers.git
+   $ cd transformers
+   $ git remote add upstream git@github.com:huggingface/transformers.git
+   ```
+
+3. Create a new branch to hold your development changes:
+
+   ```bash
+   $ git checkout -b a-descriptive-name-for-my-changes
+   ```
+   
+   **do not** work on the `master` branch.
+   
+4. Set up a development environment by running in a virtual environment:
+
+   ```bash
+   $ pip install -r requirements-dev.txt
+   ```
+
+5. Develop the features on your branch. Add changed files using `git add` and
+   then `git commit` to record your changes locally:
+   
+   ```bash
+   $ git add modified_file.py
+   $ git commit
+   ```
+   
+   Please write [good commit
+   messages](https://chris.beams.io/posts/git-commit/). It
+   is a good idea to sync your copy of the code with the original repository
+   regularly. This way you can quickly account for changes:
+   
+   ```bash
+   $ git fetch upstream
+   $ git rebase upstream/master
+   ```
+   
+   Push the changes to your account using:
+   
+   ```bash
+   $ git push -u origin a-descriptive-name-for-my-changes
+   ```
+   
+6. Once you are satisfied (**and the checklist below is happy too**), go to the
+   webpage of your fork on Github. Click on 'Pull request' to send your changes
+   to the project maintainers for review.
+
+
+### Checklist
+
+1. The title of your pull request should be a summary of its contribution;
+2. If your pull request adresses an issue, please mention the issue number in
+   the pull request description to make sure they are linked;
+3. To indicate a work in progress please prefix the title with `[WIP]`. These
+   are useful to avoid duplicated work, and to differentiate it from PRs ready
+   to be merged;
+4. Make sure pre-existing tests still pass;
+5. Add high-coverage tests. No quality test, no merge;
+6. All public methods must have informative doctrings;
+
+
+### Style guide
+
+For documentation strings, `transformers` follows the [google
+style](https://google.github.io/styleguide/pyguide.html).
+
+#### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md)
