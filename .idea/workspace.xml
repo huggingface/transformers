@@ -5,12 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ac1bbbce-0bd6-4474-be7d-b6c3c0e97978" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/examples/eval_utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/examples/utils_nq_gzip2squad.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/examples/utlis_nq_eval.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/examples/utlis_nq_eval2.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/lqtest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/run_squad.py" beforeDir="false" afterPath="$PROJECT_DIR$/examples/run_squad.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/examples/utils_squad.py" beforeDir="false" afterPath="$PROJECT_DIR$/examples/utils_squad.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -20,18 +14,19 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="CoverageDataManager">
-    <SUITE FILE_PATH="coverage/pytorch_transformers$lqtest.coverage" NAME="lqtest Coverage Results" MODIFIED="1570342490294" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/pytorch_transformers$lqtest.coverage" NAME="lqtest Coverage Results" MODIFIED="1570432336457" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/pytorch_transformers$run_squad.coverage" NAME="run_squad Coverage Results" MODIFIED="1570430338919" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/examples" />
     <SUITE FILE_PATH="coverage/pytorch_transformers$utils_squad.coverage" NAME="utils_squad Coverage Results" MODIFIED="1570427576922" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/examples" />
     <SUITE FILE_PATH="coverage/pytorch_transformers$utils_nq_gzip2squad.coverage" NAME="utils_nq_gzip2squad Coverage Results" MODIFIED="1570362829378" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/examples" />
+    <SUITE FILE_PATH="coverage/pytorch_transformers$run_nq_reranker.coverage" NAME="run_nq_reranker Coverage Results" MODIFIED="1570451891986" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/examples" />
   </component>
   <component name="FileEditorManager">
     <leaf>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/examples/run_squad.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="230">
-              <caret line="536" column="18" lean-forward="true" selection-start-line="536" selection-start-column="18" selection-end-line="536" selection-end-column="18" />
+            <state relative-caret-position="298">
+              <caret line="308" column="66" selection-start-line="308" selection-start-column="66" selection-end-line="308" selection-end-column="66" />
               <folding>
                 <element signature="e#799#863#0" expanded="true" />
               </folding>
@@ -39,13 +34,13 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/examples/utils_squad_evaluate.py">
+      <file pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/examples/utils_squad.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="431">
-              <caret line="320" column="20" lean-forward="true" selection-start-line="320" selection-start-column="4" selection-end-line="320" selection-end-column="41" />
+            <state relative-caret-position="242">
+              <caret line="189" column="13" selection-start-line="189" selection-start-column="13" selection-end-line="189" selection-end-column="13" />
               <folding>
-                <element signature="e#412#427#0" expanded="true" />
+                <element signature="e#739#803#0" expanded="true" />
               </folding>
             </state>
           </provider>
@@ -65,7 +60,6 @@
       <find>cache</find>
       <find>output_examples</find>
       <find>20</find>
-      <find>evaluate(</find>
       <find>write_predictions</find>
       <find>convert_examples_to_features</find>
       <find>read</find>
@@ -87,6 +81,9 @@
       <find>write_nq_pred</find>
       <find>output_prediction_file</find>
       <find>eval</find>
+      <find>evaluate(</find>
+      <find>convert_</find>
+      <find>squadExample(</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -98,10 +95,10 @@
         <option value="$PROJECT_DIR$/lqtest.py" />
         <option value="$PROJECT_DIR$/examples/utils_nq_gzip2squad.py" />
         <option value="$PROJECT_DIR$/examples/utlis_nq_eval.py" />
-        <option value="$PROJECT_DIR$/examples/utils_squad.py" />
         <option value="$PROJECT_DIR$/examples/utlis_nq_eval2.py" />
         <option value="$PROJECT_DIR$/examples/eval_utils.py" />
         <option value="$PROJECT_DIR$/examples/run_squad.py" />
+        <option value="$PROJECT_DIR$/examples/utils_squad.py" />
       </list>
     </option>
   </component>
@@ -257,8 +254,8 @@
     <list>
       <item itemvalue="Python.lqtest" />
       <item itemvalue="Python.run_squad" />
-      <item itemvalue="Python.utils_squad" />
       <item itemvalue="Python.utils_nq_gzip2squad" />
+      <item itemvalue="Python.utils_squad" />
     </list>
     <recent_temporary>
       <list>
@@ -284,35 +281,35 @@
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="35050000" />
+    <option name="totallyTimeSpent" value="35644000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="-8" y="-8" width="1936" height="1056" extended-state="6" />
     <editor active="true" />
     <layout>
-      <window_info id="Favorites" side_tool="true" />
-      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.15991472" />
+      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.12313433" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
-      <window_info anchor="bottom" id="Docker" show_stripe_button="false" />
-      <window_info anchor="bottom" id="Database Changes" />
-      <window_info anchor="bottom" id="Version Control" weight="0.32936078" />
-      <window_info anchor="bottom" id="Python Console" weight="0.32936078" />
-      <window_info anchor="bottom" id="Terminal" />
-      <window_info anchor="bottom" id="Event Log" sideWeight="0.50053304" side_tool="true" weight="0.32936078" />
-      <window_info anchor="bottom" id="File Transfer" sideWeight="0.49946696" weight="0.42686892" />
+      <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" />
-      <window_info active="true" anchor="bottom" id="Run" order="2" visible="true" weight="0.40628386" />
-      <window_info anchor="bottom" id="Debug" order="3" weight="0.37594798" />
+      <window_info anchor="bottom" id="Run" order="2" weight="0.40628386" />
+      <window_info active="true" anchor="bottom" id="Debug" order="3" visible="true" weight="0.058504876" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" />
-      <window_info anchor="right" id="Remote Host" />
-      <window_info anchor="right" id="SciView" />
-      <window_info anchor="right" id="Database" />
+      <window_info anchor="bottom" id="Docker" order="7" show_stripe_button="false" />
+      <window_info anchor="bottom" id="Version Control" order="8" weight="0.32936078" />
+      <window_info anchor="bottom" id="File Transfer" order="9" sideWeight="0.49946696" weight="0.42686892" />
+      <window_info anchor="bottom" id="Database Changes" order="10" />
+      <window_info anchor="bottom" id="Terminal" order="11" />
+      <window_info anchor="bottom" id="Python Console" order="12" weight="0.32936078" />
+      <window_info anchor="bottom" id="Event Log" order="13" sideWeight="0.50053304" side_tool="true" weight="0.32936078" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
       <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
       <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
+      <window_info anchor="right" id="Remote Host" order="3" />
+      <window_info anchor="right" id="SciView" order="4" />
+      <window_info anchor="right" id="Database" order="5" />
     </layout>
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -422,16 +419,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/examples/utils_squad.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="14410">
-          <caret line="902" column="42" lean-forward="true" selection-start-line="902" selection-start-column="42" selection-end-line="902" selection-end-column="42" />
-          <folding>
-            <element signature="e#739#803#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$USER_HOME$/.PyCharm2018.3/system/remote_sources/-254533873/1274496176/absl/flags/_flagvalues.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="202">
@@ -481,10 +468,20 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/examples/run_squad.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="230">
-          <caret line="536" column="18" lean-forward="true" selection-start-line="536" selection-start-column="18" selection-end-line="536" selection-end-column="18" />
+        <state relative-caret-position="298">
+          <caret line="308" column="66" selection-start-line="308" selection-start-column="66" selection-end-line="308" selection-end-column="66" />
           <folding>
             <element signature="e#799#863#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/examples/utils_squad.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="242">
+          <caret line="189" column="13" selection-start-line="189" selection-start-column="13" selection-end-line="189" selection-end-column="13" />
+          <folding>
+            <element signature="e#739#803#0" expanded="true" />
           </folding>
         </state>
       </provider>

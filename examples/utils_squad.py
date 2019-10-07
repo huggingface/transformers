@@ -178,15 +178,27 @@ def paragraphs2examples(paragraph, is_training=False, version_2_with_negative=Fa
                 start_position = -1
                 end_position = -1
                 orig_answer_text = ""
-
-        example = SquadExample(
-            qas_id=qas_id,
-            question_text=question_text,
-            doc_tokens=doc_tokens,
-            orig_answer_text=orig_answer_text,
-            start_position=start_position,
-            end_position=end_position,
-            is_impossible=is_impossible)
+        if is_training:
+            example = SquadExample(
+                qas_id=qas_id,
+                question_text=question_text,
+                doc_tokens=doc_tokens,
+                orig_answer_text=orig_answer_text,
+                start_position=start_position,
+                end_position=end_position,
+                is_impossible=is_impossible)
+        else:
+            example = SquadExample(
+                        qas_id=qas_id,
+                        question_text=question_text,
+                        doc_tokens=doc_tokens,
+                        orig_answer_text=orig_answer_text,
+                        start_position=start_position,
+                        end_position=end_position,
+                        is_impossible=is_impossible,
+                        nq_context_map=paragraph.get("nq_context_map","is not nq data"),#lqq different
+                        nq_long_candidates =paragraph.get('nq_long_candidates', "is not nq data")#lqq different
+                    )
         paragraph_examples.append(example)
     return paragraph_examples
 
