@@ -199,9 +199,11 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
         ]
     encoder_optimizer = AdamW(encoder_grouped_params, lr=args.learning_rate, eps=args.adam_epsilon)
     decoder_optimizer = AdamW(decoder.parameters(), lr=0.0001, eps=args.adam_epsilon)
+    label_classifier_optimizer = AdamW(label_classifier.parameters(), lr=0.0001, eps=args.adam_epsilon)
     
     encoder_scheduler = WarmupLinearSchedule(encoder_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     decoder_scheduler = WarmupLinearSchedule(decoder_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    label_classifier_scheduler = WarmupLinearSchedule(label_classifier_optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     
     if args.fp16:
         try:
@@ -210,11 +212,13 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         encoder, encoder_optimizer = amp.initialize(encoder, encoder_optimizer, opt_level=args.fp16_opt_level)
         decoder, decoder_optimizer = amp.initialize(decoder, decoder_optimizer, opt_level=args.fp16_opt_level)
+        label_classifier, label_classifier_optimizer = amp.initialize(label_classifier, label_classifier_optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
         encoder = torch.nn.DataParallel(encoder)
         decoder = torch.nn.DataParallel(decoder)
+        label_classifier = torch.nn.DataParallel(label_classifier)
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
@@ -222,6 +226,9 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                                                             output_device=args.local_rank,
                                                             find_unused_parameters=True)
         decoder = torch.nn.parallel.DistributedDataParallel(decoder, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            find_unused_parameters=True)
+        label_classifier = torch.nn.parallel.DistributedDataParallel(label_classifier, device_ids=[args.local_rank],
                                                             output_device=args.local_rank,
                                                             find_unused_parameters=True)
         
@@ -239,6 +246,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     tr_loss, logging_loss = 0.0, 0.0
     encoder.zero_grad()
     decoder.zero_grad()
+    label_classifier.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility 
     epoch_loss = 0 
@@ -256,6 +264,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 encoder.train()
             
             decoder.train()
+            label_classifier.train()
             batch = tuple(t.to(args.device) for t in batch)
             
             bert_output_pooled = get_encoder_output(batch, encoder)
@@ -299,6 +308,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 with amp.scale_loss(loss, decoder_optimizer) as scaled_loss:
                     scaled_loss.backward()
                 torch.nn.utils.clip_grad_norm_(amp.master_params(decoder_optimizer), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(amp.master_params(label_classifier_optimizer), args.max_grad_norm)
+                
                 # check if loss get modified already
                 print('loss: ', loss, ' not supposed to change!!!')
                 if num_epoch <= 3 and args.freeze:
@@ -309,7 +320,8 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(encoder.parameters(), args.max_grad_norm)
                 torch.nn.utils.clip_grad_norm_(decoder.parameters(), args.max_grad_norm)
-
+                torch.nn.utils.clip_grad_norm_(label_classifier.parameters(), args.max_grad_norm)
+                
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if num_epoch <= 3 and args.freeze:
@@ -320,6 +332,9 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                 decoder_scheduler.step()
                 decoder_optimizer.step()
                 decoder.zero_grad()
+                label_classifier_scheduler.step()
+                label_classifier_optimizer.step()
+                label_classifier.zero_grad()
                 global_step += 1
                 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and num_epoch % print_per == 0:
@@ -333,28 +348,6 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
                 
-                # save model at checkpoint
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    encoder_to_save = encoder.module if hasattr(encoder, 'module') else encoder  # Take care of distributed/parallel training
-                    encoder_to_save.save_pretrained(output_dir)
-                    torch.save(args, os.path.join(output_dir, 'encoder_training_args.bin'))
-                    logger.info("Saving encoder checkpoint to %s", output_dir)
-                    
-                    decoder_to_save = decoder.module if hasattr(decoder, 'module') else decoder # Take care of distributed/parallel training
-                    torch.save(decoder_to_save.state_dict(), args.output_dir+'decoder_state_dict.pt')
-                    decoder = decoder_to_save
-                    decoder.to(args.device)
-                    logger.info("Saving decoder checkpoint to %s", output_dir)
-                    # save decoder_lang using pickle
-                    filehandler = open(args.output_dir+'decoder_lang.obj', 'wb') 
-                    pickle.dump(decoder_lang, filehandler)
-                    logger.info("Saving decoder_lang checkpoint to %s", output_dir)
-                    
-
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
                 break
