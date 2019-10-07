@@ -255,13 +255,16 @@ def evaluate(args, model, tokenizer, prefix=""):
     else:
         output_null_log_odds_file = None
 
-    # examples = pickle.load(open("/mnt/pkdata/examples.pk","rb"))
-    # features = pickle.load(open("/mnt/pkdata/features.pk","rb"))
-    # all_results = pickle.load(open("/mnt/pkdata/all_results.pk","rb"))
-    pickle.dump(examples,open("/mnt/pkdata/examples.pk","wb"))
-    pickle.dump(features,open("/mnt/pkdata/features.pk","wb"))
-    pickle.dump(all_results,open("/mnt/pkdata/all_results.pk","wb"))
-    print("LQ: Dump example, features, allresults")
+    example_output_pk_file = os.path.join(args.output_dir, "examples_{}.pk".format(prefix))
+    feature_output_pk_file = os.path.join(args.output_dir, "features_{}.pk".format(prefix))
+    allresults_pk_file = os.path.join(args.output_dir, "allresults_{}.pk".format(prefix))
+    pickle.dump(examples,open(example_output_pk_file,"wb"))
+    pickle.dump(features,open(feature_output_pk_file,"wb"))
+    pickle.dump(all_results,open(allresults_pk_file,"wb"))
+    logger.info("  Saved all examples to {} ".format(example_output_pk_file))
+    logger.info("  Saved all features to {} ".format(feature_output_pk_file))
+    logger.info("  Saved all all_results to {} ".format(allresults_pk_file))
+
 
     if args.model_type in ['xlnet', 'xlm']:
         # XLNet uses a more complex post-processing procedure
