@@ -62,6 +62,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     migration
     bertology
     torchscript
+    multilingual
 
 .. toctree::
     :maxdepth: 2
