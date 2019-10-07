@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 try:
     import tensorflow as tf
-    assert int(tf.__version__[0]) >= 2
+    assert hasattr(tf, '__version__') and int(tf.__version__[0]) >= 2
     _tf_available = True  # pylint: disable=invalid-name
     logger.info("TensorFlow version {} available.".format(tf.__version__))
 except (ImportError, AssertionError):
