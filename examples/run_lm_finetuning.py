@@ -117,16 +117,16 @@ def _rotate_checkpoints(args, checkpoint_prefix, use_mtime=False):
     if len(glob_checkpoints) <= args.save_total_limit:
         return
 
-    checkpoints_sorted = []
+    ordering_and_checkpoint_path = []
     for path in glob_checkpoints:
-        regex_match = re.match('.*{}-([0-9]+)'.format(checkpoint_prefix), path)
-        if regex_match and regex_match.groups():
-            if use_mtime:
-                checkpoints_sorted.append((os.path.getmtime(path), path))
-            else:
-                checkpoints_sorted.append((int(regex_match.groups()[0]), path))
+        if use_mtime:
+            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
+        else:
+            regex_match = re.match('.*{}-([0-9]+)'.format(checkpoint_prefix), path)
+            if regex_match and regex_match.groups():
+                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
 
-    checkpoints_sorted = sorted(checkpoints_sorted)
+    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
     checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
     number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - args.save_total_limit)
     checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
