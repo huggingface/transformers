@@ -145,8 +145,10 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--classes', type=int, default=2, help="specify total number of classes in the set")
     parser.add_argument('--test', type=int, default=0, help="to evaluate test.tsv instead of dev.tsv")
-
+    parser.add_argument('--freeze_layers', type=str, default='', help="specify layer numbers to freeze during finetuning e.g. 0,1,2 to freeze first three layers")
+    parser.add_argument('--freeze_embeddings', action='store_true', help="flag to freeze embeddings")
     args = parser.parse_args()
+
 
     if args.server_ip and args.server_port:
         # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
@@ -212,6 +214,25 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
+
+# freezing layers during fine-tuning
+    freeze_layers = args.freeze_layers
+    freeze_embeddings = args.freeze_embeddings
+
+#    print (list(model.bert.embeddings.parameters()))
+    if freeze_embeddings:
+            for param in list(model.bert.embeddings.parameters()):
+                param.requires_grad = False
+            print ("Froze Embedding Layer")
+#    print (list(model.bert.embeddings.parameters()))
+ 
+    if freeze_layers is not "":
+        layer_indexes = [int(x) for x in freeze_layers.split(",")]
+        for layer_idx in layer_indexes:
+            for param in list(model.bert.encoder.layer[layer_idx].parameters()):
+                param.requires_grad = False
+            print ("Froze Layer: ", layer_idx)
+
     if args.local_rank == 0:
         torch.distributed.barrier()
 
