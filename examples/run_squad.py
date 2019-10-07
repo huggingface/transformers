@@ -274,11 +274,18 @@ def evaluate(args, model, tokenizer, prefix=""):
                         model.config.start_n_top, model.config.end_n_top,
                         args.version_2_with_negative, tokenizer, args.verbose_logging)
     else:
-        write_nq_predictions(examples, features, all_results, args.n_best_size,
+        if args.task_name == "nq":
+            write_nq_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
                         args.version_2_with_negative, args.null_score_diff_threshold)
+        else:
+            write_predictions(examples, features, all_results, args.n_best_size,
+                                 args.max_answer_length, args.do_lower_case, output_prediction_file,
+                                 output_nbest_file, output_null_log_odds_file, args.verbose_logging,
+                                 args.version_2_with_negative, args.null_score_diff_threshold)
     print("LQ:finished, and writed to {}".format(output_prediction_file))
+
     # Evaluate with the official NQ script
     evaluate_options = EVAL_OPTS_NQ(gold_path = args.eval_gzip_path,
                                  pred_path=output_prediction_file)
@@ -365,8 +372,7 @@ def main():
                         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model checkpoints and predictions will be written.")
-    parser.add_argument("--eval_gzip_path", default=None, type=str, required=True,
-                        help="NQ gzip for predictions")#lqq added
+
     ## Other parameters
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
@@ -451,7 +457,14 @@ def main():
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--nsp', type=float, default=1.0, help='negtive examples sample probability')
+
+    parser.add_argument("--eval_gzip_path", default=None, type=str,
+                        help="NQ gzip for predictions")#lqq added
+    parser.add_argument("--task_name",default="squad",required=True)
+
     args = parser.parse_args()
+    if args.task_name == "nq":
+        assert args.eval_gzip_path != None
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
