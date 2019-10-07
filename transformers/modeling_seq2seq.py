@@ -17,11 +17,13 @@
 
 class Seq2SeqModel(object):
     def __init__(self):
-        # need to use from_pretrained to initialize
-        raise NotImplementedError
+        raise EnvironmentError(
+            """Seq2Seq is designed to be instantiated using the
+        `Seq2Seq.from_pretrained(encoder_name_or_path, decoder_name_or_path)` method."""
+        )
 
     @classmethod
-    def from_pretrained(cls, encoder, decoder):
+    def from_pretrained(cls, encoder_name, decoder_name):
         # Here we should call AutoModel to initialize the models depending
         # on the pretrained models taken as an input.
         # For a first iteration we only work with Bert.
