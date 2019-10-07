@@ -101,14 +101,34 @@ import pickle
 from absl import app
 from absl import flags
 from absl import logging
-import eval_utils as util
+import nq_eval_utils as util
 import six
+import argparse
+import sys
+class EVAL_OPTS_NQ():
+  def __init__(self, gold_path,
+               pred_path,
+               cache_gold_data=False,
+               num_threads=10,
+               pretty_print=False):
+    self.gold_path = gold_path
+    self.pred_path = pred_path
+    self.cache_gold_data = cache_gold_data
+    self.num_threads = num_threads
+    self.pretty_print = pretty_print
+OPTS = None
 
-flags.DEFINE_string(
-    'gold_path', None, 'Path to the gzip JSON data. For '
+def parse_args():
+  parser = argparse.ArgumentParser('Official evaluation script for SQuAD version 2.0.')
+  parser.add_argument('gold_path', default=None, type=str, required=True, help='Path to the gzip JSON data. For '
     'multiple files, should be a glob '
     'pattern (e.g. "/path/to/files-*"')
-flags.DEFINE_string('predictions_path', None, 'Path to prediction JSON.')
+  parser.add_argument('pred_path', default=None, type=str, required=True, help='prediction json file')
+  if len(sys.argv) == 1:
+    parser.print_help()
+    sys.exit(1)
+  return parser.parse_args()
+
 flags.DEFINE_bool(
     'cache_gold_data', False,
     'Whether to cache gold data in Pickle format to speed up '
@@ -416,24 +436,24 @@ def get_metrics_with_answer_stats(long_answer_stats, short_answer_stats):
   return metrics
 
 
-def main(_):
-  cache_path = os.path.join(os.path.dirname(FLAGS.gold_path), 'cache')
-  if FLAGS.cache_gold_data and os.path.exists(cache_path):
+def main(OPTS):
+  cache_path = os.path.join(os.path.dirname(OPTS.gold_path), 'cache')
+  if OPTS.cache_gold_data and os.path.exists(cache_path):
     logging.info('Reading from cache: %s', format(cache_path))
     nq_gold_dict = pickle.load(open(cache_path, 'r'))
   else:
     nq_gold_dict = util.read_annotation(
-        FLAGS.gold_path, n_threads=FLAGS.num_threads)
-    if FLAGS.cache_gold_data:
+        OPTS.gold_path, n_threads=OPTS.num_threads)
+    if OPTS.cache_gold_data:
       logging.info('Caching gold data for next time to: %s', format(cache_path))
       pickle.dump(nq_gold_dict, open(cache_path, 'w'))
 
-  nq_pred_dict = util.read_prediction_json(FLAGS.predictions_path)
+  nq_pred_dict = util.read_prediction_json(OPTS.pred_path)
 
   long_answer_stats, short_answer_stats = score_answers(nq_gold_dict,
                                                         nq_pred_dict)
 
-  if FLAGS.pretty_print:
+  if OPTS.pretty_print:
     print('*' * 20)
     print('LONG ANSWER R@P TABLE:')
     print_r_at_p_table(long_answer_stats)
@@ -455,9 +475,13 @@ def main(_):
     metrics = get_metrics_with_answer_stats(long_answer_stats,
                                             short_answer_stats)
     print(json.dumps(metrics))
+    return metrics
 
 
 if __name__ == '__main__':
-  flags.mark_flag_as_required('gold_path')
-  flags.mark_flag_as_required('predictions_path')
-  app.run(main)
+  # flags.mark_flag_as_required('gold_path')
+  # flags.mark_flag_as_required('predictions_path')
+  # app.run(main)
+  OPTS = parse_args()
+  main(OPTS)
+

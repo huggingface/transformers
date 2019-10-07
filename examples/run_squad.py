@@ -51,7 +51,7 @@ from utils_squad import (read_squad_examples, convert_examples_to_features,
 # The follwing import is the official SQuAD evaluation script (2.0).
 # You can remove it from the dependencies if you are using this script outside of the library
 # We've added it here for automated tests (see examples/test_examples.py file)
-from utlis_nq_eval2 import EVAL_OPTS_NQ, main as evaluate_on_nq
+from utlis_nq_eval import EVAL_OPTS_NQ, main as evaluate_on_nq
 
 logger = logging.getLogger(__name__)
 
