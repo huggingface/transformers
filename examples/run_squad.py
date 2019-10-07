@@ -52,6 +52,7 @@ from utils_squad import (read_squad_examples, convert_examples_to_features,
 # You can remove it from the dependencies if you are using this script outside of the library
 # We've added it here for automated tests (see examples/test_examples.py file)
 from utlis_nq_eval import EVAL_OPTS_NQ, main as evaluate_on_nq
+from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
 
 logger = logging.getLogger(__name__)
 
@@ -278,19 +279,29 @@ def evaluate(args, model, tokenizer, prefix=""):
             write_nq_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                        args.version_2_with_negative, args.null_score_diff_threshold)
+                        args.version_2_with_negative, args.null_score_diff_threshold,tokenizer, model_type=args.model_type)
         else:
             write_predictions(examples, features, all_results, args.n_best_size,
                                  args.max_answer_length, args.do_lower_case, output_prediction_file,
                                  output_nbest_file, output_null_log_odds_file, args.verbose_logging,
-                                 args.version_2_with_negative, args.null_score_diff_threshold)
+                                 args.version_2_with_negative, args.null_score_diff_threshold,tokenizer, model_type=args.model_type)
     print("LQ:finished, and writed to {}".format(output_prediction_file))
 
     # Evaluate with the official NQ script
-    evaluate_options = EVAL_OPTS_NQ(gold_path = args.eval_gzip_path,
-                                 pred_path=output_prediction_file)
-    metric = evaluate_on_nq(evaluate_options)
-    return metric
+    if args.task_name == "nq":
+        evaluate_options = EVAL_OPTS_NQ(gold_path = args.eval_gzip_dir,
+                                     pred_path=output_prediction_file)
+        results = evaluate_on_nq(evaluate_options)
+    elif args.task_name == "squad":
+        # Evaluate with the official SQuAD script
+        evaluate_options = EVAL_OPTS(data_file=args.predict_file,
+                                     pred_file=output_prediction_file,
+                                     na_prob_file=output_null_log_odds_file)
+        results = evaluate_on_squad(evaluate_options)
+    else:
+        print("Task name error")
+        return {}
+    return results
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
@@ -458,13 +469,13 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--nsp', type=float, default=1.0, help='negtive examples sample probability')
 
-    parser.add_argument("--eval_gzip_path", default=None, type=str,
-                        help="NQ gzip for predictions")#lqq added
+    parser.add_argument("--eval_gzip_dir", default=None, type=str,
+                        help="NQ dev gzip's dir for predictions")#lqq added
     parser.add_argument("--task_name",default="squad",required=True)
 
     args = parser.parse_args()
     if args.task_name == "nq":
-        assert args.eval_gzip_path != None
+        assert args.eval_gzip_dir != None
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))

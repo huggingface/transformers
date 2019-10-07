@@ -301,7 +301,11 @@ def read_annotation_from_one_split(gzipped_input_file):
 
 def read_annotation(path_name, n_threads=10):
   """Read annotations with real multiple processes."""
-  input_paths = glob.glob(path_name)
+  # input_paths = glob.glob(path_name)
+  input_paths = []
+  for path in glob.glob("{}/*.gz".format(path_name)):
+      input_paths.append(path)
+
   pool = multiprocessing.Pool(n_threads)
   try:
     dict_list = pool.map(read_annotation_from_one_split, input_paths)

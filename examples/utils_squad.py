@@ -689,33 +689,31 @@ def convert_examples_to_features1(examples, max_seq_length,
             if is_training and span_is_impossible:
                 start_position = cls_index
                 end_position = cls_index
-                if random.random() > 0.02:
-                    continue
 
-            # if example_index < 20:
-            #     logger.info("*** Example ***")
-            #     logger.info("unique_id: %s" % (unique_id))
-            #     logger.info("example_index: %s" % (example_index))
-            #     logger.info("doc_span_index: %s" % (doc_span_index))
-            #     logger.info("tokens: %s" % " ".join(tokens))
-            #     logger.info("token_to_orig_map: %s" % " ".join([
-            #         "%d:%d" % (x, y) for (x, y) in token_to_orig_map.items()]))
-            #     logger.info("token_is_max_context: %s" % " ".join([
-            #         "%d:%s" % (x, y) for (x, y) in token_is_max_context.items()
-            #     ]))
-            #     logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            #     logger.info(
-            #         "input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            #     logger.info(
-            #         "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            #     if is_training and span_is_impossible:
-            #         logger.info("impossible example")
-            #     if is_training and not span_is_impossible:
-            #         answer_text = " ".join(tokens[start_position:(end_position + 1)])
-            #         logger.info("start_position: %d" % (start_position))
-            #         logger.info("end_position: %d" % (end_position))
-            #         logger.info(
-            #             "answer: %s" % (answer_text))
+            if example_index < 2:
+                logger.info("*** Example ***")
+                logger.info("unique_id: %s" % (unique_id))
+                logger.info("example_index: %s" % (example_index))
+                logger.info("doc_span_index: %s" % (doc_span_index))
+                logger.info("tokens: %s" % " ".join(tokens))
+                logger.info("token_to_orig_map: %s" % " ".join([
+                    "%d:%d" % (x, y) for (x, y) in token_to_orig_map.items()]))
+                logger.info("token_is_max_context: %s" % " ".join([
+                    "%d:%s" % (x, y) for (x, y) in token_is_max_context.items()
+                ]))
+                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+                logger.info(
+                    "input_mask: %s" % " ".join([str(x) for x in input_mask]))
+                logger.info(
+                    "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+                if is_training and span_is_impossible:
+                    logger.info("impossible example")
+                if is_training and not span_is_impossible:
+                    answer_text = " ".join(tokens[start_position:(end_position + 1)])
+                    logger.info("start_position: %d" % (start_position))
+                    logger.info("end_position: %d" % (end_position))
+                    logger.info(
+                        "answer: %s" % (answer_text))
 
             features.append(
                 InputFeatures(
@@ -1026,7 +1024,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
 def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
                       output_nbest_file, output_null_log_odds_file, verbose_logging,
-                      version_2_with_negative, null_score_diff_threshold):
+                      version_2_with_negative, null_score_diff_threshold,tokenizer, model_type="bert"):
     """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
     logger.info("Writing nbest to: %s" % (output_nbest_file))
@@ -1132,16 +1130,23 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
                 orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
                 tok_text = " ".join(tok_tokens)
 
-                # De-tokenize WordPieces that have been split off.
-                tok_text = tok_text.replace(" ##", "")
-                tok_text = tok_text.replace("##", "")
+                if model_type == 'roberta':
+                    tok_text = tokenizer.convert_tokens_to_string(tok_tokens)
+                    tok_text = " ".join(tok_text.strip().split())
+                    orig_text = " ".join(orig_tokens)
+                    final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
+                else:
+                    # De-tokenize WordPieces that have been split off.
+                    tok_text = tok_text.replace(" ##", "")
+                    tok_text = tok_text.replace("##", "")
 
-                # Clean whitespace
-                tok_text = tok_text.strip()
-                tok_text = " ".join(tok_text.split())
-                orig_text = " ".join(orig_tokens)
+                    # Clean whitespace
+                    tok_text = tok_text.strip()
+                    tok_text = " ".join(tok_text.split())
+                    orig_text = " ".join(orig_tokens)
 
-                final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
+                    final_text = get_final_text(tok_text, orig_text, do_lower_case, verbose_logging)
+
                 if final_text in seen_predictions:
                     continue
 
