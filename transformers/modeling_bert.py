@@ -1449,7 +1449,7 @@ class Bert2Rnd(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(Bert2Bert, self).__init__(config)
+        super(Bert2Rnd, self).__init__(config)
         self.encoder = BertModel(config)
         self.decoder = BertDecoderModel(config)
 
