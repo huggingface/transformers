@@ -1419,7 +1419,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 @add_start_docstrings("Bert encoder-decoder model for sequence generation.",
                       BERT_START_DOCSTRING,
                       BERT_INPUTS_DOCSTRING)
-class Bert2Bert(BertPreTrainedModel):
+class Bert2Rnd(BertPreTrainedModel):
     r"""
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -1434,7 +1434,8 @@ class Bert2Bert(BertPreTrainedModel):
     Examples::
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = Bert2Bert.from_pretrained('bert-base-uncased')
+        model = Bert2Rnd.from_pretrained('bert-base-uncased')
+        # fine-tuning magic happens here
         input = tokenizer.encode("Hello, how are you?")
         outputs = model(input)
         output_text = tokenize.decode(outputs[0])
@@ -1468,4 +1469,4 @@ class Bert2Bert(BertPreTrainedModel):
                                        token_type_ids=token_type_ids,
                                        position_ids=position_ids,
                                        head_mask=head_mask)
-        return decoder_outputs
+        return decoder_outputs[0]
