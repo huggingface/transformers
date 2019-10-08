@@ -27,9 +27,9 @@ from .configuration_common_test import ConfigTester
 
 if is_torch_available():
     from transformers import (BertConfig, BertModel, BertForMaskedLM,
-                                        BertForNextSentencePrediction, BertForPreTraining,
-                                        BertForQuestionAnswering, BertForSequenceClassification,
-                                        BertForTokenClassification, BertForMultipleChoice)
+                              BertForNextSentencePrediction, BertForPreTraining,
+                              BertForQuestionAnswering, BertForSequenceClassification,
+                              BertForTokenClassification, BertForMultipleChoice, Bert2Bert)
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
     pytestmark = pytest.mark.skip("Require Torch")
@@ -38,8 +38,8 @@ else:
 class BertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
-            BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
-            BertForTokenClassification) if is_torch_available() else ()
+                         BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
+                         BertForTokenClassification) if is_torch_available() else ()
 
     class BertModelTester(object):
 
@@ -66,7 +66,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                      num_labels=3,
                      num_choices=4,
                      scope=None,
-                    ):
+                     ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -145,7 +145,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length, self.hidden_size])
             self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
-
         def create_and_check_bert_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertForMaskedLM(config=config)
             model.eval()
@@ -172,7 +171,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, 2])
             self.check_loss_output(result)
 
-
         def create_and_check_bert_for_pretraining(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertForPreTraining(config=config)
             model.eval()
@@ -190,7 +188,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 list(result["seq_relationship_score"].size()),
                 [self.batch_size, 2])
             self.check_loss_output(result)
-
 
         def create_and_check_bert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertForQuestionAnswering(config=config)
@@ -210,7 +207,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
-
         def create_and_check_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = BertForSequenceClassification(config)
@@ -225,7 +221,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
-
         def create_and_check_bert_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = BertForTokenClassification(config=config)
@@ -239,7 +234,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 list(result["logits"].size()),
                 [self.batch_size, self.seq_length, self.num_labels])
             self.check_loss_output(result)
-
 
         def create_and_check_bert_for_multiple_choice(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_choices = self.num_choices
@@ -261,6 +255,16 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.num_choices])
             self.check_loss_output(result)
 
+        def create_and_check_bert2bert(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            config.num_choices = self.num_choices
+            model = Bert2Bert(config=config)
+            model.eval()
+            bert2bert_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            bert2bert_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            bert2bert_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            _ = model(bert2bert_inputs_ids,
+                      attention_mask=bert2bert_input_mask,
+                      token_type_ids=bert2bert_token_type_ids)
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -315,6 +319,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
+
 
 if __name__ == "__main__":
     unittest.main()
