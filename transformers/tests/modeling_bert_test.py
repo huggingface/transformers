@@ -255,7 +255,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.num_choices])
             self.check_loss_output(result)
 
-        def create_and_check_bert2bert(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_bert2rnd(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_choices = self.num_choices
             model = Bert2Rnd(config=config)
             model.eval()
