@@ -19,7 +19,6 @@ import os
 import math
 import psutil
 import time
-from tensorboardX import SummaryWriter
 from tqdm import trange, tqdm
 import numpy as np
 import psutil
@@ -30,6 +29,11 @@ import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import RandomSampler, BatchSampler, DataLoader
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
 
 from transformers import WarmupLinearSchedule
 
