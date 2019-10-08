@@ -55,7 +55,7 @@ class CTRLTokenizationTest(CommonTestCases.CommonTokenizerTester):
         tokenizer = CTRLTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "adapt react readapt apt"
         bpe_tokens = 'adapt re@@ a@@ c@@ t re@@ adapt apt'.split()
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
+        tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
