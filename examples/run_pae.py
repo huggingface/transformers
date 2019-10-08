@@ -35,6 +35,7 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertTokenizer,
                                   BertForESNLI, DecoderRNN, BertModel, 
                                   AttnDecoderRNN, LabelAndExplDecoderRNN,
+                                  LabelPrediction,
                                   XLMConfig, XLMForSequenceClassification,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForSequenceClassification,
@@ -130,9 +131,9 @@ def get_decoder_output(args, batch, decoder, bert_output_pooled, decoder_lang, a
         #print(decoder_hidden)
         
         if i == 0:
-            pred_labels, pred_label_dsn, decoder_hidden = label_classifier(decoder_hidden)
+            pred_labels, pred_label_dsn, decoder_hidden, pred_labels_word_idx = label_classifier(decoder_hidden, device=args.device)
             
-        decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, labels, mode, decoder_lang, i, pred_labels, device=args.device, temperature=args.temp) 
+        decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden, labels, mode, decoder_lang, i, pred_labels_word_idx, device=args.device, temperature=args.temp) 
 
         generated_expl[i] = decoder_output   
         topv, topi = decoder_output.topk(1) 
@@ -189,7 +190,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     
     # initialize decoder
     decoder = LabelAndExplDecoderRNN(hidden_size=hidden_size, output_size=decoder_lang.n_words).to(args.device) #initialize decoder
-    label_classifier = LabelPrediction(hidden_size=hidden_size)
+    label_classifier = LabelPrediction(hidden_size=hidden_size).to(args.device)
     
     # prepare optimizers
     no_decay = ['bias', 'LayerNorm.weight']
@@ -270,11 +271,14 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
             bert_output_pooled = get_encoder_output(batch, encoder)
             #print('***bert_output_pooled: ***')
             #print(bert_output_pooled)
-            generated_expl, target_expl_index, predict_label_dsn, target_labels, pred_labels = get_decoder_output(args, batch,\
-                                                                                                     decoder, \
-                                                                                                     bert_output_pooled, \
-                                                                                                     decoder_lang, \
-                                                                                                     all_expl, mode='train')
+            generated_expl, target_expl_index, predict_label_dsn, target_labels, pred_labels = \
+                                          get_decoder_output(args, batch,\
+                                                             decoder, \
+                                                             bert_output_pooled, \
+                                                             decoder_lang, \
+                                                             all_expl, \
+                                                             mode='train',\
+                                                             label_classifier=label_classifier)
             generated_expl = generated_expl.transpose(1, 2) #(output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
             expl_loss = get_loss(generated_expl, target_expl_index)
             
@@ -361,7 +365,7 @@ def train_enc_dec(args, train_dataset, encoder, tokenizer, all_expl):
     return global_step, tr_loss / global_step, decoder, decoder_lang, label_classifier # global steps, average training loss, decoder
 
 
-def evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, prefix="", do_print=False):
+def evaluate_enc_dec(args, encoder, decoder, decoder_lang, label_classifier, tokenizer, prefix="", do_print=False):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
     eval_outputs_dirs = (args.output_dir, args.output_dir + '-MM') if args.task_name == "mnli" else (args.output_dir,)
@@ -394,12 +398,14 @@ def evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, prefix="",
             batch_num += 1
             encoder.eval()
             decoder.eval()
+            label_classifier.eval()
             batch = tuple(t.to(args.device) for t in batch)
 
             with torch.no_grad():
                 bert_output_pooled = get_encoder_output(batch, encoder)
                 generated_expl, target_expl_index, predict_label_dsn, target_labels, pred_labels = \
-                        get_decoder_output(args, batch,decoder, bert_output_pooled, decoder_lang, all_expl, mode='eval')
+                        get_decoder_output(args, batch,decoder, bert_output_pooled, \
+                                           decoder_lang, all_expl, mode='eval', label_classifier=label_classifier)
                 generated_expl = generated_expl.transpose(1, 2) #(output_seq_len, bs, n_vocab) -> (output_seq_len, n_vocab, bs)
                 expl_loss = get_loss(generated_expl, target_expl_index)
 
@@ -733,7 +739,7 @@ def main():
         encoder.to(args.device)
         decoder.to(args.device)
         label_classifier.to(args.device)
-        result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, tokenizer, do_print=True)
+        result = evaluate_enc_dec(args, encoder, decoder, decoder_lang, label_classifier, tokenizer, do_print=True)
         result = dict((k + '_{}'.format(""), v) for k, v in result.items())
         results.update(result)
 

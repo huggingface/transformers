@@ -1380,6 +1380,7 @@ class DecoderRNN(nn.Module):
 
 class LabelPrediction(nn.Module):
     def __init__(self, hidden_size):
+        super(LabelPrediction, self).__init__()
         self.dpout_fc = 0 #according to esnli
         self.inputdim = hidden_size #take bert pooled output as input
         self.fc_dim = 512 #according to esnli
@@ -1394,9 +1395,11 @@ class LabelPrediction(nn.Module):
             nn.Dropout(p=self.dpout_fc),
             nn.Linear(self.fc_dim, self.n_classes),
             )
+        self.hidden_size = hidden_size
         self.resize = nn.Linear(768, self.hidden_size)
         
-    def forward(self, hidden):
+    def forward(self, hidden, device='cuda:1'):
+        #hidden = hidden.to(device)
         if hidden.size(2) != self.hidden_size:
             hidden = self.resize(hidden)
         
@@ -1412,9 +1415,11 @@ class LabelPrediction(nn.Module):
         out_label_i = out_label_i.squeeze(0) # (bs)
         
         #later used to generate embeddings for labels
-        predicted_labels = [LABEL_DICT[out_one_label.item()] for out_one_label in out_label_i] 
+        predicted_labels_word_idx = [LABEL_DICT[out_one_label.item()] for out_one_label in out_label_i] 
         
-        return predicted_labels, out_label, hidden
+        predicted_labels_correct_idx = [(index-4) for index in predicted_labels_word_idx]
+        
+        return predicted_labels_correct_idx, out_label, hidden, predicted_labels_word_idx
 
 
 class LabelAndExplDecoderRNN(nn.Module):
