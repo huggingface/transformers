@@ -1,34 +1,99 @@
 version: 2
 jobs:
-    build_py3:
-        working_directory: ~/pytorch-transformers
+    build_py3_torch_and_tf:
+        working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
-        resource_class: large
-        parallelism: 4
+        resource_class: xlarge
+        parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install torch
+            - run: sudo pip install tensorflow==2.0.0-rc0
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
+            - run: codecov
+    build_py3_torch:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.5
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install torch
+            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install tensorboardX scikit-learn
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
             - run: codecov
-    build_py2:
-        working_directory: ~/pytorch-transformers
+    build_py3_tf:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.5
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install tensorflow==2.0.0-rc0
+            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install tensorboardX scikit-learn
+            - run: python -m pytest -sv ./transformers/tests/ --cov
+            - run: codecov
+    build_py2_torch:
+        working_directory: ~/transformers
         resource_class: large
-        parallelism: 4
+        parallelism: 1
         docker:
             - image: circleci/python:2.7
         steps:
             - checkout
+            - run: sudo pip install torch
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./pytorch_transformers/tests/ --cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
+    build_py2_tf:
+        working_directory: ~/transformers
+        resource_class: large
+        parallelism: 1
+        docker:
+            - image: circleci/python:2.7
+        steps:
+            - checkout
+            - run: sudo pip install tensorflow==2.0.0-rc0
+            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install pytest codecov pytest-cov
+            - run: python -m pytest -sv ./transformers/tests/ --cov
+            - run: codecov
+    deploy_doc:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.5
+        steps:
+            - add_ssh_keys:
+                  fingerprints:
+                      - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
+            - checkout
+            - run: sudo pip install --progress-bar off -r docs/requirements.txt
+            - run: sudo pip install --progress-bar off -r requirements.txt
+            - run: cd docs && make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir
+workflow_filters: &workflow_filters
+    filters:
+        branches:
+            only:
+                - master
 workflows:
-  version: 2
-  build_and_test:
-    jobs:
-      - build_py3
-      - build_py2
+    version: 2
+    build_and_test:
+        jobs:
+            - build_py3_torch_and_tf
+            - build_py3_torch
+            - build_py3_tf
+            - build_py2_torch
+            - build_py2_tf
+            - deploy_doc: *workflow_filters
