@@ -13,54 +13,49 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CTRL model."""
+""" TF 2.0 CTRL model."""
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import collections
-import json
 import logging
-import math
 import os
 import sys
 from io import open
 import numpy as np
-import torch
-import torch.nn as nn
-from torch.nn import CrossEntropyLoss
-from torch.nn.parameter import Parameter
+import tensorflow as tf
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_ctrl import CTRLConfig
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer
 from .file_utils import add_start_docstrings
+from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
-CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-ctrl/pytorch/seqlen256_v1.bin"}
+TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-tf_model.h5"}
 
 
 def angle_defn(pos, i, d_model_size):
-    angle_rates = 1 / torch.pow(10000, (2 * (i//2)) / d_model_size)
+    angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model_size))
     return pos * angle_rates
 
 def positional_encoding(position, d_model_size, dtype):
     # create the sinusoidal pattern for the positional encoding
-    angle_rads = (angle_defn(torch.arange(position, dtype=dtype).unsqueeze(1),
-                  torch.arange(d_model_size, dtype=dtype).unsqueeze(0),
-                  d_model_size))
+    angle_rads = angle_defn(np.arange(position)[:, np.newaxis],
+                            np.arange(d_model_size)[np.newaxis, :],
+                            d_model_size)
 
-    sines = torch.sin(angle_rads[:, 0::2])
-    cosines = torch.cos(angle_rads[:, 1::2])
+    sines = np.sin(angle_rads[:, 0::2])
+    cosines = np.cos(angle_rads[:, 1::2])
 
-    pos_encoding = torch.cat([sines, cosines], dim=-1)
+    pos_encoding = tf.cast(np.concatenate([sines, cosines], axis=-1)[np.newaxis, ...], dtype=tf.float32)
     return pos_encoding
 
 def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=None):
     # calculate attention
-    matmul_qk = torch.matmul(q, k.permute(0,1,3,2))
-
-    dk = k.shape[-1]
-    scaled_attention_logits = matmul_qk / np.sqrt(dk)
+    matmul_qk = tf.matmul(q, k, transpose_b=True)
+    
+    dk = tf.cast(tf.shape(k)[-1], tf.float32)
+    scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
     if mask is not None:
         scaled_attention_logits += (mask * -1e4)
@@ -69,37 +64,38 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
         # Apply the attention mask
         scaled_attention_logits = scaled_attention_logits + attention_mask
 
-    attention_weights = torch.softmax(scaled_attention_logits, dim=-1) 
+    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1) 
 
     # Mask heads if we want to
     if head_mask is not None:
         attention_weights = attention_weights * head_mask
 
-    output = torch.matmul(attention_weights, v)
+    output = tf.matmul(attention_weights, v) 
 
     return output, attention_weights
 
 
-class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, d_model_size, num_heads, output_attentions=False):
-        super(MultiHeadAttention, self).__init__()
+class TFMultiHeadAttention(tf.keras.layers.Layer):
+    def __init__(self, d_model_size, num_heads, output_attentions=False, **kwargs):
+        super(TFMultiHeadAttention, self).__init__(**kwargs)
         self.output_attentions = output_attentions
         self.num_heads = num_heads
         self.d_model_size = d_model_size
 
         self.depth = int(d_model_size / self.num_heads)
 
-        self.Wq = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wk = torch.nn.Linear(d_model_size, d_model_size)
-        self.Wv = torch.nn.Linear(d_model_size, d_model_size)
+        self.Wq = tf.keras.layers.Dense(d_model_size, name='Wq')
+        self.Wk = tf.keras.layers.Dense(d_model_size, name='Wk')
+        self.Wv = tf.keras.layers.Dense(d_model_size, name='Wv')
 
-        self.dense = torch.nn.Linear(d_model_size, d_model_size)
+        self.dense = tf.keras.layers.Dense(d_model_size, name='dense')
 
     def split_into_heads(self, x, batch_size):
-        x = x.reshape(batch_size, -1, self.num_heads, self.depth)
-        return x.permute([0, 2, 1, 3])
+        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
+        return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None):
+    def call(self, inputs, training=False)
+        v, k, q, mask, layer_past, attention_mask, head_mask = inputs
         batch_size = q.shape[0]
 
         q = self.Wq(q)
@@ -110,15 +106,15 @@ class MultiHeadAttention(torch.nn.Module):
         k = self.split_into_heads(k, batch_size)
         v = self.split_into_heads(v, batch_size)
         if layer_past is not None:
-            past_key, past_value = layer_past[0], layer_past[1]
-            k = torch.cat((past_key, k), dim=-2)
-            v = torch.cat((past_value, v), dim=-2)
-        present = torch.stack((k, v))
+            past_key, past_value = tf.unstack(layer_past, axis=1)
+            k = tf.concat((past_key, k), dim=-2)
+            v = tf.concat((past_value, v), dim=-2)
+        present = tf.stack((k, v), axis=1)
 
         output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
-        scaled_attention = output[0].permute([0, 2, 1, 3])
+        scaled_attention = tf.transpose(output[0], perm=[0, 2, 1, 3])
         attn = output[1]
-        original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
+        original_size_attention = tf.reshape(scaled_attention,  (batch_size, -1, self.d_model_size))
         output = self.dense(original_size_attention)
 
         outputs = (output, present)
@@ -129,14 +125,13 @@ class MultiHeadAttention(torch.nn.Module):
 
 
 def point_wise_feed_forward_network(d_model_size, dff):
-    return torch.nn.Sequential(torch.nn.Linear(d_model_size, dff),
-                               torch.nn.ReLU(),
-                               torch.nn.Linear(dff, d_model_size))
+    return tf.keras.Sequential([tf.keras.layers.Dense(dff, activation='relu'), 
+                                tf.keras.layers.Dense(d_model_size)])
 
 
-class EncoderLayer(torch.nn.Module):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1, output_attentions=False):
-        super(EncoderLayer, self).__init__()
+class TFEncoderLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model_size, num_heads, dff, rate=0.1, output_attentions=False, **kwargs):
+        super(TFEncoderLayer, self).__init__(**kwargs)
 
         self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, output_attentions)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
@@ -147,32 +142,34 @@ class EncoderLayer(torch.nn.Module):
         self.dropout1 = torch.nn.Dropout(rate)
         self.dropout2 = torch.nn.Dropout(rate)
 
-    def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None):
+    def call(self, inputs, training=False):
+        x, mask, layer_past, attention_mask, head_mask = inputs
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(normed, normed, normed, mask,
                                                       layer_past=layer_past,
                                                       attention_mask=attention_mask,
                                                       head_mask=head_mask)
         attn_output = attn_outputs[0]
-        attn_output = self.dropout1(attn_output)
+        attn_output = self.dropout1(attn_output, training=training)
         out1 = x + attn_output
 
         out2 = self.layernorm2(out1)
         ffn_output = self.ffn(out2)
-        ffn_output = self.dropout2(ffn_output)
+        ffn_output = self.dropout2(ffn_output, training=training)
         out2 = out1 + ffn_output
 
         outputs = (out2,) + attn_outputs[1:]
         return outputs
 
 
-class CTRLPreTrainedModel(PreTrainedModel):
+class TFCTRLPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
     config_class = CTRLConfig
-    pretrained_model_archive_map = CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
+    pretrained_model_archive_map = TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
+    load_pt_weights = load_bert_pt_weights_in_tf2
 
     def _init_weights(self, module):
         """ Initialize the weights.
@@ -240,7 +237,7 @@ CTRL_INPUTS_DOCSTRING = r"""    Inputs:
 
 @add_start_docstrings("The bare CTRL Model transformer outputting raw hidden-states without any specific head on top.",
                                             CTRL_START_DOCSTRING, CTRL_INPUTS_DOCSTRING)
-class CTRLModel(CTRLPreTrainedModel):
+class TFCTRLModel(TFCTRLPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
@@ -266,8 +263,8 @@ class CTRLModel(CTRLPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
-    def __init__(self, config):
-        super(CTRLModel, self).__init__(config)
+    def __init__(self, config, **kwargs):
+        super(TFCTRLModel, self).__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
