@@ -21,6 +21,7 @@ import logging
 from .modeling_bert import BertModel, BertForMaskedLM, BertForSequenceClassification, BertForQuestionAnswering
 from .modeling_openai import OpenAIGPTModel, OpenAIGPTLMHeadModel
 from .modeling_gpt2 import GPT2Model, GPT2LMHeadModel
+from .modeling_ctrl import CTRLModel, CTRLLMHeadModel
 from .modeling_transfo_xl import TransfoXLModel, TransfoXLLMHeadModel
 from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering
 from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering
@@ -51,6 +52,7 @@ class AutoModel(object):
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
             - contains `gpt2`: GPT2Model (OpenAI GPT-2 model)
+            - contains `ctrl`: CTRLModel (Salesforce CTRL  model)
             - contains `transfo-xl`: TransfoXLModel (Transformer-XL model)
             - contains `xlnet`: XLNetModel (XLNet model)
             - contains `xlm`: XLMModel (XLM model)
@@ -73,6 +75,7 @@ class AutoModel(object):
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
             - contains `gpt2`: GPT2Model (OpenAI GPT-2 model)
+            - contains `ctrl`: CTRLModel (Salesforce CTRL  model)
             - contains `transfo-xl`: TransfoXLModel (Transformer-XL model)
             - contains `xlnet`: XLNetModel (XLNet model)
             - contains `xlm`: XLMModel (XLM model)
@@ -149,10 +152,11 @@ class AutoModel(object):
             return XLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
+        elif 'ctrl' in pretrained_model_name_or_path:
+            return CTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta, 'ctrl'".format(pretrained_model_name_or_path))
 
 
 class AutoModelWithLMHead(object):
@@ -172,6 +176,7 @@ class AutoModelWithLMHead(object):
             - contains `bert`: BertForMaskedLM (Bert model)
             - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
             - contains `gpt2`: GPT2LMHeadModel (OpenAI GPT-2 model)
+            - contains `ctrl`: CTRLLMModel (Salesforce CTRL model)
             - contains `transfo-xl`: TransfoXLLMHeadModel (Transformer-XL model)
             - contains `xlnet`: XLNetLMHeadModel (XLNet model)
             - contains `xlm`: XLMWithLMHeadModel (XLM model)
@@ -273,10 +278,11 @@ class AutoModelWithLMHead(object):
             return XLNetLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMWithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
+        elif 'ctrl' in pretrained_model_name_or_path:
+            return CTRLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta','ctrl'".format(pretrained_model_name_or_path))
 
 
 class AutoModelForSequenceClassification(object):

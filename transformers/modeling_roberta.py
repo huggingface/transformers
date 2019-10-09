@@ -172,7 +172,8 @@ class RobertaModel(BertModel):
         if input_ids[:, 0].sum().item() != 0:
             logger.warning("A sequence with no special tokens has been passed to the RoBERTa model. "
                            "This model requires special tokens in order to work. "
-                           "Please specify add_special_tokens=True in your encoding.")
+                           "Please specify add_special_tokens=True in your tokenize.encode()"
+                           "or tokenizer.convert_tokens_to_ids().")
         return super(RobertaModel, self).forward(input_ids,
                                                  attention_mask=attention_mask,
                                                  token_type_ids=token_type_ids,
