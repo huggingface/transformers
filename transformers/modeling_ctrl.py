@@ -189,24 +189,24 @@ class CTRLPreTrainedModel(PreTrainedModel):
 
 
 CTRL_START_DOCSTRING = r"""    CTRL model was proposed in 
-        `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
-        by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
-        It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
-        corpus of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
+    `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
+    by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
+    It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
+    corpus of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
 
-        This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-        refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
+    refer to the PyTorch documentation for all matter related to general usage and behavior.
 
-        .. _`CTRL: A Conditional Transformer Language Model for Controllable Generation`:
-            https://www.github.com/salesforce/ctrl
+    .. _`CTRL: A Conditional Transformer Language Model for Controllable Generation`:
+        https://www.github.com/salesforce/ctrl
 
-        .. _`torch.nn.Module`:
-            https://pytorch.org/docs/stable/nn.html#module
+    .. _`torch.nn.Module`:
+        https://pytorch.org/docs/stable/nn.html#module
 
-        Parameters:
-            config (:class:`~transformers.CTRLConfig`): Model configuration class with all the parameters of the model.
-                Initializing with a config file does not load the weights associated with the model, only the configuration.
-                Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+    Parameters:
+        config (:class:`~transformers.CTRLConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 CTRL_INPUTS_DOCSTRING = r"""    Inputs:

@@ -331,28 +331,28 @@ class TFCTRLPreTrainedModel(TFPreTrainedModel):
 
 
 CTRL_START_DOCSTRING = r"""    CTRL model was proposed in 
-        `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
-        by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
-        It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
-        corpus of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
+    `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
+    by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
+    It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
+    corpus of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
 
-        This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-        refer to the PyTorch documentation for all matter related to general usage and behavior.
+    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
+    refer to the PyTorch documentation for all matter related to general usage and behavior.
 
-        .. _`CTRL: A Conditional Transformer Language Model for Controllable Generation`:
-            https://www.github.com/salesforce/ctrl
+    .. _`CTRL: A Conditional Transformer Language Model for Controllable Generation`:
+        https://www.github.com/salesforce/ctrl
 
-        .. _`torch.nn.Module`:
-            https://pytorch.org/docs/stable/nn.html#module
+    .. _`torch.nn.Module`:
+        https://pytorch.org/docs/stable/nn.html#module
 
-        Parameters:
-            config (:class:`~transformers.CTRLConfig`): Model configuration class with all the parameters of the model.
-                Initializing with a config file does not load the weights associated with the model, only the configuration.
-                Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+    Parameters:
+        config (:class:`~transformers.CTRLConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 CTRL_INPUTS_DOCSTRING = r"""    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             CTRL is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
@@ -360,21 +360,21 @@ CTRL_INPUTS_DOCSTRING = r"""    Inputs:
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer):
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **token_type_ids**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             A parallel sequence of tokens (can be used to indicate various portions of the inputs).
             The embeddings from these tokens will be summed with the respective token embeddings.
             Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **position_ids**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        **head_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
@@ -450,15 +450,15 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
     Examples::
