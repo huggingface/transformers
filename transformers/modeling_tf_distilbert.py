@@ -45,7 +45,7 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 ### UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE ###
 def gelu(x):
     """ Gaussian Error Linear Unit.
-    Original Implementation of the gelu activation function in Google Bert repo when initialy created.
+    Original Implementation of the gelu activation function in Google Bert repo when initially created.
         For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         Also see https://arxiv.org/abs/1606.08415
@@ -226,8 +226,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         dim_per_head = self.dim // self.n_heads
 
-        assert 2 <= len(tf.shape(mask)) <= 3
-        causal = (len(tf.shape(mask)) == 3)
         mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
@@ -603,7 +601,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids)
         prediction_scores = outputs[0]
 
     """
@@ -715,9 +713,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        start_positions = tf.constant([1])
-        end_positions = tf.constant([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
     """
