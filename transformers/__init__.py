@@ -155,6 +155,11 @@ if is_tf_available():
                                          load_distilbert_pt_weights_in_tf2,
                                          TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_tf_ctrl import (TFCTRLPreTrainedModel, TFCTRLModel,
+                                    TFCTRLLMHeadModel,
+                                    load_ctrl_pt_weights_in_tf2,
+                                    TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
+
 # TF 2.0 <=> PyTorch conversion utilities
 if is_tf_available() and is_torch_available():
     from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,
