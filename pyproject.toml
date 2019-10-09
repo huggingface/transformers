@@ -13,10 +13,12 @@ regex = "^2019.8.19"
 sentencepiece = "^0.1.83"
 sacremoses = "^0.0.35"
 torch = {version = "^1.2.0", allows-prereleases = true}
+lm = { git = "https://github.com/iambotHQ/transformer-lm.git", branch = "master" }
 
 [tool.poetry.dev-dependencies]
 black = {version = "^19.3b0", allows-prereleases = true}
 rope = {version = "^0.14.0", allows-prereleases = true}
+ipdb = "^0.12.2"
 
 [tool.black]
 line-length = 192

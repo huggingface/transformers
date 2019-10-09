@@ -95,6 +95,8 @@ if is_torch_available():
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_iambot_gpt2 import (IamBotGPT2, IamBotSentencePiece)
+
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
                                WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
