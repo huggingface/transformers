@@ -22,7 +22,7 @@
 <p>State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch
 </h3>
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
 
 ### Features
 
@@ -121,6 +121,7 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
 7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), released together with the paper a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
 8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the paper [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108) by Victor Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into [DistilGPT2](https://github.com/huggingface/transformers/tree/master/examples/distillation).
+9. **[CTRL](https://github.com/salesforce/ctrl/)** (from Salesforce) released with the paper [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
@@ -147,6 +148,7 @@ from transformers import *
 MODELS = [(BertModel,       BertTokenizer,       'bert-base-uncased'),
           (OpenAIGPTModel,  OpenAIGPTTokenizer,  'openai-gpt'),
           (GPT2Model,       GPT2Tokenizer,       'gpt2'),
+          (CTRLModel,       CTRLTokenizer,       'ctrl'),
           (TransfoXLModel,  TransfoXLTokenizer,  'transfo-xl-wt103'),
           (XLNetModel,      XLNetTokenizer,      'xlnet-base-cased'),
           (XLMModel,        XLMTokenizer,        'xlm-mlm-enfr-1024'),
@@ -252,7 +254,7 @@ The library comprises several example scripts with SOTA performances for NLU and
 
 - `run_glue.py`: an example fine-tuning Bert, XLNet and XLM on nine different GLUE tasks (*sequence-level classification*)
 - `run_squad.py`: an example fine-tuning Bert, XLNet and XLM on the question answering dataset SQuAD 2.0 (*token-level classification*)
-- `run_generation.py`: an example using GPT, GPT-2, Transformer-XL and XLNet for conditional language generation
+- `run_generation.py`: an example using GPT, GPT-2, CTRL, Transformer-XL and XLNet for conditional language generation
 - other model-specific examples (see the documentation).
 
 Here are three quick usage examples for these scripts:
@@ -390,7 +392,7 @@ python $SQUAD_DIR/evaluate-v1.1.py $SQUAD_DIR/dev-v1.1.json ../models/wwm_uncase
 
 This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-squad`.
 
-### `run_generation.py`: Text generation with GPT, GPT-2, Transformer-XL and XLNet
+### `run_generation.py`: Text generation with GPT, GPT-2, CTRL, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
 The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by Aman Rusia to get high-quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
@@ -402,6 +404,16 @@ python ./examples/run_generation.py \
     --model_type=gpt2 \
     --length=20 \
     --model_name_or_path=gpt2 \
+```
+
+and from the Salesforce CTRL model: 
+```shell
+python ./examples/run_generation.py \
+    --model_type=ctrl \
+    --length=20 \
+    --model_name_or_path=gpt2 \
+    --temperature=0 \
+    --repetition_penalty=1.2 \
 ```
 
 ## Migrating from pytorch-transformers to transformers

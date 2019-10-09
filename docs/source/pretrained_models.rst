@@ -129,4 +129,8 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | | The DistilGPT2 model distilled from the GPT2 model `gpt2` checkpoint.                                                               |
 |                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| CTRL              | ``ctrl``                                                   | | 48-layer, 1280-hidden, 16-heads, 1.6B parameters                                                                                    |
+|                   |                                                            | | Salesforce's Large-sized CTRL English model                                                                                         |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+
 .. <https://huggingface.co/transformers/examples.html>`__
