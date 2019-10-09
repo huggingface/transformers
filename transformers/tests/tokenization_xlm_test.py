@@ -72,8 +72,8 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         text = tokenizer.encode("sequence builders")
         text_2 = tokenizer.encode("multi-sequence build")
 
-        encoded_sentence = tokenizer.add_special_tokens_single_sequence(text)
-        encoded_pair = tokenizer.add_special_tokens_sequence_pair(text, text_2)
+        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
+        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
         assert encoded_sentence == [1] + text + [1]
         assert encoded_pair == [1] + text + [1] + text_2 + [1]
