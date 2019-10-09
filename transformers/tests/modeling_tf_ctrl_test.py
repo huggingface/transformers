@@ -24,24 +24,21 @@ import sys
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
-from transformers import GPT2Config, is_tf_available
+from transformers import CTRLConfig, is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers.modeling_tf_gpt2 import (TFGPT2Model, TFGPT2LMHeadModel,
-                                                       TFGPT2DoubleHeadsModel,
-                                                       TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from transformers.modeling_tf_ctrl import (TFCTRLModel, TFCTRLLMHeadModel,
+                                                TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
     pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
-class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel,
-                         TFGPT2DoubleHeadsModel) if is_tf_available() else ()
-    # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()
+    all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel) if is_tf_available() else ()
 
-    class TFGPT2ModelTester(object):
+    class TFCTRLModelTester(object):
 
         def __init__(self,
                      parent,
@@ -115,7 +112,7 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-            config = GPT2Config(
+            config = CTRLConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
                 n_embd=self.hidden_size,
                 n_layer=self.num_hidden_layers,
@@ -134,8 +131,8 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
 
             return config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, token_labels, choice_labels
 
-        def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-            model = TFGPT2Model(config=config)
+        def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+            model = TFCTRLModel(config=config)
             inputs = {'input_ids': input_ids,
                       'attention_mask': input_mask,
                       'token_type_ids': token_type_ids}
@@ -154,8 +151,8 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                 [self.batch_size, self.seq_length, self.hidden_size])
 
 
-        def create_and_check_gpt2_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-            model = TFGPT2LMHeadModel(config=config)
+        def create_and_check_ctrl_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+            model = TFCTRLLMHeadModel(config=config)
             inputs = {'input_ids': input_ids,
                       'attention_mask': input_mask,
                       'token_type_ids': token_type_ids}
@@ -167,30 +164,6 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                 list(result["prediction_scores"].shape),
                 [self.batch_size, self.seq_length, self.vocab_size])
 
-
-        def create_and_check_gpt2_double_head(self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args):
-            model = TFGPT2DoubleHeadsModel(config=config)
-
-            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
-
-            inputs = {'input_ids': multiple_choice_inputs_ids,
-                      'mc_token_ids': mc_token_ids,
-                      'attention_mask': multiple_choice_input_mask,
-                      'token_type_ids': multiple_choice_token_type_ids}
-            lm_logits, mc_logits = model(inputs)[:2]
-            result = {
-                "lm_logits": lm_logits.numpy(),
-                "mc_logits": mc_logits.numpy()
-            }
-            self.parent.assertListEqual(
-                list(result["lm_logits"].shape),
-                [self.batch_size, self.num_choices, self.seq_length, self.vocab_size])
-            self.parent.assertListEqual(
-                list(result["mc_logits"].shape),
-                [self.batch_size, self.num_choices])
-
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
 
@@ -201,29 +174,25 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = TFGPT2ModelTest.TFGPT2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
+        self.model_tester = TFCTRLModelTest.TFCTRLModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CTRLConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_gpt2_model(self):
+    def test_ctrl_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_model(*config_and_inputs)
+        self.model_tester.create_and_check_ctrl_model(*config_and_inputs)
 
-    def test_gpt2_lm_head(self):
+    def test_ctrl_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_lm_head(*config_and_inputs)
-
-    def test_gpt2_double_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
+        self.model_tester.create_and_check_ctrl_lm_head(*config_and_inputs)
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
-        for model_name in list(TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFGPT2Model.from_pretrained(model_name, cache_dir=cache_dir)
+        for model_name in list(TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = TFCTRLModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
 
