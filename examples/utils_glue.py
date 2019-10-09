@@ -93,7 +93,7 @@ class DataProcessor(object):
                     line = list(unicode(cell, 'utf-8') for cell in line)
                 lines.append(line)
             return lines
-    
+
     @classmethod
     def _read_csv(cls, input_file):
         """Reads a comma separated value file."""
@@ -105,7 +105,7 @@ class DataProcessor(object):
                     #line = list(unicode(cell, 'utf-8') for cell in line)
                 lines.append(line)
             return lines
-    
+
     @classmethod
     def _read_jsonl(cls, input_file, quotechar=None):
         """Reads a json list file."""
@@ -337,7 +337,7 @@ class QnliProcessor(DataProcessor):
     def get_dev_examples(self, data_dir):
         """See base class."""
         return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), 
+            self._read_tsv(os.path.join(data_dir, "dev.tsv")),
             "dev_matched")
 
     def get_labels(self):
@@ -503,7 +503,7 @@ class Expl2LabelsProcessor(DataProcessor):
     def get_labels(self):
         """See base class."""
         return ["contradiction", "entailment", "neutral"]
-    
+
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
@@ -517,7 +517,7 @@ class Expl2LabelsProcessor(DataProcessor):
                 InputExample(guid=guid, text_a=expl, text_b=None, label=label))
         return examples
 
-    
+
 def convert_examples_to_features(examples, label_list, max_seq_length,
                                  tokenizer, output_mode,
                                  cls_token_at_end=False, pad_on_left=False,
@@ -612,7 +612,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
             label_id = float(example.label)
         else:
             raise KeyError(output_mode)
-        
+
         if ex_index < 5:
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
@@ -629,7 +629,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
                               segment_ids=segment_ids,
                               label_id=label_id,
                               expl=example.expl))
-      
+
     return features
 
 
@@ -755,9 +755,9 @@ GLUE_TASKS_NUM_LABELS = {
 
 import torch
 # in decoder language:
-CLS_token = 0 
-SEP_token = 1 
-PAD_token = 2 
+CLS_token = 0
+SEP_token = 1
+PAD_token = 2
 UNK_token = 3
 contradiction_token = 4
 entailment_token = 5
@@ -779,7 +779,7 @@ class Lang:
         for word in sentence.split(' '):
             self.addWord(word)
 
-    #If the word is not in the container, the word will be added to it, 
+    #If the word is not in the container, the word will be added to it,
     #else, update the word counter
     def addWord(self, word):
         if word not in self.word2index:
@@ -789,13 +789,13 @@ class Lang:
             self.n_words += 1
         else:
             self.word2count[word] += 1
-            
+
     def getIndex(self, word):
         if word not in self.word2index or self.word2count[word] < self.min_freq:
             return 3 #UNK
         else:
             return self.word2index[word]
-    '''    
+    '''
     def rare2UNK(self, min_freq=10):
         words = list(self.word2index.keys())
         words = words.copy()
@@ -810,8 +810,8 @@ class Lang:
                     self.index2word.pop(index)
                     self.n_words -= 1
                     '''
-    
-    
+
+
 def normalize_sentence(sentence):
     sentence = sentence.lower()
     sentence = sentence.replace('[^A-Za-z\s]+', '')
@@ -838,7 +838,7 @@ def get_index(softmax_tensor):
     return a indexed_tensor of size (seq_len, bs), the index with largest probability
     '''
     return softmax_tensor.max(1)[1]
-    
+
 def get_text(lang, indexed_tensor):
     '''
     :param: indexed_tensor has size (seq_len, bs), where each value is an index between 0 and decode_lang_vocab_size
@@ -864,14 +864,14 @@ def expl_to_expl2label_input(expl_batch, max_seq_length, tokenizer,
                              sequence_a_segment_id=0, sequence_b_segment_id=1,
                              cls_token_segment_id=1, pad_token_segment_id=0,
                              mask_padding_with_zero=True):
-    """ 
+    """
     takes a batch of explanations, each explanation a string not containing SEP, PAD, or CLS
     """
     # initialize place holders
     input_ids_batch = []
     input_mask_batch = []
     segment_ids_batch = []
-    
+
     for expl_st in expl_batch: # expl_st: expl sentence
         tokens = tokenizer.tokenize(expl_st)
         # Account for [CLS] and [SEP] with "- 2"
@@ -908,11 +908,11 @@ def expl_to_expl2label_input(expl_batch, max_seq_length, tokenizer,
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
-        
+
         input_ids_batch.append(input_ids)
         input_mask_batch.append(input_mask)
         segment_ids_batch.append(segment_ids)
-        
+
     input_ids_batch = torch.tensor([a for a in input_ids_batch], dtype=torch.long)
     input_mask_batch = torch.tensor([a for a in input_mask_batch], dtype=torch.long)
     segment_ids_batch = torch.tensor([a for a in segment_ids_batch], dtype=torch.long)

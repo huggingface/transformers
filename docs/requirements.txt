@@ -26,3 +26,7 @@ sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==1.0.2
 sphinxcontrib-serializinghtml==1.1.3
 urllib3==1.25.3
+sphinx-markdown-tables==0.0.9
+numpy==1.17.2
+tensorflow==2.0.0rc2
+torch==1.2.0
