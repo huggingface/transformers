@@ -108,17 +108,6 @@ class CTRLTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
         self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
 
-        try:
-            import ftfy
-            from spacy.lang.en import English
-            _nlp = English()
-            self.nlp = _nlp.Defaults.create_tokenizer(_nlp)
-            self.fix_text = ftfy.fix_text
-        except ImportError:
-            logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")
-            self.nlp = BasicTokenizer(do_lower_case=True)
-            self.fix_text = None
-
         self.encoder = json.load(open(vocab_file, encoding="utf-8"))
         self.decoder = {v:k for k,v in self.encoder.items()}
         merges = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
@@ -177,22 +166,9 @@ class CTRLTokenizer(PreTrainedTokenizer):
         """ Tokenize a string.
         """
         split_tokens = []
-        if self.fix_text is None:
-            # Using BERT's BasicTokenizer
-            text = self.nlp.tokenize(text)
-            for token in text:
-                split_tokens.extend([t for t in self.bpe(token).split(' ')])
-        else:
-            # Using SpaCy & ftfy (original tokenization process of OpenAI GPT)
-            text = self.nlp(text_standardize(self.fix_text(text)))
-            for token in text:
-                split_tokens.extend([t for t in self.bpe(token.text.lower()).split(' ')])
-        # for token in text.split():
-        #     if sys.version_info[0] == 2:
-        #         token = ''.join(self.byte_encoder[ord(b)] for b in token) # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
-        #     else:
-        #         token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8')) # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
-        #     bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
+        text = text.split(' ')
+        for token in text:
+            split_tokens.extend([t for t in self.bpe(token).split(' ')])
         return split_tokens
 
     def _convert_token_to_id(self, token):
