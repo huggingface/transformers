@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import random
+from time import time
 
 import numpy as np
 import torch
@@ -130,59 +131,72 @@ def train(args, train_dataset, model, tokenizer):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
+            start = time()
             model.train()
+
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {'input_ids':      batch[0],
                       'attention_mask': batch[1],
                       'labels':         batch[3]}
+
+            print(batch[0].device)
+
             if args.model_type != 'distilbert':
                 inputs['token_type_ids'] = batch[2] if args.model_type in ['bert', 'xlnet'] else None  # XLM, DistilBERT and RoBERTa don't use segment_ids
+
+            intermediate = time()
+            print("Model took " + str(intermediate - start) + " to put on device.")
+
             outputs = model(**inputs)
+
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
-            if args.n_gpu > 1:
-                loss = loss.mean() # mean() to average on multi-gpu parallel training
-            if args.gradient_accumulation_steps > 1:
-                loss = loss / args.gradient_accumulation_steps
-
-            if args.fp16:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
-            else:
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            # if args.n_gpu > 1:
+            #     loss = loss.mean() # mean() to average on multi-gpu parallel training
+            # if args.gradient_accumulation_steps > 1:
+            #     loss = loss / args.gradient_accumulation_steps
+            #
+            # if args.fp16:
+            #     with amp.scale_loss(loss, optimizer) as scaled_loss:
+            #         scaled_loss.backward()
+            #     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+            # else:
+            loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
-            if (step + 1) % args.gradient_accumulation_steps == 0:
-                optimizer.step()
-                scheduler.step()  # Update learning rate schedule
-                model.zero_grad()
-                global_step += 1
+            # if (step + 1) % args.gradient_accumulation_steps == 0:
+            #     optimizer.step()
+            #     scheduler.step()  # Update learning rate schedule
+            #     model.zero_grad()
+            #     global_step += 1
+            #
+            #     if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+            #         # Log metrics
+            #         if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
+            #             results = evaluate(args, model, tokenizer)
+            #             for key, value in results.items():
+            #                 tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+            #         tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
+            #         tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
+            #         logging_loss = tr_loss
+            #
+            #     if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+            #         # Save model checkpoint
+            #         output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
+            #         if not os.path.exists(output_dir):
+            #             os.makedirs(output_dir)
+            #         model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+            #         model_to_save.save_pretrained(output_dir)
+            #         torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+            #         logger.info("Saving model checkpoint to %s", output_dir)
+            #
+            # if args.max_steps > 0 and global_step > args.max_steps:
+            #     epoch_iterator.close()
+            #     break
 
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    # Log metrics
-                    if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
-                        results = evaluate(args, model, tokenizer)
-                        for key, value in results.items():
-                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
-                    logging_loss = tr_loss
-
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(output_dir)
-                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
-                    logger.info("Saving model checkpoint to %s", output_dir)
-
-            if args.max_steps > 0 and global_step > args.max_steps:
-                epoch_iterator.close()
-                break
+            end = time()
+            print("Model took " + str(end - start) + " for its forward pass.")
         if args.max_steps > 0 and global_step > args.max_steps:
             train_iterator.close()
             break
@@ -379,6 +393,8 @@ def main():
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
 
+    parser.add_argument('--tpu', action='store_true',
+                        help="Whether to use try and connect to a tpu")
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
@@ -392,6 +408,7 @@ def main():
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
+
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
@@ -410,6 +427,16 @@ def main():
         device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend='nccl')
         args.n_gpu = 1
+
+
+    if args.tpu:
+        os.environ["TPU_IP_ADDRESS"] = "192.168.0.2"
+        os.environ["TPU_NAME"] = "node-1"
+        os.environ["XRT_TPU_CONFIG"] = "tpu_worker;0;192.168.0.2:8470"
+        import torch_xla
+        import torch_xla.core.xla_model as xm
+        device = xm.xla_device()
+
     args.device = device
 
     # Setup logging
