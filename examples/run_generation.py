@@ -116,7 +116,6 @@ def sample_sequence(model, length, context, tokenizer, num_samples=1, temperatur
     generated = context
 
     with torch.no_grad():
-
         iter_idx = 0
         try:
             while True:
