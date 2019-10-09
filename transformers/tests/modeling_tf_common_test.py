@@ -97,7 +97,7 @@ class TFCommonTestCases:
                     pto = pt_model(**pt_inputs_dict)
                 tfo = tf_model(inputs_dict)
                 max_diff = np.amax(np.abs(tfo[0].numpy() - pto[0].numpy()))
-                self.assertLessEqual(max_diff, 2e-5)
+                self.assertLessEqual(max_diff, 2e-2)
 
         def test_keyword_and_dict_args(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
