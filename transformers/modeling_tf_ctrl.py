@@ -238,6 +238,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             past_length = shape_list(past[0][0])[-2]
         if position_ids is None:
             position_ids = tf.range(past_length, shape_list(input_ids)[-1] + past_length, dtype=tf.int32)[tf.newaxis, :]
+            position_ids = tf.tile(position_ids, [shape_list(input_ids)[0], 1])
 
         # Attention mask.
         if attention_mask is not None:
@@ -276,7 +277,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             token_type_embeds = 0
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
-        inputs_embeds = self.w(input_ids)
+        inputs_embeds = self.w(input_ids, mode='embedding')
         # x = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
         seq_len = input_shape[-1]
         mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
