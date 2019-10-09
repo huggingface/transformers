@@ -59,7 +59,7 @@ class TextDataset(Dataset):
     def __init__(self, tokenizer, file_path='train', block_size=512):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, f'cached_lm_{block_size}_{filename}')
+        cached_features_file = os.path.join(directory, 'cached_lm_{}_{}'.format(block_size, filename))
 
         if os.path.exists(cached_features_file):
             logger.info("Loading features from cached file %s", cached_features_file)
@@ -282,7 +282,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         "perplexity": perplexity
     }
 
-    output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+    output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
     with open(output_eval_file, "w") as writer:
         logger.info("***** Eval results {} *****".format(prefix))
         for key in sorted(result.keys()):
@@ -484,9 +484,11 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+            
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=global_step)
+            result = evaluate(args, model, tokenizer, prefix=prefix)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
 

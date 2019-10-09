@@ -56,7 +56,7 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: TF 2.0 and PyTorch ](#Quick-tour-TF-20-training-and-PyTorch-interoperability) | Train a TF 2.0 model in 10 lines of code, load it in PyTorch |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
-| [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
+| [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
 | [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
 
@@ -67,7 +67,7 @@ This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3
 ### With pip
 
 First you need to install one of, or both, TensorFlow 2.0 and PyTorch.
-Please refere to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
 
 When TensorFlow 2.0 and/or PyTorch has been installed, 🤗 Transformers can be installed using pip as follows:
 
@@ -78,9 +78,9 @@ pip install transformers
 ### From source
 
 Here also, you first need to install one of, or both, TensorFlow 2.0 and PyTorch.
-Please refere to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific install command for your platform.
 
-When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and runing:
+When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and running:
 
 ```bash
 pip install [--editable] .
@@ -88,7 +88,7 @@ pip install [--editable] .
 
 ### Tests
 
-A series of tests is included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 These tests can be run using `pytest` (install pytest if needed with `pip install pytest`).
 
@@ -105,7 +105,7 @@ python -m pytest -sv ./examples/
 
 You should check out our [`swift-coreml-transformers`](https://github.com/huggingface/swift-coreml-transformers) repo.
 
-It contains an example of a conversion script from a Pytorch trained Transformer model (here, `GPT-2`) to a CoreML model that runs on iOS devices.
+It contains a set of tools to convert PyTorch or TensorFlow 2.0 trained Transformer models (currently contains `GPT-2`, `DistilGPT-2`, `BERT`, and `DistilBERT`) to CoreML models that run on iOS devices.
 
 At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models to productizing them in CoreML, or prototype a model or an app in CoreML then research its hyperparameters or architecture from TensorFlow 2.0 and/or PyTorch. Super exciting!
 
@@ -120,8 +120,7 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 5. **[XLNet](https://github.com/zihangdai/xlnet/)** (from Google/CMU) released with the paper [​XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 6. **[XLM](https://github.com/facebookresearch/XLM/)** (from Facebook) released together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau.
 7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), released together with the paper a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
-8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the blogpost [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5
-) by Victor Sanh, Lysandre Debut and Thomas Wolf.
+8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the paper [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108) by Victor Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into [DistilGPT2](https://github.com/huggingface/transformers/tree/master/examples/distillation).
 9. **[CTRL](https://github.com/salesforce/ctrl/)** (from Salesforce) released with the paper [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
@@ -182,24 +181,24 @@ for model_class in BERT_MODEL_CLASSES:
     # Load pretrained model/tokenizer
     model = model_class.from_pretrained('bert-base-uncased')
 
-# Models can return full list of hidden-states & attentions weights at each layer
-model = model_class.from_pretrained(pretrained_weights,
-                                    output_hidden_states=True,
-                                    output_attentions=True)
-input_ids = torch.tensor([tokenizer.encode("Let's see all hidden-states and attentions on this text")])
-all_hidden_states, all_attentions = model(input_ids)[-2:]
+    # Models can return full list of hidden-states & attentions weights at each layer
+    model = model_class.from_pretrained(pretrained_weights,
+                                        output_hidden_states=True,
+                                        output_attentions=True)
+    input_ids = torch.tensor([tokenizer.encode("Let's see all hidden-states and attentions on this text")])
+    all_hidden_states, all_attentions = model(input_ids)[-2:]
 
-# Models are compatible with Torchscript
-model = model_class.from_pretrained(pretrained_weights, torchscript=True)
-traced_model = torch.jit.trace(model, (input_ids,))
+    # Models are compatible with Torchscript
+    model = model_class.from_pretrained(pretrained_weights, torchscript=True)
+    traced_model = torch.jit.trace(model, (input_ids,))
 
-# Simple serialization for models and tokenizers
-model.save_pretrained('./directory/to/save/')  # save
-model = model_class.from_pretrained('./directory/to/save/')  # re-load
-tokenizer.save_pretrained('./directory/to/save/')  # save
-tokenizer = tokenizer_class.from_pretrained('./directory/to/save/')  # re-load
+    # Simple serialization for models and tokenizers
+    model.save_pretrained('./directory/to/save/')  # save
+    model = model_class.from_pretrained('./directory/to/save/')  # re-load
+    tokenizer.save_pretrained('./directory/to/save/')  # save
+    tokenizer = BertTokenizer.from_pretrained('./directory/to/save/')  # re-load
 
-# SOTA examples for GLUE, SQUAD, text generation...
+    # SOTA examples for GLUE, SQUAD, text generation...
 ```
 
 ## Quick tour TF 2.0 training and PyTorch interoperability
@@ -396,7 +395,7 @@ This is the model provided as `bert-large-uncased-whole-word-masking-finetuned-s
 ### `run_generation.py`: Text generation with GPT, GPT-2, CTRL, Transformer-XL and XLNet
 
 A conditional generation script is also included to generate text from a prompt.
-The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by Aman Rusia to get high quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
+The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-gen#methodology) proposed by Aman Rusia to get high-quality generation with memory models like Transformer-XL and XLNet (include a predefined text to make short inputs longer).
 
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
@@ -436,9 +435,9 @@ Here is a quick summary of what you should take care of when migrating from `pyt
 
 ### Models always output `tuples`
 
-The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
+The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that every model's forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
-The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
+The exact content of the tuples for each model is detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
@@ -470,11 +469,11 @@ By enabling the configuration option `output_hidden_states`, it was possible to 
 
 ### Serialization
 
-Breaking change in the `from_pretrained()`method:
+Breaking change in the `from_pretrained()` method:
 
-1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
+1. Models are now set in evaluation mode by default when instantiated with the `from_pretrained()` method. To train them, don't forget to set them back in training mode (`model.train()`) to activate the dropout modules.
 
-2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead which can break derived model classes build based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/transformers/pull/866) by forwarding the the model `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuration class attributes.
+2. The additional `*input` and `**kwargs` arguments supplied to the `from_pretrained()` method used to be directly passed to the underlying model's class `__init__()` method. They are now used to update the model configuration attribute instead, which can break derived model classes built based on the previous `BertForSequenceClassification` examples. We are working on a way to mitigate this breaking change in [#866](https://github.com/huggingface/transformers/pull/866) by forwarding the the model's `__init__()` method (i) the provided positional arguments and (ii) the keyword arguments which do not match any configuration class attributes.
 
 Also, while not a breaking change, the serialization methods have been standardized and you probably should switch to the new method `save_pretrained(save_directory)` if you were using any other serialization method before.
 
@@ -546,4 +545,4 @@ for batch in train_data:
 
 ## Citation
 
-At the moment, there is no paper associated to Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
+At the moment, there is no paper associated with Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
