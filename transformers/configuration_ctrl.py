@@ -53,8 +53,8 @@ class CTRLConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size_or_config_json_file=246534,
-        n_positions=50000,
-        n_ctx=512,
+        n_positions=256,
+        n_ctx=256,
         n_embd=1280,
         dff=8192,
         n_layer=48,
