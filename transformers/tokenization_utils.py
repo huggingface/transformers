@@ -337,13 +337,13 @@ class PreTrainedTokenizer(object):
                 vocab_files[file_id] = full_file_name
 
             if all(full_file_name is None for full_file_name in vocab_files.values()):
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find tokenizer files"
-                    "at this path or url.".format(
+                raise EnvironmentError(
+                    "Model name '{}' was not found in tokenizers model name list ({}). "
+                    "We assumed '{}' was a path or url to a directory containing vocabulary files "
+                    "named {} but couldn't find such vocabulary files at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
-                        pretrained_model_name_or_path, ))
-                return None
+                        pretrained_model_name_or_path, 
+                        list(cls.vocab_files_names.values())))
 
         # Get files from url, cache, or disk depending on the case
         try:
@@ -353,17 +353,18 @@ class PreTrainedTokenizer(object):
                     resolved_vocab_files[file_id] = None
                 else:
                     resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
-        except EnvironmentError as e:
+        except EnvironmentError:
             if pretrained_model_name_or_path in s3_models:
-                logger.error("Couldn't reach server to download vocabulary.")
+                msg = "Couldn't reach server at '{}' to download vocabulary files."
             else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find files {} "
-                    "at this path or url.".format(
+                msg = "Model name '{}' was not found in tokenizers model name list ({}). " \
+                    "We assumed '{}' was a path or url to a directory containing vocabulary files " \
+                    "named {}, but couldn't find such vocabulary files at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
-                        pretrained_model_name_or_path, str(vocab_files.keys())))
-            raise e
+                        pretrained_model_name_or_path,
+                        list(cls.vocab_files_names.values()))
+
+            raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:

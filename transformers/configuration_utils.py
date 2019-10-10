@@ -130,20 +130,19 @@ class PretrainedConfig(object):
         # redirect to the cache, if necessary
         try:
             resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
-        except EnvironmentError as e:
+        except EnvironmentError:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
-                logger.error(
-                    "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                        config_file))
+                msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
+                        config_file)
             else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
+                msg = "Model name '{}' was not found in model name list ({}). " \
+                      "We assumed '{}' was a path or url to a configuration file named {} or " \
+                      "a directory containing such a file but couldn't find any such file at this path or url.".format(
                         pretrained_model_name_or_path,
                         ', '.join(cls.pretrained_config_archive_map.keys()),
-                        config_file))
-            raise e
+                        config_file, CONFIG_NAME)
+            raise EnvironmentError(msg)
+
         if resolved_config_file == config_file:
             logger.info("loading configuration file {}".format(config_file))
         else:
