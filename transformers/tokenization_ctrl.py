@@ -22,9 +22,6 @@ import os
 import regex as re
 from io import open
 
-import sacremoses as sm
-
-from .tokenization_xlm import replace_unicode_punct, remove_non_printing_char
 from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
@@ -81,9 +78,6 @@ class CTRLTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
         self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
 
-        self.punct_normalizer = sm.MosesPunctNormalizer(lang='en')
-        self.moses_tokenizer = sm.MosesTokenizer(lang='en')
-
         self.encoder = json.load(open(vocab_file, encoding="utf-8"))
         self.decoder = {v:k for k,v in self.encoder.items()}
         merges = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
@@ -138,22 +132,12 @@ class CTRLTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def moses_pipeline(self, text):
-        text = replace_unicode_punct(text)
-        text = self.punct_normalizer.normalize(text)
-        text = remove_non_printing_char(text)
-        return text
-
-    def _tokenize(self, text, bypass_tokenizer=False):
+    def _tokenize(self, text):
         """ Tokenize a string.
         """
         split_tokens = []
 
-        if bypass_tokenizer:
-            text = text.split()
-        else:
-            text = self.moses_pipeline(text)
-            text = self.moses_tokenizer.tokenize(text, return_str=False, escape=False)
+        text = text.split(' ')
 
         for token in text:
             split_tokens.extend([t for t in self.bpe(token).split(' ')])
