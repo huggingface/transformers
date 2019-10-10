@@ -34,7 +34,12 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from tensorboardX import SummaryWriter
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
 from tqdm import tqdm, trange
 
 from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
