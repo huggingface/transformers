@@ -25,9 +25,8 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer, DUMMY_INPUTS
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +42,6 @@ TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'xlm-mlm-17-1280': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-tf_model.h5",
     'xlm-mlm-100-1280': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-tf_model.h5",
 }
-
-
-def load_xlm_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-    attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
-    if tf_model.config.use_lang_emb and tf_model.config.n_langs > 1:
-        langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
-    else:
-        langs_list = None
-    tf_inputs = [inputs_list, attns_list, langs_list]
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -441,8 +427,18 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
     """
     config_class = XLMConfig
     pretrained_model_archive_map = TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_xlm_pt_weights_in_tf2
     base_model_prefix = "transformer"
+
+    @property
+    def dummy_inputs(self):
+        # Sometimes XLM has language embeddings so don't forget to build them as well if needed
+        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        if self.config.use_lang_emb and self.config.n_langs > 1:
+            langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        else:
+            langs_list = None
+        return [inputs_list, attns_list, langs_list]
 
 
 XLM_START_DOCSTRING = r"""    The XLM model was proposed in

@@ -110,65 +110,55 @@ if is_tf_available():
                                    TFBertForMaskedLM, TFBertForNextSentencePrediction,
                                    TFBertForSequenceClassification, TFBertForMultipleChoice,
                                    TFBertForTokenClassification, TFBertForQuestionAnswering,
-                                   load_bert_pt_weights_in_tf2,
                                    TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_gpt2 import (TFGPT2PreTrainedModel, TFGPT2MainLayer,
                                    TFGPT2Model, TFGPT2LMHeadModel, TFGPT2DoubleHeadsModel,
-                                   load_gpt2_pt_weights_in_tf2,
                                    TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_openai import (TFOpenAIGPTPreTrainedModel, TFOpenAIGPTMainLayer,
                                      TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel,
-                                     load_openai_gpt_pt_weights_in_tf2,
                                      TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_transfo_xl import (TFTransfoXLPreTrainedModel, TFTransfoXLMainLayer,
                                          TFTransfoXLModel, TFTransfoXLLMHeadModel,
-                                         load_transfo_xl_pt_weights_in_tf2,
                                          TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_xlnet import (TFXLNetPreTrainedModel, TFXLNetMainLayer,
                                     TFXLNetModel, TFXLNetLMHeadModel,
                                     TFXLNetForSequenceClassification,
                                     TFXLNetForQuestionAnsweringSimple,
-                                    load_xlnet_pt_weights_in_tf2,
                                     TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_xlm import (TFXLMPreTrainedModel, TFXLMMainLayer,
                                   TFXLMModel, TFXLMWithLMHeadModel,
                                   TFXLMForSequenceClassification,
                                   TFXLMForQuestionAnsweringSimple,
-                                  load_xlm_pt_weights_in_tf2,
                                   TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_roberta import (TFRobertaPreTrainedModel, TFRobertaMainLayer,
                                       TFRobertaModel, TFRobertaForMaskedLM,
                                       TFRobertaForSequenceClassification,
-                                      load_roberta_pt_weights_in_tf2,
                                       TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_distilbert import (TFDistilBertPreTrainedModel, TFDistilBertMainLayer,
                                          TFDistilBertModel, TFDistilBertForMaskedLM,
                                          TFDistilBertForSequenceClassification,
                                          TFDistilBertForQuestionAnswering,
-                                         load_distilbert_pt_weights_in_tf2,
                                          TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_ctrl import (TFCTRLPreTrainedModel, TFCTRLModel,
                                     TFCTRLLMHeadModel,
-                                    load_ctrl_pt_weights_in_tf2,
                                     TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # TF 2.0 <=> PyTorch conversion utilities
-if is_tf_available() and is_torch_available():
-    from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,
-                                            load_pytorch_checkpoint_in_tf2_model,
-                                            load_pytorch_weights_in_tf2_model,
-                                            load_pytorch_model_in_tf2_model,
-                                            load_tf2_checkpoint_in_pytorch_model,
-                                            load_tf2_weights_in_pytorch_model,
-                                            load_tf2_model_in_pytorch_model)
+from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,
+                                        load_pytorch_checkpoint_in_tf2_model,
+                                        load_pytorch_weights_in_tf2_model,
+                                        load_pytorch_model_in_tf2_model,
+                                        load_tf2_checkpoint_in_pytorch_model,
+                                        load_tf2_weights_in_pytorch_model,
+                                        load_tf2_model_in_pytorch_model)
 
 if not is_tf_available() and not is_torch_available():
     logger.warning("Neither PyTorch nor TensorFlow >= 2.0 have been found."

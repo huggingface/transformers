@@ -30,7 +30,6 @@ import tensorflow as tf
 from .configuration_xlnet import XLNetConfig
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 
 logger = logging.getLogger(__name__)
@@ -39,13 +38,6 @@ TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tf_model.h5",
     'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tf_model.h5",
 }
-
-
-def load_xlnet_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)  # build the network
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def gelu(x):
@@ -670,7 +662,6 @@ class TFXLNetPreTrainedModel(TFPreTrainedModel):
     """
     config_class = XLNetConfig
     pretrained_model_archive_map = TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_xlnet_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 
