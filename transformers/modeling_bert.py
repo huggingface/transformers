@@ -333,12 +333,12 @@ class BertLayer(nn.Module):
 
         if encoder_hidden_state:
             try:
-                crossattention_outputs = self.crossattention(attention_output, attention_mask, head_mask, encoder_hidden_state)
+                attention_outputs = self.crossattention(attention_output, attention_mask, head_mask, encoder_hidden_state)
             except AttributeError as ae:
                 raise ae("you need to set `is_encoder` to True in the configuration to instantiate an encoder layer")
 
-        crossattention_output = crossattention_outputs[0]
-        intermediate_output = self.intermediate(crossattention_output)
+        attention_output = attention_outputs[0]
+        intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
         return outputs
