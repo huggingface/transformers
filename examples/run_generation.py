@@ -194,7 +194,7 @@ def main():
     elif args.length < 0:
         args.length = MAX_LENGTH  # avoid infinite loop
 
-    print(args)
+    logger.info(args)
     if args.model_type in ["ctrl"]:
         if args.temperature > 0.7 : 
             logger.info('CTRL typically works better with lower temperatures (and lower top_k).')
