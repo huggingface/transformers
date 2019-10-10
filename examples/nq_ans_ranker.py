@@ -3,6 +3,7 @@ import pickle
 import logging
 import collections
 import json
+import re
 
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 logger = logging.getLogger(__name__)
@@ -89,9 +90,10 @@ def get_final_text(pred_text, orig_text, do_lower_case, verbose_logging=False):
 
 #--------------------------lqq added ---------------------------------------------------------
 def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
-                      max_answer_length, do_lower_case, output_prediction_file,
-                      verbose_logging,
-                      version_2_with_negative):
+                        max_answer_length, do_lower_case, output_prediction_file,
+                        verbose_logging,
+                        version_2_with_negative,
+                        nbest_pred_file):
     """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
 
@@ -110,6 +112,7 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
     # all_predictions = collections.OrderedDict()
     all_nq_predictions = []
     # scores_diff_json = collections.OrderedDict()
+    all_nq_nbest_predictions ={}
 
     for (example_index, example) in enumerate(all_examples):
         features = example_index_to_features[example_index]
@@ -277,6 +280,7 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
 
         assert len(nbest_json) >= 1
 
+        all_nq_nbest_predictions[example.qas_id] = nbest_json
         if version_2_with_negative:
             score_diff =  best_non_null_entry.start_logit+best_non_null_entry.end_logit -score_null#score is the cls.startlogits+cls.endlogits
             short_start = best_non_null_entry.start_nq_idx
@@ -311,24 +315,100 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
     predictions_json = {"predictions": all_nq_predictions}
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(predictions_json, indent=4) + "\n")
-    return all_nq_predictions
-#--------------------------lqq end ---------------------------------------------------------
-if __name__ == '__main__':
-    pk_dir = "/mnt/ans_ranker/pk200"
-    example_file = pk_dir+"/examples.pk"
-    feature_file = pk_dir+"/features.pk"
-    results_file = pk_dir+"/all_results.pk"
+    pickle.dump(all_nq_nbest_predictions,open(nbest_pred_file,"wb"))
+    logger.info("Pickle dumped nbest predictions to: %s" % (nbest_pk_file))
 
-    all_examples = pickle.load(open(example_file,"rb"))
-    all_features = pickle.load(open(feature_file,"rb"))
-    all_results = pickle.load(open(results_file,"rb"))
-    output_prediction_file = "out.json"
-    verbose_logging=True
-    #----------------------------------------------------------------
-    write_nq_predictions(all_examples, all_features, all_results,
-                         n_best_size=30,
-                         max_answer_length=30,
-                         do_lower_case=True,
-                         output_prediction_file=output_prediction_file,
-                         verbose_logging=verbose_logging,
-                         version_2_with_negative=True)
+    return all_nq_predictions,all_nq_nbest_predictions
+#--------------------------lqq end ------------------------------------------------------------
+
+
+if __name__ == '__main__':
+    # # -----------------------------------input files-----------------------------------------
+    pk_dir = "/mnt/ans_ranker/pkdev"#pk200
+
+    example_file = pk_dir+"/examples_.pk"
+    feature_file = pk_dir+"/features_.pk"
+    results_file = pk_dir+"/allresults_.pk"
+    nbest_pk_file = pk_dir+"/all_nbest_pred.pk"
+    one_pred_json_file = pk_dir+"/predictions.json"
+    nbest_pred_with_sent_file = pk_dir+"/all_nbest_with_sent.pk"
+    all_examples = pickle.load(open(example_file, "rb"))
+    all_features = pickle.load(open(feature_file, "rb"))
+    all_results = pickle.load(open(results_file, "rb"))
+
+    all_examples_dict = {}
+    for e in all_examples:
+        all_examples_dict[e.qas_id] = e
+
+    #----------------------------------output files-------------------------------------------
+    output_prediction_file = one_pred_json_file
+    all_nq_prediction, all_nbest_predictions = write_nq_predictions(all_examples, all_features, all_results,
+                                                                    n_best_size=30,
+                                                                    max_answer_length=30,
+                                                                    do_lower_case=True,
+                                                                    output_prediction_file=output_prediction_file,
+                                                                    verbose_logging=False,
+                                                                    version_2_with_negative=True,
+                                                                    nbest_pred_file=nbest_pk_file)
+    # # ------------------------------------answer ranker------------------------------------------
+    # all_nbest_predictions = pickle.load(open(nbest_pk_file, "rb"))
+    all_nbest_with_sents = {}
+    count_all_sents = 0
+    for (eid,nbest_pred) in all_nbest_predictions.items():
+        example = all_examples_dict[eid]
+        #------------nq_context_map to a dict---------------
+        map_dict = {}
+        for (i, n) in enumerate(example.nq_context_map):
+            if n != -1:
+                map_dict[n] = i
+        #------------sentence selector----------------------
+        doc_tokens = example.doc_tokens
+        idx = [i for i, n in enumerate(doc_tokens) if n == "." or n == "!" or n == "?"]
+        if len(idx) == 0:
+            idx = [len(doc_tokens)]
+        elif idx[-1] != len(doc_tokens):
+            idx = idx + [len(doc_tokens)]
+        sent_ends = list(map(lambda x: x + 1, idx))
+        sent_starts = [0] + sent_ends
+        sent_spans = list(zip(sent_starts, sent_ends))#print(" ".join(doc_tokens[start:end]))
+        #---------------------------------------------------
+        nbest_pred_with_sent = []
+        sentlist = []
+        for ans in nbest_pred:
+            ans["sent"] = None
+            ans["sent_start_idx"] = None
+            ans["sent_end_idx"] = None
+
+            if ans["start_nq_idx"] == -1 or ans["end_nq_idx"] == -1:
+                # print("this is a null answer!")
+                continue
+            elif (ans["start_nq_idx"] not in map_dict) or (ans["end_nq_idx"] not in map_dict):
+                print("the answer span is not right")
+            else:
+                start_tok_idx = map_dict[ans["start_nq_idx"]]
+                end_tok_idx = map_dict[ans["end_nq_idx"]]
+
+                start_of_sentence = 0
+                end_of_sentence = 0
+                for i in range(len(sent_starts)-1):
+                    if start_tok_idx>=sent_starts[i] and start_tok_idx<= sent_starts[i+1]:
+                        start_of_sentence = sent_starts[i]
+                        break
+                for i in range(len(sent_ends)-1):
+                    if end_tok_idx>=sent_ends[i] and end_tok_idx<= sent_ends[i+1]:
+                        end_of_sentence = sent_ends[i+1]
+                        break
+                sentlist.append(" ".join(doc_tokens[start_of_sentence:end_of_sentence]))
+                ans["sent"] = " ".join(doc_tokens[start_of_sentence:end_of_sentence])
+                ans["sent_start_idx"] = start_of_sentence
+                ans["sent_end_idx"] = end_of_sentence
+                nbest_pred_with_sent.append(ans)
+
+        all_nbest_with_sents[eid] = nbest_pred_with_sent
+        count_all_sents += len(set(sentlist))
+
+    logger.info("Num of examples: %s" % (str(len(all_nbest_with_sents))))
+    logger.info("Averaged sentences for each example: %s" % (str(count_all_sents/len(all_nbest_predictions))))
+    pickle.dump(all_nbest_with_sents,open(nbest_pred_with_sent_file,"wb"))
+    logger.info("Dumped all_nbest_with_sents to : %s" % (nbest_pred_with_sent_file))
+

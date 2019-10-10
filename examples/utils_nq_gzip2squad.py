@@ -257,7 +257,7 @@ def get_candidate_type_and_position(e, idx):
         return e["long_answer_candidates"][idx]["type_and_position"]
 
 
-def create_example_from_jsonl(line):
+def create_example_from_jsonl(line,is_training):
     """Creates an NQ example from a given line of JSON."""
     e = json.loads(line, object_pairs_hook=collections.OrderedDict)
     add_candidate_types_and_positions(e)
@@ -273,7 +273,7 @@ def create_example_from_jsonl(line):
         # if len(context_list) >= args.max_contexts:
         #     break
 
-    has_long, has_short, longs, shorts = dev_answer(e, False)
+    has_long, has_short, longs, shorts = dev_answer(e, is_training)
     candidate_answers = []
     if (not has_long) and (not has_short):
         is_impossibile = True
@@ -409,7 +409,7 @@ def read_nq_entry(entry, is_training):
     return examples
 
 
-def read_nq_examples_from_jsonl(input_file):
+def read_nq_examples_from_jsonl(input_file,is_training):
     """
     revised of read_nq_examples (tf run_nq.py) by lq
     :param input_file: a single jsonl.gz
@@ -427,7 +427,7 @@ def read_nq_examples_from_jsonl(input_file):
     # logger.info("Reading: %s", input_file)
     with _open(input_file) as input_jsonl:
         for line in input_jsonl:
-            input_data.append(create_example_from_jsonl(line))  # char-level
+            input_data.append(create_example_from_jsonl(line,is_training))  # char-level
     return input_data  # examples
 
 
@@ -507,18 +507,21 @@ if __name__ == '__main__':
     parser.add_argument("--max_contexts", default=48, type=int,
                         help="Maximum number of contexts to output for an example.")
 
-    parser.add_argument("--nq_dev_dir", default=None, type=str, required=True,
+
+    parser.add_argument("--is_training", default=True, type=bool, required=True,
+                        help="True is trianing, False is dev.")
+    parser.add_argument("--input_gzip_dir", default=None, type=str, required=True,
                         help="the director path of dev nq_gzip.")
-    parser.add_argument("--saved_name", default=None, type=str, required=True,
-                        help="the output filename of the squad_format json file for dev set.")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="the output dir to save the nq_format.pk, squad_format.pk, and squad_format.json file.")
+
     args = parser.parse_args()
     # -----------------------------------------------------------------------------------------------------
-    input_file_dir = args.nq_dev_dir
-    output_json_path = args.output_dir + "/" + args.saved_name + "_squad2format.json"
-    output_squad_pk_path = args.output_dir + "/" + args.saved_name + "_squad2format.pk"
-    output_nq_pk_path = args.output_dir + "/" + args.saved_name + "_nqformat.pk"
+    input_file_dir = args.input_gzip_dir
+    saved_name="train_5piece"
+    output_json_path = args.output_dir + "/" + saved_name + "_squad2format.json"
+    output_squad_pk_path = args.output_dir + "/" + saved_name + "_squad2format.pk"
+    output_nq_pk_path = args.output_dir + "/" + saved_name + "_nqformat.pk"
     # -----------------------------------------------------------------------------------------------------
     input_paths = []
     for path in glob.glob("{}/*.gz".format(input_file_dir)):
@@ -530,7 +533,7 @@ if __name__ == '__main__':
     total_nq_examples = []
     from tqdm import tqdm
     for file in tqdm(input_paths):
-        nq_examples = read_nq_examples_from_jsonl(file)
+        nq_examples = read_nq_examples_from_jsonl(file,args.is_training)
         total_nq_examples.extend(nq_examples)
     pickle.dump(total_nq_examples, open(output_nq_pk_path, "wb"))
     print("Finish: gzip to nq_format.pk, and saved to {}".format(output_nq_pk_path))
