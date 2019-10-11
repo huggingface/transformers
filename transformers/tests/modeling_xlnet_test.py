@@ -150,7 +150,9 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 "outputs": outputs,
             }
 
-            model.config.mem_len = 0
+            config.mem_len = 0
+            model = XLNetModel(config)
+            model.eval()
             no_mems_outputs = model(input_ids_1)
             self.parent.assertEqual(len(no_mems_outputs), 1)
 
