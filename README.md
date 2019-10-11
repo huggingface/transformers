@@ -545,4 +545,14 @@ for batch in train_data:
 
 ## Citation
 
-At the moment, there is no paper associated with Transformers but we are working on preparing one. In the meantime, please include a mention of the library and a link to the present repository if you use this work in a published or open-source project.
+We now have a paper you can cite for the 🤗 Transformers library:
+```
+@misc{wolf2019transformers,
+    title={Transformers: State-of-the-art Natural Language Processing},
+    author={Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Jamie Brew},
+    year={2019},
+    eprint={1910.03771},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL}
+}
+```
