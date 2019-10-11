@@ -161,6 +161,10 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 "outputs": outputs.numpy(),
             }
 
+            model.config.mem_len = 0
+            no_mems_outputs = model(inputs)
+            self.parent.assertEqual(len(no_mems_outputs), 1)
+
             self.parent.assertListEqual(
                 list(result["outputs"].shape),
                 [self.batch_size, self.seq_length, self.hidden_size])
