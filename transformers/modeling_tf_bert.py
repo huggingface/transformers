@@ -30,7 +30,6 @@ import tensorflow as tf
 from .configuration_bert import BertConfig
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +49,6 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-tf_model.h5",
 }
-
-
-def load_bert_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def gelu(x):
@@ -545,7 +536,6 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
     """
     config_class = BertConfig
     pretrained_model_archive_map = TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_bert_pt_weights_in_tf2
     base_model_prefix = "bert"
 
 
