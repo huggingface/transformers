@@ -27,19 +27,10 @@ import tensorflow as tf
 from .configuration_ctrl import CTRLConfig
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, TFSharedEmbeddings
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-tf_model.h5"}
-
-def load_ctrl_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
-
 
 def angle_defn(pos, i, d_model_size):
     angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model_size))
@@ -177,12 +168,14 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFCTRLMainLayer, self).__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
+        self.output_past = config.output_past
+
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
 
         self.pos_encoding = positional_encoding(config.n_positions, self.d_model_size)
 
-        self.output_attentions = config.output_attentions
 
         self.w = TFSharedEmbeddings(config.vocab_size,
                                     config.n_embd,
@@ -299,7 +292,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h([hidden_states, mask, layer_past, attention_mask, head_mask[i]], training=training)
             hidden_states, present = outputs[:2]
-            presents = presents + (present,)
+
+            if self.output_past:
+                presents = presents + (present,)
 
             if self.output_attentions:
                 all_attentions.append(outputs[2])
@@ -309,7 +304,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         if self.output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states, presents)
+        outputs = (hidden_states,)
+        if self.output_past:
+            outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
@@ -327,7 +324,6 @@ class TFCTRLPreTrainedModel(TFPreTrainedModel):
     config_class = CTRLConfig
     pretrained_model_archive_map = TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
-    load_pt_weights = load_ctrl_pt_weights_in_tf2
 
 
 CTRL_START_DOCSTRING = r"""    CTRL model was proposed in 
