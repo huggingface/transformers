@@ -44,6 +44,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-vocab.txt",
         'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
         'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
+        'bert-base-german-dbmdz-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-vocab.txt",
+        'bert-base-german-dbmdz-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-vocab.txt",
     }
 }
 
@@ -61,6 +63,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': 512,
     'bert-large-cased-whole-word-masking-finetuned-squad': 512,
     'bert-base-cased-finetuned-mrpc': 512,
+    'bert-base-german-dbmdz-cased': 512,
+    'bert-base-german-dbmdz-uncased': 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
@@ -77,6 +81,8 @@ PRETRAINED_INIT_CONFIGURATION = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': {'do_lower_case': True},
     'bert-large-cased-whole-word-masking-finetuned-squad': {'do_lower_case': False},
     'bert-base-cased-finetuned-mrpc': {'do_lower_case': False},
+    'bert-base-german-dbmdz-cased': {'do_lower_case': False},
+    'bert-base-german-dbmdz-uncased': {'do_lower_case': True},
 }
 
 
