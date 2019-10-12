@@ -10,8 +10,12 @@ from download_save import save_path_model, save_path_tokenizer
 tokenizer = DistilBertTokenizer.from_pretrained(save_path_tokenizer)
 model = DistilBertForSequenceClassification.from_pretrained(save_path_model)
 
-encoded = tokenizer.encode('hello world, my name is Tom')
-encoded = torch.tensor(encoded).unsqueeze(dim=0)
+# encoded = tokenizer.encode('hello world, my name is Tom')
+# encoded = torch.tensor(encoded).unsqueeze(dim=0)
 label = torch.tensor([1]).unsqueeze(dim=0)
+
+encoded = torch.randint(5000, size=[32, 512])
+labels = torch.randint(1, size=[32, 2])
 result = model(encoded, labels=label)
 print()
+
