@@ -15,8 +15,8 @@ if not os.path.exists(save_path_tokenizer):
 if not os.path.exists(save_path_model):
     os.makedirs(save_path_model)
 
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-tokenizer.save_pretrained(save_path_tokenizer)
-
-model = DistilBertModel.from_pretrained('distilbert-base-uncased')
-model.save_pretrained(save_path_model)
+# tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+# tokenizer.save_pretrained(save_path_tokenizer)
+#
+# model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+# model.save_pretrained(save_path_model)
