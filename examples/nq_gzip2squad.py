@@ -11,7 +11,7 @@ import enum
 import random
 import argparse
 import pickle
-import time
+import os
 
 from pytorch_transformers.tokenization_bert import whitespace_tokenize
 
@@ -489,14 +489,37 @@ def nq_2_squad_dev(nqexample_list):
         squadexample_list.append(squad_example)
     return squadexample_list, skips
 
-def pickle2json(pickle_path,json_path):
-    with open(pickle_path,'rb') as r:
+def pickle2json(pickle_path,output_dir,name,splited_num):
+    with open(pickle_path, 'rb') as r:
         data = pickle.load(r)
-        # print(type(data))
-        with open(json_path,'wb') as w:
-            datas = json.dumps({'data':data,'version':'nq'})
-            # print(type(datas))
-            w.write(datas.encode())
+        if splited_num ==None:
+            json_path = os.path.join(output_dir,"all_{}_squad2format.json".format(name))
+            with open(json_path,'wb') as w:
+                datas = json.dumps({'data':data,'version':'nq'})
+                w.write(datas.encode())
+            print("Output json file name: {}".format(json_path))
+        else:
+            num = int(len(data) / splited_num)
+            idx = []
+            for i in range(splited_num):
+                idx.append(i * num)
+            idx.append(len(data))
+
+            #------------------saved all--------------
+            json_path = os.path.join(output_dir, "all_{}_squad2format.json".format(name))
+            with open(json_path,'wb') as w:
+                datas = json.dumps({'data':data,'version':'nq'})
+                w.write(datas.encode())
+            print("Output all json file: {}".format(json_path))
+            #------------------saved splits-----------
+            for i in range(len(idx) - 1):
+                splited_data = data[idx[i]:idx[i + 1]]
+                json_path = os.path.join(output_dir, "{}_splited_{}_squad2format.json".format(i,name))
+                with open(json_path, 'wb') as w:
+                    datas = json.dumps({'data': splited_data, 'version': 'nq'})
+                    w.write(datas.encode())
+                print("Output split json file {}: {} examples, and saved to {}".format(i, len(splited_data), json_path))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     ## parameters
@@ -516,20 +539,23 @@ if __name__ == '__main__':
                         help="the output dir to save the nq_format.pk, squad_format.pk, and squad_format.json file.")
     parser.add_argument("--saved_name", default="", type=str, required=True,
                         help="saved name")
+    parser.add_argument("--splited",default=None,type=int,
+                        help="if splited == n, we split the output to n parts.")
 
     args = parser.parse_args()
     # -----------------------------------------------------------------------------------------------------
-    input_file_dir = args.input_gzip_dir
-    output_json_path = args.output_dir + "/" + args.saved_name + "_squad2format.json"
     output_squad_pk_path = args.output_dir + "/" + args.saved_name + "_squad2format.pk"
     output_nq_pk_path = args.output_dir + "/" + args.saved_name + "_nqformat.pk"
     # -----------------------------------------------------------------------------------------------------
-    input_paths = []
-    for path in glob.glob("{}/*.gz".format(input_file_dir)):
-        input_paths.append(path)
-    print("Input dir:{}".format(input_file_dir))
-    print("Containg gzip files: {}".format("\t\n".join(input_paths)))
-    # input_paths = [args.input_gzip_dir]
+    if os.path.isdir(args.input_gzip_dir):
+        input_paths = []
+        for path in glob.glob("{}/*.gz".format(args.input_gzip_dir)):
+            input_paths.append(path)
+        print("Input dir:{}".format(args.input_gzip_dir))
+        print("Containg gzip files: {}".format("\t\n".join(input_paths)))
+    else:
+        input_paths = [args.input_gzip_dir]
+        print("Input file: {}".format(args.input_gzip_dir))
 
     # ---------------------------process----------------------
     total_nq_examples = []
@@ -543,8 +569,8 @@ if __name__ == '__main__':
     pickle.dump(squadexample_list, open(output_squad_pk_path, "wb"))
     print("Finish: nq_format.pk to squad2_format.pk, and saved to {}".format(output_squad_pk_path))
 
-    pickle2json(output_squad_pk_path, output_json_path)
-    print("Finish: squad2_format.pk to squad2format.json, and saved to {}".format(output_json_path))
+    pickle2json(output_squad_pk_path,args.output_dir,args.saved_name,args.splited)
+    print("Finished: squad2_format.pk to squad2format.json")
     # ---------------------------stastics--------------------
     count_a = 0
     count_b = 0

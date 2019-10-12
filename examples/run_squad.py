@@ -255,10 +255,14 @@ def evaluate(args, model, tokenizer, prefix=""):
         output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
     else:
         output_null_log_odds_file = None
-
-    example_output_pk_file = os.path.join(args.output_dir, "examples_{}.pk".format(prefix))
-    feature_output_pk_file = os.path.join(args.output_dir, "features_{}.pk".format(prefix))
-    allresults_pk_file = os.path.join(args.output_dir, "allresults_{}.pk".format(prefix))
+    if args.task_name == "nq":
+        example_output_pk_file = os.path.join(args.output_dir, "examples_{}_{}.pk".format(args.predict_file.split("/")[-1].split("_")[0],prefix))
+        feature_output_pk_file = os.path.join(args.output_dir, "features_{}_{}.pk".format(args.predict_file.split("/")[-1].split("_")[0],prefix))
+        allresults_pk_file = os.path.join(args.output_dir, "allresults_{}_{}.pk".format(args.predict_file.split("/")[-1].split("_")[0],prefix))
+    else:
+        example_output_pk_file = os.path.join(args.output_dir, "examples_{}.pk".format(prefix))
+        feature_output_pk_file = os.path.join(args.output_dir, "features_{}.pk".format(prefix))
+        allresults_pk_file = os.path.join(args.output_dir, "allresults_{}.pk".format(prefix))
     pickle.dump(examples,open(example_output_pk_file,"wb"))
     pickle.dump(features,open(feature_output_pk_file,"wb"))
     pickle.dump(all_results,open(allresults_pk_file,"wb"))
@@ -276,6 +280,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                         args.version_2_with_negative, tokenizer, args.verbose_logging)
     else:
         if args.task_name == "nq":
+            output_prediction_file = os.path.join(args.output_dir, "predictions_{}_{}.json".format(
+                                                  args.predict_file.split("/")[-1].split("_")[0],prefix))#lqq added
             write_nq_predictions(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
