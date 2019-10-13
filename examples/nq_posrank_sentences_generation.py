@@ -4,6 +4,7 @@ import logging
 import collections
 import json
 import re
+import argparse
 
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 logger = logging.getLogger(__name__)
@@ -315,6 +316,7 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
     predictions_json = {"predictions": all_nq_predictions}
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(predictions_json, indent=4) + "\n")
+
     pickle.dump(all_nq_nbest_predictions,open(nbest_pred_file,"wb"))
     logger.info("Pickle dumped nbest predictions to: %s" % (nbest_pk_file))
 
@@ -323,15 +325,36 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
 
 
 if __name__ == '__main__':
-    # # -----------------------------------input files-----------------------------------------
-    pk_dir = "/mnt/ans_ranker/pkdev"#pk200
 
-    example_file = pk_dir+"/examples_.pk"
-    feature_file = pk_dir+"/features_.pk"
-    results_file = pk_dir+"/allresults_.pk"
-    nbest_pk_file = pk_dir+"/all_nbest_pred.pk"
-    one_pred_json_file = pk_dir+"/predictions.json"
-    nbest_pred_with_sent_file = pk_dir+"/all_nbest_with_sent.pk"
+
+    parser = argparse.ArgumentParser()
+
+    ## Required parameters
+    parser.add_argument("--example_pk_file", default=None, type=str, required=True)
+    parser.add_argument("--feature_pk_file", default=None, type=str, required=True)
+    parser.add_argument("--results_file", default=None, type=str, required=True)
+    parser.add_argument("--output_nbest_pk_file", default=None, type=str, required=True)
+    parser.add_argument("--output_pred_file", default=None, type=str, required=True)
+    parser.add_argument("--output_nbest_pred_with_sent_file", default=None, type=str, required=True)
+    args = parser.parse_args()
+    #--------------------------------------input files-----------------------------------------
+    example_file = args.example_pk_file
+    feature_file = args.feature_pk_file
+    results_file = args.results_file
+    #-------------------------------------output files-----------------------------------------
+    nbest_pk_file = args.output_nbest_pk_file# exampleid:{30 answer candidates}
+    one_pred_json_file = args.output_pred_file#offical prediction file
+    nbest_pred_with_sent_file = args.output_nbest_pred_with_sent_file#example:{30 answer candidates, and each answer is associated with its sentences}
+
+    # pk_dir = "/mnt/ans_ranker/pkdev"#pk200
+    # example_file = pk_dir+"/examples_.pk"
+    # feature_file = pk_dir+"/features_.pk"
+    # results_file = pk_dir+"/allresults_.pk"
+    # #-------------------------------------output files-----------------------------------------
+    # nbest_pk_file = pk_dir+"/all_nbest_pred.pk"# exampleid:{30 answer candidates}
+    # one_pred_json_file = pk_dir+"/predictions.json"#offical prediction file
+    # nbest_pred_with_sent_file = pk_dir+"/all_nbest_with_sent.pk"#example:{30 answer candidates, and each answer is associated with its sentences}
+    #------------------------------------------------------------------------------------------
     all_examples = pickle.load(open(example_file, "rb"))
     all_features = pickle.load(open(feature_file, "rb"))
     all_results = pickle.load(open(results_file, "rb"))
@@ -354,7 +377,8 @@ if __name__ == '__main__':
     # all_nbest_predictions = pickle.load(open(nbest_pk_file, "rb"))
     all_nbest_with_sents = {}
     count_all_sents = 0
-    for (eid,nbest_pred) in all_nbest_predictions.items():
+    import tqdm
+    for (eid,nbest_pred) in tqdm(all_nbest_predictions.items()):
         example = all_examples_dict[eid]
         #------------nq_context_map to a dict---------------
         map_dict = {}
