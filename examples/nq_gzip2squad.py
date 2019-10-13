@@ -531,10 +531,10 @@ if __name__ == '__main__':
                         help="Maximum number of contexts to output for an example.")
 
 
-    parser.add_argument("--is_training", default=True, type=bool, required=True,
+    parser.add_argument("--is_training", action='store_true',
                         help="True is trianing, False is dev.")
     parser.add_argument("--input_gzip_dir", default=None, type=str, required=True,
-                        help="the director path of dev nq_gzip.")
+                        help="the ector path of dev nq_gzip.")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="the output dir to save the nq_format.pk, squad_format.pk, and squad_format.json file.")
     parser.add_argument("--saved_name", default="", type=str, required=True,

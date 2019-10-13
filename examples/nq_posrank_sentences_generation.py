@@ -332,7 +332,7 @@ if __name__ == '__main__':
     ## Required parameters
     parser.add_argument("--example_pk_file", default=None, type=str, required=True)
     parser.add_argument("--feature_pk_file", default=None, type=str, required=True)
-    parser.add_argument("--results_file", default=None, type=str, required=True)
+    parser.add_argument("--results_pk_file", default=None, type=str, required=True)
     parser.add_argument("--output_nbest_pk_file", default=None, type=str, required=True)
     parser.add_argument("--output_pred_file", default=None, type=str, required=True)
     parser.add_argument("--output_nbest_pred_with_sent_file", default=None, type=str, required=True)
