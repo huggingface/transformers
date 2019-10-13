@@ -272,7 +272,7 @@ def create_example_from_jsonl(line,is_training):
         context_list.append(context)
         # if len(context_list) >= args.max_contexts:
         #     break
-
+    print(is_training)
     has_long, has_short, longs, shorts = dev_answer(e, is_training)
     candidate_answers = []
     if (not has_long) and (not has_short):

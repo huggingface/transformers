@@ -1,19 +1,12 @@
 import json
 import argparse
-import os
 from utlis_nq_eval import EVAL_OPTS_NQ, main as evaluate_on_nq
 
 if __name__ == '__main__':
     #--------------------------------------------------------------
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--eval_gzip_dir',required=True, default='', type=str)
-    parser.add_argument('--input_prediction_dir', required=True,type=str)
-    args = parser.parse_args()
     all_prediction_files = []
-    for i in range(4):
-        all_prediction_files.append(os.join(args.input_prediction_dir,'predictions_{}_.json'.format(i)))
-    output_prediction_file = os.join(args.input_prediction_dir,'all_predictions.json')
-    gold_gzip_path = args.eval_gzip_dir
+    output_prediction_file = ""
+    gold_gzip_path = "/mnt/NQ_Data/dev"
     # --------------------------------------------------------------
     all_preds = []
     for per_pred_file in all_prediction_files:

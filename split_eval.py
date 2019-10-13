@@ -9,12 +9,13 @@ if __name__ == '__main__':
     parser.add_argument('--eval_gzip_dir',required=True, default='', type=str)
     parser.add_argument('--input_prediction_dir', required=True,type=str)
     args = parser.parse_args()
+    #---------input: splited pred files, output: jointed prediction file-------------
     all_prediction_files = []
     for i in range(4):
         all_prediction_files.append(os.join(args.input_prediction_dir,'predictions_{}_.json'.format(i)))
     output_prediction_file = os.join(args.input_prediction_dir,'all_predictions.json')
     gold_gzip_path = args.eval_gzip_dir
-    # --------------------------------------------------------------
+    # ----------------------------joint----------------------------------
     all_preds = []
     for per_pred_file in all_prediction_files:
         with open(per_pred_file, "r") as fin:
@@ -24,7 +25,7 @@ if __name__ == '__main__':
     with open(output_prediction_file, "w") as writer:
         writer.write(json.dumps(predictions_json, indent=4) + "\n")
     print("dumped all predictions to {}".format(output_prediction_file))
-    # --------------------------------------------------------------
+    # ----------------------------eval----------------------------------
     evaluate_options = EVAL_OPTS_NQ(gold_path = gold_gzip_path,
                                     pred_path = output_prediction_file)
     results = evaluate_on_nq(evaluate_options)
