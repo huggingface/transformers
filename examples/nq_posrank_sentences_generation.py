@@ -114,8 +114,8 @@ def write_nq_predictions(all_examples, all_features, all_results, n_best_size,
     all_nq_predictions = []
     # scores_diff_json = collections.OrderedDict()
     all_nq_nbest_predictions ={}
-
-    for (example_index, example) in enumerate(all_examples):
+    from tqdm import tqdm
+    for (example_index, example) in tqdm(enumerate(all_examples)):
         features = example_index_to_features[example_index]
 
         prelim_predictions = []

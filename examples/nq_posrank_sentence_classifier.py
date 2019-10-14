@@ -117,7 +117,17 @@ if __name__ == '__main__':
     all_sents = []
     for i in range(4):
         file = "/data/nieping/pytorch-transformers/data/nq_sentence_selector/train_5_piece/train5piece_nbest_predwithsent_{}.pk".format(i)
-        print("pred_with_sent_file:",)
+        print("pred_with_sent_file:",file)
         all_sents.extend(convert_predwithsent_cls_format(example_labels,file))
     pickle.dump(all_sents,open(args.output_file,"wb"))
-    print("Finised dump:",{args.output_file})
+    print("Total sents:",len(all_sents))
+    count_has = 0
+    count_no = 0
+    for sent in all_sents:
+        if sent["sent_label"]:
+            count_has+=1
+        else:
+            count_no+=1
+    print("\t positive sent:",count_has)
+    print("\t negative sent:",count_no)
+    print("Finised dump:",args.output_file)
