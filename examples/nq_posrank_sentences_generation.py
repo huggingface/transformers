@@ -346,24 +346,25 @@ if __name__ == '__main__':
     one_pred_json_file = args.output_pred_file#offical prediction file
     nbest_pred_with_sent_file = args.output_nbest_pred_with_sent_file#example:{30 answer candidates, and each answer is associated with its sentences}
 
-    # pk_dir = "/mnt/ans_ranker/pkdev"#pk200
+    #---------------------------------------GCRtest--------------------------------------------
+    # pk_dir = "/mnt/ans_ranker/pk200"#pkdev
     # example_file = pk_dir+"/examples_.pk"
     # feature_file = pk_dir+"/features_.pk"
     # results_file = pk_dir+"/allresults_.pk"
-    # #-------------------------------------output files-----------------------------------------
+    #-------------------------------------output files-----------------------------------------
     # nbest_pk_file = pk_dir+"/all_nbest_pred.pk"# exampleid:{30 answer candidates}
     # one_pred_json_file = pk_dir+"/predictions.json"#offical prediction file
     # nbest_pred_with_sent_file = pk_dir+"/all_nbest_with_sent.pk"#example:{30 answer candidates, and each answer is associated with its sentences}
-    #------------------------------------------------------------------------------------------
+    #--------------------------------------GCRend----------------------------------------------
     all_examples = pickle.load(open(example_file, "rb"))
     all_features = pickle.load(open(feature_file, "rb"))
     all_results = pickle.load(open(results_file, "rb"))
-
+    #
     all_examples_dict = {}
     for e in all_examples:
         all_examples_dict[e.qas_id] = e
-
-    #----------------------------------output files-------------------------------------------
+    #
+    # #----------------------------------output files-------------------------------------------
     output_prediction_file = one_pred_json_file
     all_nq_prediction, all_nbest_predictions = write_nq_predictions(all_examples, all_features, all_results,
                                                                     n_best_size=30,
@@ -373,11 +374,12 @@ if __name__ == '__main__':
                                                                     verbose_logging=False,
                                                                     version_2_with_negative=True,
                                                                     nbest_pred_file=nbest_pk_file)
+    #
     # # ------------------------------------answer ranker------------------------------------------
     # all_nbest_predictions = pickle.load(open(nbest_pk_file, "rb"))
     all_nbest_with_sents = {}
     count_all_sents = 0
-    import tqdm
+    from tqdm import tqdm
     for (eid,nbest_pred) in tqdm(all_nbest_predictions.items()):
         example = all_examples_dict[eid]
         #------------nq_context_map to a dict---------------
@@ -390,10 +392,11 @@ if __name__ == '__main__':
         idx = [i for i, n in enumerate(doc_tokens) if n == "." or n == "!" or n == "?"]
         if len(idx) == 0:
             idx = [len(doc_tokens)]
-        elif idx[-1] != len(doc_tokens):
-            idx = idx + [len(doc_tokens)]
+        # elif idx[-1] != len(doc_tokens):
+        #     idx = idx + [len(doc_tokens)]
         sent_ends = list(map(lambda x: x + 1, idx))
         sent_starts = [0] + sent_ends
+        sent_ends.append(len(doc_tokens)+1)
         sent_spans = list(zip(sent_starts, sent_ends))#print(" ".join(doc_tokens[start:end]))
         #---------------------------------------------------
         nbest_pred_with_sent = []
@@ -415,18 +418,31 @@ if __name__ == '__main__':
                 start_of_sentence = 0
                 end_of_sentence = 0
                 for i in range(len(sent_starts)-1):
-                    if start_tok_idx>=sent_starts[i] and start_tok_idx<= sent_starts[i+1]:
+                    if start_tok_idx>=sent_starts[i] and start_tok_idx< sent_starts[i+1]:
                         start_of_sentence = sent_starts[i]
                         break
-                for i in range(len(sent_ends)-1):
-                    if end_tok_idx>=sent_ends[i] and end_tok_idx<= sent_ends[i+1]:
-                        end_of_sentence = sent_ends[i+1]
-                        break
+                if end_tok_idx < sent_ends[0]:
+                    end_of_sentence = sent_ends[0]
+                else:
+                    for i in range(len(sent_ends)-1):
+                        if end_tok_idx>=sent_ends[i] and end_tok_idx< sent_ends[i+1]:
+                            end_of_sentence = sent_ends[i+1]
+                            break
                 sentlist.append(" ".join(doc_tokens[start_of_sentence:end_of_sentence]))
                 ans["sent"] = " ".join(doc_tokens[start_of_sentence:end_of_sentence])
-                ans["sent_start_idx"] = start_of_sentence
-                ans["sent_end_idx"] = end_of_sentence
+                ans["sent_start_doc_token_idx"] = start_of_sentence
+                ans["sent_end_doc_token_idx"] = end_of_sentence-2
+                ans["sent_start_nq_idx"] = example.nq_context_map[start_of_sentence]
+                ans["sent_start_nq_idx"] = example.nq_context_map[end_of_sentence-2]
+                ans["question"] = example.question_text
+                ans["doc_tokens"] = example.doc_tokens
+                ans["doc_tokens_nqidx_map"] = example.nq_context_map
+
                 nbest_pred_with_sent.append(ans)
+                if ans["sent"]=="":
+                    print("!")
+                if ans["text"] not in ans["sent"]:
+                    print("answer: {}, sent: {}".format(ans["text"],ans["sent"]))
 
         all_nbest_with_sents[eid] = nbest_pred_with_sent
         count_all_sents += len(set(sentlist))
