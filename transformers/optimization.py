@@ -194,7 +194,7 @@ class L2GradClipNative(object):
         pass
 
     def __call__(self, parameters, max_grad_norm):
-        torch.nn.utils.grad_clip_norm_(parameters, max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(parameters, max_grad_norm)
 
 try:
     from apex.optimizers import FusedAdam
