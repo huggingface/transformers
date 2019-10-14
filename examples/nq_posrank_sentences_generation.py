@@ -340,7 +340,7 @@ if __name__ == '__main__':
     #--------------------------------------input files-----------------------------------------
     example_file = args.example_pk_file
     feature_file = args.feature_pk_file
-    results_file = args.results_file
+    results_file = args.results_pk_file
     #-------------------------------------output files-----------------------------------------
     nbest_pk_file = args.output_nbest_pk_file# exampleid:{30 answer candidates}
     one_pred_json_file = args.output_pred_file#offical prediction file
