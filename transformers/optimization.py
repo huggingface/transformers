@@ -204,7 +204,9 @@ try:
     # the original version
     class AdamWApex(FusedAdam):
         def __init__(self, *args, **kwargs):
-            super(AdamWApex, self).__init__(*args, **kwargs, adam_w_mode=True)
+            # Needs to be set to match behaviour of original implementation
+            kwargs['adam_w_mode'] = True
+            super(AdamWApex, self).__init__(*args, **kwargs)
 
     AdamW = AdamWApex
 
