@@ -433,7 +433,7 @@ if __name__ == '__main__':
                 ans["sent_start_doc_token_idx"] = start_of_sentence
                 ans["sent_end_doc_token_idx"] = end_of_sentence-2
                 ans["sent_start_nq_idx"] = example.nq_context_map[start_of_sentence]
-                ans["sent_start_nq_idx"] = example.nq_context_map[end_of_sentence-2]
+                ans["sent_end_nq_idx"] = example.nq_context_map[end_of_sentence-2]
                 ans["question"] = example.question_text
                 ans["doc_tokens"] = example.doc_tokens
                 ans["doc_tokens_nqidx_map"] = example.nq_context_map

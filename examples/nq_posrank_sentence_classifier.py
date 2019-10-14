@@ -109,7 +109,7 @@ if __name__ == '__main__':
     #----------------------------------modified pred_with_sent-------------------------------------
     # parser.add_argument("--label_file", default=None, type=str, required=True)
     # parser.add_argument("--predwithsent_file", default=None, type=str, required=True)
-    # parser.add_argument("--output_file", default=None, type=str, required=True)
+    parser.add_argument("--output_file", default=None, type=str, required=True)
     args = parser.parse_args()
     # label_file = args.label_file
     label_file = "/data/nieping/pytorch-transformers/data/nq_sentence_selector/train_5_piece/train5piece_short_label.pk"
