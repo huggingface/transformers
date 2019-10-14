@@ -218,12 +218,14 @@ class PreTrainedSeq2seq(nn.Module):
         if encoder_hidden_states is None:
             encoder_outputs = self.encoder(*inputs, *kwargs)
             encoder_hidden_states = encoder_outputs[0]
+        else:
+            encoder_outputs = (,)
 
         # Decode
         decoder_kwargs['encoder_hidden_states'] = encoder_hidden_states
         decoder_outputs = self.decoder(**decoder_kwargs)
 
-        return decoder_outputs
+        return decoder_outputs + encoder_outputs
 
 
 class Model2Model(PreTrainedSeq2seq):
