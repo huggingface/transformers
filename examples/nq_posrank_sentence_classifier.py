@@ -21,7 +21,7 @@ if __name__ == '__main__':
     for i in range(0,5):
         input_files.append(os.path.join(args.input_gzip_dir,"nq-train-0{}.jsonl.gz".format(i)))
     example_short_anno = {}
-    import tqdm
+    from tqdm import tqdm
     for input_file in tqdm(input_files):
         with _open(input_file) as input_jsonl:
 
