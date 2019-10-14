@@ -10,6 +10,7 @@ similar API between the different models.
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
 | [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
+| [Seq2seq Model fine-tuning](#seq2seq-model-fine-tuning) | Fine-tuning the library models for seq2seq tasks on the CNN/Daily Mail dataset. |
 
 ## Language model fine-tuning
 
@@ -387,6 +388,30 @@ f1 = 93.15
 exact_match = 86.91
 ```
 
-This fine-tuneds model is available as a checkpoint under the reference
+This fine-tuned model is available as a checkpoint under the reference
 `bert-large-uncased-whole-word-masking-finetuned-squad`.
 
+## Seq2seq model fine-tuning
+
+Based on the script [`run_seq2seq_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_seq2seq_finetuning.py).
+
+Before running this script you should download **both** CNN and Daily Mail datasets (the links next to "Stories") from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/) in the same folder. Then uncompress the archives by running:
+
+```bash
+tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
+```
+
+We will refer as `$DATA_PATH` the path to where you uncompressed both archive.
+
+## Bert2Bert and abstractive summarization
+
+```bash
+export DATA_PATH=/path/to/dataset/
+
+python run_seq2seq_finetuning.py \
+    --output_dir=output \
+    --model_type=bert2bert \
+    --model_name_or_path=bert2bert \
+    --do_train \
+    --data_path=$DATA_PATH \
+```
