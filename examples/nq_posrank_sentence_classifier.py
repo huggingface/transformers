@@ -11,122 +11,113 @@ def _open(path):
     else:
         print("wrong file")
         exit()
-def convert_squad_to_sentence_cls(input_file, version=1):
-    out_file =  input_file + '.sent'
-    sentence_examples = []
-    data = []
-    with open(input_file, 'r', encoding='utf-8') as fin:
-        data = json.load(fin)['data']
-    ans_sent = 0
-    not_sent = 0
-    for article in tqdm(data):
-        for paragraph in article['paragraphs']:
-            context =paragraph['context']
-            for qa in paragraph['qas']:
-                id_, question, answers, is_impossible = qa['id'], qa['question'], qa['answers'], qa.get('is_impossible', None)
+def read_annotation_for_traingzip(gzip_dir,number):
+    input_files = []
+    for i in range(0,number):
+        input_files.append(os.path.join(gzip_dir,"nq-train-0{}.jsonl.gz".format(i)))
+    example_short_anno = {}
+    from tqdm import tqdm
+    for input_file in tqdm(input_files):
+        with _open(input_file) as input_jsonl:
 
-                sent_ends = [m.start() for m in re.finditer('\.', context)]
-                sent_ends = list(map(lambda x:x+1, sent_ends))
-                sent_starts = [0] + sent_ends
-                sent_spans = list(zip(sent_starts, sent_ends))
-                context_sent_examples = [{'question': question, 'sentence': context[sentence[0]:sentence[1]],
-                                         'id': id_, 'answers': answers, 'is_impossible': is_impossible, 'sent_span': sentence}
-                                         for sentence in sent_spans]
-                for i in range(len(context_sent_examples)):
-                    if context_sent_examples[i]['sent_span'][1] - context_sent_examples[i]['sent_span'][0]< 1:
-                        print('sentent is too short!')
-                        print('squad id:', id_, 'sent_span:', context_sent_examples[i]['sentence'])
-
-                    if context_sent_examples[i]['is_impossible']:
-                        context_sent_examples[i]['label'] = '0'
-                        not_sent += 1
+            for line in input_jsonl:
+                e = json.loads(line, object_pairs_hook=collections.OrderedDict)
+                eid = e["example_id"]
+                anno = e["annotations"][0]
+                question = " ".join(e["question_tokens"])
+                short_ans = anno["short_answers"]
+                if len(short_ans) == 0:
+                    example_short_anno[eid] = [-1, -1, False,question]
+                else:
+                    answer = short_ans[0]
+                    start_tok = answer["start_token"]
+                    end_tok = answer["end_token"]
+                    if start_tok == -1 or end_tok ==-1:
+                        example_short_anno[eid] = [start_tok,end_tok,False,question]
+                        print("!")
                     else:
-                        is_ans = False
-                        for answer in answers:
-                            ans_start = answer['answer_start']
-                            ans_end = ans_start + len(answer['text'])
-                            if context_sent_examples[i]['sent_span'][0] <= ans_start and context_sent_examples[i]['sent_span'][1] >= ans_end:
-                                context_sent_examples[i]['label'] = '1'
-                                is_ans = True
-                                ans_sent += 1
-                                break
-                        if not is_ans:
-                            not_sent += 1
-                            context_sent_examples[i]['label'] = '0'
-                sentence_examples.extend(context_sent_examples)
-    print('can answer:', ans_sent)
-    print('cannot answer:', not_sent)
-    with open(out_file, 'w', encoding='utf-8') as fout:
-        for example in sentence_examples:
-            fout.write(json.dumps(example) + '\n')
+                        example_short_anno[eid] = [start_tok,end_tok,True,question]
+    print("total examples",len(example_short_anno))
+    return example_short_anno
 
-if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # # Required parameters
-    # parser.add_argument("--input_gzip_dir", default=None, type=str, required=True)
-    # parser.add_argument("--output_pklabel_file", default=None, type=str, required=True)
-    # args = parser.parse_args()
-    # # -------------------------------------generated labels-------------------------------------------
-    # input_files = []
-    # for i in range(0,5):
-    #     input_files.append(os.path.join(args.input_gzip_dir,"nq-train-0{}.jsonl.gz".format(i)))
-    # example_short_anno = {}
-    # from tqdm import tqdm
-    # for input_file in tqdm(input_files):
-    #     with _open(input_file) as input_jsonl:
-    #
-    #         for line in input_jsonl:
-    #             e = json.loads(line, object_pairs_hook=collections.OrderedDict)
-    #             eid = e["example_id"]
-    #             anno = e["annotations"][0]
-    #             question = " ".join(e["question_tokens"])
-    #             short_ans = anno["short_answers"]
-    #             if len(short_ans) == 0:
-    #                 example_short_anno[eid] = [-1, -1, False,question]
-    #             else:
-    #                 answer = short_ans[0]
-    #                 start_tok = answer["start_token"]
-    #                 end_tok = answer["end_token"]
-    #                 if start_tok == -1 or end_tok ==-1:
-    #                     example_short_anno[eid] = [start_tok,end_tok,False,question]
-    #                     print("!")
-    #                 else:
-    #                     example_short_anno[eid] = [start_tok,end_tok,True,question]
-    # print(len(example_short_anno))
-    # pickle.dump(example_short_anno,open(args.output_pklabel_file,"wb"))
+def convert_predwithsent_cls_format(example_labels,predwithsent_files):
+    '''
 
-    #----------------------------------modified pred_with_sent-------------------------------------
-    label_file = "/data/nieping/pytorch-transformers/data/nq_sentence_selector/train_5_piece/train5piece_short_label.pk"
-    label_file = "train5piece_short_label.pk"
-    example_labels = pickle.load(open(label_file,"rb"))#30632
-
-    pred_files = []
-    for i in range(4):
-        pred_files.append("/data/nieping/pytorch-transformers/data/nq_sentence_selector/train_5_piece/train5piece_nbest_predwithsent_{}.pk".format(i))
-
+    :param example_labels: a dict{example_id:[start_nq_idx, end_nq_idx, False/True,question]}
+    :param predwithsent_files: a dict {example_id:{generated from nq_posrank_Sentences_generation}}
+    :return:
+    '''
     all_sents_examples = []
     count_no_annotation_examples = 0
     count_has_annotation_examples = 0
     count_has_answer = 0
     count_no_answer = 0
-    from tqdm import tqdm
-    for file in tqdm(pred_files):
-        file = "train5piece_nbest_predwithsent_0.pk"
-        data = pickle.load(open(file,"rb"))
-        for (eid,ans_list) in data.items():
-            #----------generated distinguished sentens
-            sents_dict = {}
-            for ana in ans_list:
-                if ana["sent"] in sents_dict:
-                    continue
-                else:
-                    print(ana["sent"])
-                    print(ana["text"])
+    data = pickle.load(open(predwithsent_files,"rb"))
+    for (eid,ans_list) in data.items():
+        question = ans_list[0]["question"]
+        #----------generated distinguished sentens
+        sents_dict = {}
+        if int(eid) in example_labels:
+            label = example_labels[int(eid)]
+            count_has_annotation_examples+=1
+        else:
+            print("an example without annotation")
+            count_no_annotation_examples +=1
+            continue
+
+        for ana in ans_list:
+            if ana["sent"] in sents_dict:
+                continue
+            else:
+                sents_dict[ana["sent"]] = [ana["sent_start_nq_idx"],ana["sent_end_nq_idx"]]
+
+        for (sent,span) in sents_dict.items():
+            if label[-1] and label[0] >= span[0] and label[1] <= span[1]:
+                sent_label = 1
+                count_has_answer+=1
+            else:
+                sent_label = 0
+                count_no_answer+=1
+            all_sents_examples.append({
+                'example_id':int(eid),
+                'question': question,
+                'sentence': sent,
+                'sent_span': span,
+                'sent_label':sent_label,
+            })
+    print("no annotation examples:",count_no_annotation_examples)
+    print("has annotation examples:",count_has_annotation_examples)
+    print("All sents:",len(all_sents_examples))
+    print("\t positive sent:",count_has_answer)
+    print("\t negative sent:",count_no_answer)
+    return all_sents_examples
 
 
-            # if int(eid) in example_labels:
-            #     label = example_labels[int(eid)]
-            # else:
-            #     label = [-1,-1,False]
-            #     continue
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    # Required parameters
 
+
+
+    # # -------------------------------------generated labels-------------------------------------------
+    # parser.add_argument("--input_gzip_dir", default=None, type=str, required=True)
+    # parser.add_argument("--output_label_file", default=None, type=str, required=True)
+    # parser.add_argument("--output_pklabel_file", default=None, type=str, required=True)
+    # annotated_label = read_annotation_for_traingzip(args.input_gzip_dir, 5, args.output_label_file)
+    # pickle.dump(annotated_label, open(args.output_file, "wb"))
+    # print("Dumpted annotations into {}".format(args.output_file))
+    #----------------------------------modified pred_with_sent-------------------------------------
+    # parser.add_argument("--label_file", default=None, type=str, required=True)
+    # parser.add_argument("--predwithsent_file", default=None, type=str, required=True)
+    # parser.add_argument("--output_file", default=None, type=str, required=True)
+    args = parser.parse_args()
+    # label_file = args.label_file
+    label_file = "/data/nieping/pytorch-transformers/data/nq_sentence_selector/train_5_piece/train5piece_short_label.pk"
+    example_labels = pickle.load(open(label_file,"rb"))#read_annotation_for_trainingzip
+    all_sents = []
+    for i in range(4):
+        file = "/data/nieping/pytorch-transformers/data/nq_sentence_selector/train_5_piece/train5piece_nbest_predwithsent_{}.pk".format(i)
+        print("pred_with_sent_file:",)
+        all_sents.extend(convert_predwithsent_cls_format(example_labels,file))
+    pickle.dump(all_sents,open(args.output_file,"wb"))
+    print("Finised dump:",{args.output_file})
