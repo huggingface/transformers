@@ -302,7 +302,11 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 max_seq_length=args.max_seq_length,
                                                 doc_stride=args.doc_stride,
                                                 max_query_length=args.max_query_length,
-                                                is_training=not evaluate)
+                                                is_training=not evaluate,
+                                                cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+                                                pad_token_segment_id=3 if args.model_type in ['xlnet'] else 0,
+                                                cls_token_at_end=True if args.model_type in ['xlnet'] else False,
+                                                sequence_a_is_doc=True if args.model_type in ['xlnet'] else False)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
