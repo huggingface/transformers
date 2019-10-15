@@ -159,8 +159,6 @@ class MultiHeadSelfAttention(nn.Module):
 
         dim_per_head = self.dim // self.n_heads
 
-        assert 2 <= mask.dim() <= 3
-        causal = (mask.dim() == 3)
         mask_reshp = (bs, 1, 1, k_length)
 
         def shape(x):

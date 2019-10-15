@@ -33,21 +33,12 @@ from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_tf_utils import TFPreTrainedModel, TFConv1D, TFSequenceSummary, shape_list, get_initializer
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-tf_model.h5",
 }
-
-def load_transfo_xl_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
-
 
 class TFPositionalEmbedding(tf.keras.layers.Layer):
     def __init__(self, demb, **kwargs):
@@ -577,7 +568,6 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     """
     config_class = TransfoXLConfig
     pretrained_model_archive_map = TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_transfo_xl_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 

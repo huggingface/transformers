@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/Transformer-XL/XLNet)
+""" Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -26,12 +26,13 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from transformers import GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig
+from transformers import GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig, CTRLConfig
 
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from transformers import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer
 from transformers import XLNetLMHeadModel, XLNetTokenizer
 from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
+from transformers import CTRLLMHeadModel, CTRLTokenizer
 from transformers import XLMWithLMHeadModel, XLMTokenizer
 
 
@@ -42,10 +43,11 @@ logger = logging.getLogger(__name__)
 
 MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig)), ())
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig, CTRLConfig)), ())
 
 MODEL_CLASSES = {
     'gpt2': (GPT2LMHeadModel, GPT2Tokenizer),
+    'ctrl': (CTRLLMHeadModel, CTRLTokenizer),
     'openai-gpt': (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     'xlnet': (XLNetLMHeadModel, XLNetTokenizer),
     'transfo-xl': (TransfoXLLMHeadModel, TransfoXLTokenizer),
@@ -105,8 +107,8 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
     return logits
 
 
-def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=0, top_p=0.0, is_xlnet=False,
-                    xlm_lang=None, device='cpu'):
+def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=0, top_p=0.0, repetition_penalty=1.0,
+                    is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, xlm_lang=None, device='cpu'):
     context = torch.tensor(context, dtype=torch.long, device=device)
     context = context.unsqueeze(0).repeat(num_samples, 1)
     generated = context
@@ -124,13 +126,27 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 target_mapping[0, 0, -1] = 1.0  # predict last token
                 inputs = {'input_ids': input_ids, 'perm_mask': perm_mask, 'target_mapping': target_mapping}
 
-            if xlm_lang is not None:
-                inputs["langs"] = torch.tensor([xlm_lang] * inputs["input_ids"].shape[1]).view(1, -1)
+            if is_xlm_mlm and xlm_mask_token:
+                # XLM MLM models are direct models (predict same token, not next token)
+                # => need one additional dummy token in the input (will be masked and guessed)
+                input_ids = torch.cat((generated, torch.full((1, 1), xlm_mask_token, dtype=torch.long, device=device)), dim=1)
+                inputs = {'input_ids': input_ids}
 
-            outputs = model(**inputs)  # Note: we could also use 'past' with GPT-2/Transfo-XL/XLNet (cached hidden-states)
-            next_token_logits = outputs[0][0, -1, :] / temperature
+            if xlm_lang is not None:
+                inputs["langs"] = torch.tensor([xlm_lang] * inputs["input_ids"].shape[1], device=device).view(1, -1)
+
+            outputs = model(**inputs)  # Note: we could also use 'past' with GPT-2/Transfo-XL/XLNet/CTRL (cached hidden-states)
+            next_token_logits = outputs[0][0, -1, :] / (temperature if temperature > 0 else 1.)
+
+            # reptition penalty from CTRL (https://arxiv.org/abs/1909.05858)
+            for _ in set(generated):
+                next_token_logits[_] /= repetition_penalty
+                
             filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-            next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
+            if temperature == 0: #greedy sampling:
+                next_token = torch.argmax(filtered_logits).unsqueeze(0)
+            else:
+                next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
             generated = torch.cat((generated, next_token.unsqueeze(0)), dim=1)
     return generated
 
@@ -145,7 +161,10 @@ def main():
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
     parser.add_argument("--length", type=int, default=20)
-    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--temperature", type=float, default=1.0,
+                        help="temperature of 0 implies greedy sampling")
+    parser.add_argument("--repetition_penalty", type=float, default=1.0,
+                        help="primarily useful for CTRL model; in that case, use 1.2")
     parser.add_argument("--top_k", type=int, default=0)
     parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--no_cuda", action='store_true',
@@ -175,7 +194,11 @@ def main():
     elif args.length < 0:
         args.length = MAX_LENGTH  # avoid infinite loop
 
-    print(args)
+    logger.info(args)
+    if args.model_type in ["ctrl"]:
+        if args.temperature > 0.7 : 
+            logger.info('CTRL typically works better with lower temperatures (and lower top_k).')
+
     while True:
         xlm_lang = None
         # XLM Language usage detailed in the issues #1414
@@ -189,6 +212,13 @@ def main():
                     language = input("Using XLM. Select language in " + str(list(tokenizer.lang2id.keys())) + " >>> ")
             xlm_lang = tokenizer.lang2id[language]
 
+        # XLM masked-language modeling (MLM) models need masked token (see details in sample_sequence)
+        is_xlm_mlm = args.model_type in ["xlm"] and 'mlm' in args.model_name_or_path
+        if is_xlm_mlm:
+            xlm_mask_token = tokenizer.mask_token_id
+        else:
+            xlm_mask_token = None
+
         raw_text = args.prompt if args.prompt else input("Model prompt >>> ")
         if args.model_type in ["transfo-xl", "xlnet"]:
             # Models with memory likes to have a long prompt for short inputs.
@@ -201,7 +231,10 @@ def main():
             temperature=args.temperature,
             top_k=args.top_k,
             top_p=args.top_p,
+            repetition_penalty=args.repetition_penalty,
             is_xlnet=bool(args.model_type == "xlnet"),
+            is_xlm_mlm=is_xlm_mlm,
+            xlm_mask_token=xlm_mask_token,
             xlm_lang=xlm_lang,
             device=args.device,
         )

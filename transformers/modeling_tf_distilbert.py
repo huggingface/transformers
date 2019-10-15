@@ -31,7 +31,6 @@ import tensorflow as tf
 from .configuration_distilbert import DistilBertConfig
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, get_initializer
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +64,6 @@ def gelu_new(x):
     cdf = 0.5 * (1.0 + tf.tanh(
         (np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
     return x * cdf
-
-def load_distilbert_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-    attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
-    tf_inputs = [inputs_list, attns_list]
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 class TFEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -226,8 +217,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
         dim_per_head = self.dim // self.n_heads
 
-        assert 2 <= len(tf.shape(mask)) <= 3
-        causal = (len(tf.shape(mask)) == 3)
         mask_reshape = [bs, 1, 1, k_length]
 
         def shape(x):
@@ -456,7 +445,6 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     """
     config_class = DistilBertConfig
     pretrained_model_archive_map = TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_distilbert_pt_weights_in_tf2
     base_model_prefix = "distilbert"
 
 

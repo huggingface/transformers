@@ -3,7 +3,7 @@ Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/m
 
 To create the package for pypi.
 
-1. Change the version in __init__.py and setup.py.
+1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
 
 2. Commit these changes with the message: "Release: VERSION"
 
@@ -38,7 +38,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="transformers",
-    version="2.0.0",
+    version="2.1.1",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
