@@ -395,13 +395,17 @@ This fine-tuned model is available as a checkpoint under the reference
 
 Based on the script [`run_seq2seq_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_seq2seq_finetuning.py).
 
-Before running this script you should download **both** CNN and Daily Mail datasets (the links next to "Stories") from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/) in the same folder. Then uncompress the archives by running:
+Before running this script you should download **both** CNN and Daily Mail
+datasets from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/)  (the
+links next to "Stories") in the same folder. Then uncompress the archives by running:
 
 ```bash
 tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
 ```
 
-We will refer as `$DATA_PATH` the path to where you uncompressed both archive.
+note that the finetuning script **will not work** if you do not download both
+datasets. We will refer as `$DATA_PATH` the path to where you uncompressed both
+archive.
 
 ## Bert2Bert and abstractive summarization
 
