@@ -53,6 +53,14 @@ Here is the full list of the currently provided pretrained models together with 
 |                   | ``bert-base-cased-finetuned-mrpc``                         | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
 |                   |                                                            | | The ``bert-base-cased`` model fine-tuned on MRPC                                                                                    |
 |                   |                                                            | (see `details of fine-tuning in the example section <https://huggingface.co/transformers/examples.html>`__)                           |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-german-dbmdz-cased``                           | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on cased German text by DBMDZ                                                                                               |
+|                   |                                                            | (see `details on dbmdz repository <https://github.com/dbmdz/german-bert>`__).                                                         |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-german-dbmdz-uncased``                         | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on uncased German text by DBMDZ                                                                                             |
+|                   |                                                            | (see `details on dbmdz repository <https://github.com/dbmdz/german-bert>`__).                                                         |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | GPT               | ``openai-gpt``                                             | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
 |                   |                                                            | | OpenAI GPT English model                                                                                                            |
@@ -129,4 +137,8 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | | The DistilGPT2 model distilled from the GPT2 model `gpt2` checkpoint.                                                               |
 |                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| CTRL              | ``ctrl``                                                   | | 48-layer, 1280-hidden, 16-heads, 1.6B parameters                                                                                    |
+|                   |                                                            | | Salesforce's Large-sized CTRL English model                                                                                         |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+
 .. <https://huggingface.co/transformers/examples.html>`__

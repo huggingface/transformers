@@ -28,7 +28,12 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-from tensorboardX import SummaryWriter
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
 from tqdm import tqdm, trange
 
 from transformers import (WEIGHTS_NAME, BertConfig,
@@ -155,7 +160,7 @@ def train(args, train_dataset, model, tokenizer):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
-            if (step + 1) % args.gradient_accumulation_steps == 0:
+            if (step + 1) % args.gradient_accumulation_steps == 0 and not args.tpu:
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
@@ -180,6 +185,11 @@ def train(args, train_dataset, model, tokenizer):
                     model_to_save.save_pretrained(output_dir)
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
+
+            if args.tpu:
+                args.xla_model.optimizer_step(optimizer, barrier=True)
+                model.zero_grad()
+                global_step += 1
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -249,7 +259,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         result = compute_metrics(eval_task, preds, out_label_ids)
         results.update(result)
 
-        output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+        output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results {} *****".format(prefix))
             for key in sorted(result.keys()):
@@ -271,7 +281,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length),
         str(task)))
-    if os.path.exists(cached_features_file):
+    if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
@@ -380,6 +390,15 @@ def main():
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
 
+    parser.add_argument('--tpu', action='store_true',
+                        help="Whether to run on the TPU defined in the environment variables")
+    parser.add_argument('--tpu_ip_address', type=str, default='',
+                        help="TPU IP address if none are set in the environment variables")
+    parser.add_argument('--tpu_name', type=str, default='',
+                        help="TPU name if none are set in the environment variables")
+    parser.add_argument('--xrt_tpu_config', type=str, default='',
+                        help="XRT TPU config if none are set in the environment variables")
+
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
@@ -412,6 +431,23 @@ def main():
         torch.distributed.init_process_group(backend='nccl')
         args.n_gpu = 1
     args.device = device
+
+    if args.tpu:
+        if args.tpu_ip_address:
+            os.environ["TPU_IP_ADDRESS"] = args.tpu_ip_address
+        if args.tpu_name:
+            os.environ["TPU_NAME"] = args.tpu_name
+        if args.xrt_tpu_config:
+            os.environ["XRT_TPU_CONFIG"] = args.xrt_tpu_config
+
+        assert "TPU_IP_ADDRESS" in os.environ
+        assert "TPU_NAME" in os.environ
+        assert "XRT_TPU_CONFIG" in os.environ
+
+        import torch_xla
+        import torch_xla.core.xla_model as xm
+        args.device = xm.xla_device()
+        args.xla_model = xm
 
     # Setup logging
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -458,7 +494,7 @@ def main():
 
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0) and not args.tpu:
         # Create output directory if needed
         if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(args.output_dir)
@@ -490,9 +526,11 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+            
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=global_step)
+            result = evaluate(args, model, tokenizer, prefix=prefix)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
 

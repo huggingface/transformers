@@ -170,7 +170,7 @@ class Attention(nn.Module):
         # w = w * self.bias + -1e9 * (1 - self.bias)  # TF implem method: mask_attn_weights
         # XD: self.b may be larger than w, so we need to crop it
         b = self.bias[:, :, : w.size(-2), : w.size(-1)]
-        w = w * b + -1e9 * (1 - b)
+        w = w * b + - 1e4 * (1 - b)
 
         if attention_mask is not None:
             # Apply the attention mask

@@ -29,7 +29,12 @@ import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-from tensorboardX import SummaryWriter
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
 from tqdm import tqdm, trange
 
 from transformers import (WEIGHTS_NAME, BertConfig,
@@ -293,7 +298,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length),
         str(task)))
-    if os.path.exists(cached_features_file):
+    if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
@@ -306,14 +311,14 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
         else:
             examples = processor.get_train_examples(args.data_dir)
         logger.info("Training number: %s", str(len(examples)))
-        features = convert_examples_to_features(examples, label_list, args.max_seq_length, tokenizer,
-            cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
-            cls_token=tokenizer.cls_token,
-            sep_token=tokenizer.sep_token,
-            sep_token_extra=bool(args.model_type in ['roberta']),
-            cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+        features = convert_examples_to_features(
+            examples,
+            label_list,
+            args.max_seq_length,
+            tokenizer,
             pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
-            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0)
+            pad_token_segment_id=4 if args.model_type in ['xlnet'] else 0
+        )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -362,7 +367,7 @@ def main():
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--do_test", action='store_true', help='Whether to run test on the test set')
     parser.add_argument("--evaluate_during_training", action='store_true',
-                        help="Rul evaluation during training at each logging step.")
+                        help="Run evaluation during training at each logging step.")
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
@@ -512,9 +517,11 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+            
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=global_step)
+            result = evaluate(args, model, tokenizer, prefix=prefix)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
 
@@ -528,9 +535,11 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
+            
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=global_step, test=True)
+            result = evaluate(args, model, tokenizer, prefix=prefix, test=True)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
     if best_steps:
