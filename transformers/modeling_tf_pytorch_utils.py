@@ -198,7 +198,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     tf_model = tf_model_class(pt_model.config)
 
     if tf_inputs is None:
-        tf_inputs = tf.constant(DUMMY_INPUTS)
+        tf_inputs = tf_model.dummy_inputs
 
     if tf_inputs is not None:
         tfo = tf_model(tf_inputs, training=False)  # Make sure model is built
