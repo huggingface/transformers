@@ -1,3 +1,4 @@
 tensorboardX
 tensorboard
 scikit-learn
+seqeval
