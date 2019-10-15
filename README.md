@@ -176,10 +176,11 @@ BERT_MODEL_CLASSES = [BertModel, BertForPreTraining, BertForMaskedLM, BertForNex
 # All the classes for an architecture can be initiated from pretrained weights for this architecture
 # Note that additional weights added for fine-tuning are only initialized
 # and need to be trained on the down-stream task
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+pretrained_weights = 'bert-base-uncased'
+tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
 for model_class in BERT_MODEL_CLASSES:
     # Load pretrained model/tokenizer
-    model = model_class.from_pretrained('bert-base-uncased')
+    model = model_class.from_pretrained(pretrained_weights)
 
     # Models can return full list of hidden-states & attentions weights at each layer
     model = model_class.from_pretrained(pretrained_weights,
