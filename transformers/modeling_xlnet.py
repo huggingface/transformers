@@ -188,11 +188,8 @@ def swish(x):
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
 
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as XLNetLayerNorm
-except (ImportError, AttributeError) as e:
-    logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    from torch.nn import LayerNorm as XLNetLayerNorm
+XLNetLayerNorm = nn.LayerNorm
+
 
 class XLNetRelativeAttention(nn.Module):
     def __init__(self, config):
