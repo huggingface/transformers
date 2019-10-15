@@ -5,11 +5,34 @@ similar API between the different models.
 
 | Section                    | Description                                                                                                                                                |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [TensorFlow 2.0 models on GLUE](#TensorFlow-2.0-Bert-models-on-GLUE) | Examples running BERT TensorFlow 2.0 model on the GLUE tasks. 
 | [Language Model fine-tuning](#language-model-fine-tuning) | Fine-tuning the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
 | [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
+
+## TensorFlow 2.0 Bert models on GLUE
+
+Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/run_tf_glue.py).
+
+Fine-tuning the library TensorFlow 2.0 Bert model for sequence classification on the  MRPC task of the GLUE benchmark: [General Language Understanding Evaluation](https://gluebenchmark.com/).
+
+This script has an option for mixed precision (Automatic Mixed Precision / AMP) to run models on Tensor Cores (NVIDIA Volta/Turing GPUs) and future hardware and an option for XLA, which uses the XLA compiler to reduce model runtime.
+Options are toggled using `USE_XLA` or `USE_AMP` variables in the script.
+These options and the below benchmark are provided by @tlkh.
+
+Quick benchmarks from the script (no other modifications):
+
+| GPU    | Mode | Time (2nd epoch) | Val Acc (3 runs) |
+| --------- | -------- | ----------------------- | ----------------------|
+| Titan V | FP32 | 41s | 0.8438/0.8281/0.8333 |
+| Titan V | AMP | 26s | 0.8281/0.8568/0.8411 |
+| V100    | FP32 | 35s | 0.8646/0.8359/0.8464 |
+| V100    | AMP | 22s | 0.8646/0.8385/0.8411 |
+| 1080 Ti | FP32 | 55s | - | 
+
+Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
 
 ## Language model fine-tuning
 
