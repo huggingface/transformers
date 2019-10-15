@@ -345,9 +345,9 @@ eval_loss = 0.44457291918821606
 
 Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py).
 
-#### Fine-tuning on SQuAD
+#### Fine-tuning BERT on SQuAD
 
-This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) 
+This example code fine-tunes BERT on the SQuAD v1.1 dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) 
 on a single tesla V100 16GB. The data for SQuAD can be downloaded with the following links and should be saved in a 
 $SQUAD_DIR directory.
 
@@ -413,6 +413,51 @@ exact_match = 86.91
 
 This fine-tuneds model is available as a checkpoint under the reference
 `bert-large-uncased-whole-word-masking-finetuned-squad`.
+
+#### Fine-tuning RoBERTa on SQuAD
+
+This is an example using 4-GPUs distributed training to fine-tune RoBERTa-large model on the SQuAD v2.0 dataset:
+
+* [train-v2.0.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json)
+* [dev-v2.0.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json)
+* [evaluate-v2.0.py](https://worksheets.codalab.org/rest/bundles/0x6b567e1cf2e041ec80d7098f031c5c9e/contents/blob/)
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 run_squad.py \
+    --model_type roberta \
+    --model_name_or_path roberta-large \
+    --do_train \
+    --do_eval \
+    --version_2_with_negative \
+    --train_file $SQUAD_DIR/data/train-v2.0.json \
+    --predict_file $SQUAD_DIR/data/dev-v2.0.json \
+    --learning_rate 1.5e-5 \
+    --num_train_epochs 2 \
+    --max_seq_length 512 \
+    --doc_stride 128 \
+    --output_dir $SQUAD_DIR/output/roberta-large \
+    --per_gpu_eval_batch_size 12 \
+    --per_gpu_train_batch_size 12 \
+    --warmup_steps 500 \
+    --save_steps 500 \
+    --weight_decay 0.01
+```
+
+Training with the previously defined hyper-parameters yields the following results:
+
+```bash
+SQuAD v1.1
+    f1 = 89.43
+    exact_match = 86.59
+
+SQuAD v2.0
+    f1 = 94.44
+    exact_match = 88.26
+```
+
+Note: This result is achieved by using add_prefix_space=True for RoBERTa tokenization 
 
 ## Named Entity Recognition
 
