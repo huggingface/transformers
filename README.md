@@ -243,8 +243,9 @@ sentence_2 = "His findings were not compatible with this research."
 inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
 inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
 
-pred_1 = pytorch_model(**inputs_1)[0].argmax().item()
-pred_2 = pytorch_model(**inputs_2)[0].argmax().item()
+pred_1 = pytorch_model(inputs_1['input_ids'], token_type_ids=inputs_1['token_type_ids'])[0].argmax().item()
+pred_2 = pytorch_model(inputs_2['input_ids'], token_type_ids=inputs_2['token_type_ids'])[0].argmax().item()
+
 print("sentence_1 is", "a paraphrase" if pred_1 else "not a paraphrase", "of sentence_0")
 print("sentence_2 is", "a paraphrase" if pred_2 else "not a paraphrase", "of sentence_0")
 ```
