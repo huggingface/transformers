@@ -62,15 +62,15 @@ setup(
                       'regex',
                       'sentencepiece',
                       'sacremoses'],
+    extras_require=extras,
+    scripts=[
+        'transformers-cli'
+    ],
     entry_points={
       'console_scripts': [
         "transformers=transformers.__main__:main",
       ]
     },
-    extras_require=extras,
-    scripts=[
-        'transformers-cli'
-    ],
     # python_requires='>=3.5.0',
     classifiers=[
           'Intended Audience :: Science/Research',
