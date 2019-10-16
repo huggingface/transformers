@@ -52,6 +52,10 @@ def set_seed(args):
     torch.manual_seed(args.seed)
 
 
+# ------------
+# Load dataset
+# ------------
+
 class TextDataset(Dataset):
     """ Abstracts the dataset used to train seq2seq models.
 
@@ -210,6 +214,11 @@ def _fit_to_block_size(src_sequence, tgt_sequence, block_size):
 def load_and_cache_examples(args, tokenizer):
     dataset = TextDataset(tokenizer, file_path=args.data_dir)
     return dataset
+
+
+# ------------
+# Train
+# ------------
 
 
 def train(args, train_dataset, model, tokenizer):
