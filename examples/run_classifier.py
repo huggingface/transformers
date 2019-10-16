@@ -147,6 +147,8 @@ def main():
     parser.add_argument('--test', type=int, default=0, help="to evaluate test.tsv instead of dev.tsv")
     parser.add_argument('--freeze_layers', type=str, default='', help="specify layer numbers to freeze during finetuning e.g. 0,1,2 to freeze first three layers")
     parser.add_argument('--freeze_embeddings', action='store_true', help="flag to freeze embeddings")
+    parser.add_argument('--remove_layers', type=str, default='', help="specify layer numbers to remove during finetuning e.g. 0,1,2 to remove first three layers")
+
     args = parser.parse_args()
 
 
@@ -215,16 +217,16 @@ def main():
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
     model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
 
-# freezing layers during fine-tuning
+    #freezing layers during fine-tuning
     freeze_layers = args.freeze_layers
     freeze_embeddings = args.freeze_embeddings
 
-#    print (list(model.bert.embeddings.parameters()))
+    #print (list(model.bert.embeddings.parameters()))
     if freeze_embeddings:
             for param in list(model.bert.embeddings.parameters()):
                 param.requires_grad = False
             print ("Froze Embedding Layer")
-#    print (list(model.bert.embeddings.parameters()))
+    #print (list(model.bert.embeddings.parameters()))
  
     if freeze_layers is not "":
         layer_indexes = [int(x) for x in freeze_layers.split(",")]
@@ -254,6 +256,22 @@ def main():
     if args.do_train:
         if args.local_rank in [-1, 0]:
             tb_writer = SummaryWriter()
+
+        # check for model reduction
+        remove_layers = args.remove_layers
+        if remove_layers is not "":
+            layer_indexes = [int(x) for x in remove_layers.split(",")]
+            layer_indexes.sort(reverse=True)
+            for layer_idx in layer_indexes:
+                if layer_idx < 0:
+                    print ("Only positive indices allowed")
+                    sys.exit(1)
+                del(model.bert.encoder.layer[layer_idx])
+                print ("Removed Layer: ", layer_idx)
+
+	# update model config
+        model.config.num_hidden_layers = len(model.bert.encoder.layer)
+        print(model.config)
 
         # Prepare data loader
         train_examples = processor.get_train_examples(args.data_dir)
@@ -293,6 +311,7 @@ def main():
         # Prepare optimizer
 
         param_optimizer = list(model.named_parameters())
+
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
@@ -400,6 +419,9 @@ def main():
 
     ### Evaluation
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+
+        print ("Evaluation")
+        print (model.config)
 
         eval_examples = []
         cached_eval_features_file = ""
