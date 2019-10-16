@@ -24,6 +24,8 @@ from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH
 
 from .data import (is_sklearn_available,
                    InputExample, InputFeatures, DataProcessor,
+                   SingleSentenceClassificationProcessor,
+                   convert_examples_to_features,
                    glue_output_modes, glue_convert_examples_to_features,
                    glue_processors, glue_tasks_num_labels,
                    xnli_output_modes, xnli_processors, xnli_tasks_num_labels,
