@@ -350,7 +350,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     end_position = 0
                     span_is_impossible = True
                 else:
-                    doc_offset = len(query_tokens) + special_tokens_count - 1
+                    special_tokens_offset = special_tokens_count - 2 if cls_token_at_end else special_tokens_count - 1
+                    doc_offset = len(query_tokens) + special_tokens_offset
                     start_position = tok_start_position - doc_start + doc_offset
                     end_position = tok_end_position - doc_start + doc_offset
 
