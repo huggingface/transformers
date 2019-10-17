@@ -222,7 +222,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         batch_length = max(len(input_ids) for input_ids in all_input_ids)
 
         features = []
-        for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, examples)):
+        for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, self.examples)):
             if ex_index % 10000 == 0:
                 logger.info("Writing example %d", ex_index)
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
