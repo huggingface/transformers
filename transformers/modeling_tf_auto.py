@@ -18,6 +18,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
+from .configuration_auto import (BertConfig, CTRLConfig, DistilBertConfig,
+                                 GPT2Config, OpenAIGPTConfig, RobertaConfig,
+                                 TransfoXLConfig, XLMConfig, XLNetConfig)
+
 from .modeling_tf_bert import TFBertModel, TFBertForMaskedLM, TFBertForSequenceClassification, TFBertForQuestionAnswering
 from .modeling_tf_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel
 from .modeling_tf_gpt2 import TFGPT2Model, TFGPT2LMHeadModel
@@ -59,7 +63,50 @@ class TFAutoModel(object):
     """
     def __init__(self):
         raise EnvironmentError("TFAutoModel is designed to be instantiated "
-            "using the `TFAutoModel.from_pretrained(pretrained_model_name_or_path)` method.")
+            "using the `TFAutoModel.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModel.from_config(config)` methods.")
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                The model class to instantiate is selected based on the configuration class:
+                    - isInstance of `distilbert` configuration class: TFDistilBertModel (DistilBERT model)
+                    - isInstance of `roberta` configuration class: TFRobertaModel (RoBERTa model)
+                    - isInstance of `bert` configuration class: TFBertModel (Bert model)
+                    - isInstance of `openai-gpt` configuration class: TFOpenAIGPTModel (OpenAI GPT model)
+                    - isInstance of `gpt2` configuration class: TFGPT2Model (OpenAI GPT-2 model)
+                    - isInstance of `ctrl` configuration class: TFCTRLModel (Salesforce CTRL  model)
+                    - isInstance of `transfo-xl` configuration class: TFTransfoXLModel (Transformer-XL model)
+                    - isInstance of `xlnet` configuration class: TFXLNetModel (XLNet model)
+                    - isInstance of `xlm` configuration class: TFXLMModel (XLM model)
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = TFAutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        if isinstance(config, DistilBertConfig):
+            return TFDistilBertModel(config)
+        elif isinstance(config, RobertaConfig):
+            return TFRobertaModel(config)
+        elif isinstance(config, BertConfig):
+            return TFBertModel(config)
+        elif isinstance(config, OpenAIGPTConfig):
+            return TFOpenAIGPTModel(config)
+        elif isinstance(config, GPT2Config):
+            return TFGPT2Model(config)
+        elif isinstance(config, TransfoXLConfig):
+            return TFTransfoXLModel(config)
+        elif isinstance(config, XLNetConfig):
+            return TFXLNetModel(config)
+        elif isinstance(config, XLMConfig):
+            return TFXLMModel(config)
+        elif isinstance(config, CTRLConfig):
+            return TFCTRLModel(config)
+        raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -156,7 +203,7 @@ class TFAutoModel(object):
             return TFCTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+                         "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
                          "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
 
 
@@ -186,7 +233,50 @@ class TFAutoModelWithLMHead(object):
     """
     def __init__(self):
         raise EnvironmentError("TFAutoModelWithLMHead is designed to be instantiated "
-            "using the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
+            "using the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModelWithLMHead.from_config(config)` methods.")
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                The model class to instantiate is selected based on the configuration class:
+                    - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
+                    - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
+                    - isInstance of `bert` configuration class: BertModel (Bert model)
+                    - isInstance of `openai-gpt` configuration class: OpenAIGPTModel (OpenAI GPT model)
+                    - isInstance of `gpt2` configuration class: GPT2Model (OpenAI GPT-2 model)
+                    - isInstance of `ctrl` configuration class: CTRLModel (Salesforce CTRL  model)
+                    - isInstance of `transfo-xl` configuration class: TransfoXLModel (Transformer-XL model)
+                    - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
+                    - isInstance of `xlm` configuration class: XLMModel (XLM model)
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = AutoModelWithLMHead.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        if isinstance(config, DistilBertConfig):
+            return TFDistilBertForMaskedLM(config)
+        elif isinstance(config, RobertaConfig):
+            return TFRobertaForMaskedLM(config)
+        elif isinstance(config, BertConfig):
+            return TFBertForMaskedLM(config)
+        elif isinstance(config, OpenAIGPTConfig):
+            return TFOpenAIGPTLMHeadModel(config)
+        elif isinstance(config, GPT2Config):
+            return TFGPT2LMHeadModel(config)
+        elif isinstance(config, TransfoXLConfig):
+            return TFTransfoXLLMHeadModel(config)
+        elif isinstance(config, XLNetConfig):
+            return TFXLNetLMHeadModel(config)
+        elif isinstance(config, XLMConfig):
+            return TFXLMWithLMHeadModel(config)
+        elif isinstance(config, CTRLConfig):
+            return TFCTRLLMHeadModel(config)
+        raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -287,7 +377,7 @@ class TFAutoModelWithLMHead(object):
             return TFCTRLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+                         "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
                          "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
 
 
@@ -312,8 +402,39 @@ class TFAutoModelForSequenceClassification(object):
         This class cannot be instantiated using `__init__()` (throws an error).
     """
     def __init__(self):
-        raise EnvironmentError("TFAutoModelWithLMHead is designed to be instantiated "
-            "using the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
+        raise EnvironmentError("TFAutoModelForSequenceClassification is designed to be instantiated "
+            "using the `TFAutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModelForSequenceClassification.from_config(config)` methods.")
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                The model class to instantiate is selected based on the configuration class:
+                    - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
+                    - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
+                    - isInstance of `bert` configuration class: BertModel (Bert model)
+                    - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
+                    - isInstance of `xlm` configuration class: XLMModel (XLM model)
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        if isinstance(config, DistilBertConfig):
+            return TFDistilBertForSequenceClassification(config)
+        elif isinstance(config, RobertaConfig):
+            return TFRobertaForSequenceClassification(config)
+        elif isinstance(config, BertConfig):
+            return TFBertForSequenceClassification(config)
+        elif isinstance(config, XLNetConfig):
+            return TFXLNetForSequenceClassification(config)
+        elif isinstance(config, XLMConfig):
+            return TFXLMForSequenceClassification(config)
+        raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -405,7 +526,7 @@ class TFAutoModelForSequenceClassification(object):
             return TFXLMForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'xlm', 'roberta'".format(pretrained_model_name_or_path))
+                         "'distilbert', 'bert', 'xlnet', 'xlm', 'roberta'".format(pretrained_model_name_or_path))
 
 
 class TFAutoModelForQuestionAnswering(object):
@@ -428,8 +549,36 @@ class TFAutoModelForQuestionAnswering(object):
         This class cannot be instantiated using `__init__()` (throws an error).
     """
     def __init__(self):
-        raise EnvironmentError("TFAutoModelWithLMHead is designed to be instantiated "
-            "using the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
+        raise EnvironmentError("TFAutoModelForQuestionAnswering is designed to be instantiated "
+            "using the `TFAutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModelForQuestionAnswering.from_config(config)` methods.")
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                The model class to instantiate is selected based on the configuration class:
+                    - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
+                    - isInstance of `bert` configuration class: BertModel (Bert model)
+                    - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
+                    - isInstance of `xlm` configuration class: XLMModel (XLM model)
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        if isinstance(config, DistilBertConfig):
+            return TFDistilBertForQuestionAnswering(config)
+        elif isinstance(config, BertConfig):
+            return TFBertForQuestionAnswering(config)
+        elif isinstance(config, XLNetConfig):
+            return TFXLNetForQuestionAnswering(config)
+        elif isinstance(config, XLMConfig):
+            return TFXLMForQuestionAnswering(config)
+        raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -518,4 +667,4 @@ class TFAutoModelForQuestionAnswering(object):
             return TFXLMForQuestionAnsweringSimple.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'xlm'".format(pretrained_model_name_or_path))
+                         "'distilbert', 'bert', 'xlnet', 'xlm'".format(pretrained_model_name_or_path))
