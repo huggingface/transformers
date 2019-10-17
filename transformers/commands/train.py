@@ -83,7 +83,7 @@ class TrainCommand(BaseTransformersCLICommand):
 
         self.logger.info('Loading model {}'.format(args.model_name))
         self.model_name = args.model_name
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.pipeline = AutoTokenizer.from_pretrained(args.model_name)
         if args.task == 'text_classification':
             self.model = SequenceClassifModel.from_pretrained(args.model_name)
         elif args.task == 'token_classification':
