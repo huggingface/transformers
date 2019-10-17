@@ -165,7 +165,8 @@ def _fit_to_block_size(sequence, block_size):
     if len(sequence) > block_size:
         return sequence[:block_size]
     else:
-        return sequence.extend([0] * (block_size - len(sequence)))
+        sequence.extend([0] * (block_size - len(sequence)))
+        return sequence
 
 
 def mask_padding_tokens(sequence):
