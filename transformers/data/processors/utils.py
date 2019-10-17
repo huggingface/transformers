@@ -122,14 +122,30 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         return self.examples[idx]
 
     @classmethod
-    def create_from_csv(cls, file_name, **kwargs):
+    def create_from_csv(cls, file_name, split_name='', column_label=0, column_text=1,
+                        column_id=None, skip_first_row=False, **kwargs):
         processor = cls(**kwargs)
-        processor.add_examples_from_csv(file_name)
+        processor.add_examples_from_csv(file_name,
+                                        split_name=split_name,
+                                        column_label=column_label,
+                                        column_text=column_text,
+                                        column_id=column_id,
+                                        skip_first_row=skip_first_row,
+                                        overwrite_labels=True,
+                                        overwrite_examples=True)
+        return processor
+
+    @classmethod
+    def create_from_examples(cls, texts_or_text_and_labels, labels=None, **kwargs):
+        processor = cls(**kwargs)
+        processor.add_examples(texts_or_text_and_labels, labels=labels)
         return processor
 
     def add_examples_from_csv(self, file_name, split_name='', column_label=0, column_text=1, column_id=None,
-                              overwrite_labels=False, overwrite_examples=False):
+                              skip_first_row=False, overwrite_labels=False, overwrite_examples=False):
         lines = self._read_tsv(file_name)
+        if skip_first_row:
+            lines = lines[1:]
         texts = []
         labels = []
         ids = []
@@ -144,15 +160,21 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
         return self.add_examples(texts, labels, ids, overwrite_labels=overwrite_labels, overwrite_examples=overwrite_examples)
 
-    def add_examples(self, texts, labels, ids=None, overwrite_labels=False, overwrite_examples=False):
+    def add_examples(self, texts_or_text_and_labels, labels=None, ids=None,
+                     overwrite_labels=False, overwrite_examples=False):
+        assert labels is None or len(texts_or_text_and_labels) == len(labels)
+        assert ids is None or len(texts_or_text_and_labels) == len(ids)
         if ids is None:
-            ids = [None] * len(texts)
-        assert len(texts) == len(labels)
-        assert len(texts) == len(ids)
-
+            ids = [None] * len(texts_or_text_and_labels)
+        if labels is None:
+            labels = [None] * len(texts_or_text_and_labels)
         examples = []
         added_labels = set()
-        for (text, label, guid) in zip(texts, labels, ids):
+        for (text_or_text_and_label, label, guid) in zip(texts_or_text_and_labels, labels, ids):
+            if isinstance(text_or_text_and_label, (tuple, list)) and label is None:
+                text, label = text_or_text_and_label
+            else:
+                text = text_or_text_and_label
             added_labels.add(label)
             examples.append(InputExample(guid=guid, text_a=text, text_b=None, label=label))
 
@@ -169,12 +191,6 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             self.labels = list(set(self.labels).union(added_labels))
 
         return self.examples
-
-    @classmethod
-    def create_from_examples(cls, texts, labels, **kwargs):
-        processor = cls(**kwargs)
-        processor.add_examples(texts, labels)
-        return processor
 
     def get_features(self,
                      tokenizer,
@@ -204,6 +220,8 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             a list of task-specific ``InputFeatures`` which can be fed to the model.
 
         """
+        if max_length is None:
+            max_length = tokenizer.max_len
 
         label_map = {label: i for i, label in enumerate(self.labels)}
 

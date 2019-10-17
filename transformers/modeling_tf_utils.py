@@ -22,6 +22,8 @@ import logging
 import os
 
 import tensorflow as tf
+from tensorflow.python.keras.saving import hdf5_format
+import h5py
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
@@ -206,6 +208,9 @@ class TFPreTrainedModel(tf.keras.Model):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
 
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
@@ -229,6 +234,7 @@ class TFPreTrainedModel(tf.keras.Model):
         force_download = kwargs.pop('force_download', False)
         resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
+        output_loading_info = kwargs.pop('output_loading_info', False)
 
         # Load config
         if config is None:
@@ -303,6 +309,31 @@ class TFPreTrainedModel(tf.keras.Model):
         model.load_weights(resolved_archive_file, by_name=True)
 
         ret = model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+
+        # Check if the models are the same to output loading informations
+        with h5py.File(resolved_archive_file, 'r') as f:
+            if 'layer_names' not in f.attrs and 'model_weights' in f:
+                f = f['model_weights']
+            hdf5_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, 'layer_names'))
+        model_layer_names = set(layer.name for layer in model.layers)
+        missing_keys = list(model_layer_names - hdf5_layer_names)
+        unexpected_keys = list(hdf5_layer_names - model_layer_names)
+        error_msgs = []
+
+        if len(missing_keys) > 0:
+            logger.info("Layers of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, missing_keys))
+        if len(unexpected_keys) > 0:
+            logger.info("Layers from pretrained model not used in {}: {}".format(
+                model.__class__.__name__, unexpected_keys))
+        if len(error_msgs) > 0:
+            raise RuntimeError('Error(s) in loading weights for {}:\n\t{}'.format(
+                            model.__class__.__name__, "\n\t".join(error_msgs)))
+        if output_loading_info:
+            loading_info = {"missing_keys": missing_keys,
+                            "unexpected_keys": unexpected_keys,
+                            "error_msgs": error_msgs}
+            return model, loading_info
 
         return model
 

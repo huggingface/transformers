@@ -3,14 +3,11 @@ from argparse import ArgumentParser, Namespace
 from logging import getLogger
 
 from transformers.commands import BaseTransformersCLICommand
-from transformers import (AutoTokenizer, is_tf_available, is_torch_available,
-                          SingleSentenceClassificationProcessor,
-                          convert_examples_to_features)
-if is_tf_available():
-    from transformers import TFAutoModelForSequenceClassification as SequenceClassifModel
-elif is_torch_available():
-    from transformers import AutoModelForSequenceClassification as SequenceClassifModel
-else:
+from transformers import (is_tf_available, is_torch_available,
+                          TextClassificationPipeline,
+                          SingleSentenceClassificationProcessor as Processor)
+
+if not is_tf_available() and not is_torch_available():
     raise ImportError("At least one of PyTorch or TensorFlow 2.0+ should be installed to use CLI training")
 
 # TF training parameters
@@ -35,16 +32,18 @@ class TrainCommand(BaseTransformersCLICommand):
         :return:
         """
         train_parser = parser.add_parser('train', help='CLI tool to train a model on a task.')
+
         train_parser.add_argument('--train_data', type=str, required=True,
                                   help="path to train (and optionally evaluation) dataset as a csv with "
                                        "tab separated labels and sentences.")
-
         train_parser.add_argument('--column_label', type=int, default=0,
                                   help='Column of the dataset csv file with example labels.')
         train_parser.add_argument('--column_text', type=int, default=1,
                                   help='Column of the dataset csv file with example texts.')
         train_parser.add_argument('--column_id', type=int, default=2,
                                   help='Column of the dataset csv file with example ids.')
+        train_parser.add_argument('--skip_first_row', action='store_true',
+                                  help='Skip the first row of the csv file (headers).')
 
         train_parser.add_argument('--validation_data', type=str, default='',
                                   help='path to validation dataset.')
@@ -74,39 +73,38 @@ class TrainCommand(BaseTransformersCLICommand):
 
         self.framework = 'tf' if is_tf_available() else 'torch'
 
-        os.makedirs(args.output)
+        os.makedirs(args.output, exist_ok=True)
+        assert os.path.isdir(args.output)
         self.output = args.output
 
         self.column_label = args.column_label
         self.column_text = args.column_text
         self.column_id = args.column_id
 
-        self.logger.info('Loading model {}'.format(args.model_name))
-        self.model_name = args.model_name
-        self.pipeline = AutoTokenizer.from_pretrained(args.model_name)
+        self.logger.info('Loading {} pipeline for {}'.format(args.task, args.model))
         if args.task == 'text_classification':
-            self.model = SequenceClassifModel.from_pretrained(args.model_name)
+            self.pipeline = TextClassificationPipeline.from_pretrained(args.model)
         elif args.task == 'token_classification':
             raise NotImplementedError
         elif args.task == 'question_answering':
             raise NotImplementedError
 
         self.logger.info('Loading dataset from {}'.format(args.train_data))
-        dataset = SingleSentenceClassificationProcessor.create_from_csv(args.train_data)
-        num_data_samples = len(dataset)
+        self.train_dataset = Processor.create_from_csv(args.train_data,
+                                                       column_label=args.column_label,
+                                                       column_text=args.column_text,
+                                                       column_id=args.column_id,
+                                                       skip_first_row=args.skip_first_row)
+        self.valid_dataset = None
         if args.validation_data:
             self.logger.info('Loading validation dataset from {}'.format(args.validation_data))
-            self.valid_dataset = SingleSentenceClassificationProcessor.create_from_csv(args.validation_data)
-            self.num_valid_samples = len(self.valid_dataset)
-            self.train_dataset = dataset
-            self.num_train_samples = num_data_samples
-        else:
-            assert 0.0 < args.validation_split < 1.0, "--validation_split should be between 0.0 and 1.0"
-            self.num_valid_samples = num_data_samples * args.validation_split
-            self.num_train_samples = num_data_samples - self.num_valid_samples
-            self.train_dataset = dataset[self.num_train_samples]
-            self.valid_dataset = dataset[self.num_valid_samples]
+            self.valid_dataset = Processor.create_from_csv(args.validation_data,
+                                                           column_label=args.column_label,
+                                                           column_text=args.column_text,
+                                                           column_id=args.column_id,
+                                                           skip_first_row=args.skip_first_row)
 
+        self.validation_split = args.validation_split
         self.train_batch_size = args.train_batch_size
         self.valid_batch_size = args.valid_batch_size
         self.learning_rate = args.learning_rate
@@ -121,34 +119,13 @@ class TrainCommand(BaseTransformersCLICommand):
         raise NotImplementedError
 
     def run_tf(self):
-        import tensorflow as tf
+        self.pipeline.fit(self.train_dataset,
+                          validation_data=self.valid_dataset,
+                          validation_split=self.validation_split,
+                          learning_rate=self.learning_rate,
+                          adam_epsilon=self.adam_epsilon,
+                          train_batch_size=self.train_batch_size,
+                          valid_batch_size=self.valid_batch_size)
 
-        tf.config.optimizer.set_jit(USE_XLA)
-        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": USE_AMP})
-
-        # Prepare dataset as a tf.train_data.Dataset instance
-        self.logger.info('Tokenizing and processing dataset')
-        train_dataset = self.train_dataset.get_features(self.tokenizer)
-        valid_dataset = self.valid_dataset.get_features(self.tokenizer)
-        train_dataset = train_dataset.shuffle(128).batch(self.train_batch_size).repeat(-1)
-        valid_dataset = valid_dataset.batch(self.valid_batch_size)
-
-        # Prepare training: Compile tf.keras model with optimizer, loss and learning rate schedule 
-        opt = tf.keras.optimizers.Adam(learning_rate=args.learning_rate, epsilon=self.adam_epsilon)
-        if USE_AMP:
-            # loss scaling is currently required when using mixed precision
-            opt = tf.keras.mixed_precision.experimental.LossScaleOptimizer(opt, 'dynamic')
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
-        self.model.compile(optimizer=opt, loss=loss, metrics=[metric])
-
-        # Train and evaluate using tf.keras.Model.fit()
-        train_steps = self.num_train_samples//self.train_batch_size
-        valid_steps = self.num_valid_samples//self.valid_batch_size
-
-        self.logger.info('Training model')
-        history = self.model.fit(train_dataset, epochs=2, steps_per_epoch=train_steps,
-                                 validation_data=valid_dataset, validation_steps=valid_steps)
-
-        # Save trained model
-        self.model.save_pretrained(self.output)
+        # Save trained pipeline
+        self.pipeline.save_pretrained(self.output)
