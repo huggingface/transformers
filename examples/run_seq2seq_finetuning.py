@@ -13,22 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning seq2seq models for sequence generation.
-
-We use the procedure described in [1] to finetune models for sequence
-generation. Let S1 and S2 be the source and target sequence respectively; we
-pack them using the start of sequence [EOS] and end of sequence [EOS] token:
-
-    [CLS] S1 [EOS] S2 [EOS]
-
-We then mask a fixed percentage of token from S2 at random and learn to predict
-the masked words. [EOS] can be masked during finetuning so the model learns to
-terminate the generation process.
-
-[1] Dong Li, Nan Yang, Wenhui Wang, Furu Wei, Xiaodong Liu, Yu Wang, Jianfeng
-Gao, Ming Zhou, and Hsiao-Wuen Hon.  “Unified Language Model Pre-Training for
-Natural Language Understanding and Generation.” (May 2019) ArXiv:1905.03197
-"""
+""" Finetuning seq2seq models for sequence generation."""
 
 import argparse
 from collections import deque
@@ -55,6 +40,7 @@ def set_seed(args):
 # ------------
 # Load dataset
 # ------------
+
 
 class TextDataset(Dataset):
     """ Abstracts the dataset used to train seq2seq models.

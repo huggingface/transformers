@@ -87,6 +87,7 @@ if is_torch_available():
     from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_seq2seq import Model2Model
 
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
