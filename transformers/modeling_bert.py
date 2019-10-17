@@ -201,9 +201,9 @@ class BertSelfAttention(nn.Module):
     def forward(self, hidden_states, attention_mask=None, head_mask=None, encoder_hidden_states=None, encoder_attention_mask=None):
         mixed_query_layer = self.query(hidden_states)
 
-        # if the attention Module is a encoder-decoder self attention module
-        # they keys & values are given by the encoder; the attention mask
-        # needs to be such that there is no atention on the encoder's padding tokens.
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
         if encoder_hidden_states is not None:
             mixed_key_layer = self.key(encoder_hidden_states)
             mixed_value_layer = self.value(encoder_hidden_states)
