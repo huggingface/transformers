@@ -37,6 +37,8 @@ Mixed precision (AMP) reduces the training time considerably for the same hardwa
 
 ## Language model fine-tuning
 
+Note: This requires Pytorch 1.2.0+
+
 Based on the script [`run_lm_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_lm_finetuning.py).
 
 Fine-tuning the library models for language modeling on a text dataset for GPT, GPT-2, BERT and RoBERTa (DistilBERT 
