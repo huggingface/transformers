@@ -46,7 +46,7 @@ setup(
     long_description_content_type="text/markdown",
     keywords='NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU',
     license='Apache',
-    url="https://github.com/huggingface/transformers",
+    url="https://github.com/iambotHQ/transformers",
     packages=find_packages(exclude=["*.tests", "*.tests.*",
                                     "tests.*", "tests"]),
     install_requires=['numpy',
