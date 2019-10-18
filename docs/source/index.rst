@@ -46,8 +46,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
 5. `XLNet <https://github.com/zihangdai/xlnet>`_ (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_ by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 6. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
 7. `RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_ (from Facebook), released together with the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_ by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
-8. `DistilBERT <https://huggingface.co/transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together with the blog post `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`_ by Victor Sanh, Lysandre Debut and Thomas Wolf.
-
+8. `DistilBERT <https://huggingface.co/transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together with the paper `DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`_ by Victor Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into `DistilGPT2 <https://github.com/huggingface/transformers/tree/master/examples/distillation>`_.
 
 .. toctree::
     :maxdepth: 2
@@ -63,6 +62,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     migration
     bertology
     torchscript
+    multilingual
 
 .. toctree::
     :maxdepth: 2
@@ -87,3 +87,4 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/xlnet
     model_doc/roberta
     model_doc/distilbert
+    model_doc/ctrl
