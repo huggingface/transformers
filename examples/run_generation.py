@@ -114,7 +114,9 @@ def sample_sequence(model, length, context, tokenizer, num_samples=1, temperatur
     context = torch.tensor(context, dtype=torch.long, device=device)
     context = context.unsqueeze(0).repeat(num_samples, 1)
     generated = context
+
     with torch.no_grad():
+
         iter_idx = 0
         try:
             while True:
@@ -137,7 +139,6 @@ def sample_sequence(model, length, context, tokenizer, num_samples=1, temperatur
                 next_token_logits = outputs[0][0, -1, :] / temperature
                 filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
-
 
                 if hasattr(tokenizer, 'stop_id'):
                     if next_token.item() == tokenizer.stop_id:
@@ -184,7 +185,7 @@ def main():
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = torch.cuda.device_count()
 
-    set_seed(args)
+    # set_seed(args)
 
     args.model_type = args.model_type.lower()
     model_class, tokenizer_class = MODEL_CLASSES[args.model_type]

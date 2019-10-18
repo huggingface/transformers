@@ -42,6 +42,7 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_sentencepiece import SentencePieceTokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
@@ -95,7 +96,7 @@ if is_torch_available():
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
-    from .modeling_iambot_gpt2 import (IamBotGPT2, IamBotSentencePiece)
+    from .modeling_custom_gpt2 import CustomGPT2
 
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,

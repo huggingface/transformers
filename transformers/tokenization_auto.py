@@ -27,8 +27,10 @@ from .tokenization_xlnet import XLNetTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_sentencepiece import SentencePieceTokenizer
 
 logger = logging.getLogger(__name__)
+
 
 class AutoTokenizer(object):
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
@@ -53,9 +55,9 @@ class AutoTokenizer(object):
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoTokenizer is designed to be instantiated "
-            "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method.")
+        raise EnvironmentError("AutoTokenizer is designed to be instantiated " "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method.")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
@@ -101,24 +103,31 @@ class AutoTokenizer(object):
             tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
-            return DistilBertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
-            return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
-            return OpenAIGPTTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
-            return GPT2Tokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
-            return TransfoXLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
-            return XLNetTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
-            return XLMTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
-            return CTRLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
+        tokenizer = None
+        if "distilbert" in pretrained_model_name_or_path:
+            tokenizer = DistilBertTokenizer
+        elif "roberta" in pretrained_model_name_or_path:
+            tokenizer = RobertaTokenizer
+        elif "bert" in pretrained_model_name_or_path:
+            tokenizer = BertTokenizer
+        elif "openai-gpt" in pretrained_model_name_or_path:
+            tokenizer = OpenAIGPTTokenizer
+        elif "gpt2" in pretrained_model_name_or_path:
+            tokenizer = GPT2Tokenizer
+        elif "transfo-xl" in pretrained_model_name_or_path:
+            tokenizer = TransfoXLTokenizer
+        elif "xlnet" in pretrained_model_name_or_path:
+            tokenizer = XLNetTokenizer
+        elif "ctrl" in pretrained_model_name_or_path:
+            tokenizer = CTRLTokenizer
+        elif "iambot" in pretrained_model_name_or_path:
+            tokenizer = SentencePieceTokenizer
+
+        if tokenizer:
+            return tokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path)
+        )

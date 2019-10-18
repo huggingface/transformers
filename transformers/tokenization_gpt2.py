@@ -69,7 +69,7 @@ def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings.
     We specifically avoids mapping to whitespace/control characters the bpe code barfs on.
-    
+
     The reversible bpe codes work on unicode strings.
     This means you need a large # of unicode characters in your vocab if you want to avoid UNKs.
     When you're at something like a 10B token dataset you end up needing around 5K for decent coverage.
