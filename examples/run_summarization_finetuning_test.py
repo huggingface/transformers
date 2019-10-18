@@ -14,7 +14,7 @@
 # limitations under the License.
 import unittest
 
-from run_seq2seq_finetuning import _fit_to_block_size, process_story
+from run_summarization_finetuning import _fit_to_block_size, process_story
 
 
 class DataLoaderTest(unittest.TestCase):
@@ -43,15 +43,16 @@ class DataLoaderTest(unittest.TestCase):
         raw_story = """It was the year of Our Lord one thousand seven hundred and
         seventy-five.\n\nSpiritual revelations were conceded to England at that
         favoured period, as at this."""
-        with self.assertRaises(IndexError):
-            process_story(raw_story)
+        _, summary = process_story(raw_story)
+        self.assertEqual(summary, [])
 
     def test_process_empty_story(self):
         """ An empty story should also raise and exception.
         """
         raw_story = ""
-        with self.assertRaises(IndexError):
-            process_story(raw_story)
+        story, summary = process_story(raw_story)
+        self.assertEqual(story, [])
+        self.assertEqual(summary, [])
 
     def test_story_with_missing_period(self):
         raw_story = (
@@ -59,17 +60,16 @@ class DataLoaderTest(unittest.TestCase):
             "seventy-five\n\nSpiritual revelations were conceded to England "
             "at that favoured period, as at this.\n@highlight\n\nIt was the best of times"
         )
-        story, summary = process_story(raw_story)
+        story_lines, summary_lines = process_story(raw_story)
 
-        expected_story = (
-            "It was the year of Our Lord one thousand seven hundred and "
-            "seventy-five. Spiritual revelations were conceded to England at that "
-            "favoured period, as at this."
-        )
-        self.assertEqual(expected_story, story)
+        expected_story_lines = [
+            "It was the year of Our Lord one thousand seven hundred and seventy-five.",
+            "Spiritual revelations were conceded to England at that favoured period, as at this.",
+        ]
+        self.assertEqual(expected_story_lines, story_lines)
 
-        expected_summary = "It was the best of times."
-        self.assertEqual(expected_summary, summary)
+        expected_summary_lines = ["It was the best of times."]
+        self.assertEqual(expected_summary_lines, summary_lines)
 
 
 if __name__ == "__main__":
