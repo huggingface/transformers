@@ -393,7 +393,8 @@ This fine-tuned model is available as a checkpoint under the reference
 
 ## Seq2seq model fine-tuning
 
-Based on the script [`run_seq2seq_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_seq2seq_finetuning.py).
+Based on the script
+[`run_summarization_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_summarization_finetuning.py).
 
 Before running this script you should download **both** CNN and Daily Mail
 datasets from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/)  (the
@@ -412,7 +413,7 @@ archive.
 ```bash
 export DATA_PATH=/path/to/dataset/
 
-python run_seq2seq_finetuning.py \
+python run_summarization_finetuning.py \
     --output_dir=output \
     --model_type=bert2bert \
     --model_name_or_path=bert2bert \
