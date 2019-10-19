@@ -42,6 +42,7 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_unilm import UnilmTokenizer, WhitespaceTokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
@@ -56,6 +57,7 @@ from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlm import XLMConfig, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_unilm import UnilmConfig, UNILM_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # Modeling
 if is_torch_available():
@@ -93,6 +95,8 @@ if is_torch_available():
     from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_unilm import (UnilmModel, UnilmForSeq2Seq, UnilmForSeq2SeqDecode,
+                                UNILM_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,

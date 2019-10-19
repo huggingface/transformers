@@ -27,8 +27,10 @@ from .tokenization_xlnet import XLNetTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_unilm import UnilmTokenizer
 
 logger = logging.getLogger(__name__)
+
 
 class AutoTokenizer(object):
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
@@ -50,12 +52,14 @@ class AutoTokenizer(object):
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
+            - contains `unilm`: UnilmTokenizer (Unilm model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
+
     def __init__(self):
         raise EnvironmentError("AutoTokenizer is designed to be instantiated "
-            "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method.")
+                               "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method.")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
@@ -73,6 +77,7 @@ class AutoTokenizer(object):
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
+            - contains `unilm`: UnilmTokenizer (UniLM model)
 
         Params:
             pretrained_model_name_or_path: either:
@@ -119,6 +124,8 @@ class AutoTokenizer(object):
             return XLMTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'ctrl' in pretrained_model_name_or_path:
             return CTRLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'unilm' in pretrained_model_name_or_path:
+            return UnilmTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta', 'ctrl', 'unilm'".format(pretrained_model_name_or_path))

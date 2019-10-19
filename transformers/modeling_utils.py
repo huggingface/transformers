@@ -377,6 +377,26 @@ class PreTrainedModel(nn.Module):
             for old_key, new_key in zip(old_keys, new_keys):
                 state_dict[new_key] = state_dict.pop(old_key)
 
+            # initialize new position embeddings
+            _k = 'bert.embeddings.position_embeddings.weight'
+            if _k in state_dict and config.max_position_embeddings != state_dict[_k].shape[0]:
+                logger.info("config.max_position_embeddings != state_dict[bert.embeddings.position_embeddings.weight] ({0} - {1})".format(
+                    config.max_position_embeddings, state_dict[_k].shape[0]))
+                if config.max_position_embeddings > state_dict[_k].shape[0]:
+                    old_size = state_dict[_k].shape[0]
+                    # state_dict[_k].data = state_dict[_k].data.resize_(config.max_position_embeddings, state_dict[_k].shape[1])
+                    state_dict[_k].resize_(
+                        config.max_position_embeddings, state_dict[_k].shape[1])
+                    start = old_size
+                    while start < config.max_position_embeddings:
+                        chunk_size = min(
+                            old_size, config.max_position_embeddings - start)
+                        state_dict[_k].data[start:start+chunk_size,
+                                            :].copy_(state_dict[_k].data[:chunk_size, :])
+                        start += chunk_size
+                elif config.max_position_embeddings < state_dict[_k].shape[0]:
+                    state_dict[_k].data = state_dict[_k].data[:config.max_position_embeddings, :]
+
             # copy state_dict so _load_from_state_dict can modify it
             metadata = getattr(state_dict, '_metadata', None)
             state_dict = state_dict.copy()

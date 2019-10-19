@@ -27,6 +27,7 @@ from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassi
 from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering
 from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification
 from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification
+from .modeling_unilm import UnilmModel, UnilmForSeq2Seq, UnilmForSeq2SeqDecode
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
@@ -59,9 +60,10 @@ class AutoModel(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
         raise EnvironmentError("AutoModel is designed to be instantiated "
-            "using the `AutoModel.from_pretrained(pretrained_model_name_or_path)` method.")
+                               "using the `AutoModel.from_pretrained(pretrained_model_name_or_path)` method.")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -154,9 +156,191 @@ class AutoModel(object):
             return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'ctrl' in pretrained_model_name_or_path:
             return CTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'unilm' in pretrained_model_name_or_path:
+            return UnilmModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta, 'ctrl'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta, 'ctrl', 'unilm'".format(pretrained_model_name_or_path))
+
+
+class AutoModelForSeq2Seq(object):
+    r"""
+        :class:`~transformers.AutoModelForSeq2Seq` is a generic model class
+        that will be instantiated as one of the language modeling model classes of the library
+        when created with the `AutoModelForSeq2Seq.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        using pattern matching on the `pretrained_model_name_or_path` string.
+
+        The model class to instantiate is selected as the first pattern matching
+        in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `unilm`: UnilmForSeq2Seq (UniLM model)
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError("AutoModelForSeq2Seq is designed to be instantiated "
+                               "using the `AutoModelForSeq2Seq.from_pretrained(pretrained_model_name_or_path)` method.")
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the language modeling model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        using pattern matching on the `pretrained_model_name_or_path` string.
+
+        The model class to instantiate is selected as the first pattern matching
+        in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `unilm`: UnilmForSeq2Seq (UniLM model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Params:
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
+
+        Examples::
+
+            model = AutoModelForSeq2Seq.from_pretrained('unilm-large-cased')    # Download model and configuration from S3 and cache.
+            model = AutoModelForSeq2Seq.from_pretrained('./test/unilm_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+
+        """
+        if 'unilm' in pretrained_model_name_or_path:
+            return UnilmForSeq2Seq.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
+                         "'unilm'".format(pretrained_model_name_or_path))
+
+
+class AutoModelForSeq2SeqDecode(object):
+    r"""
+        :class:`~transformers.AutoModelForSeq2SeqDecode` is a generic model class
+        that will be instantiated as one of the language modeling model classes of the library
+        when created with the `AutoModelForSeq2SeqDecode.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        using pattern matching on the `pretrained_model_name_or_path` string.
+
+        The model class to instantiate is selected as the first pattern matching
+        in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `unilm`: UnilmForSeq2Seq (UniLM model)
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError("AutoModelForSeq2SeqDecode is designed to be instantiated "
+                               "using the `AutoModelForSeq2SeqDecode.from_pretrained(pretrained_model_name_or_path)` method.")
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the language modeling model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        using pattern matching on the `pretrained_model_name_or_path` string.
+
+        The model class to instantiate is selected as the first pattern matching
+        in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `unilm`: UnilmForSeq2Seq (UniLM model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Params:
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
+
+        Examples::
+
+            model = AutoModelForSeq2SeqDecode.from_pretrained('unilm-large-cased')    # Download model and configuration from S3 and cache.
+            model = AutoModelForSeq2SeqDecode.from_pretrained('./test/unilm_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+
+        """
+        if 'unilm' in pretrained_model_name_or_path:
+            return UnilmForSeq2SeqDecode.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
+                         "'unilm'".format(pretrained_model_name_or_path))
 
 
 class AutoModelWithLMHead(object):
@@ -183,9 +367,10 @@ class AutoModelWithLMHead(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
         raise EnvironmentError("AutoModelWithLMHead is designed to be instantiated "
-            "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
+                               "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -305,9 +490,10 @@ class AutoModelForSequenceClassification(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
         raise EnvironmentError("AutoModelWithLMHead is designed to be instantiated "
-            "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
+                               "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -415,9 +601,10 @@ class AutoModelForQuestionAnswering(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
         raise EnvironmentError("AutoModelWithLMHead is designed to be instantiated "
-            "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
+                               "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` method.")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
