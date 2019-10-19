@@ -132,6 +132,7 @@ class PreTrainedModel(nn.Module):
                 'constant',
                 0
             )
+        first_module.out_features = second_module.num_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
