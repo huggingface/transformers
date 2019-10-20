@@ -9,7 +9,7 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install torch
-            - run: sudo pip install tensorflow==2.0.0-rc0
+            - run: sudo pip install tensorflow
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
@@ -38,7 +38,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install tensorflow==2.0.0-rc0
+            - run: sudo pip install tensorflow
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
@@ -65,7 +65,7 @@ jobs:
             - image: circleci/python:2.7
         steps:
             - checkout
-            - run: sudo pip install tensorflow==2.0.0-rc0
+            - run: sudo pip install tensorflow
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: python -m pytest -sv ./transformers/tests/ --cov
