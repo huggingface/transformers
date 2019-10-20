@@ -304,6 +304,11 @@ def main():
             optim_recover = optim_recover.state_dict()
         optimizer.load_state_dict(optim_recover)
 
+        logger.info("***** Recover amp: %d *****", recover_step)
+        amp_recover = torch.load(os.path.join(
+            args.output_dir, "amp.{0}.bin".format(recover_step)), map_location='cpu')
+        amp.load_state_dict(amp_recover)
+
     logger.info("***** CUDA.empty_cache() *****")
     torch.cuda.empty_cache()
 
@@ -368,6 +373,10 @@ def main():
                 output_optim_file = os.path.join(
                     args.output_dir, "optim.{0}.bin".format(i_epoch))
                 torch.save(optimizer.state_dict(), output_optim_file)
+                if args.fp16:
+                    output_amp_file = os.path.join(
+                        args.output_dir, "amp.{0}.bin".format(i_epoch))
+                    torch.save(amp.state_dict(), output_amp_file)
 
                 logger.info("***** CUDA.empty_cache() *****")
                 torch.cuda.empty_cache()
