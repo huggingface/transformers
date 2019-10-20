@@ -144,10 +144,11 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 
             filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
             if temperature == 0: #greedy sampling:
-                next_token = torch.argmax(filtered_logits).unsqueeze(0)
+                # Return indices of the top num_samples logits (i.e. equivalent to argmax if num_samples = 1)
+                next_token = torch.topk(filtered_logits, num_samples)[1]
             else:
-                next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
-            generated = torch.cat((generated, next_token.unsqueeze(0)), dim=1)
+                next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=num_samples, replacement=True)
+            generated = torch.cat((generated, next_token.unsqueeze(1)), dim=1)
     return generated
 
 
@@ -161,6 +162,7 @@ def main():
     parser.add_argument("--padding_text", type=str, default="")
     parser.add_argument("--xlm_lang", type=str, default="", help="Optional language when used with the XLM model.")
     parser.add_argument("--length", type=int, default=20)
+    parser.add_argument("--num_samples", type=int, default=1)
     parser.add_argument("--temperature", type=float, default=1.0,
                         help="temperature of 0 implies greedy sampling")
     parser.add_argument("--repetition_penalty", type=float, default=1.0,
@@ -224,9 +226,10 @@ def main():
             # Models with memory likes to have a long prompt for short inputs.
             raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
         context_tokens = tokenizer.encode(raw_text)
-        out = sample_sequence(
+        outputs = sample_sequence(
             model=model,
             context=context_tokens,
+            num_samples=args.num_samples,
             length=args.length,
             temperature=args.temperature,
             top_k=args.top_k,
@@ -238,15 +241,16 @@ def main():
             xlm_lang=xlm_lang,
             device=args.device,
         )
-        out = out[0, len(context_tokens):].tolist()
-
-        text = tokenizer.decode(out, clean_up_tokenization_spaces=True, skip_special_tokens=True)
-        text = text[: text.find(args.stop_token) if args.stop_token else None]
-
-        print(text)
+        outputs = outputs[:, len(context_tokens):].tolist()
+        text_candidates = []
+        for out in outputs:
+            text = tokenizer.decode(out, clean_up_tokenization_spaces=False, skip_special_tokens=False)
+            text = text[: text.find(args.stop_token) if args.stop_token else None]
+            text_candidates.append(text)
+            print(text)
         if args.prompt:
             break
-    return text
+    return text_candidates
 
 
 if __name__ == '__main__':
