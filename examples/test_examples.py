@@ -100,12 +100,15 @@ class ExamplesTests(unittest.TestCase):
         testargs = ["run_generation.py",
                     "--prompt=Hello",
                     "--length=10",
-                    "--seed=42"]
+                    "--seed=42"
+                    "--num_samples=2"]
         model_type, model_name = ("--model_type=openai-gpt",
                                   "--model_name_or_path=openai-gpt")
         with patch.object(sys, 'argv', testargs + [model_type, model_name]):
-            result = run_generation.main()
-            self.assertGreaterEqual(len(result), 10)
-
+            results = run_generation.main()
+            for result in results:
+                self.assertGreaterEqual(len(result), 10)
+            self.assertEqual(len(results), 2)
+            
 if __name__ == "__main__":
     unittest.main()
