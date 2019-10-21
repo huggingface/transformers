@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Preprocessing script before training DistilBERT.
+Preprocessing script before training the distilled model.
 """
 from collections import Counter
 import argparse
