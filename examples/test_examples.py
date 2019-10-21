@@ -100,7 +100,7 @@ class ExamplesTests(unittest.TestCase):
         testargs = ["run_generation.py",
                     "--prompt=Hello",
                     "--length=10",
-                    "--seed=42"
+                    "--seed=42",
                     "--num_samples=2"]
         model_type, model_name = ("--model_type=openai-gpt",
                                   "--model_name_or_path=openai-gpt")
