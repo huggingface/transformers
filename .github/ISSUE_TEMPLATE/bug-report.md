@@ -1,6 +1,10 @@
 ---
 name: "\U0001F41B Bug Report"
 about: Submit a bug report to help us improve PyTorch Transformers
+title: ''
+labels: ''
+assignees: ''
+
 ---
 
 ## 🐛 Bug

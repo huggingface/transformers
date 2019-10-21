@@ -28,6 +28,7 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-config.json",
     'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-config.json",
     'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-config.json",
+    'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-config.json",
 }
 
 

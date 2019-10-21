@@ -50,7 +50,7 @@ make html
 ---
 **NOTE**
 
-If you are adding/removing elements from the toc-tree or from any strutural item, it is recommended to clean the build
+If you are adding/removing elements from the toc-tree or from any structural item, it is recommended to clean the build
 directory before rebuilding. Run the following command to clean and build:
 
 ```bash

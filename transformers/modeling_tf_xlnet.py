@@ -30,7 +30,6 @@ import tensorflow as tf
 from .configuration_xlnet import XLNetConfig
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 
 logger = logging.getLogger(__name__)
@@ -39,13 +38,6 @@ TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tf_model.h5",
     'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tf_model.h5",
 }
-
-
-def load_xlnet_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)  # build the network
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def gelu(x):
@@ -362,6 +354,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         super(TFXLNetMainLayer, self).__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.output_past = config.output_past
 
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
@@ -421,16 +414,13 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
     def cache_mem(self, curr_out, prev_mem):
         """cache hidden states into memory."""
-        if self.mem_len is None or self.mem_len == 0:
-            return None
-        else:
-            if self.reuse_len is not None and self.reuse_len > 0:
-                curr_out = curr_out[:self.reuse_len]
+        if self.reuse_len is not None and self.reuse_len > 0:
+            curr_out = curr_out[:self.reuse_len]
 
-            if prev_mem is None:
-                new_mem = curr_out[-self.mem_len:]
-            else:
-                new_mem = tf.concat([prev_mem, curr_out], 0)[-self.mem_len:]
+        if prev_mem is None:
+            new_mem = curr_out[-self.mem_len:]
+        else:
+            new_mem = tf.concat([prev_mem, curr_out], 0)[-self.mem_len:]
 
         return tf.stop_gradient(new_mem)
 
@@ -546,8 +536,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             raise ValueError('Unsupported attention type: {}'.format(self.attn_type))
 
         # data mask: input mask & perm mask
-        assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
-        "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+        assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) " \
+            "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - attention_mask
         if input_mask is not None and perm_mask is not None:
@@ -632,7 +622,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
+            if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+                new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
@@ -650,7 +641,11 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         output = self.dropout(output_g if output_g is not None else output_h, training=training)
 
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
-        outputs = (tf.transpose(output, perm=(1, 0, 2)), new_mems)
+        outputs = (tf.transpose(output, perm=(1, 0, 2)),)
+
+        if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+            outputs = outputs + (new_mems,)
+
         if self.output_hidden_states:
             if output_g is not None:
                 hidden_states = tuple(tf.transpose(h, perm=(1, 0, 2)) for hs in hidden_states for h in hs)
@@ -661,7 +656,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
             outputs = outputs + (attentions,)
 
-        return outputs  # outputs, new_mems, (hidden_states), (attentions)
+        return outputs  # outputs, (new_mems), (hidden_states), (attentions)
 
 
 class TFXLNetPreTrainedModel(TFPreTrainedModel):
@@ -670,7 +665,6 @@ class TFXLNetPreTrainedModel(TFPreTrainedModel):
     """
     config_class = XLNetConfig
     pretrained_model_archive_map = TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_xlnet_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 
@@ -777,7 +771,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``tf.Tensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -819,7 +813,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **prediction_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``tf.Tensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -863,7 +857,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
 
         outputs = (logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
 
-        return outputs  # return logits, mems, (hidden states), (attentions)
+        return outputs  # return logits, (mems), (hidden states), (attentions)
 
 
 @add_start_docstrings("""XLNet Model with a sequence classification/regression head on top (a linear layer on top of
@@ -874,7 +868,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **logits**: ``tf.Tensor`` of shape ``(batch_size, config.num_labels)``
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``tf.Tensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -918,7 +912,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
 
         outputs = (logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
 
-        return outputs  # return logits, mems, (hidden states), (attentions)
+        return outputs  # return logits, (mems), (hidden states), (attentions)
 
 
 # @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
@@ -932,6 +926,11 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
             Span-start scores (before SoftMax).
         **end_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
             Span-end scores (before SoftMax).
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
+            list of ``tf.Tensor`` (one for each layer):
+            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
+            if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
+            See details in the docstring of the `mems` input above.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -971,7 +970,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
 
         outputs = (start_logits, end_logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
 
-        return outputs  # start_logits, end_logits, (hidden_states), (attentions)
+        return outputs  # start_logits, end_logits, (mems), (hidden_states), (attentions)
 
 # @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
 #     the hidden-states output to compute `span start logits` and `span end logits`). """,
