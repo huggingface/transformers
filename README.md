@@ -413,7 +413,7 @@ and from the Salesforce CTRL model:
 python ./examples/run_generation.py \
     --model_type=ctrl \
     --length=20 \
-    --model_name_or_path=gpt2 \
+    --model_name_or_path=ctrl \
     --temperature=0 \
     --repetition_penalty=1.2 \
 ```
