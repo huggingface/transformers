@@ -86,7 +86,7 @@ workflow_filters: &workflow_filters
     filters:
         branches:
             only:
-                - deploy_doc
+                - master
 workflows:
     version: 2
     build_and_test:
