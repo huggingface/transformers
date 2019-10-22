@@ -81,7 +81,7 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off -r docs/requirements.txt
             - run: sudo pip install --progress-bar off -r requirements.txt
-            - run: ./deploy.sh
+            - run: ./.circleci/deploy.sh
 workflow_filters: &workflow_filters
     filters:
         branches:
