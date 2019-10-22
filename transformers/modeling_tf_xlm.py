@@ -63,7 +63,6 @@ def gelu(x):
     cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
     return x * cdf
 
-
 def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
     """
     Generate hidden states mask, and optionally an attention mask.
@@ -84,7 +83,7 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
         attn_mask = mask
 
     # sanity check
-    assert shape_list(mask) == [bs, slen]
+    tf.debugging.assert_equal(shape_list(mask), [bs, slen])
     assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
 
     mask = tf.cast(mask, dtype=dtype)
@@ -318,7 +317,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         bs, slen = shape_list(input_ids)
-        assert shape_list(lengths)[0] == bs
+        tf.debugging.assert_equal(shape_list(lengths)[0], bs)
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
