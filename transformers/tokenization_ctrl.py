@@ -63,11 +63,7 @@ def get_pairs(word):
 class CTRLTokenizer(PreTrainedTokenizer):
     """
     CTRL BPE tokenizer. Peculiarities:
-        - Byte-level Byte-Pair-Encoding
-        - Requires a space to start the input string => the encoding methods should be called with the
-          ``add_prefix_space`` flag set to ``True``.
-          Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-          the absence of a space at the beginning of a string: `tokenizer.decode(tokenizer.encode("Hello")) = " Hello"`
+        - Byte-Pair-Encoding
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
