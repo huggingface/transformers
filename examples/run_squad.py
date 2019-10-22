@@ -451,7 +451,7 @@ def main():
         args.n_gpu = 0
     elif args.device is not None:
         device = torch.device(args.device)
-        args.n_gpu = 1
+        args.n_gpu = 0 if args.device == "cpu" else 1
     elif args.local_rank == -1:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         args.n_gpu = torch.cuda.device_count()
