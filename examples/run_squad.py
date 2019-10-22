@@ -414,6 +414,8 @@ def main():
                         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Whether not to use CUDA when available")
+    parser.add_argument("--device", type=str, default=None,
+                        help="Use this flag to force a specific device")
     parser.add_argument('--overwrite_output_dir', action='store_true',
                         help="Overwrite the content of the output directory")
     parser.add_argument('--overwrite_cache', action='store_true',
@@ -444,8 +446,14 @@ def main():
         ptvsd.wait_for_attach()
 
     # Setup CUDA, GPU & distributed training
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    if args.no_cuda:
+        device = torch.device("cpu")
+        args.n_gpu = 0
+    elif args.device is not None:
+        device = torch.device(args.device)
+        args.n_gpu = 1
+    elif args.local_rank == -1:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         args.n_gpu = torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
