@@ -81,12 +81,12 @@ jobs:
             - checkout
             - run: sudo pip install --progress-bar off -r docs/requirements.txt
             - run: sudo pip install --progress-bar off -r requirements.txt
-            - run: cd docs && make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir
+            - run: ./deploy.sh
 workflow_filters: &workflow_filters
     filters:
         branches:
             only:
-                - master
+                - deploy_doc
 workflows:
     version: 2
     build_and_test:
