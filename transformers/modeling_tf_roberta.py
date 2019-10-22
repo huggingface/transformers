@@ -65,6 +65,7 @@ class TFRobertaMainLayer(TFBertMainLayer):
         super(TFRobertaMainLayer, self).__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name='embeddings')
 
+    @tf.function()
     def call(self, inputs, **kwargs):
         # Check that input_ids starts with control token
         if isinstance(inputs, (tuple, list)):
