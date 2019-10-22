@@ -16,6 +16,6 @@ function deploy_doc(){
 deploy_doc "master" 
 deploy_doc "b33a385" v1.0.0
 deploy_doc "fe02e45" v1.1.0
-eploy_doc "89fd345" v1.2.0
+deploy_doc "89fd345" v1.2.0
 deploy_doc "fc9faa8" v2.0.0
 deploy_doc "3ddce1d" v2.1.1
