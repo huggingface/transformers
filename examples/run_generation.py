@@ -223,7 +223,7 @@ def main():
         if args.model_type in ["transfo-xl", "xlnet"]:
             # Models with memory likes to have a long prompt for short inputs.
             raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
-        context_tokens = tokenizer.encode(raw_text)
+        context_tokens = tokenizer.encode(raw_text, add_special_tokens=False)
         out = sample_sequence(
             model=model,
             context=context_tokens,
