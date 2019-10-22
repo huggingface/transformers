@@ -539,7 +539,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) " \
             "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
-            input_mask = 1.0 - attention_mask
+            input_mask = 1 - attention_mask
         if input_mask is not None and perm_mask is not None:
             data_mask = input_mask[None] + perm_mask
         elif input_mask is not None and perm_mask is None:
@@ -552,7 +552,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         if data_mask is not None:
             # all mems can be attended to
             mems_mask = tf.zeros([tf.shape(data_mask)[0], mlen, bsz],
-                                dtype=dtype_float)
+                                dtype=tf.int32)
+            data_mask = tf.cast(data_mask, dtype=tf.int32)
             data_mask = tf.concat([mems_mask, data_mask], axis=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
@@ -902,7 +903,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
         self.logits_proj = tf.keras.layers.Dense(config.num_labels,
                                                  kernel_initializer=get_initializer(config.initializer_range),
                                                  name='logits_proj')
-
+    @tf.function
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
         output = transformer_outputs[0]
