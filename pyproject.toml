@@ -20,8 +20,11 @@ fire = "^0.2.1"
 <<<<<<< HEAD
 =======
 
+<<<<<<< HEAD
 >>>>>>> add BertForNer, SentencePiece wrapper, fix eval scripts
 
+=======
+>>>>>>> move custom models and utils to transformers.customs for convenience :3
 [tool.poetry.dev-dependencies]
 black = {version = "^19.3b0", allows-prereleases = true}
 rope = {version = "^0.14.0", allows-prereleases = true}
