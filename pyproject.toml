@@ -17,6 +17,10 @@ lm = { git = "https://github.com/iambotHQ/transformer-lm.git", branch = "master"
 seqeval = "^0.0.12"
 tensorboardx = {version = "^1.9", allows-prereleases = true}
 fire = "^0.2.1"
+<<<<<<< HEAD
+=======
+
+>>>>>>> add BertForNer, SentencePiece wrapper, fix eval scripts
 
 [tool.poetry.dev-dependencies]
 black = {version = "^19.3b0", allows-prereleases = true}

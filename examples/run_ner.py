@@ -125,6 +125,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                       "token_type_ids": batch[2] if args.model_type in ["bert", "xlnet", 'iambot'] else None,
                       # XLM and RoBERTa don"t use segment_ids
                       "labels": batch[3]}
+
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
