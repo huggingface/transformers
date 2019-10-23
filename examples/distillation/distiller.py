@@ -27,10 +27,7 @@ import psutil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-try:
-    from torch.optim import AdamW
-except ImportError:
-    from transformers.optimization import AdamW
+from torch.optim import AdamW
 
 from transformers import WarmupLinearSchedule
 
