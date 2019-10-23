@@ -27,7 +27,7 @@ To create the package for pypi.
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
 
-6. Upload the final version to actual pypi:
+6. Upload the final version to actual pypi to the server:
    twine upload dist/* -r pypi
 
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
