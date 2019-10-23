@@ -165,6 +165,7 @@ class PretrainedConfig(object):
         for key in to_remove:
             kwargs.pop(key, None)
 
+        config.__dict__.update(kwargs)
         logger.info("Model config %s", str(config))
         if return_unused_kwargs:
             return config, kwargs

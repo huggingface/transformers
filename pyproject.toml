@@ -18,7 +18,6 @@ seqeval = "^0.0.12"
 tensorboardx = {version = "^1.9", allows-prereleases = true}
 fire = "^0.2.1"
 
-
 [tool.poetry.dev-dependencies]
 black = {version = "^19.3b0", allows-prereleases = true}
 rope = {version = "^0.14.0", allows-prereleases = true}

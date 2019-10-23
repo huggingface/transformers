@@ -42,7 +42,7 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
-from .tokenization_sentencepiece import SentencePieceTokenizer
+from .customs import SentencePieceTokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
@@ -68,7 +68,7 @@ if is_torch_available():
                                 BertForMaskedLM, BertForNextSentencePrediction,
                                 BertForSequenceClassification, BertForMultipleChoice,
                                 BertForTokenClassification, BertForQuestionAnswering,
-                                CustomBertForNer, load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
                                 OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
                                 load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
@@ -96,7 +96,7 @@ if is_torch_available():
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
-    from .modeling_custom_gpt2 import CustomGPT2
+    from .customs import CustomGPT2, CustomBertForNer, ConcatAvgMaxPooler
 
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,

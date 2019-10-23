@@ -4,7 +4,7 @@ from typing import List, Sequence, cast
 
 import lm
 from sentencepiece import SentencePieceProcessor
-from .tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
 
 
 class SentencePieceTokenizer(PreTrainedTokenizer):
