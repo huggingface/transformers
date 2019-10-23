@@ -26,12 +26,14 @@ Here are the results on the dev sets of GLUE:
 | :---:                     |    :---:                       | :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:             |
 | BERT-base                 |  **77.6**                      | 48.9 | 84.3 | 88.6 | 89.3 | 89.5 | 71.3 | 91.7 | 91.2 | 43.7              |
 | DistilBERT                |  **76.8**                      | 49.1 | 81.8 | 90.2 | 90.2 | 89.2 | 62.9 | 92.7 | 90.7 | 44.4              |
-| :---:                     |    :---:                       | :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:             |
-| RoBERTa-base (reported)   |  **83.2**/**86.4**<sup>2</sup> | 63.6 | 87.6 | 90.2 | 92.8 | 91.9 | 78.7 | 94.8 | 91.2 | 57.7<sup>**</sup> |
+| ---                       |    ---                         |  --- |  --- |  --- |  --- |  --- |  --- |  --- |  --- |  ---              |
+| RoBERTa-base (reported)   |  **83.2**/**86.4**<sup>2</sup> | 63.6 | 87.6 | 90.2 | 92.8 | 91.9 | 78.7 | 94.8 | 91.2 | 57.7<sup>3</sup> |
 | DistilRoBERTa<sup>1</sup> |  **79.0**/**82.3**<sup>2</sup> | 59.4 | 83.9 | 86.6 | 90.8 | 89.4 | 67.9 | 92.5 | 88.3 | 52.1              |
 
-<sup>1</sup> We did not use the MNLI checkpoint for fine-tuning but directy perform transfer learning on the pre-trained DistilRoBERTa. 
+<sup>1</sup> We did not use the MNLI checkpoint for fine-tuning but directy perform transfer learning on the pre-trained DistilRoBERTa.
+
 <sup>2</sup> Macro-score computed without WNLI.
+
 <sup>3</sup> We compute this score ourselves for completeness.
 
 ## Setup
