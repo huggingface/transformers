@@ -12,6 +12,7 @@ class SentencePieceTokenizer(PreTrainedTokenizer):
         self.sp = self.load_sentencepieceprocessor(model_path)
         self.eot_token = eot_token
         super(SentencePieceTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token, pad_token=pad_token, cls_token=cls_token, mask_token=mask_token, **kwargs)
+        self.max_len_single_sentence = self.max_len
 
     @property
     def __len__(self):

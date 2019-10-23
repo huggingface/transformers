@@ -47,7 +47,7 @@ from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
                                   BertConfig, BertForMaskedLM, BertTokenizer,
                                   GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
                                   OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
-                                  RobertaConfig, RobertaForMaskedLM, RobertaTokenizer, IamBotSentencePiece,
+                                  RobertaConfig, RobertaForMaskedLM, RobertaTokenizer, SentencePieceTokenizer,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
 
 
@@ -58,8 +58,9 @@ MODEL_CLASSES = {
     'gpt2': (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
-    'roberta': (RobertaConfig, RobertaForMaskedLM, IamBotSentencePiece),
-    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
+    'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
+    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
+    'roberta-iambot': (RobertaConfig, RobertaForMaskedLM, SentencePieceTokenizer)
 }
 
 
@@ -372,7 +373,7 @@ def main():
                         help="Optional pretrained tokenizer name or path if not the same as model_name_or_path")
     parser.add_argument("--cache_dir", default="", type=str,
                         help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)")
-    parser.add_argument("--block_size", default=-1, type=int,
+    parser.add_argument("--block_size", default=512, type=int,
                         help="Optional input sequence length after tokenization."
                              "The training dataset will be truncated in block of this size for training."
                              "Default to the model max input length for single sentence inputs (take into account special tokens).")
@@ -385,9 +386,9 @@ def main():
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
-    parser.add_argument("--per_gpu_train_batch_size", default=4, type=int,
+    parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--per_gpu_eval_batch_size", default=4, type=int,
+    parser.add_argument("--per_gpu_eval_batch_size", default=2, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -429,7 +430,7 @@ def main():
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument("--local_rank", type=int, default=-1,
-                        help="For distributed training: local_rankconfig_name")
+                        help="For distributed training: local_rank config_name")
     parser.add_argument('--server_ip', type=str, default='', help="For distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     parser.add_argument('--logdir', type=str, default='', help='Directory for logs')
@@ -490,11 +491,12 @@ def main():
     model = model_class(config)
     model.to(args.device)
 
-    # if args.model_name_or_path:
-    #     global_step = args.model_name_or_path.split('-')
-    #     global_step = global_step[-1] if len(global_step) > 1 else 0
-    #     logger.info(f'Global step: {global_step}')
-    global_step = 0
+    if args.model_name_or_path:
+        global_step = args.model_name_or_path.split('-')
+        global_step = global_step[-1] if len(global_step) > 1 else 0
+        logger.info(f'Global step: {global_step}')
+    else:
+        global_step = 0
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # End of barrier to make sure only the first process in distributed training download model & vocab
@@ -536,29 +538,29 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         model.to(args.device)
 
-    eval_log_writer = None
-    if args.local_rank in [-1, 0]:
-        eval_log_writer = SummaryWriter(args.logdir / 'val')
 
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
+        eval_log_writer = SummaryWriter(args.logdir / 'val')
         checkpoints = [args.output_dir]
-        if args.eval_all_checkpoints:
-            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
-            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
-        logger.info("Evaluate the following checkpoints: %s", checkpoints)
-        for checkpoint in checkpoints:
-            global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
-            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
 
+        if args.eval_all_checkpoints:
+            checkpoints = list(os.path.dirname(c) for c in glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True))
+            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+
+        logger.info("Evaluate the following checkpoints: %s", checkpoints)
+
+        checkpoints = sorted([(path, int(path.split("-")[-1])) for path in checkpoints], key=lambda item: item[1])
+
+        for checkpoint, global_step in checkpoints:
+            prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, eval_log_writer, int(global_step), prefix=global_step)
+            result = evaluate(args, model, tokenizer, eval_log_writer, int(global_step), prefix=prefix)
             result = dict((k + '_{}'.format(global_step), v) for k, v in result.items())
             results.update(result)
 
-    if eval_log_writer:
         eval_log_writer.close()
 
     return results

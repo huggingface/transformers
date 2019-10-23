@@ -34,8 +34,8 @@ from tqdm import tqdm, trange
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 from transformers import AdamW, WarmupLinearSchedule
-from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
+from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer, CustomBertForNer
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,8 @@ ALL_MODELS = sum(
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer)
+    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
+    "iambot": (BertConfig, CustomBertForNer, BertTokenizer)
 }
 
 
@@ -124,6 +125,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                       "token_type_ids": batch[2] if args.model_type in ["bert", "xlnet"] else None,
                       # XLM and RoBERTa don"t use segment_ids
                       "labels": batch[3]}
+
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
 
@@ -289,7 +291,6 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-
     dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
     return dataset
 
@@ -332,7 +333,7 @@ def main():
 
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
+    parser.add_argument("--per_gpu_eval_batch_size", default=4, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
@@ -466,11 +467,13 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)))
+            checkpoints = list(os.path.dirname(c) for c in glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
-        for checkpoint in checkpoints:
-            global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
+
+        checkpoints = sorted([(path, int(path.split("-")[-1])) for path in checkpoints], key=lambda item: item[1])
+
+        for checkpoint, global_step in checkpoints:
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
@@ -483,7 +486,7 @@ def main():
                 writer.write("{} = {}\n".format(key, str(results[key])))
 
     if args.do_predict and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        tokenizer = tokenizer_class.from_preteval_batch_sizerained(args.output_dir, do_lower_case=args.do_lower_case)
         model = model_class.from_pretrained(args.output_dir)
         model.to(args.device)
         result, predictions = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
