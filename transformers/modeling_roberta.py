@@ -478,12 +478,16 @@ class RobertaForTokenClassification(BertPreTrainedModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForTokenClassification.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, scores = outputs[:2]
 
     """
+    config_class = RobertaConfig
+    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "roberta"
+
     def __init__(self, config):
         super(RobertaForTokenClassification, self).__init__(config)
         self.num_labels = config.num_labels

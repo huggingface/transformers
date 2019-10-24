@@ -396,7 +396,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = TFRobertaForTokenClassification.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         scores = outputs[0]
 
