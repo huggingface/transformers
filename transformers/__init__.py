@@ -89,6 +89,7 @@ if is_torch_available():
                             XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_roberta import (RobertaForMaskedLM, RobertaModel,
                                 RobertaForSequenceClassification, RobertaForMultipleChoice,
+                                RobertaForTokenClassification,
                                 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
@@ -139,6 +140,7 @@ if is_tf_available():
     from .modeling_tf_roberta import (TFRobertaPreTrainedModel, TFRobertaMainLayer,
                                       TFRobertaModel, TFRobertaForMaskedLM,
                                       TFRobertaForSequenceClassification,
+                                      TFRobertaForTokenClassification,
                                       TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_distilbert import (TFDistilBertPreTrainedModel, TFDistilBertMainLayer,

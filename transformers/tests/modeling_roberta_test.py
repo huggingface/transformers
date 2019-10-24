@@ -24,7 +24,8 @@ from transformers import is_torch_available
 
 if is_torch_available():
     import torch
-    from transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification)
+    from transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM,
+                              RobertaForSequenceClassification, RobertaForTokenClassification)
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
     pytestmark = pytest.mark.skip("Require Torch")
@@ -154,6 +155,22 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
             self.parent.assertListEqual(
                 list(result["prediction_scores"].size()),
                 [self.batch_size, self.seq_length, self.vocab_size])
+            self.check_loss_output(result)
+
+        def create_and_check_roberta_for_token_classification(self, config, input_ids, token_type_ids, input_mask,
+                                                              sequence_labels, token_labels, choice_labels):
+            config.num_labels = self.num_labels
+            model = RobertaForTokenClassification(config=config)
+            model.eval()
+            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
+                                 labels=token_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()),
+                [self.batch_size, self.seq_length, self.num_labels])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
