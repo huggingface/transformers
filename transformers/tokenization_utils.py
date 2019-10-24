@@ -251,6 +251,9 @@ class PreTrainedTokenizer(object):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the vocabulary files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -286,6 +289,7 @@ class PreTrainedTokenizer(object):
     def _from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
         cache_dir = kwargs.pop('cache_dir', None)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
@@ -352,7 +356,7 @@ class PreTrainedTokenizer(object):
                 if file_path is None:
                     resolved_vocab_files[file_id] = None
                 else:
-                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies, resume_download=resume_download)
         except EnvironmentError:
             if pretrained_model_name_or_path in s3_models:
                 msg = "Couldn't reach server at '{}' to download vocabulary files."
