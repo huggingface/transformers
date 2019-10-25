@@ -23,15 +23,15 @@ logger = logging.getLogger(__name__)
 try:
     from scipy.stats import pearsonr, spearmanr
     from sklearn.metrics import matthews_corrcoef, f1_score
-    _has_sklearn = True
+    _sklearn_available = True
 except (AttributeError, ImportError) as e:
     logger.warning("To use data.metrics please install scikit-learn. See https://scikit-learn.org/stable/index.html")
-    _has_sklearn = False
+    _sklearn_available = False
 
 def is_sklearn_available():
-    return _has_sklearn
+    return _sklearn_available
 
-if _has_sklearn:
+if _sklearn_available:
 
     def simple_accuracy(preds, labels):
         return (preds == labels).mean()
