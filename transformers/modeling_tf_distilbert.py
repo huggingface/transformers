@@ -532,7 +532,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertModel.from_pretrained('distilbert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -590,7 +590,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores = outputs[0]
 
@@ -645,7 +645,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
 
@@ -702,7 +702,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
