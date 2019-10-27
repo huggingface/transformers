@@ -204,7 +204,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = TFRobertaModel.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -281,7 +281,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         prediction_scores = outputs[0]
 
@@ -349,7 +349,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
 
         tokenizer = RoertaTokenizer.from_pretrained('roberta-base')
         model = TFRobertaForSequenceClassification.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         labels = tf.constant([1])[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
