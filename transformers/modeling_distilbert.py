@@ -411,7 +411,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertModel.from_pretrained('distilbert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -495,7 +495,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
@@ -569,7 +569,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, logits = outputs[:2]
@@ -643,7 +643,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
