@@ -136,19 +136,23 @@ def sample_sequence(model, length, context, num_samples=1, temperature=1, top_k=
                 inputs["langs"] = torch.tensor([xlm_lang] * inputs["input_ids"].shape[1], device=device).view(1, -1)
 
             outputs = model(**inputs)  # Note: we could also use 'past' with GPT-2/Transfo-XL/XLNet/CTRL (cached hidden-states)
-            next_token_logits = outputs[0][0, -1, :] / (temperature if temperature > 0 else 1.)
+            next_token_logits = outputs[0][:, -1, :] / (temperature if temperature > 0 else 1.) # batch_size x vocab_size
 
-            # reptition penalty from CTRL (https://arxiv.org/abs/1909.05858)
-            for _ in set(generated.view(-1).tolist()):
-                next_token_logits[_] /= repetition_penalty
+            # Apply repetition penalty and next token generation for each sample
+            next_token_batch = torch.Tensor().long()
+            for i, sample in enumerate(generated):
+                # repetition penalty from CTRL (https://arxiv.org/abs/1909.05858)
+                for _ in set(sample.view(-1).tolist()):
+                    next_token_logits[i][_] /= repetition_penalty
                 
-            filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-            if temperature == 0: #greedy sampling:
-                # Return indices of the top num_samples logits (i.e. equivalent to argmax if num_samples = 1)
-                next_token = torch.topk(filtered_logits, num_samples)[1]
-            else:
-                next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=num_samples, replacement=True)
-            generated = torch.cat((generated, next_token.unsqueeze(1)), dim=1)
+                filtered_logits = top_k_top_p_filtering(next_token_logits[i], top_k=top_k, top_p=top_p)
+                if temperature == 0: #greedy sampling:
+                    next_token = torch.argmax(filtered_logits)
+                else:
+                    next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
+                next_token_batch = torch.cat((next_token_batch, next_token))
+                    
+            generated = torch.cat((generated, next_token_batch.unsqueeze(1)), dim=1)
     return generated
 
 
