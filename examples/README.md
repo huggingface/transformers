@@ -604,13 +604,13 @@ python run_summarization_finetuning.py \
 
 ## XNLI
 
-Based on the script [`run_xnli.py`](TODO).
+Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/run_xnli.py).
 
 [XNLI](https://www.nyu.edu/projects/bowman/xnli/) is crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-ressource language such as English and low-ressource languages such as Swahili).
 
 #### Fine-tuning on XNLI
 
-This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in TODO min
+This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins
 on a single tesla V100 16GB. The data for XNLI can be downloaded with the following links and should be both saved (and un-zipped) in a 
 `$XNLI_DIR` directory.
 
@@ -623,20 +623,21 @@ export XNLI_DIR=/path/to/XNLI
 python run_xnli.py \
   --model_type bert \
   --model_name_or_path bert-base-multilingual-cased \
-  --language en \
+  --language es \
   --train_language en \
   --do_train \
   --do_eval \
-  --data_dir $SQUAD_DIR \
+  --data_dir $XNLI_DIR \
   --per_gpu_train_batch_size 32 \
   --learning_rate 5e-5 \
   --num_train_epochs 2.0 \
   --max_seq_length 128 \
-  --output_dir /tmp/debug_xnli/
+  --output_dir /tmp/debug_xnli/ \
+  --save_steps -1
 ```
 
-Training with the previously defined hyper-parameters yields the following results:
+Training with the previously defined hyper-parameters yields the following results on the dev set:
 
 ```bash
-TODO
+acc = 0.738152610441767
 ```
