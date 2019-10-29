@@ -247,8 +247,8 @@ def evaluate(args, model, tokenizer, prefix=""):
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
+        else:
+            raise ValueError(f'No other `output_mode` for XNLI.')
         result = compute_metrics(eval_task, preds, out_label_ids)
         results.update(result)
 
