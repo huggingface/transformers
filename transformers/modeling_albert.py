@@ -30,17 +30,19 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         names.append(name)
         arrays.append(array)
 
-    print(model)
+    for name, array in zip(names, arrays):
+        print(name)
     
     for name, array in zip(names, arrays):
         print(name)
         og = name
-        name = name.replace("transformer/group_0/inner_group_0", "transformer")
         name = name.replace("ffn_1", "ffn")
         name = name.replace("ffn/intermediate/output", "ffn_output")
         name = name.replace("attention_1", "attention")   
         name = name.replace("cls/predictions/transform", "predictions")
-        name = name.replace("transformer/LayerNorm_1", "transformer/attention/LayerNorm")        
+        name = name.replace("LayerNorm_1", "attention/LayerNorm")    
+        name = name.replace("inner_group_", "albert_layers/") 
+        name = name.replace("group_", "albert_layer_groups/")    
         name = name.split('/')
 
         print(name)
@@ -104,7 +106,7 @@ class AlbertModel(BertModel):
 
         self.config = config
         self.embeddings = AlbertEmbeddings(config)
-        self.encoder = AlbertEncoder(config)
+        self.encoder = AlbertTransformer(config)
         self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
         self.pooler_activation = nn.Tanh()
 
@@ -133,6 +135,7 @@ class AlbertModel(BertModel):
                                        extended_attention_mask,
                                        head_mask=head_mask)
         sequence_output = encoder_outputs[0]
+    
         print(sequence_output.shape, sequence_output[:, 0].shape, self.pooler(sequence_output[:, 0]).shape)
         pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
 
@@ -246,18 +249,18 @@ class AlbertAttention(BertSelfAttention):
         return layernormed_context_layer, projected_context_layer, reshaped_context_layer, context_layer, attention_scores, attention_probs, attention_mask
 
 
-class AlbertTransformer(nn.Module):
+class AlbertLayer(nn.Module):
     def __init__(self, config):
-        super(AlbertTransformer, self).__init__()
+        super(AlbertLayer, self).__init__()
         
-        self.config =config
+        self.config = config
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = AlbertAttention(config)
         self.ffn = nn.Linear(config.hidden_size, config.intermediate_size) 
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        for i in range(self.config.num_hidden_layers):
+        for _ in range(self.config.inner_group_num):
             attention_output = self.attention(hidden_states, attention_mask)[0]
             ffn_output = self.ffn(attention_output)
             ffn_output = gelu_new(ffn_output)
@@ -267,42 +270,59 @@ class AlbertTransformer(nn.Module):
         return hidden_states
 
 
-class AlbertEncoder(nn.Module):
+class AlbertLayerGroup(nn.Module):
     def __init__(self, config):
-        super(AlbertEncoder, self).__init__()
+        super(AlbertLayerGroup, self).__init__()
+        
+        self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
 
+    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+        for albert_layer in self.albert_layers:
+            hidden_states = albert_layer(hidden_states, attention_mask, head_mask)
+
+        return hidden_states
+
+
+class AlbertTransformer(nn.Module):
+    def __init__(self, config):
+        super(AlbertTransformer, self).__init__()
+        
+        self.config = config
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
-        self.transformer = AlbertTransformer(config)
+        self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
-        hidden_states = self.transformer(hidden_states, attention_mask, head_mask)
 
-        outputs = (hidden_states,)
-        if self.output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        for layer_idx in range(self.config.num_hidden_layers):
+            group_idx = int(layer_idx / self.config.num_hidden_layers * self.config.num_hidden_groups)
+            hidden_states = self.albert_layer_groups[group_idx](hidden_states, attention_mask, head_mask)  
+        
+        return (hidden_states,)
 
-model_size = "base"
-config = AlbertConfig.from_json_file("/home/hf/google-research/albert/config_{}.json".format(model_size))
+
+model_size = 'base'
+hidden_groups = 1
+inner_groups = 1
+config = AlbertConfig.from_json_file("/home/hf/google-research/albert/config_{}-{}-hg-{}-ig.json".format(model_size, hidden_groups, inner_groups))
 model = AlbertModel(config)
-model = load_tf_weights_in_albert(model, config, "/home/hf/transformers/albert-{}/albert-{}".format(model_size, model_size))
+
+print(model)
+model = load_tf_weights_in_albert(model, config, "/home/hf/transformers/albert-{}-{}-hg-{}-ig/albert-{}-{}-hg-{}-ig".format(model_size, hidden_groups, inner_groups, model_size, hidden_groups, inner_groups))
 model.eval()
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 
-input_ids = [[31, 51, 99, 88, 54, 34, 23, 23, 12], [15, 5, 0, 88, 54, 34, 23, 23, 12]]
-input_mask = [[1, 1, 1, 1, 1, 1, 1, 1, 0], [1, 1, 1, 1, 1, 1, 0, 0, 0]]
-segment_ids = [[0, 0, 1, 0, 0, 1, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0]]
+# input_ids = [[31, 51, 99, 88, 54, 34, 23, 23, 12], [15, 5, 0, 88, 54, 34, 23, 23, 12]]
+# input_mask = [[1, 1, 1, 1, 1, 1, 1, 1, 0], [1, 1, 1, 1, 1, 1, 0, 0, 0]]
+# segment_ids = [[0, 0, 1, 0, 0, 1, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
-pt_input_ids = torch.tensor(input_ids)
-pt_input_mask = torch.tensor(input_mask)
-pt_segment_ids = torch.tensor(segment_ids)
+# pt_input_ids = torch.tensor(input_ids)
+# pt_input_mask = torch.tensor(input_mask)
+# pt_segment_ids = torch.tensor(segment_ids)
 
-pt_dict = {"input_ids": pt_input_ids, "attention_mask": pt_input_mask, "token_type_ids": pt_segment_ids}
-pt_output = model(**pt_dict)
-print(pt_output)
+# pt_dict = {"input_ids": pt_input_ids, "attention_mask": pt_input_mask, "token_type_ids": pt_segment_ids}
+# pt_output = model(**pt_dict)
+# print(pt_output)
