@@ -21,6 +21,7 @@ pip install [--editable] .
 | [SQuAD](#squad) | Using BERT/RoBERTa/XLNet/XLM for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
+| [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
 | [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
 
 ## TensorFlow 2.0 Bert models on GLUE
@@ -599,4 +600,43 @@ python run_summarization_finetuning.py \
     --model_name_or_path=bert2bert \
     --do_train \
     --data_path=$DATA_PATH \
+```
+
+## XNLI
+
+Based on the script [`run_xnli.py`](TODO).
+
+[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-ressource language such as English and low-ressource languages such as Swahili).
+
+#### Fine-tuning on XNLI
+
+This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in TODO min
+on a single tesla V100 16GB. The data for XNLI can be downloaded with the following links and should be both saved (and un-zipped) in a 
+`$XNLI_DIR` directory.
+
+* [XNLI 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-1.0.zip)
+* [XNLI-MT 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-MT-1.0.zip)
+
+```bash
+export XNLI_DIR=/path/to/XNLI
+
+python run_xnli.py \
+  --model_type bert \
+  --model_name_or_path bert-base-multilingual-cased \
+  --language en \
+  --train_language en \
+  --do_train \
+  --do_eval \
+  --data_dir $SQUAD_DIR \
+  --per_gpu_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 128 \
+  --output_dir /tmp/debug_xnli/
+```
+
+Training with the previously defined hyper-parameters yields the following results:
+
+```bash
+TODO
 ```
