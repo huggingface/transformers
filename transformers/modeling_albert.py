@@ -4,8 +4,11 @@ import math
 import logging
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 from transformers.configuration_albert import AlbertConfig
 from transformers.modeling_bert import BertEmbeddings, BertModel, BertSelfAttention, prune_linear_layer, gelu_new
+from .file_utils import add_start_docstrings
+
 logger = logging.getLogger(__name__)
 
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
@@ -232,6 +235,70 @@ class AlbertTransformer(nn.Module):
         return (hidden_states,)
 
 
+ALBERT_START_DOCSTRING = r"""    The ALBERT model was proposed in
+    `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations`_
+    by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut. It presents
+    two parameter-reduction techniques to lower memory consumption and increase the trainig speed of BERT.
+
+    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
+    refer to the PyTorch documentation for all matter related to general usage and behavior.
+
+    .. _`ALBERT: A Lite BERT for Self-supervised Learning of Language Representations`:
+        https://arxiv.org/abs/1909.11942
+
+    .. _`torch.nn.Module`:
+        https://pytorch.org/docs/stable/nn.html#module
+
+    Parameters:
+        config (:class:`~transformers.AlbertConfig`): Model configuration class with all the parameters of the model. 
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+ALBERT_INPUTS_DOCSTRING = r"""
+    Inputs:
+        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            To match pre-training, BERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+
+            (a) For sequence pairs:
+
+                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
+                
+                ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
+
+            (b) For single sequences:
+
+                ``tokens:         [CLS] the dog is hairy . [SEP]``
+                
+                ``token_type_ids:   0   0   0   0  0     0   0``
+
+            Albert is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
+            Indices can be obtained using :class:`transformers.AlbertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
+        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+"""
+
+@add_start_docstrings("The bare ALBERT Model transformer outputting raw hidden-states without any specific head on top.",
+                      BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
 class AlbertModel(BertModel):
     def __init__(self, config):
         super(AlbertModel, self).__init__(config)
@@ -274,6 +341,7 @@ class AlbertModel(BertModel):
         return outputs
 
 
+@add_start_docstrings("Bert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
 class AlbertForMaskedLM(nn.Module):
     def __init__(self, config):
         super(AlbertForMaskedLM, self).__init__()
@@ -292,12 +360,19 @@ class AlbertForMaskedLM(nn.Module):
         self._tie_or_clone_weights(self.classifier.word_embeddings,
                                    self.transformer.embeddings.word_embeddings)
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
-        hidden_states = self.bert(input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None)[0]
-        hidden_states = self.dense(hidden_states)
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+                masked_lm_labels=None):
+        outputs = self.bert(input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None)
+        sequence_outputs = outputs[0]
+        hidden_states = self.dense(sequence_outputs)
         hidden_states = gelu_new(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
+        prediction_scores = self.word_embeddings(hidden_states)
 
-        logits = self.word_embeddings(hidden_states)
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+        if masked_lm_labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            outputs = (masked_lm_loss,) + outputs
 
-        return logits
+        return outputs
