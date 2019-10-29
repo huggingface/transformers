@@ -1,32 +1,4 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" ALBERT model configuration """
-
 from .configuration_utils import PretrainedConfig
-
-ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'albert-base-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-config.json",
-    'albert-large-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-config.json",
-    'albert-xlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-config.json",
-    'albert-xxlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-config.json",
-    'albert-base-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-config.json",
-    'albert-large-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-config.json",
-    'albert-xlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-config.json",
-    'albert-xxlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-config.json",
-}
 
 class AlbertConfig(PretrainedConfig):
     """Configuration for `AlbertModel`.
@@ -34,10 +6,8 @@ class AlbertConfig(PretrainedConfig):
     The default settings match the configuration of model `albert_xxlarge`.
     """
 
-    pretrained_config_archive_map = ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-
     def __init__(self,
-                 vocab_size_or_config_json_file=30000,
+                 vocab_size_or_config_json_file,
                  embedding_size=128,
                  hidden_size=4096,
                  num_hidden_layers=12,
@@ -45,7 +15,8 @@ class AlbertConfig(PretrainedConfig):
                  num_attention_heads=64,
                  intermediate_size=16384,
                  inner_group_num=1,
-                 hidden_act="gelu_new",
+                 down_scale_factor=1,
+                 hidden_act="gelu",
                  hidden_dropout_prob=0,
                  attention_probs_dropout_prob=0,
                  max_position_embeddings=512,
@@ -90,6 +61,7 @@ class AlbertConfig(PretrainedConfig):
         self.num_hidden_groups = num_hidden_groups
         self.num_attention_heads = num_attention_heads
         self.inner_group_num = inner_group_num
+        self.down_scale_factor = down_scale_factor
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
