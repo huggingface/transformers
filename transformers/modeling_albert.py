@@ -100,6 +100,138 @@ class AlbertEmbeddings(BertEmbeddings):
         self.LayerNorm = torch.nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
 
 
+class AlbertAttention(BertSelfAttention):
+    def __init__(self, config):
+        super(AlbertAttention, self).__init__(config)
+
+        self.num_attention_heads = config.num_attention_heads
+        self.hidden_size = config.hidden_size 
+        self.attention_head_size = config.hidden_size // config.num_attention_heads
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        mask = torch.ones(self.num_attention_heads, self.attention_head_size)
+        heads = set(heads) - self.pruned_heads  # Convert to set and emove already pruned heads
+        for head in heads:
+            # Compute how many pruned heads are before the head and move the index accordingly
+            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
+            mask[head] = 0
+        mask = mask.view(-1).contiguous().eq(1)
+        index = torch.arange(len(mask))[mask].long()
+
+        # Prune linear layers
+        self.query = prune_linear_layer(self.query, index)
+        self.key = prune_linear_layer(self.key, index)
+        self.value = prune_linear_layer(self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.num_attention_heads = self.num_attention_heads - len(heads)
+        self.all_head_size = self.attention_head_size * self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(self, input_ids, attention_mask=None, head_mask=None):
+        mixed_query_layer = self.query(input_ids)
+        mixed_key_layer = self.key(input_ids)
+        mixed_value_layer = self.value(input_ids)
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        reshaped_context_layer = context_layer.view(*new_context_layer_shape)
+        
+
+        # Should find a better way to do this
+        w = self.dense.weight.T.view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
+        b = self.dense.bias
+
+        projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
+        projected_context_layer = self.dropout(projected_context_layer)
+        layernormed_context_layer = self.LayerNorm(input_ids + projected_context_layer)
+        return layernormed_context_layer, projected_context_layer, reshaped_context_layer, context_layer, attention_scores, attention_probs, attention_mask
+
+
+class AlbertLayer(nn.Module):
+    def __init__(self, config):
+        super(AlbertLayer, self).__init__()
+        
+        self.config = config
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = AlbertAttention(config)
+        self.ffn = nn.Linear(config.hidden_size, config.intermediate_size) 
+        self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+        attention_output = self.attention(hidden_states, attention_mask)[0]
+        ffn_output = self.ffn(attention_output)
+        ffn_output = gelu_new(ffn_output)
+        ffn_output = self.ffn_output(ffn_output)
+        hidden_states = self.LayerNorm(ffn_output + attention_output)
+
+        return hidden_states
+
+
+class AlbertLayerGroup(nn.Module):
+    def __init__(self, config):
+        super(AlbertLayerGroup, self).__init__()
+        
+        self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
+
+    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+        for albert_layer in self.albert_layers:
+            hidden_states = albert_layer(hidden_states, attention_mask, head_mask)
+
+        return hidden_states
+
+
+class AlbertTransformer(nn.Module):
+    def __init__(self, config):
+        super(AlbertTransformer, self).__init__()
+        
+        self.config = config
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+        self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
+        self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
+
+    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
+
+        for layer_idx in range(self.config.num_hidden_layers):
+            group_idx = int(layer_idx / self.config.num_hidden_layers * self.config.num_hidden_groups)
+            hidden_states = self.albert_layer_groups[group_idx](hidden_states, attention_mask, head_mask)  
+        
+        return (hidden_states,)
+
+
 class AlbertModel(BertModel):
     def __init__(self, config):
         super(AlbertModel, self).__init__(config)
@@ -169,158 +301,3 @@ class AlbertForMaskedLM(nn.Module):
         logits = self.word_embeddings(hidden_states)
 
         return logits
-
-
-class AlbertAttention(BertSelfAttention):
-    def __init__(self, config):
-        super(AlbertAttention, self).__init__(config)
-
-        self.num_attention_heads = config.num_attention_heads
-        self.hidden_size = config.hidden_size 
-        self.attention_head_size = config.hidden_size // config.num_attention_heads
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        mask = torch.ones(self.num_attention_heads, self.attention_head_size)
-        heads = set(heads) - self.pruned_heads  # Convert to set and emove already pruned heads
-        for head in heads:
-            # Compute how many pruned heads are before the head and move the index accordingly
-            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
-
-        # Prune linear layers
-        self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_attention_heads = self.num_attention_heads - len(heads)
-        self.all_head_size = self.attention_head_size * self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(self, input_ids, attention_mask=None, head_mask=None):
-        mixed_query_layer = self.query(input_ids)
-        mixed_key_layer = self.key(input_ids)
-        mixed_value_layer = self.value(input_ids)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        reshaped_context_layer = context_layer.view(*new_context_layer_shape)
-        print(self.dense.weight.T.shape)
-        w = self.dense.weight.T.view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
-        b = self.dense.bias
-
-        projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
-        projected_context_layer = self.dropout(projected_context_layer)
-        layernormed_context_layer = self.LayerNorm(input_ids + projected_context_layer)
-        return layernormed_context_layer, projected_context_layer, reshaped_context_layer, context_layer, attention_scores, attention_probs, attention_mask
-
-
-class AlbertLayer(nn.Module):
-    def __init__(self, config):
-        super(AlbertLayer, self).__init__()
-        
-        self.config = config
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = AlbertAttention(config)
-        self.ffn = nn.Linear(config.hidden_size, config.intermediate_size) 
-        self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        attention_output = self.attention(hidden_states, attention_mask)[0]
-        ffn_output = self.ffn(attention_output)
-        ffn_output = gelu_new(ffn_output)
-        ffn_output = self.ffn_output(ffn_output)
-        hidden_states = self.LayerNorm(ffn_output + attention_output)
-
-        return hidden_states
-
-
-class AlbertLayerGroup(nn.Module):
-    def __init__(self, config):
-        super(AlbertLayerGroup, self).__init__()
-        
-        self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
-
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        for albert_layer in self.albert_layers:
-            hidden_states = albert_layer(hidden_states, attention_mask, head_mask)
-
-        return hidden_states
-
-
-class AlbertTransformer(nn.Module):
-    def __init__(self, config):
-        super(AlbertTransformer, self).__init__()
-        
-        self.config = config
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-        self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
-        self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
-
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
-
-        for layer_idx in range(self.config.num_hidden_layers):
-            group_idx = int(layer_idx / self.config.num_hidden_layers * self.config.num_hidden_groups)
-            hidden_states = self.albert_layer_groups[group_idx](hidden_states, attention_mask, head_mask)  
-        
-        return (hidden_states,)
-
-
-# model_size = 'base'
-# hidden_groups = 1
-# inner_groups = 2
-# config = AlbertConfig.from_json_file("/home/hf/google-research/albert/config_{}-{}-hg-{}-ig.json".format(model_size, hidden_groups, inner_groups))
-# model = AlbertModel(config)
-
-# # print(model)
-# model = load_tf_weights_in_albert(model, config, "/home/hf/transformers/albert-{}-{}-hg-{}-ig/albert-{}-{}-hg-{}-ig".format(model_size, hidden_groups, inner_groups, model_size, hidden_groups, inner_groups))
-# # model.eval()
-# # print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-
-
-# input_ids = [[31, 51, 99, 88, 54, 34, 23, 23, 12], [15, 5, 0, 88, 54, 34, 23, 23, 12]]
-# input_mask = [[1, 1, 1, 1, 1, 1, 1, 1, 0], [1, 1, 1, 1, 1, 1, 0, 0, 0]]
-# segment_ids = [[0, 0, 1, 0, 0, 1, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0]]
-
-# pt_input_ids = torch.tensor(input_ids)
-# pt_input_mask = torch.tensor(input_mask)
-# pt_segment_ids = torch.tensor(segment_ids)
-
-# pt_dict = {"input_ids": pt_input_ids, "attention_mask": pt_input_mask, "token_type_ids": pt_segment_ids}
-# pt_output = model(**pt_dict)
-# print(pt_output)
