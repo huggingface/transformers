@@ -128,7 +128,7 @@ def build_mask(sequence, pad_token):
     """ Builds the mask. The attention mechanism will only attend to positions
     with value 1. """
     mask = torch.ones_like(sequence)
-    idx_pad_tokens = (sequence == pad_token)
+    idx_pad_tokens = sequence == pad_token
     mask[idx_pad_tokens] = 0
     return mask
 
