@@ -30,10 +30,10 @@ logger = logging.getLogger(__name__)
 class PreTrainedSeq2seq(nn.Module):
     r"""
         :class:`~transformers.PreTrainedSeq2seq` is a generic model class that will be
-        instantiated as a Seq2seq model with one of the base model classes of
-        the library as encoder and (optionally) as decoder when created with
-        the `AutoModel.from_pretrained(pretrained_model_name_or_path)` class
-        method.
+        instantiated as a transformer architecture with one of the base model
+        classes of the library as encoder and (optionally) another one as
+        decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
+        class method.
     """
 
     def __init__(self, encoder, decoder):
@@ -59,13 +59,13 @@ class PreTrainedSeq2seq(nn.Module):
             encoder_pretrained_model_name_or_path: information necessary to initiate the encoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
-                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/encoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path: information necessary to initiate the decoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
-                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/decoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args: (`optional`) Sequence of positional arguments:
@@ -103,7 +103,7 @@ class PreTrainedSeq2seq(nn.Module):
                 - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
                 - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
 
-                You can specify different kwargs for the decoder by prefixing the key with `decoder_` (e.g. ``decoder_output_attention=True``).
+                You can specify kwargs sepcific for the encoder and decoder by prefixing the key with `encoder_` and `decoder_` respectively. (e.g. ``decoder_output_attention=True``). The remaining kwargs will be passed to both encoders and decoders.
 
         Examples::
 
@@ -154,8 +154,11 @@ class PreTrainedSeq2seq(nn.Module):
         return model
 
     def save_pretrained(self, save_directory):
-        """ Save a Seq2Seq model and its configuration file in a format
-        such that it can be loaded using `:func:`~transformers.PreTrainedSeq2seq.from_pretrained` """
+        """ Save a Seq2Seq model and its configuration file in a format such
+        that it can be loaded using `:func:`~transformers.PreTrainedSeq2seq.from_pretrained`
+
+        We save the encoder' and decoder's parameters in two separate directories.
+        """
         self.encoder.save_pretrained(os.path.join(save_directory, "encoder"))
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
@@ -176,6 +179,7 @@ class PreTrainedSeq2seq(nn.Module):
                 Indices of encoder input sequence tokens in the vocabulary.
             decoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
                 Indices of decoder input sequence tokens in the vocabulary.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
         # keyword arguments come in 3 flavors: encoder-specific (prefixed by
         # `encoder_`), decoder-specific (prefixed by `decoder_`) and those

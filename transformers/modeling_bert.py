@@ -791,7 +791,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
-        **ltr_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the left-to-right language modeling loss (next word prediction).
             Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -800,7 +800,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **masked_lm_loss**: (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
-        **ltr_lm_loss**: (`optional`, returned when ``ltr_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        **ltr_lm_loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Next token prediction loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -838,7 +838,7 @@ class BertForMaskedLM(BertPreTrainedModel):
                                    self.bert.embeddings.word_embeddings)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
-                masked_lm_labels=None, encoder_hidden_states=None, encoder_attention_mask=None, ltr_lm_labels=None, ):
+                masked_lm_labels=None, encoder_hidden_states=None, encoder_attention_mask=None, lm_labels=None, ):
 
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
@@ -857,19 +857,19 @@ class BertForMaskedLM(BertPreTrainedModel):
         # 1. If a tensor that contains the indices of masked labels is provided,
         #    the cross-entropy is the MLM cross-entropy that measures the likelihood
         #    of predictions for masked words.
-        # 2. If `ltr_lm_labels` is provided we are in a causal scenario where we
+        # 2. If `lm_labels` is provided we are in a causal scenario where we
         #    try to predict the next token for each input in the decoder.
         if masked_lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)  # -1 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
-        if ltr_lm_labels is not None:
+        if lm_labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
             prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            ltr_lm_labels = ltr_lm_labels[:, 1:].contiguous()
+            lm_labels = lm_labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), ltr_lm_labels.view(-1))
+            ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
             outputs = (ltr_lm_loss,) + outputs
 
         return outputs  # (masked_lm_loss), (ltr_lm_loss), prediction_scores, (hidden_states), (attentions)
