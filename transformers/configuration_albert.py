@@ -16,7 +16,7 @@ class AlbertConfig(PretrainedConfig):
                  intermediate_size=16384,
                  inner_group_num=1,
                  down_scale_factor=1,
-                 hidden_act="gelu",
+                 hidden_act="gelu_new",
                  hidden_dropout_prob=0,
                  attention_probs_dropout_prob=0,
                  max_position_embeddings=512,
