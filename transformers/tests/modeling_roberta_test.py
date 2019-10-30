@@ -178,6 +178,11 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=choice_labels)
 
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+
             self.parent.assertListEqual(
                 list(result["logits"].size()),
                 [self.batch_size, self.num_choices])
