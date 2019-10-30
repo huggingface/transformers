@@ -11,6 +11,15 @@ from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
+
+ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    'albert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-pytorch_model.bin",
+    'albert-large': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-pytorch_model.bin",
+    'albert-xlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-pytorch_model.bin",
+    'albert-xxlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-pytorch_model.bin",
+}
+
+
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     """ Load tf checkpoints in a pytorch model."""
     try:
@@ -39,6 +48,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     for name, array in zip(names, arrays):
         original_name = name
         name = name.replace("ffn_1", "ffn")
+        name = name.replace("/bert/", "/albert/")
         name = name.replace("ffn/intermediate/output", "ffn_output")
         name = name.replace("attention_1", "attention")   
         name = name.replace("cls/predictions", "predictions")
@@ -113,29 +123,6 @@ class AlbertAttention(BertSelfAttention):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        mask = torch.ones(self.num_attention_heads, self.attention_head_size)
-        heads = set(heads) - self.pruned_heads  # Convert to set and emove already pruned heads
-        for head in heads:
-            # Compute how many pruned heads are before the head and move the index accordingly
-            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
-
-        # Prune linear layers
-        self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_attention_heads = self.num_attention_heads - len(heads)
-        self.all_head_size = self.attention_head_size * self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, input_ids, attention_mask=None, head_mask=None):
         mixed_query_layer = self.query(input_ids)
@@ -225,7 +212,7 @@ class AlbertLayerGroup(nn.Module):
                 layer_attentions = layer_attentions + (layer_output[1],)
 
         if self.output_hidden_states:
-                layer_hidden_states = layer_hidden_states + (hidden_states,)
+            layer_hidden_states = layer_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if self.output_hidden_states:
@@ -367,6 +354,8 @@ class AlbertModel(BertModel):
         self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
         self.pooler_activation = nn.Tanh()
 
+        self.init_weights()
+
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
         if attention_mask is None:
@@ -422,33 +411,41 @@ class AlbertForMaskedLM(BertPreTrainedModel):
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
-    
+
+    config_class = AlbertConfig
+    pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    load_tf_weights = load_tf_weights_in_albert
+    base_model_prefix = "albert"
+
     def __init__(self, config):
         super(AlbertForMaskedLM, self).__init__(config)
 
         self.config = config
-        self.bert = AlbertModel(config)
+        self.albert = AlbertModel(config)
         self.LayerNorm = nn.LayerNorm(config.embedding_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
-        self.word_embeddings = nn.Linear(config.embedding_size, config.vocab_size)
+        self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
+
+        self.init_weights()
+        self.tie_weights()
 
     def tie_weights(self):
         """ Make sure we are sharing the input and output embeddings.
             Export to TorchScript can't handle parameter sharing so we are cloning them instead.
         """
-        self._tie_or_clone_weights(self.classifier.word_embeddings,
-                                   self.transformer.embeddings.word_embeddings)
+        self._tie_or_clone_weights(self.decoder,
+                                   self.albert.embeddings.word_embeddings)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
                 masked_lm_labels=None):
-        outputs = self.bert(input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None)
+        outputs = self.albert(input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None)
         sequence_outputs = outputs[0]
         hidden_states = self.dense(sequence_outputs)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
-        prediction_scores = self.word_embeddings(hidden_states)
+        prediction_scores = self.decoder(hidden_states)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
         if masked_lm_labels is not None:
