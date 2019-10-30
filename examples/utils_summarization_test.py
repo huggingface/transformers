@@ -116,6 +116,13 @@ class SummarizationDataProcessingTest(unittest.TestCase):
             build_mask(sequence, 23).numpy(), expected.numpy()
         )
 
+    def test_build_mask_with_padding_equal_to_one(self):
+        sequence = torch.tensor([8, 2, 3, 4, 1, 1, 1])
+        expected = torch.tensor([1, 1, 1, 1, 0, 0, 0])
+        np.testing.assert_array_equal(
+            build_mask(sequence, 1).numpy(), expected.numpy()
+        )
+
     def test_compute_token_type_ids(self):
         separator = 101
         batch = torch.tensor(
