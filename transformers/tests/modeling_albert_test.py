@@ -26,9 +26,7 @@ from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
 if is_torch_available():
-    from transformers import (AlbertConfig, AlbertModel, AlbertForMaskedLM,
-                              AlbertForSequenceClassification, AlbertForQuestionAnswering,
-                              )
+    from transformers import (AlbertConfig, AlbertModel, AlbertForMaskedLM)
     from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
     pytestmark = pytest.mark.skip("Require Torch")
@@ -37,6 +35,8 @@ else:
 class AlbertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (AlbertModel, AlbertForMaskedLM) if is_torch_available() else ()
+    test_pruning = False
+    test_head_masking = False
 
     class AlbertModelTester(object):
 
@@ -49,11 +49,9 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
                      use_token_type_ids=True,
                      use_labels=True,
                      vocab_size=99,
-                     embedding_size=16,
-                     hidden_size=36,
-                     num_hidden_layers=6,
-                     num_hidden_groups=6,
-                     num_attention_heads=6,
+                     hidden_size=32,
+                     num_hidden_layers=5,
+                     num_attention_heads=4,
                      intermediate_size=37,
                      hidden_act="gelu",
                      hidden_dropout_prob=0.1,
@@ -74,7 +72,6 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
             self.use_token_type_ids = use_token_type_ids
             self.use_labels = use_labels
             self.vocab_size = vocab_size
-            self.embedding_size = embedding_size
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
             self.num_attention_heads = num_attention_heads
@@ -89,7 +86,6 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
-            self.num_hidden_groups = num_hidden_groups
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -121,8 +117,7 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range,
-                num_hidden_groups=self.num_hidden_groups)
+                initializer_range=self.initializer_range)
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
@@ -161,39 +156,6 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length, self.vocab_size])
             self.check_loss_output(result)
 
-        def create_and_check_albert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            model = AlbertForQuestionAnswering(config=config)
-            model.eval()
-            loss, start_logits, end_logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
-                                                   start_positions=sequence_labels, end_positions=sequence_labels)
-            result = {
-                "loss": loss,
-                "start_logits": start_logits,
-                "end_logits": end_logits,
-            }
-            self.parent.assertListEqual(
-                list(result["start_logits"].size()),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["end_logits"].size()),
-                [self.batch_size, self.seq_length])
-            self.check_loss_output(result)
-
-
-        def create_and_check_albert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
-            config.num_labels = self.num_labels
-            model = AlbertForSequenceClassification(config)
-            model.eval()
-            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.num_labels])
-            self.check_loss_output(result)
-
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -216,14 +178,6 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_masked_lm(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_sequence_classification(*config_and_inputs)
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
