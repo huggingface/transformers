@@ -39,7 +39,7 @@ State-of-the-art NLP for everyone
 Lower compute costs, smaller carbon footprint
 - Researchers can share trained models instead of always retraining
 - Practitioners can reduce compute time and production costs
-- 8 architectures with over 30 pretrained models, some in more than 100 languages
+- 10 architectures with over 30 pretrained models, some in more than 100 languages
 
 Choose the right framework for every part of a model's lifetime
 - Train state-of-the-art models in 3 lines of code
@@ -111,7 +111,7 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 
 ## Model architectures
 
-🤗 Transformers currently provides 8 NLU/NLG architectures:
+🤗 Transformers currently provides 10 NLU/NLG architectures:
 
 1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
@@ -413,7 +413,7 @@ and from the Salesforce CTRL model:
 python ./examples/run_generation.py \
     --model_type=ctrl \
     --length=20 \
-    --model_name_or_path=gpt2 \
+    --model_name_or_path=ctrl \
     --temperature=0 \
     --repetition_penalty=1.2 \
 ```
