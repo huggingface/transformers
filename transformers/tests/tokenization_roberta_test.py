@@ -87,8 +87,8 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
         encoded_text_from_decode = tokenizer.encode("sequence builders", add_special_tokens=True)
         encoded_pair_from_decode = tokenizer.encode("sequence builders", "multi-sequence build", add_special_tokens=True)
 
-        encoded_sentence = tokenizer.add_special_tokens_single_sequence(text)
-        encoded_pair = tokenizer.add_special_tokens_sequence_pair(text, text_2)
+        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
+        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
         assert encoded_sentence == encoded_text_from_decode
         assert encoded_pair == encoded_pair_from_decode

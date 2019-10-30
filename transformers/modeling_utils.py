@@ -316,20 +316,20 @@ class PreTrainedModel(nn.Module):
             # redirect to the cache, if necessary
             try:
                 resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
-            except EnvironmentError as e:
+            except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    logger.error(
-                        "Couldn't reach server at '{}' to download pretrained weights.".format(
-                            archive_file))
+                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(
+                            archive_file)
                 else:
-                    logger.error(
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url but couldn't find any file "
-                        "associated to this path or url.".format(
+                    msg = "Model name '{}' was not found in model name list ({}). " \
+                        "We assumed '{}' was a path or url to model weight files named one of {} but " \
+                        "couldn't find any such file at this path or url.".format(
                             pretrained_model_name_or_path,
                             ', '.join(cls.pretrained_model_archive_map.keys()),
-                            archive_file))
-                raise e
+                            archive_file,
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME])
+                raise EnvironmentError(msg)
+
             if resolved_archive_file == archive_file:
                 logger.info("loading weights file {}".format(archive_file))
             else:
