@@ -8,7 +8,7 @@ from shutil import copyfile
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'vocab_file': '30k-clean.model'}
+VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
 SPIECE_UNDERLINE = u'▁'
 
 class AlbertTokenizer(PreTrainedTokenizer):
