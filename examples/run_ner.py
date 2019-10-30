@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert). """
+""" Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert or Roberta). """
 
 from __future__ import absolute_import, division, print_function
 
@@ -35,15 +35,17 @@ from utils_ner import convert_examples_to_features, get_labels, read_examples_fr
 
 from transformers import AdamW, WarmupLinearSchedule
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
+from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
 
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, )),
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
     ())
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
+    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer)
 }
 
 
