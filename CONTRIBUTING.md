@@ -62,7 +62,7 @@ Awesome! Please provide the following information:
 If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
-We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find then in the [`templates`](./templates) folder.
+We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder.
 
 ### Do you want a new feature (that is not a model)?
 
