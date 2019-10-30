@@ -33,6 +33,8 @@ where
     * ``bert-large-uncased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     * ``bert-large-cased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     * ``bert-large-uncased-whole-word-masking-finetuned-squad``: The ``bert-large-uncased-whole-word-masking`` model finetuned on SQuAD (using the ``run_bert_squad.py`` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
+    * ``bert-base-german-dbmdz-cased``: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://github.com/dbmdz/german-bert>`__
+    * ``bert-base-german-dbmdz-uncased``: Trained on (uncased) German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://github.com/dbmdz/german-bert>`__
     * ``openai-gpt``: OpenAI GPT English model, 12-layer, 768-hidden, 12-heads, 110M parameters
     * ``gpt2``: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
     * ``gpt2-medium``: OpenAI GPT-2 English model, 24-layer, 1024-hidden, 16-heads, 345M parameters

@@ -26,6 +26,7 @@ from .configuration_xlnet import XLNetConfig
 from .configuration_xlm import XLMConfig
 from .configuration_roberta import RobertaConfig
 from .configuration_distilbert import DistilBertConfig
+from .configuration_ctrl import CTRLConfig
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class AutoConfig(object):
             - contains `xlnet`: XLNetConfig (XLNet model)
             - contains `xlm`: XLMConfig (XLM model)
             - contains `roberta`: RobertaConfig (RoBERTa model)
-
+            - contains `ctrl` : CTRLConfig (CTRL model)
         This class cannot be instantiated using `__init__()` (throw an error).
     """
     def __init__(self):
@@ -71,7 +72,7 @@ class AutoConfig(object):
             - contains `xlnet`: XLNetConfig (XLNet model)
             - contains `xlm`: XLMConfig (XLM model)
             - contains `roberta`: RobertaConfig (RoBERTa model)
-
+            - contains `ctrl` : CTRLConfig (CTRL model)
         Params:
             pretrained_model_name_or_path: either:
 
@@ -129,7 +130,8 @@ class AutoConfig(object):
             return XLNetConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'xlm' in pretrained_model_name_or_path:
             return XLMConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
+        elif 'ctrl' in pretrained_model_name_or_path:
+            return CTRLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))

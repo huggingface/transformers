@@ -80,13 +80,13 @@ def glue_convert_examples_to_features(examples, tokenizer,
             logger.info("Writing example %d" % (ex_index))
         if is_tf_dataset:
             example = processor.get_example_from_tensor_dict(example)
+            example = processor.tfds_map(example)
 
         inputs = tokenizer.encode_plus(
             example.text_a,
             example.text_b,
             add_special_tokens=True,
             max_length=max_length,
-            truncate_first_sequence=True  # We're truncating the first sequence in priority
         )
         input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
