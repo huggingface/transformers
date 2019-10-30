@@ -689,14 +689,14 @@ class PreTrainedTokenizer(object):
         raise NotImplementedError
 
     def encode(self,
-                text,
-                text_pair=None,
-                add_special_tokens=False,
-                max_length=None,
-                stride=0,
-                truncation_strategy='longest_first',
-                return_tensors=None,
-                **kwargs):
+               text,
+               text_pair=None,
+               add_special_tokens=True,
+               max_length=None,
+               stride=0,
+               truncation_strategy='longest_first',
+               return_tensors=None,
+               **kwargs):
         """
         Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
 
@@ -739,7 +739,7 @@ class PreTrainedTokenizer(object):
     def encode_plus(self,
                     text,
                     text_pair=None,
-                    add_special_tokens=False,
+                    add_special_tokens=True,
                     max_length=None,
                     stride=0,
                     truncation_strategy='longest_first',
@@ -794,7 +794,7 @@ class PreTrainedTokenizer(object):
                                       truncation_strategy=truncation_strategy,
                                       return_tensors=return_tensors)
 
-    def prepare_for_model(self, ids, pair_ids=None, max_length=None, add_special_tokens=False, stride=0,
+    def prepare_for_model(self, ids, pair_ids=None, max_length=None, add_special_tokens=True, stride=0,
                           truncation_strategy='longest_first', return_tensors=None):
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.

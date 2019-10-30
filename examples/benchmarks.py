@@ -309,7 +309,7 @@ def _compute_pytorch(model_names, dictionary, average_over, device, torchscript)
         model = AutoModel.from_pretrained(model_name, config=config)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        tokenized_sequence = tokenizer.encode(input_text)
+        tokenized_sequence = tokenizer.encode(input_text, add_special_tokens=False)
 
         max_input_size = tokenizer.max_model_input_sizes[model_name]
         batch_sizes = [1, 2, 4, 8]
@@ -353,7 +353,7 @@ def _compute_tensorflow(model_names, dictionary, average_over):
         model = TFAutoModel.from_pretrained(model_name, config=config)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        tokenized_sequence = tokenizer.encode(input_text)
+        tokenized_sequence = tokenizer.encode(input_text, add_special_tokens=False)
 
         max_input_size = tokenizer.max_model_input_sizes[model_name]
         batch_sizes = [1, 2, 4, 8]

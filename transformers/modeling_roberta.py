@@ -169,18 +169,6 @@ class RobertaModel(BertModel):
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
-        if input_ids[:, 0].sum().item() != 0:
-            logger.warning("A sequence with no special tokens has been passed to the RoBERTa model. "
-                           "This model requires special tokens in order to work. "
-                           "Please specify add_special_tokens=True in your tokenize.encode()"
-                           "or tokenizer.convert_tokens_to_ids().")
-        return super(RobertaModel, self).forward(input_ids,
-                                                 attention_mask=attention_mask,
-                                                 token_type_ids=token_type_ids,
-                                                 position_ids=position_ids,
-                                                 head_mask=head_mask)
-
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """,
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
