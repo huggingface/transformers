@@ -108,7 +108,7 @@ python train.py \
     --student_config training_configs/distilbert-base-uncased.json \
     --teacher_type bert \
     --teacher_name bert-base-uncased \
-    --alpha_ce 5.0 --alpha_mlm 2.0 --alpha_cos 1.0 --mlm \
+    --alpha_ce 5.0 --alpha_mlm 2.0 --alpha_cos 1.0 --alpha_clm 0.0 --mlm \
     --freeze_pos_embs \
     --dump_path serialization_dir/my_first_training \
     --data_file data/binarized_text.bert-base-uncased.pickle \
@@ -144,7 +144,7 @@ python -m torch.distributed.launch \
         --student_config training_configs/distilbert-base-uncased.json \
         --teacher_type bert \
         --teacher_name bert-base-uncased \
-        --alpha_ce 0.33 --alpha_mlm 0.33 --alpha_cos 0.33 --mlm \
+        --alpha_ce 0.33 --alpha_mlm 0.33 --alpha_cos 0.33 --alpha_clm 0.0 --mlm \
         --freeze_pos_embs \
         --dump_path serialization_dir/my_first_training \
         --data_file data/binarized_text.bert-base-uncased.pickle \
