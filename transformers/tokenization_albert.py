@@ -8,6 +8,7 @@ from shutil import copyfile
 
 logger = logging.getLogger(__name__)
 
+VOCAB_FILES_NAMES = {'vocab_file': '30k-clean.model'}
 SPIECE_UNDERLINE = u'▁'
 
 class AlbertTokenizer(PreTrainedTokenizer):
@@ -16,12 +17,12 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
             - requires `SentencePiece <https://github.com/google/sentencepiece>`_
     """
-    # vocab_files_names = VOCAB_FILES_NAMES
+    vocab_files_names = VOCAB_FILES_NAMES
     # pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     # max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file,
-                 do_lower_case=False, remove_space=True, keep_accents=False,
+                 do_lower_case=True, remove_space=True, keep_accents=False,
                  bos_token="[CLS]", eos_token="[SEP]", unk_token="<unk>", sep_token="[SEP]",
                  pad_token="<pad>", cls_token="[CLS]", mask_token="[MASK]>", **kwargs):
         super(AlbertTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token,
@@ -142,15 +143,15 @@ class AlbertTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
-            single sequence: <s> X </s>
-            pair of sequences: <s> A </s></s> B </s>
+        An ALBERT sequence has the following format:
+            single sequence: [CLS] X [SEP]
+            pair of sequences: [CLS] A [SEP] B [SEP]
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
         if token_ids_1 is None:
-            return token_ids_0 + sep + cls
-        return token_ids_0 + sep + token_ids_1 + sep + cls
+            return cls + token_ids_0 + sep
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
         """
@@ -175,25 +176,24 @@ class AlbertTokenizer(PreTrainedTokenizer):
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is not None:
-            return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1, 1]
-        return ([0] * len(token_ids_0)) + [1, 1]
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A BERT sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 2
-        | first sequence    | second sequence     | CLS segment ID
+        An ALBERT sequence pair mask has the following format:
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 
+        | first sequence    | second sequence     
         
         if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-        cls_segment_id = [2]
 
         if token_ids_1 is None:
-            return len(token_ids_0 + sep + cls) * [0]
-        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
