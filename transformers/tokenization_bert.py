@@ -44,6 +44,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-vocab.txt",
         'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
         'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
+        'bert-base-german-dbmdz-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-vocab.txt",
+        'bert-base-german-dbmdz-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-vocab.txt",
     }
 }
 
@@ -61,6 +63,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': 512,
     'bert-large-cased-whole-word-masking-finetuned-squad': 512,
     'bert-base-cased-finetuned-mrpc': 512,
+    'bert-base-german-dbmdz-cased': 512,
+    'bert-base-german-dbmdz-uncased': 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
@@ -77,6 +81,8 @@ PRETRAINED_INIT_CONFIGURATION = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': {'do_lower_case': True},
     'bert-large-cased-whole-word-masking-finetuned-squad': {'do_lower_case': False},
     'bert-base-cased-finetuned-mrpc': {'do_lower_case': False},
+    'bert-base-german-dbmdz-cased': {'do_lower_case': False},
+    'bert-base-german-dbmdz-uncased': {'do_lower_case': True},
 }
 
 
@@ -187,33 +193,59 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
-    def add_special_tokens_single_sequence(self, token_ids):
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
-        Adds special tokens to the a sequence for sequence classification tasks.
-        A BERT sequence has the following format: [CLS] X [SEP]
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A BERT sequence has the following format:
+            single sequence: [CLS] X [SEP]
+            pair of sequences: [CLS] A [SEP] B [SEP]
         """
-        return [self.cls_token_id] + token_ids + [self.sep_token_id]
-
-    def add_special_tokens_sequence_pair(self, token_ids_0, token_ids_1):
-        """
-        Adds special tokens to a sequence pair for sequence classification tasks.
-        A BERT sequence pair has the following format: [CLS] A [SEP] B [SEP]
-        """
-        sep = [self.sep_token_id]
+        if token_ids_1 is None:
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         cls = [self.cls_token_id]
-
+        sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1):
+    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
+        """
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+
+        Args:
+            token_ids_0: list of ids (must not contain special tokens)
+            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
+                for sequence pairs
+            already_has_special_tokens: (default False) Set to True if the token list is already formated with
+                special tokens for the model
+
+        Returns:
+            A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError("You should not supply a second sequence if the provided sequence of "
+                                 "ids is already formated with special tokens for the model.")
+            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+
+        if token_ids_1 is not None:
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1]
+
+    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
         A BERT sequence pair mask has the following format:
         0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
         | first sequence    | second sequence
+
+        if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, vocab_path):
