@@ -298,7 +298,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
 """
 
 @add_start_docstrings("The bare ALBERT Model transformer outputting raw hidden-states without any specific head on top.",
-                      BERT_START_DOCSTRING, BERT_INPUTS_DOCSTRING)
+                      ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
 class AlbertModel(BertModel):
     def __init__(self, config):
         super(AlbertModel, self).__init__(config)
