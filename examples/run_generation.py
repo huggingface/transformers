@@ -17,7 +17,7 @@
 """ Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
-
+import lm
 import argparse
 import logging
 from tqdm import trange
@@ -34,7 +34,7 @@ from transformers import XLNetLMHeadModel, XLNetTokenizer
 from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
 from transformers import CTRLLMHeadModel, CTRLTokenizer
 from transformers import XLMWithLMHeadModel, XLMTokenizer
-from transformers import IamBotGPT2, IamBotSentencePiece
+from transformers import CustomGPT2, SentencePieceTokenizer
 
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -47,7 +47,7 @@ MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (GPT2Config, OpenAIGPTConfig, XLNetConfig, TransfoXLConfig, XLMConfig, CTRLConfig)), ())
 
 MODEL_CLASSES = {
-    "iambotgpt2": (IamBotGPT2, IamBotSentencePiece),
+    "iambotgpt2": (CustomGPT2, SentencePieceTokenizer),
     'gpt2': (GPT2LMHeadModel, GPT2Tokenizer),
     'ctrl': (CTRLLMHeadModel, CTRLTokenizer),
     'openai-gpt': (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
@@ -109,8 +109,8 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
     return logits
 
 
-def sample_sequence(model, length, context, tokenizer, num_samples=1, temperature=1, top_k=0, top_p=0.0, is_xlnet=False,
-                    xlm_lang=None, device='cpu'):
+def sample_sequence(model, length, context, tokenizer, num_samples=1, temperature=1, top_k=0, top_p=0.0,
+                    xlm_lang=None, is_xlnet=False, is_xlm_mlm=False, xlm_mask_token=None, device='cpu', repetition_penalty=1.0, max_seq_len: int=1024):
     context = torch.tensor(context, dtype=torch.long, device=device)
     context = context.unsqueeze(0).repeat(num_samples, 1)
     generated = context
@@ -119,8 +119,9 @@ def sample_sequence(model, length, context, tokenizer, num_samples=1, temperatur
         iter_idx = 0
         try:
             while True:
-
+                generated = generated[:, -min(max_seq_len, generated.shape[1]):]
                 inputs = {'input_ids': generated}
+
                 if is_xlnet:
                     # XLNet is a direct (predict same token, not next token) and bi-directional model by default
                     # => need one additional dummy token in the input (will be masked), attention mask and target mapping (see model docstring)
@@ -136,6 +137,10 @@ def sample_sequence(model, length, context, tokenizer, num_samples=1, temperatur
 
                 outputs = model(**inputs)  # Note: we could also use 'past' with GPT-2/Transfo-XL/XLNet (cached hidden-states)
                 next_token_logits = outputs[0][0, -1, :] / temperature
+
+                for _ in set(generated.view(-1).tolist()):
+                    next_token_logits[_] /= repetition_penalty
+
                 filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 next_token = torch.multinomial(F.softmax(filtered_logits, dim=-1), num_samples=1)
 
@@ -179,6 +184,7 @@ def main():
                         help="random seed for initialization")
     parser.add_argument('--stop_token', type=str, default=None,
                         help="Token at which text generation is stopped")
+    parser.add_argument('--max_seq_len', type=int, default=512, help='Max length of context given to the model')
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -189,6 +195,7 @@ def main():
     args.model_type = args.model_type.lower()
     model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
+
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
     model.eval()
@@ -200,10 +207,14 @@ def main():
     elif args.length < 0:
         args.length = MAX_LENGTH  # avoid infinite loop
 
-    logger.info(args)
     if args.model_type in ["ctrl"]:
         if args.temperature > 0.7:
             logger.info('CTRL typically works better with lower temperatures (and lower top_k).')
+
+    if args.model_type in ['iambotgpt2']:
+        tokenizer.eot_token = lm.END_OF_TEXT
+        tokenizer.eos_token = lm.END_OF_LINE
+        tokenizer.bos_token = lm.END_OF_TEXT
 
     while True:
         xlm_lang = None
@@ -229,10 +240,18 @@ def main():
         if args.model_type in ["transfo-xl", "xlnet"]:
             # Models with memory likes to have a long prompt for short inputs.
             raw_text = (args.padding_text if args.padding_text else PADDING_TEXT) + raw_text
-        context_tokens = tokenizer.encode(raw_text)
+
+        context_tokens = tokenizer.encode(raw_text, True)
+
         if args.model_type == "ctrl":
             if not any(context_tokens[0] == x for x in tokenizer.control_codes.values()):
                 logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
+
+        print('=' * 25)
+        print("Generated:")
+        print('=' * 25)
+        print(raw_text, end='')
+
         out = sample_sequence(
             model=model,
             context=context_tokens,
@@ -247,6 +266,7 @@ def main():
             xlm_mask_token=xlm_mask_token,
             xlm_lang=xlm_lang,
             device=args.device,
+            max_seq_len=args.max_seq_len
         )
         out = out[0, len(context_tokens):].tolist()
 

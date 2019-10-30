@@ -17,21 +17,14 @@ lm = { git = "https://github.com/iambotHQ/transformer-lm.git", branch = "master"
 seqeval = "^0.0.12"
 tensorboardx = {version = "^1.9", allows-prereleases = true}
 fire = "^0.2.1"
-<<<<<<< HEAD
-=======
 
-<<<<<<< HEAD
->>>>>>> add BertForNer, SentencePiece wrapper, fix eval scripts
-
-=======
->>>>>>> move custom models and utils to transformers.customs for convenience :3
 [tool.poetry.dev-dependencies]
 black = {version = "^19.3b0", allows-prereleases = true}
 rope = {version = "^0.14.0", allows-prereleases = true}
 ipdb = "^0.12.2"
 
 [tool.black]
-line-length = 256
+line-length = 100
 target-version = ['py37']
 include = '\.pyi?$'
 exclude = "generated"

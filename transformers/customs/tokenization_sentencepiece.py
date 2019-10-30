@@ -8,10 +8,10 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 
 
 class SentencePieceTokenizer(PreTrainedTokenizer):
-    def __init__(self, model_path: Path, unk_token="<unk>", eot_token="<eot>", cls_token="<cls>", sep_token="<sep>", mask_token="<mask>", pad_token="<pad>", **kwargs):
+    def __init__(self, model_path: Path, unk_token="<unk>", eot_token="<eot>", cls_token="<cls>", sep_token="<sep>", mask_token="<mask>", pad_token="<pad>", eos_token="<eos>", bos_token="<bos>", **kwargs):
         self.sp = self.load_sentencepieceprocessor(model_path)
         self.eot_token = eot_token
-        super(SentencePieceTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token, pad_token=pad_token, cls_token=cls_token, mask_token=mask_token, **kwargs)
+        super(SentencePieceTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token, pad_token=pad_token, cls_token=cls_token, mask_token=mask_token, eos_token=eos_token, bos_token=bos_token, **kwargs)
         self.max_len_single_sentence = self.max_len
 
     @property
@@ -57,18 +57,18 @@ class SentencePieceTokenizer(PreTrainedTokenizer):
         return self.sp.decode_pieces(tokens)
 
     def print_tokens(self, ids: List[int], token: str):
-        tokens, token = self.decode(ids), self.sp.piece_to_id(token)
+        tokens, token = self.decode(ids), self.sp.id_to_piece(token)
         ending_puncts = "?!)])>:;}.,"
         starting_puncts = "([{<"
 
         tok_print = lambda tok: print(tok, end="", flush=True)
 
-        normalized_token: str = token.replace(lm.END_OF_LINE, "\n").replace(lm.END_OF_TEXT, "\n").replace("▁", " ")
+        normalized_token: str = token.replace(self.eos_token, "\n").replace(self.eot_token, "\n").replace("▁", " ")
         if (len(normalized_token) > 1 and normalized_token[1] in ending_puncts) or (len(tokens) > 1 and tokens[-2].replace("▁", "") in starting_puncts):
             normalized_token = normalized_token.replace(" ", "")
 
         tok_print(normalized_token)
 
-    @lru_cache()
+    @property
     def stop_id(self):
         return self.sp.PieceToId(self.eot_token)
