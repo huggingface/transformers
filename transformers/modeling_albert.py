@@ -401,6 +401,26 @@ class AlbertModel(BertModel):
         outputs = (sequence_output, pooled_output) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
         return outputs
 
+class AlbertMLMHead(nn.Module):
+    def __init__(self, config):
+        super(AlbertMLMHead, self).__init__()
+
+        self.LayerNorm = nn.LayerNorm(config.embedding_size)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.dense = nn.Linear(config.hidden_size, config.embedding_size)
+        self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
+        self.activation = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+
+        prediction_scores = hidden_states + self.bias
+
+        return prediction_scores
+
 
 @add_start_docstrings("Bert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
 class AlbertForMaskedLM(BertPreTrainedModel):
@@ -433,13 +453,8 @@ class AlbertForMaskedLM(BertPreTrainedModel):
     def __init__(self, config):
         super(AlbertForMaskedLM, self).__init__(config)
 
-        self.config = config
         self.albert = AlbertModel(config)
-        self.LayerNorm = nn.LayerNorm(config.embedding_size)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.dense = nn.Linear(config.hidden_size, config.embedding_size)
-        self.decoder = nn.Linear(config.embedding_size, config.vocab_size)
-        self.activation = ACT2FN[config.hidden_act]
+        self.predictions = AlbertMLMHead(config)
 
         self.init_weights()
         self.tie_weights()
@@ -448,17 +463,15 @@ class AlbertForMaskedLM(BertPreTrainedModel):
         """ Make sure we are sharing the input and output embeddings.
             Export to TorchScript can't handle parameter sharing so we are cloning them instead.
         """
-        self._tie_or_clone_weights(self.decoder,
+        self._tie_or_clone_weights(self.predictions.decoder,
                                    self.albert.embeddings.word_embeddings)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
                 masked_lm_labels=None):
         outputs = self.albert(input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None)
         sequence_outputs = outputs[0]
-        hidden_states = self.dense(sequence_outputs)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        prediction_scores = self.decoder(hidden_states)
+
+        prediction_scores = self.predictions(sequence_outputs)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
         if masked_lm_labels is not None:
