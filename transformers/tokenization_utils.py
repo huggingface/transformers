@@ -671,10 +671,10 @@ class PreTrainedTokenizer(object):
         ids = []
         for token in tokens:
             ids.append(self._convert_token_to_id_with_added_voc(token))
-        if len(ids) > self.max_len:
-            logger.warning("Token indices sequence length is longer than the specified maximum sequence length "
-                           "for this model ({} > {}). Running this sequence through the model will result in "
-                           "indexing errors".format(len(ids), self.max_len))
+        # if len(ids) > self.max_len:
+        #     logger.warning("Token indices sequence length is longer than the specified maximum sequence length "
+        #                    "for this model ({} > {}). Running this sequence through the model will result in "
+        #                    "indexing errors".format(len(ids), self.max_len))
         return ids
 
     def _convert_token_to_id_with_added_voc(self, token):

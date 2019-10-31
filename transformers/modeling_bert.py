@@ -1120,13 +1120,52 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, start_positions=None, end_positions=None):
+    def forward(self, input_ids, attention_mask=None, num_question_tokens=None, position_ids=None, head_mask=None, start_positions=None, end_positions=None):
+        batch_size, seq_len = input_ids.shape
+        windowed_mode = False
+
+        if seq_len > self.config.max_position_embeddings:
+            assert batch_size == 1       # sliding window mode is not currently supported for batch_size > 1
+            assert position_ids is None
+            assert isinstance(num_question_tokens, int)
+
+            windowed_mode = True
+
+            input_ids = torch.squeeze(input_ids, dim=0)
+            question_ids, paragraph_ids = torch.split(input_ids, [num_question_tokens, seq_len - num_question_tokens])
+            windowed_paragraph_ids, paragraph_position_ids = self._apply_sliding_window_to_single_batch(
+                paragraph_ids, self.config.max_position_embeddings - num_question_tokens)
+
+            batch_size = windowed_paragraph_ids.shape[0]
+            seq_len = self.config.max_position_embeddings
+
+            input_ids = torch.cat(
+                (question_ids.unsqueeze(0).expand(batch_size, num_question_tokens), windowed_paragraph_ids),
+                dim=-1
+            )
+
+        if num_question_tokens is None:
+            num_question_tokens = seq_len
+
+        if isinstance(num_question_tokens, int):
+            token_type_ids = self._create_type_tokens_for_single_batch(num_question_tokens, seq_len).unsqueeze(0).expand(batch_size, seq_len)
+        else:
+            token_type_ids = torch.stack([self._create_type_tokens_for_single_batch(num_in_batch, seq_len) for num_in_batch in num_question_tokens])
+
+        token_type_ids = token_type_ids.to(input_ids.device)
 
         outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, position_ids=position_ids, head_mask=head_mask)
-
         sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
+        if windowed_mode:
+            question_logits, paragraph_logits = torch.split(logits, [num_question_tokens, seq_len - num_question_tokens], dim=1)
+
+            question_logits = question_logits.min(dim=0, keepdim=True)[0]
+            paragraph_logits = self._decode(paragraph_logits, paragraph_position_ids)
+
+            logits = torch.cat((question_logits, paragraph_logits), dim=1)
+
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
@@ -1150,4 +1189,38 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+    def _create_type_tokens_for_single_batch(self, num_question_tokens, seq_len):
+        return torch.cat([torch.zeros(num_question_tokens), torch.ones(seq_len - num_question_tokens)]).long()
+
+    def _apply_sliding_window_to_single_batch(self, tokens, window_size=512, window_stride=None):
+        if window_stride is None:
+            window_stride = window_size // 2
+
+        result_batch = []
+        result_positions = []
+
+        start = end = 0
+        while end < len(tokens):
+            end = min(start + window_size, len(tokens))
+            start = end - window_size # this allows to avoid shorter last window
+
+            result_batch.append(tokens[start:end])
+            result_positions.append(torch.arange(start, end))
+
+            start += window_stride
+
+        return torch.stack(result_batch), torch.stack(result_positions)
+
+    def _decode(self, windowed_tokens, positions):
+        num_tokens = positions.max() + 1
+        window_size = windowed_tokens.shape[1]
+
+        middle_positions = positions[:, window_size // 2]
+        tokens_best_window_idxs = (torch.unsqueeze(middle_positions, 0) - torch.arange(num_tokens).unsqueeze(-1)).abs().argmin(dim=1)
+        token_mask = torch.stack(
+            [tokens_best_window_idxs[token_idxs_in_window] == window_idx for window_idx, token_idxs_in_window in enumerate(positions)]
+        )
+
+        return windowed_tokens[token_mask].unsqueeze(0)
 
