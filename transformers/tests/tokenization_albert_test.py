@@ -22,7 +22,7 @@ from transformers.tokenization_albert import (AlbertTokenizer, SPIECE_UNDERLINE)
 from .tokenization_tests_commons import CommonTestCases
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                    'fixtures/30k-clean.model')
+                    'fixtures/spiece.model')
 
 class AlbertTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
