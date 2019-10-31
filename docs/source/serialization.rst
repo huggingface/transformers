@@ -33,6 +33,8 @@ where
     * ``bert-large-uncased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     * ``bert-large-cased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
     * ``bert-large-uncased-whole-word-masking-finetuned-squad``: The ``bert-large-uncased-whole-word-masking`` model finetuned on SQuAD (using the ``run_bert_squad.py`` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
+    * ``bert-base-german-dbmdz-cased``: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://github.com/dbmdz/german-bert>`__
+    * ``bert-base-german-dbmdz-uncased``: Trained on (uncased) German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://github.com/dbmdz/german-bert>`__
     * ``openai-gpt``: OpenAI GPT English model, 12-layer, 768-hidden, 12-heads, 110M parameters
     * ``gpt2``: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
     * ``gpt2-medium``: OpenAI GPT-2 English model, 24-layer, 1024-hidden, 16-heads, 345M parameters
@@ -45,7 +47,7 @@ where
     * ``bert_config.json`` or ``openai_gpt_config.json`` a configuration file for the model, and
     * ``pytorch_model.bin`` a PyTorch dump of a pre-trained instance of ``BertForPreTraining``\ , ``OpenAIGPTModel``\ , ``TransfoXLModel``\ , ``GPT2LMHeadModel`` (saved with the usual ``torch.save()``\ )
 
-  If ``PRE_TRAINED_MODEL_NAME_OR_PATH`` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links `here <https://github.com/huggingface/pytorch-transformers/blob/master/pytorch_transformers/modeling_bert.py>`__\ ) and stored in a cache folder to avoid future download (the cache folder can be found at ``~/.pytorch_pretrained_bert/``\ ).
+  If ``PRE_TRAINED_MODEL_NAME_OR_PATH`` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links `here <https://github.com/huggingface/transformers/blob/master/transformers/modeling_bert.py>`__\ ) and stored in a cache folder to avoid future download (the cache folder can be found at ``~/.pytorch_pretrained_bert/``\ ).
 
 *
   ``cache_dir`` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example ``cache_dir='./pretrained_model_{}'.format(args.local_rank)`` (see the section on distributed training for more information).
@@ -122,7 +124,7 @@ Here is the recommended way of saving the model, configuration and vocabulary to
 
 .. code-block:: python
 
-   from pytorch_transformers import WEIGHTS_NAME, CONFIG_NAME
+   from transformers import WEIGHTS_NAME, CONFIG_NAME
 
    output_dir = "./models/"
 
