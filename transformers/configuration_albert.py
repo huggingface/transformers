@@ -17,11 +17,20 @@
 
 from .configuration_utils import PretrainedConfig
 
+ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    'albert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-config.json",
+    'albert-large': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-config.json",
+    'albert-xlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-config.json",
+    'albert-xxlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-config.json",
+}
+
 class AlbertConfig(PretrainedConfig):
     """Configuration for `AlbertModel`.
 
     The default settings match the configuration of model `albert_xxlarge`.
     """
+
+    pretrained_config_archive_map = ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
                  vocab_size_or_config_json_file=30000,
