@@ -15,7 +15,7 @@
 """ Tokenization classes for ALBERT model."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-                        
+
 from .tokenization_utils import PreTrainedTokenizer
 import logging
 import unicodedata
@@ -24,8 +24,25 @@ import os
 from shutil import copyfile
 
 logger = logging.getLogger(__name__)
-
 VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    'vocab_file':
+    {
+    'albert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-spiece.model",
+    'albert-large': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-spiece.model",
+    'albert-xlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-spiece.model",
+    'albert-xxlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-spiece.model",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    'albert-base': 512,
+    'albert-large': 512,
+    'albert-xlarge': 512,
+    'albert-xxlarge': 512,
+}
+
 SPIECE_UNDERLINE = u'▁'
 
 class AlbertTokenizer(PreTrainedTokenizer):
@@ -35,8 +52,8 @@ class AlbertTokenizer(PreTrainedTokenizer):
             - requires `SentencePiece <https://github.com/google/sentencepiece>`_
     """
     vocab_files_names = VOCAB_FILES_NAMES
-    # pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    # max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file,
                  do_lower_case=True, remove_space=True, keep_accents=False,
