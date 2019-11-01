@@ -107,7 +107,8 @@ if is_torch_available():
                                 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
 
-    from .modeling_albert import (AlbertModel, AlbertForMaskedLM, load_tf_weights_in_albert, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_albert import (AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
+                                load_tf_weights_in_albert, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     # Optimization
     from .optimization import (AdamW, get_constant_schedule, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup,
