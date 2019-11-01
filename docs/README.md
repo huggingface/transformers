@@ -34,6 +34,13 @@ pip install recommonmark
 
 ## Building the documentation
 
+Make sure that there is a symlink from the `example` file (in /examples) inside the source folder. Run the following 
+command to generate it:
+
+```bash
+ln -s ../../examples/README.md examples.md
+```
+
 Once you have setup `sphinx`, you can build the documentation by running the following command in the `/docs` folder:
 
 ```bash
@@ -43,7 +50,7 @@ make html
 ---
 **NOTE**
 
-If you are adding/removing elements from the toc-tree or from any strutural item, it is recommended to clean the build
+If you are adding/removing elements from the toc-tree or from any structural item, it is recommended to clean the build
 directory before rebuilding. Run the following command to clean and build:
 
 ```bash
