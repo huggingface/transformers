@@ -60,7 +60,7 @@ def set_seed(args):
 # ------------
 
 
-def load_and_cache_examples(args, tokenizer):
+def load_and_cache_examples(args, tokenizer, evaluate=False):
     dataset = CNNDailyMailDataset(tokenizer, data_dir=args.data_dir)
     return dataset
 
@@ -271,8 +271,10 @@ def evaluate(args, model, tokenizer, prefix=""):
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     eval_dataset = load_and_cache_examples(args, tokenizer, evaluate=True)
     eval_sampler = SequentialSampler(eval_dataset)
+    model_collate_fn = functools.partial(collate, tokenizer=tokenizer, block_size=512)
     eval_dataloader = DataLoader(
-        eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size
+        eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size,
+        collate_fn=model_collate_fn 
     )
 
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -283,6 +285,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     model.eval()
 
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
+
         source, target, encoder_token_type_ids, encoder_mask, decoder_mask, lm_labels = batch
 
         source = source.to(args.device)
@@ -312,8 +315,6 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     # Save the evaluation's results
     output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
 
     with open(output_eval_file, "w") as writer:
         logger.info("***** Eval results {} *****".format(prefix))
@@ -352,15 +353,13 @@ def main():
     )
     parser.add_argument(
         "--do_evaluate",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Run model evaluation on out-of-sample data.",
     )
     parser.add_argument("--do_train", type=bool, default=False, help="Run training.")
     parser.add_argument(
         "--do_overwrite_output_dir",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Whether to overwrite the output dir.",
     )
     parser.add_argument(
@@ -395,6 +394,12 @@ def main():
     )
     parser.add_argument(
         "--per_gpu_train_batch_size",
+        default=4,
+        type=int,
+        help="Batch size per GPU/CPU for training.",
+    )
+    parser.add_argument(
+        "--per_gpu_eval_batch_size",
         default=4,
         type=int,
         help="Batch size per GPU/CPU for training.",
@@ -447,6 +452,9 @@ def main():
 
     logger.info("Training/evaluation parameters %s", args)
 
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    
     # Train the model
     model.to(args.device)
     if args.do_train:
@@ -457,6 +465,12 @@ def main():
             os.makedirs(args.output_dir)
 
         logger.info("Saving model checkpoint to %s", args.output_dir)
+    
+        # Creates the directory to save encoder and decoder.
+        for stack in ["encoder", "decoder"]:
+            stack_outputdir = os.path.join(args.output_dir, stack)
+            if not os.path.exists(stack_outputdir):
+                os.makedirs(stack_outputdir)
 
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
@@ -470,7 +484,7 @@ def main():
     # Evaluate the model
     results = {}
     if args.do_evaluate:
-        checkpoints = []
+        checkpoints = [args.output_dir]
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             encoder_checkpoint = os.path.join(checkpoint, "encoder")
@@ -479,6 +493,7 @@ def main():
                 encoder_checkpoint, decoder_checkpoint
             )
             model.to(args.device)
+            evaluate(args, model, tokenizer) 
             results = "placeholder"
 
     return results
