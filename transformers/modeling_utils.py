@@ -284,6 +284,7 @@ class PreTrainedModel(nn.Module):
                 pretrained_model_name_or_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
+                proxies=proxies,
                 **kwargs
             )
         else:
