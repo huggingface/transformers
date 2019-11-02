@@ -133,7 +133,9 @@ runs
 examples/runs
 
 # data
-/data
+/olid
+/origin_data
+/output
 serialization_dir
 
 # emacs
