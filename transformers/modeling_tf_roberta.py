@@ -65,22 +65,6 @@ class TFRobertaMainLayer(TFBertMainLayer):
         super(TFRobertaMainLayer, self).__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name='embeddings')
 
-    def call(self, inputs, **kwargs):
-        # Check that input_ids starts with control token
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-        elif isinstance(inputs, dict):
-            input_ids = inputs.get('input_ids')
-        else:
-            input_ids = inputs
-
-        if tf.not_equal(tf.reduce_sum(input_ids[:, 0]), 0):
-            tf.print("A sequence with no special tokens has been passed to the RoBERTa model. "
-                           "This model requires special tokens in order to work. "
-                           "Please specify add_special_tokens=True in your encoding.")
-
-        return super(TFRobertaMainLayer, self).call(inputs, **kwargs)
-
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
@@ -371,3 +355,54 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         outputs = (logits,) + outputs[2:]
 
         return outputs  # logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""RoBERTa Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
+class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
+    r"""
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import RobertaTokenizer, TFRobertaForTokenClassification
+
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        model = TFRobertaForTokenClassification.from_pretrained('roberta-base')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+
+    """
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFRobertaForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.roberta = TFRobertaMainLayer(config, name='roberta')
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='classifier')
+
+    def call(self, inputs, **kwargs):
+        outputs = self.roberta(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=kwargs.get('training', False))
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # scores, (hidden_states), (attentions)

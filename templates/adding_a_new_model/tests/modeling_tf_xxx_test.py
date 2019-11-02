@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2018 XXX Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,26 +19,31 @@ from __future__ import print_function
 import unittest
 import shutil
 import pytest
+import sys
 
-from transformers import is_torch_available
-
-if is_torch_available():
-    import torch
-    from transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM,
-                              RobertaForSequenceClassification, RobertaForTokenClassification)
-    from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
-
-from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
 
+from transformers import XxxConfig, is_tf_available
 
-class RobertaModelTest(CommonTestCases.CommonModelTester):
+if is_tf_available():
+    import tensorflow as tf
+    from transformers.modeling_tf_xxx import (TFXxxModel, TFXxxForMaskedLM,
+                                               TFXxxForSequenceClassification,
+                                               TFXxxForTokenClassification,
+                                               TFXxxForQuestionAnswering,
+                                               TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP)
+else:
+    pytestmark = pytest.mark.skip("Require TensorFlow")
 
-    all_model_classes = (RobertaForMaskedLM, RobertaModel) if is_torch_available() else ()
 
-    class RobertaModelTester(object):
+class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
+
+    all_model_classes = (TFXxxModel, TFXxxForMaskedLM, TFXxxForQuestionAnswering,
+                         TFXxxForSequenceClassification,
+                         TFXxxForTokenClassification) if is_tf_available() else ()
+
+    class TFXxxModelTester(object):
 
         def __init__(self,
                      parent,
@@ -106,7 +111,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-            config = RobertaConfig(
+            config = XxxConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
@@ -121,57 +126,89 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-        def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+        def create_and_check_xxx_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            model = TFXxxModel(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            sequence_output, pooled_output = model(inputs)
 
-        def create_and_check_roberta_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
-                                           token_labels, choice_labels):
-            model = RobertaModel(config=config)
-            model.eval()
-            sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-            sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
+            inputs = [input_ids, input_mask]
+            sequence_output, pooled_output = model(inputs)
+
             sequence_output, pooled_output = model(input_ids)
 
             result = {
-                "sequence_output": sequence_output,
-                "pooled_output": pooled_output,
+                "sequence_output": sequence_output.numpy(),
+                "pooled_output": pooled_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()),
+                list(result["sequence_output"].shape),
                 [self.batch_size, self.seq_length, self.hidden_size])
-            self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+            self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
-        def create_and_check_roberta_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
-                                                   token_labels, choice_labels):
-            model = RobertaForMaskedLM(config=config)
-            model.eval()
-            loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
+
+        def create_and_check_xxx_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            model = TFXxxForMaskedLM(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            prediction_scores, = model(inputs)
             result = {
-                "loss": loss,
-                "prediction_scores": prediction_scores,
+                "prediction_scores": prediction_scores.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].size()),
+                list(result["prediction_scores"].shape),
                 [self.batch_size, self.seq_length, self.vocab_size])
-            self.check_loss_output(result)
 
-        def create_and_check_roberta_for_token_classification(self, config, input_ids, token_type_ids, input_mask,
-                                                              sequence_labels, token_labels, choice_labels):
+
+        def create_and_check_xxx_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
-            model = RobertaForTokenClassification(config=config)
-            model.eval()
-            loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
-                                 labels=token_labels)
+            model = TFXxxForSequenceClassification(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            logits, = model(inputs)
             result = {
-                "loss": loss,
-                "logits": logits,
+                "logits": logits.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["logits"].size()),
+                list(result["logits"].shape),
+                [self.batch_size, self.num_labels])
+
+
+        def create_and_check_xxx_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            config.num_labels = self.num_labels
+            model = TFXxxForTokenClassification(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            logits, = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
                 [self.batch_size, self.seq_length, self.num_labels])
-            self.check_loss_output(result)
+
+
+        def create_and_check_xxx_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            model = TFXxxForQuestionAnswering(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            start_logits, end_logits = model(inputs)
+            result = {
+                "start_logits": start_logits.numpy(),
+                "end_logits": end_logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["start_logits"].shape),
+                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(
+                list(result["end_logits"].shape),
+                [self.batch_size, self.seq_length])
+
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -181,85 +218,39 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = RobertaModelTest.RobertaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=37)
+        self.model_tester = TFXxxModelTest.TFXxxModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=XxxConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_roberta_model(self):
+    def test_xxx_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_roberta_model(*config_and_inputs)
+        self.model_tester.create_and_check_xxx_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_xxx_for_masked_lm(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xxx_for_question_answering(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xxx_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xxx_for_token_classification(*config_and_inputs)
 
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
-        for model_name in list(ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = RobertaModel.from_pretrained(model_name, cache_dir=cache_dir)
+        for model_name in ['xxx-base-uncased']:
+            model = TFXxxModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
-
-
-
-class RobertaModelIntegrationTest(unittest.TestCase):
-
-    @pytest.mark.slow
-    def test_inference_masked_lm(self):
-        model = RobertaForMaskedLM.from_pretrained('roberta-base')
-        
-        input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 50265))
-        self.assertEqual(
-            output.shape,
-            expected_shape
-        )
-        # compare the actual values for a slice.
-        expected_slice = torch.Tensor(
-            [[[33.8843, -4.3107, 22.7779],
-              [ 4.6533, -2.8099, 13.6252],
-              [ 1.8222, -3.6898,  8.8600]]]
-        )
-        self.assertTrue(
-            torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3)
-        )
-
-    @pytest.mark.slow
-    def test_inference_no_head(self):
-        model = RobertaModel.from_pretrained('roberta-base')
-        
-        input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
-        output = model(input_ids)[0]
-        # compare the actual values for a slice.
-        expected_slice = torch.Tensor(
-            [[[-0.0231,  0.0782,  0.0074],
-              [-0.1854,  0.0539, -0.0174],
-              [ 0.0548,  0.0799,  0.1687]]]
-        )
-        self.assertTrue(
-            torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3)
-        )
-
-    @pytest.mark.slow
-    def test_inference_classification_head(self):
-        model = RobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        
-        input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 3))
-        self.assertEqual(
-            output.shape,
-            expected_shape
-        )
-        expected_tensor = torch.Tensor([[-0.9469,  0.3913,  0.5118]])
-        self.assertTrue(
-            torch.allclose(output, expected_tensor, atol=1e-3)
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

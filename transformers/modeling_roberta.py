@@ -169,18 +169,6 @@ class RobertaModel(BertModel):
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
-        if input_ids[:, 0].sum().item() != 0:
-            logger.warning("A sequence with no special tokens has been passed to the RoBERTa model. "
-                           "This model requires special tokens in order to work. "
-                           "Please specify add_special_tokens=True in your tokenize.encode()"
-                           "or tokenizer.convert_tokens_to_ids().")
-        return super(RobertaModel, self).forward(input_ids,
-                                                 attention_mask=attention_mask,
-                                                 token_type_ids=token_type_ids,
-                                                 position_ids=position_ids,
-                                                 head_mask=head_mask)
-
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """,
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
@@ -343,6 +331,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
+
 @add_start_docstrings("""Roberta Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
@@ -450,6 +439,81 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 
         return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
 
+
+@add_start_docstrings("""Roberta Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
+class RobertaForTokenClassification(BertPreTrainedModel):
+    r"""
+        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification loss.
+        **scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        model = RobertaForTokenClassification.from_pretrained('roberta-base')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
+
+    """
+    config_class = RobertaConfig
+    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "roberta"
+
+    def __init__(self, config):
+        super(RobertaForTokenClassification, self).__init__(config)
+        self.num_labels = config.num_labels
+
+        self.roberta = RobertaModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
+                position_ids=None, head_mask=None, labels=None):
+
+        outputs = self.roberta(input_ids,
+                               attention_mask=attention_mask,
+                               token_type_ids=token_type_ids,
+                               position_ids=position_ids,
+                               head_mask=head_mask)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), scores, (hidden_states), (attentions)
 
 
 class RobertaClassificationHead(nn.Module):
