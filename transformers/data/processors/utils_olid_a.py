@@ -20,7 +20,7 @@ import copy
 import json
 
 
-class InputExample(object):
+class Olid_A_InputExample(object):
     """
     A single training/test example for simple sequence classification.
 
@@ -34,11 +34,10 @@ class InputExample(object):
         specified for train and dev examples, but not for test examples.
     """
 
-    def __init__(self, guid, text_a, text_b=None, label=None):
+    def __init__(self, guid, label, text):
         self.guid = guid
-        self.text_a = text_a
-        self.text_b = text_b
         self.label = label
+        self.text = text
 
     def __repr__(self):
         return str(self.to_json_string())
@@ -53,7 +52,7 @@ class InputExample(object):
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
-class InputFeatures(object):
+class Olid_A_InputFeatures(object):
     """
     A single set of features of data.
 
@@ -85,7 +84,7 @@ class InputFeatures(object):
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
-class DataProcessor(object):
+class Olid_A_DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
     def get_example_from_tensor_dict(self, tensor_dict):
@@ -110,7 +109,7 @@ class DataProcessor(object):
         raise NotImplementedError()
 
     def tfds_map(self, example):
-        """Some tensorflow_datasets datasets are not formatted the same way the GLUE datasets are. 
+        """Some tensorflow_datasets datasets are not formatted the same way the GLUE datasets are.
         This method converts examples to the correct format."""
         if len(self.get_labels()) > 1:
             example.label = self.get_labels()[int(example.label)]

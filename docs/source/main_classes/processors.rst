@@ -8,12 +8,12 @@ Processors
 ~~~~~~~~~~~~~~~~~~~~~
 
 All processors follow the same architecture which is that of the
-:class:`~transformers.data.processors.utils.DataProcessor`. The processor returns a list
+:class:`~transformers.data.processors.utils.Olid_A_DataProcessor`. The processor returns a list
 of :class:`~transformers.data.processors.utils.InputExample`. These
 :class:`~transformers.data.processors.utils.InputExample` can be converted to
 :class:`~transformers.data.processors.utils.InputFeatures` in order to be fed to the model.
 
-.. autoclass:: transformers.data.processors.utils.DataProcessor
+.. autoclass:: transformers.data.processors.utils.Olid_A_DataProcessor
     :members:
 
 

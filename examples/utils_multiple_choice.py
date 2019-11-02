@@ -73,7 +73,7 @@ class InputFeatures(object):
         self.label = label
 
 
-class DataProcessor(object):
+class Olid_A_DataProcessor(object):
     """Base class for data converters for multiple choice data sets."""
 
     def get_train_examples(self, data_dir):
@@ -93,7 +93,7 @@ class DataProcessor(object):
         raise NotImplementedError()
 
 
-class RaceProcessor(DataProcessor):
+class RaceProcessor(Olid_A_DataProcessor):
     """Processor for the RACE data set."""
 
     def get_train_examples(self, data_dir):
@@ -158,7 +158,7 @@ class RaceProcessor(DataProcessor):
                         label=truth))
         return examples
 
-class SwagProcessor(DataProcessor):
+class SwagProcessor(Olid_A_DataProcessor):
     """Processor for the SWAG data set."""
 
     def get_train_examples(self, data_dir):
@@ -216,7 +216,7 @@ class SwagProcessor(DataProcessor):
         return examples
 
 
-class ArcProcessor(DataProcessor):
+class ArcProcessor(Olid_A_DataProcessor):
     """Processor for the ARC data set (request from allennlp)."""
 
     def get_train_examples(self, data_dir):

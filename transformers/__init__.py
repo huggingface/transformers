@@ -6,6 +6,7 @@ __version__ = "2.1.1"
 # and: https://github.com/tensorflow/tensorflow/issues/26691#issuecomment-500369493
 try:
     import absl.logging
+
     absl.logging.set_verbosity('info')
     absl.logging.set_stderrthreshold('info')
     absl.logging._warn_preinit_stderr = False
@@ -22,10 +23,21 @@ from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH
                          WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME,
                          is_tf_available, is_torch_available)
 
+'''
+添加olid 配置
+2019.11.2
+mofeng
+'''
 from .data import (is_sklearn_available,
                    InputExample, InputFeatures, DataProcessor,
                    glue_output_modes, glue_convert_examples_to_features,
-                   glue_processors, glue_tasks_num_labels)
+                   glue_processors, glue_tasks_num_labels,
+
+
+                   Olid_A_InputExample, Olid_A_InputFeatures, Olid_A_DataProcessor,
+                   olid_a_output_modes, olid_a_convert_examples_to_features,
+                   olid_a_processors, olid_a_tasks_num_labels
+                   )
 
 if is_sklearn_available():
     from .data import glue_compute_metrics
@@ -69,10 +81,10 @@ if is_torch_available():
                                 BertForTokenClassification, BertForQuestionAnswering,
                                 load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
-                                OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
-                                load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                  OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
+                                  load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_transfo_xl import (TransfoXLPreTrainedModel, TransfoXLModel, TransfoXLLMHeadModel,
-                                    load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                      load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_gpt2 import (GPT2PreTrainedModel, GPT2Model,
                                 GPT2LMHeadModel, GPT2DoubleHeadsModel,
                                 load_tf_weights_in_gpt2, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
@@ -80,26 +92,25 @@ if is_torch_available():
                                 CTRLLMHeadModel,
                                 CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
-                                XLNetForSequenceClassification, XLNetForMultipleChoice,
-                                XLNetForQuestionAnsweringSimple, XLNetForQuestionAnswering,
-                                load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
-    from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
-                            XLMWithLMHeadModel, XLMForSequenceClassification,
-                            XLMForQuestionAnswering, XLMForQuestionAnsweringSimple,
-                            XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                 XLNetForSequenceClassification, XLNetForMultipleChoice,
+                                 XLNetForQuestionAnsweringSimple, XLNetForQuestionAnswering,
+                                 load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from .modeling_xlm import (XLMPreTrainedModel, XLMModel,
+                               XLMWithLMHeadModel, XLMForSequenceClassification,
+                               XLMForQuestionAnswering, XLMForQuestionAnsweringSimple,
+                               XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_roberta import (RobertaForMaskedLM, RobertaModel,
-                                RobertaForSequenceClassification, RobertaForMultipleChoice,
-                                RobertaForTokenClassification,
-                                ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                   RobertaForSequenceClassification, RobertaForMultipleChoice,
+                                   RobertaForTokenClassification,
+                                   ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
-                                DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
-                                DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                      DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
+                                      DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
 
     # Optimization
     from .optimization import (AdamW, ConstantLRSchedule, WarmupConstantSchedule, WarmupCosineSchedule,
                                WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
-
 
 # TensorFlow
 if is_tf_available():
@@ -151,8 +162,8 @@ if is_tf_available():
                                          TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_ctrl import (TFCTRLPreTrainedModel, TFCTRLModel,
-                                    TFCTRLLMHeadModel,
-                                    TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                   TFCTRLLMHeadModel,
+                                   TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,

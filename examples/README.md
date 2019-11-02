@@ -174,7 +174,7 @@ output folder called `/tmp/MNLI-MM/` in addition to `/tmp/MNLI/`.
 The code has not been tested with half-precision training with apex on any GLUE task apart from MRPC, MNLI, 
 CoLA, SST-2. The following section provides details on how to run half-precision training with MRPC. With that being 
 said, there shouldn’t be any issues in running half-precision training with the remaining GLUE tasks as well, 
-since the data processor for each task inherits from the base class DataProcessor.
+since the data processor for each task inherits from the base class Olid_A_DataProcessor.
 
 ### MRPC
 
