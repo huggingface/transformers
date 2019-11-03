@@ -12,6 +12,7 @@ similar API between the different models.
 | [SQuAD](#squad) | Using BERT/XLM/XLNet/RoBERTa for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
+| [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
 
 ## TensorFlow 2.0 Bert models on GLUE
 
@@ -101,7 +102,7 @@ python run_lm_finetuning.py \
 
 Based on the script [`run_generation.py`](https://github.com/huggingface/transformers/blob/master/examples/run_generation.py).
 
-Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.
+Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL, XLNet, CTRL.
 A similar script is used for our official demo [Write With Transfomer](https://transformer.huggingface.co), where you
 can try out the different models available in the library.
 
@@ -411,7 +412,7 @@ f1 = 93.15
 exact_match = 86.91
 ```
 
-This fine-tuneds model is available as a checkpoint under the reference
+This fine-tuned model is available as a checkpoint under the reference
 `bert-large-uncased-whole-word-masking-finetuned-squad`.
 
 ## Named Entity Recognition
@@ -513,4 +514,32 @@ On the test dataset the following results could be achieved:
 10/04/2019 00:42:42 - INFO - __main__ -     loss = 0.07064602487454782
 10/04/2019 00:42:42 - INFO - __main__ -     precision = 0.8604651162790697
 10/04/2019 00:42:42 - INFO - __main__ -     recall = 0.8624150210424085
+```
+
+## Abstractive summarization
+
+Based on the script
+[`run_summarization_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_summarization_finetuning.py).
+
+Before running this script you should download **both** CNN and Daily Mail
+datasets from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/)  (the
+links next to "Stories") in the same folder. Then uncompress the archives by running:
+
+```bash
+tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
+```
+
+note that the finetuning script **will not work** if you do not download both
+datasets. We will refer as `$DATA_PATH` the path to where you uncompressed both
+archive.
+
+```bash
+export DATA_PATH=/path/to/dataset/
+
+python run_summarization_finetuning.py \
+    --output_dir=output \
+    --model_type=bert2bert \
+    --model_name_or_path=bert2bert \
+    --do_train \
+    --data_path=$DATA_PATH \
 ```

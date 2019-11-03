@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert). """
+""" Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert or Roberta). """
 
 from __future__ import absolute_import, division, print_function
 
@@ -35,15 +35,17 @@ from utils_ner import convert_examples_to_features, get_labels, read_examples_fr
 
 from transformers import AdamW, WarmupLinearSchedule
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
+from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
 
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, )),
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
     ())
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
+    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer)
 }
 
 
@@ -133,13 +135,16 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
             if args.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
+                if args.fp16:
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
                 scheduler.step()  # Update learning rate schedule
                 optimizer.step()
                 model.zero_grad()
@@ -206,6 +211,9 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
                       "labels": batch[3]}
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
+
+            if args.n_gpu > 1:
+                tmp_eval_loss = tmp_eval_loss.mean()  # mean() to average on multi-gpu parallel evaluating
 
             eval_loss += tmp_eval_loss.item()
         nb_eval_steps += 1

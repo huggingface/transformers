@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Benchmarking the library on inference and training """
-import tensorflow as tf
 
 # If checking the tensors placement
 # tf.debugging.set_log_device_placement(True)
@@ -23,15 +22,18 @@ from typing import List
 import timeit
 from transformers import is_tf_available, is_torch_available
 from time import time
-import torch
-
 import argparse
 import csv
 
-if not is_torch_available() or not is_tf_available():
-    raise ImportError("TensorFlow and Pytorch should be installed on the system.")
+if is_tf_available():
+    import tensorflow as tf
+    from transformers import TFAutoModel
 
-from transformers import AutoConfig, AutoModel, AutoTokenizer, TFAutoModel
+if is_torch_available():
+    import torch
+    from transformers import AutoModel
+
+from transformers import AutoConfig, AutoTokenizer
 
 input_text = """Bent over their instruments, three hundred Fertilizers were plunged, as 
 the Director of Hatcheries and Conditioning entered the room, in the 
@@ -251,18 +253,22 @@ def create_setup_and_compute(model_names: List[str],
                              average_over: int = 3,
                              torchscript: bool = False,
                              xla: bool = False,
+                             amp: bool = False,
+                             fp16: bool = False,
                              save_to_csv: bool = False,
                              csv_filename: str = f"results_{round(time())}.csv"):
     if xla:
         tf.config.optimizer.set_jit(True)
+    if amp:
+        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
     if tensorflow:
         dictionary = {model_name: {} for model_name in model_names}
-        results = _compute_tensorflow(model_names, dictionary, average_over)
+        results = _compute_tensorflow(model_names, dictionary, average_over, amp)
     else:
         device = 'cuda' if (gpu and torch.cuda.is_available()) else 'cpu'
         dictionary = {model_name: {} for model_name in model_names}
-        results = _compute_pytorch(model_names, dictionary, average_over, device, torchscript)
+        results = _compute_pytorch(model_names, dictionary, average_over, device, torchscript, fp16)
 
     print("=========== RESULTS ===========")
     for model_name in model_names:
@@ -300,14 +306,14 @@ def create_setup_and_compute(model_names: List[str],
                 writer.writerow({'model': model_name, **model_results})
 
 
-def _compute_pytorch(model_names, dictionary, average_over, device, torchscript):
+def _compute_pytorch(model_names, dictionary, average_over, device, torchscript, fp16):
     for c, model_name in enumerate(model_names):
         print(f"{c + 1} / {len(model_names)}")
         config = AutoConfig.from_pretrained(model_name, torchscript=torchscript)
         model = AutoModel.from_pretrained(model_name, config=config)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        tokenized_sequence = tokenizer.encode(input_text)
+        tokenized_sequence = tokenizer.encode(input_text, add_special_tokens=False)
 
         max_input_size = tokenizer.max_model_input_sizes[model_name]
         batch_sizes = [1, 2, 4, 8]
@@ -317,6 +323,8 @@ def _compute_pytorch(model_names, dictionary, average_over, device, torchscript)
         dictionary[model_name]["results"] = {i: {} for i in batch_sizes}
 
         for batch_size in batch_sizes:
+            if fp16:
+                model.half()
             model.to(device)
             model.eval()
             for slice_size in slice_sizes:
@@ -344,14 +352,14 @@ def _compute_pytorch(model_names, dictionary, average_over, device, torchscript)
     return dictionary
 
 
-def _compute_tensorflow(model_names, dictionary, average_over):
+def _compute_tensorflow(model_names, dictionary, average_over, amp):
     for c, model_name in enumerate(model_names):
         print(f"{c + 1} / {len(model_names)}")
         config = AutoConfig.from_pretrained(model_name)
         model = TFAutoModel.from_pretrained(model_name, config=config)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-        tokenized_sequence = tokenizer.encode(input_text)
+        tokenized_sequence = tokenizer.encode(input_text, add_special_tokens=False)
 
         max_input_size = tokenizer.max_model_input_sizes[model_name]
         batch_sizes = [1, 2, 4, 8]
@@ -407,6 +415,8 @@ def main():
                                                                                   "the correct dependencies are "
                                                                                   "installed")
     parser.add_argument("--xla", required=False, action="store_true", help="TensorFlow only: use XLA acceleration.")
+    parser.add_argument("--amp", required=False, action="store_true", help="TensorFlow only: use automatic mixed precision acceleration.")
+    parser.add_argument("--fp16", required=False, action="store_true", help="PyTorch only: use FP16 to accelerate inference.")
     parser.add_argument("--keras_predict", required=False, action="store_true", help="Whether to use model.predict "
                                                                                      "instead of model() to do a "
                                                                                      "forward pass.")
@@ -434,26 +444,33 @@ def main():
     print("Running with arguments", args)
 
     if args.torch:
-        create_setup_and_compute(
-            model_names=args.models,
-            tensorflow=False,
-            gpu=args.torch_cuda,
-            torchscript=args.torchscript,
-            save_to_csv=args.save_to_csv,
-            csv_filename=args.csv_filename,
-            average_over=args.average_over
-        )
+        if is_torch_available():
+            create_setup_and_compute(
+                model_names=args.models,
+                tensorflow=False,
+                gpu=args.torch_cuda,
+                torchscript=args.torchscript,
+                fp16=args.fp16,
+                save_to_csv=args.save_to_csv,
+                csv_filename=args.csv_filename,
+                average_over=args.average_over
+            )
+        else:
+            raise ImportError("Trying to run a PyTorch benchmark but PyTorch was not found in the environment.")
 
     if args.tensorflow:
-        create_setup_and_compute(
-            model_names=args.models,
-            tensorflow=True,
-            xla=args.xla,
-            save_to_csv=args.save_to_csv,
-            csv_filename=args.csv_filename,
-            average_over=args.average_over
-        )
-
+        if is_tf_available():
+            create_setup_and_compute(
+                model_names=args.models,
+                tensorflow=True,
+                xla=args.xla,
+                amp=args.amp,
+                save_to_csv=args.save_to_csv,
+                csv_filename=args.csv_filename,
+                average_over=args.average_over
+            )
+        else:
+            raise ImportError("Trying to run a TensorFlow benchmark but TensorFlow was not found in the environment.")
 
 if __name__ == '__main__':
     main()

@@ -246,7 +246,7 @@ def http_get(url, temp_file, proxies=None):
     progress.close()
 
 
-def get_from_cache(url, cache_dir=None, force_download=False, proxies=None):
+def get_from_cache(url, cache_dir=None, force_download=False, proxies=None, etag_timeout=10):
     """
     Given a URL, look for the corresponding dataset in the local cache.
     If it's not there, download it. Then return the path to the cached file.
@@ -266,12 +266,12 @@ def get_from_cache(url, cache_dir=None, force_download=False, proxies=None):
         etag = s3_etag(url, proxies=proxies)
     else:
         try:
-            response = requests.head(url, allow_redirects=True, proxies=proxies)
+            response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
             if response.status_code != 200:
                 etag = None
             else:
                 etag = response.headers.get("ETag")
-        except EnvironmentError:
+        except (EnvironmentError, requests.exceptions.Timeout):
             etag = None
 
     if sys.version_info[0] == 2 and etag is not None:
