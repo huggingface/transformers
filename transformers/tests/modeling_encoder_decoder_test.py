@@ -27,6 +27,7 @@ else:
 
 
 class EncoderDecoderModelTest(unittest.TestCase):
+    @pytest.mark.slow
     def test_model2model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
