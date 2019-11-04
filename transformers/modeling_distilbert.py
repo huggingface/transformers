@@ -421,12 +421,10 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def input_embeddings(self):
+    def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
-    @input_embeddings.setter
-    def input_embeddings(self, new_embeddings):
+    def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -513,8 +511,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
         self.mlm_loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.vocab_projector
 
     def forward(self, input_ids, attention_mask=None, head_mask=None, masked_lm_labels=None):

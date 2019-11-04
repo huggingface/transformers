@@ -601,13 +601,11 @@ class BertModel(BertPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def input_embeddings(self):
+    def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
-    @input_embeddings.setter
-    def input_embeddings(self, new_embeddings):
-        self.embeddings.word_embeddings = new_embeddings
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -753,8 +751,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
@@ -829,8 +826,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
