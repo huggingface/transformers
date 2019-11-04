@@ -456,7 +456,7 @@ class WordpieceTokenizer(object):
                 start = end
 
             if is_bad:
-                output_tokens.append(self.unk_token)
+                output_tokens.append(token)
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
