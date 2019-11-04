@@ -492,11 +492,11 @@ class CommonTestCases:
                 return equal
 
             for model_class in self.all_model_classes:
-                if not hasattr(model_class, 'tie_weights'):
-                    continue
-
                 config.torchscript = True
                 model_not_tied = model_class(config)
+                if model_not_tied.get_output_embeddings() is None:
+                    continue
+
                 params_not_tied = list(model_not_tied.parameters())
 
                 config_tied = copy.deepcopy(config)
