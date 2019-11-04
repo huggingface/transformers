@@ -79,13 +79,13 @@ class CommonTestCases:
             # Now let's start the test
             tokenizer = self.get_tokenizer(max_len=42)
 
-            before_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
+            before_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
 
             with TemporaryDirectory() as tmpdirname:
                 tokenizer.save_pretrained(tmpdirname)
                 tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
 
-                after_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running")
+                after_tokens = tokenizer.encode(u"He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
                 self.assertListEqual(before_tokens, after_tokens)
 
                 self.assertEqual(tokenizer.max_len, 42)
@@ -130,7 +130,7 @@ class CommonTestCases:
             self.assertEqual(added_toks, len(new_toks))
             self.assertEqual(all_size_2, all_size + len(new_toks))
 
-            tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l")
+            tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
             out_string = tokenizer.decode(tokens)
 
             self.assertGreaterEqual(len(tokens), 4)
@@ -148,7 +148,8 @@ class CommonTestCases:
             self.assertEqual(added_toks_2, len(new_toks_2))
             self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
-            tokens = tokenizer.encode(">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l")
+            tokens = tokenizer.encode(">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l",
+                                      add_special_tokens=False)
             out_string = tokenizer.decode(tokens)
 
             self.assertGreaterEqual(len(tokens), 6)
@@ -166,7 +167,7 @@ class CommonTestCases:
 
             tokens = tokenizer.tokenize(input_text)
             ids = tokenizer.convert_tokens_to_ids(tokens)
-            ids_2 = tokenizer.encode(input_text)
+            ids_2 = tokenizer.encode(input_text, add_special_tokens=False)
             self.assertListEqual(ids, ids_2)
 
             tokens_2 = tokenizer.convert_ids_to_tokens(ids)
@@ -206,7 +207,7 @@ class CommonTestCases:
             seq_0 = "Test this method."
             seq_1 = "With these inputs."
 
-            sequences = tokenizer.encode(seq_0, seq_1)
+            sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=False)
             attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
 
             # Method is implemented (e.g. not GPT-2)
@@ -219,7 +220,7 @@ class CommonTestCases:
             seq_0 = "This is a sentence to be encoded."
             stride = 2
 
-            sequence = tokenizer.encode(seq_0)
+            sequence = tokenizer.encode(seq_0, add_special_tokens=False)
             num_added_tokens = tokenizer.num_added_tokens()
             total_length = len(sequence) + num_added_tokens
             information = tokenizer.encode_plus(seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride)
@@ -239,13 +240,13 @@ class CommonTestCases:
             seq_1 = "This is another sentence to be encoded."
             stride = 2
 
-            sequence_0_no_special_tokens = tokenizer.encode(seq_0)
-            sequence_1_no_special_tokens = tokenizer.encode(seq_1)
+            sequence_0_no_special_tokens = tokenizer.encode(seq_0, add_special_tokens=False)
+            sequence_1_no_special_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
             sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
             truncated_second_sequence = tokenizer.build_inputs_with_special_tokens(
-                tokenizer.encode(seq_0),
-                tokenizer.encode(seq_1)[:-2]
+                tokenizer.encode(seq_0, add_special_tokens=False),
+                tokenizer.encode(seq_1, add_special_tokens=False)[:-2]
             )
 
             information = tokenizer.encode_plus(seq_0, seq_1, max_length=len(sequence) - 2, add_special_tokens=True,
@@ -283,7 +284,7 @@ class CommonTestCases:
             sequence_1 = "This one too please."
 
             # Testing single inputs
-            encoded_sequence = tokenizer.encode(sequence_0)
+            encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
             encoded_sequence_dict = tokenizer.encode_plus(sequence_0, add_special_tokens=True)
             encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
             special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
@@ -294,7 +295,8 @@ class CommonTestCases:
             self.assertEqual(encoded_sequence, filtered_sequence)
 
             # Testing inputs pairs
-            encoded_sequence = tokenizer.encode(sequence_0) + tokenizer.encode(sequence_1)
+            encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False) + tokenizer.encode(sequence_1,
+                                                                                                         add_special_tokens=False)
             encoded_sequence_dict = tokenizer.encode_plus(sequence_0, sequence_1, add_special_tokens=True)
             encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
             special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]

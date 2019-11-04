@@ -5,11 +5,36 @@ similar API between the different models.
 
 | Section                    | Description                                                                                                                                                |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [TensorFlow 2.0 models on GLUE](#TensorFlow-2.0-Bert-models-on-GLUE) | Examples running BERT TensorFlow 2.0 model on the GLUE tasks. 
 | [Language Model fine-tuning](#language-model-fine-tuning) | Fine-tuning the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
-| [SQuAD](#squad) | Using BERT for question answering, examples with distributed training.                                                                                  |
+| [SQuAD](#squad) | Using BERT/RoBERTa/XLNet/XLM for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
+| [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
+| [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
+
+## TensorFlow 2.0 Bert models on GLUE
+
+Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/run_tf_glue.py).
+
+Fine-tuning the library TensorFlow 2.0 Bert model for sequence classification on the  MRPC task of the GLUE benchmark: [General Language Understanding Evaluation](https://gluebenchmark.com/).
+
+This script has an option for mixed precision (Automatic Mixed Precision / AMP) to run models on Tensor Cores (NVIDIA Volta/Turing GPUs) and future hardware and an option for XLA, which uses the XLA compiler to reduce model runtime.
+Options are toggled using `USE_XLA` or `USE_AMP` variables in the script.
+These options and the below benchmark are provided by @tlkh.
+
+Quick benchmarks from the script (no other modifications):
+
+| GPU    | Mode | Time (2nd epoch) | Val Acc (3 runs) |
+| --------- | -------- | ----------------------- | ----------------------|
+| Titan V | FP32 | 41s | 0.8438/0.8281/0.8333 |
+| Titan V | AMP | 26s | 0.8281/0.8568/0.8411 |
+| V100    | FP32 | 35s | 0.8646/0.8359/0.8464 |
+| V100    | AMP | 22s | 0.8646/0.8385/0.8411 |
+| 1080 Ti | FP32 | 55s | - | 
+
+Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
 
 ## Language model fine-tuning
 
@@ -77,7 +102,7 @@ python run_lm_finetuning.py \
 
 Based on the script [`run_generation.py`](https://github.com/huggingface/transformers/blob/master/examples/run_generation.py).
 
-Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.
+Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL, XLNet, CTRL.
 A similar script is used for our official demo [Write With Transfomer](https://transformer.huggingface.co), where you
 can try out the different models available in the library.
 
@@ -387,6 +412,172 @@ f1 = 93.15
 exact_match = 86.91
 ```
 
-This fine-tuneds model is available as a checkpoint under the reference
+This fine-tuned model is available as a checkpoint under the reference
 `bert-large-uncased-whole-word-masking-finetuned-squad`.
 
+#### Fine-tuning XLNet on SQuAD
+
+This example code fine-tunes XLNet on the SQuAD dataset. See above to download the data for SQuAD .
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+
+python /data/home/hlu/transformers/examples/run_squad.py \
+    --model_type xlnet \
+    --model_name_or_path xlnet-large-cased \
+    --do_train \
+    --do_eval \
+    --do_lower_case \
+    --train_file /data/home/hlu/notebooks/NLP/examples/question_answering/train-v1.1.json \
+    --predict_file /data/home/hlu/notebooks/NLP/examples/question_answering/dev-v1.1.json \
+    --learning_rate 3e-5 \
+    --num_train_epochs 2 \
+    --max_seq_length 384 \
+    --doc_stride 128 \
+    --output_dir ./wwm_cased_finetuned_squad/ \
+    --per_gpu_eval_batch_size=4  \
+    --per_gpu_train_batch_size=4   \
+    --save_steps 5000
+```
+
+Training with the previously defined hyper-parameters yields the following results:
+
+```python
+{
+"exact": 85.45884578997162,
+"f1": 92.5974600601065,
+"total": 10570,
+"HasAns_exact": 85.45884578997162,
+"HasAns_f1": 92.59746006010651,
+"HasAns_total": 10570
+}
+```
+
+## Named Entity Recognition
+
+Based on the script [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/run_ner.py).
+This example fine-tune Bert Multilingual on GermEval 2014 (German NER).
+Details and results for the fine-tuning provided by @stefan-it.
+
+### Data (Download and pre-processing steps)
+
+Data can be obtained from the [GermEval 2014](https://sites.google.com/site/germeval2014ner/data) shared task page.
+
+Here are the commands for downloading and pre-processing train, dev and test datasets. The original data format has four (tab-separated) columns, in a pre-processing step only the two relevant columns (token and outer span NER annotation) are extracted:
+
+```bash
+curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-train.tsv?attredirects=0&d=1' \
+| grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > train.txt.tmp
+curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-dev.tsv?attredirects=0&d=1' \
+| grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > dev.txt.tmp
+curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-test.tsv?attredirects=0&d=1' \
+| grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > test.txt.tmp
+```
+
+The GermEval 2014 dataset contains some strange "control character" tokens like `'\x96', '\u200e', '\x95', '\xad' or '\x80'`. One problem with these tokens is, that `BertTokenizer` returns an empty token for them, resulting in misaligned `InputExample`s. I wrote a script that a) filters these tokens and b) splits longer sentences into smaller ones (once the max. subtoken length is reached).
+
+```bash
+wget "https://raw.githubusercontent.com/stefan-it/fine-tuned-berts-seq/master/scripts/preprocess.py"
+```
+Let's define some variables that we need for further pre-processing steps and training the model:
+
+```bash
+export MAX_LENGTH=128
+export BERT_MODEL=bert-base-multilingual-cased
+```
+
+Run the pre-processing script on training, dev and test datasets:
+
+```bash
+python3 preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > train.txt
+python3 preprocess.py dev.txt.tmp $BERT_MODEL $MAX_LENGTH > dev.txt
+python3 preprocess.py test.txt.tmp $BERT_MODEL $MAX_LENGTH > test.txt
+```
+
+The GermEval 2014 dataset has much more labels than CoNLL-2002/2003 datasets, so an own set of labels must be used:
+
+```bash
+cat train.txt dev.txt test.txt | cut -d " " -f 2 | grep -v "^$"| sort | uniq > labels.txt
+```
+
+### Training
+
+Additional environment variables must be set:
+
+```bash
+export OUTPUT_DIR=germeval-model
+export BATCH_SIZE=32
+export NUM_EPOCHS=3
+export SAVE_STEPS=750
+export SEED=1
+```
+
+To start training, just run:
+
+```bash
+python3 run_ner.py --data_dir ./ \
+--model_type bert \
+--labels ./labels.txt \
+--model_name_or_path $BERT_MODEL \
+--output_dir $OUTPUT_DIR \
+--max_seq_length  $MAX_LENGTH \
+--num_train_epochs $NUM_EPOCHS \
+--per_gpu_train_batch_size $BATCH_SIZE \
+--save_steps $SAVE_STEPS \
+--seed $SEED \
+--do_train \
+--do_eval \
+--do_predict
+```
+
+If your GPU supports half-precision training, just add the `--fp16` flag. After training, the model will be both evaluated on development and test datasets.
+
+### Evaluation
+
+Evaluation on development dataset outputs the following for our example:
+
+```bash
+10/04/2019 00:42:06 - INFO - __main__ -   ***** Eval results  *****
+10/04/2019 00:42:06 - INFO - __main__ -     f1 = 0.8623348017621146
+10/04/2019 00:42:06 - INFO - __main__ -     loss = 0.07183869666975543
+10/04/2019 00:42:06 - INFO - __main__ -     precision = 0.8467916366258111
+10/04/2019 00:42:06 - INFO - __main__ -     recall = 0.8784592370979806
+```
+
+On the test dataset the following results could be achieved:
+
+```bash
+10/04/2019 00:42:42 - INFO - __main__ -   ***** Eval results  *****
+10/04/2019 00:42:42 - INFO - __main__ -     f1 = 0.8614389652384803
+10/04/2019 00:42:42 - INFO - __main__ -     loss = 0.07064602487454782
+10/04/2019 00:42:42 - INFO - __main__ -     precision = 0.8604651162790697
+10/04/2019 00:42:42 - INFO - __main__ -     recall = 0.8624150210424085
+```
+
+## Abstractive summarization
+
+Based on the script
+[`run_summarization_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_summarization_finetuning.py).
+
+Before running this script you should download **both** CNN and Daily Mail
+datasets from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/)  (the
+links next to "Stories") in the same folder. Then uncompress the archives by running:
+
+```bash
+tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
+```
+
+note that the finetuning script **will not work** if you do not download both
+datasets. We will refer as `$DATA_PATH` the path to where you uncompressed both
+archive.
+
+```bash
+export DATA_PATH=/path/to/dataset/
+
+python run_summarization_finetuning.py \
+    --output_dir=output \
+    --model_type=bert2bert \
+    --model_name_or_path=bert2bert \
+    --do_train \
+    --data_path=$DATA_PATH \
+```

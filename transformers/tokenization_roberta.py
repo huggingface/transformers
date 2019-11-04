@@ -46,12 +46,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-vocab.json",
         'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
         'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-vocab.json",
+        'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-vocab.json",
     },
     'merges_file':
     {
         'roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-merges.txt",
         'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt",
         'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-merges.txt",
+        'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-merges.txt",
     },
 }
 
@@ -59,6 +61,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'roberta-base': 512,
     'roberta-large': 512,
     'roberta-large-mnli': 512,
+    'distilroberta-base': 512,
 }
 
 
