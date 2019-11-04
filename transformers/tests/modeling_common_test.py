@@ -429,12 +429,6 @@ class CommonTestCases:
                     list(hidden_states[0].shape[-2:]),
                     [self.model_tester.seq_length, self.model_tester.hidden_size])
 
-        def test_debug(self):
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            for model_class in self.all_model_classes:
-                model = model_class(config)
-                model_embed = model.resize_token_embeddings(config.vocab_size + 10)
-
         def test_resize_tokens_embeddings(self):
             original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if not self.test_resize_embeddings:
@@ -703,6 +697,7 @@ class CommonTestCases:
                 config_and_inputs = self.prepare_config_and_inputs()
                 self.create_and_check_presents(*config_and_inputs)
 
+        @pytest.mark.slow
         def run_slow_tests(self):
             self.create_and_check_model_from_pretrained()
 
@@ -776,6 +771,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 
 
 class ModelUtilsTest(unittest.TestCase):
+    @pytest.mark.slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

@@ -173,7 +173,7 @@ class RobertaModel(BertModel):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_emebddings = value
+        self.embeddings.word_embeddings = value
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """,
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
