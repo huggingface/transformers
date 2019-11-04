@@ -5,26 +5,40 @@ Transformer XL
 ``TransfoXLConfig``
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TransfoXLConfig
+.. autoclass:: transformers.TransfoXLConfig
     :members:
 
 
 ``TransfoXLTokenizer``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TransfoXLTokenizer
+.. autoclass:: transformers.TransfoXLTokenizer
     :members:
 
 
 ``TransfoXLModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TransfoXLModel
+.. autoclass:: transformers.TransfoXLModel
     :members:
 
 
 ``TransfoXLLMHeadModel``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: pytorch_transformers.TransfoXLLMHeadModel
+.. autoclass:: transformers.TransfoXLLMHeadModel
+    :members:
+
+
+``TFTransfoXLModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTransfoXLModel
+    :members:
+
+
+``TFTransfoXLLMHeadModel``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFTransfoXLLMHeadModel
     :members:
