@@ -96,7 +96,7 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
             ["un", "##want", "##ed", "runn", "##ing"])
 
         self.assertListEqual(
-            tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
+            tokenizer.tokenize("unwantedX running"), ["unwantedX", "runn", "##ing"])
 
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(u" "))
