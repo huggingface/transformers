@@ -438,12 +438,12 @@ class ALBertLMPredictionHead(nn.Module):
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.dense = nn.Linear(config.embedding_size,
+        self.decoder = nn.Linear(config.embedding_size,
                                  config.vocab_size,
                                  bias=False)
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
-        hidden_states = self.dense(hidden_states) + self.bias
+        hidden_states = self.decoder(hidden_states) + self.bias
         return hidden_states
 
 
