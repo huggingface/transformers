@@ -429,6 +429,12 @@ class CommonTestCases:
                     list(hidden_states[0].shape[-2:]),
                     [self.model_tester.seq_length, self.model_tester.hidden_size])
 
+        def test_debug(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model_embed = model.resize_token_embeddings(config.vocab_size + 10)
+
         def test_resize_tokens_embeddings(self):
             original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if not self.test_resize_embeddings:
@@ -468,9 +474,9 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
-                self.assertTrue(hasattr(model, 'input_embeddings'))
-                setattr(model, 'input_embeddings', torch.nn.Embedding(10, 10))
-                self.assertTrue(hasattr(model, 'output_embeddings'))
+                model.get_input_embeddings()
+                model.set_input_embeddings(torch.nn.Embedding(10, 10))
+                model.get_output_embeddings()
 
         def test_tie_model_weights(self):
             if not self.test_torchscript:

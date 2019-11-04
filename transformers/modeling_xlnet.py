@@ -611,12 +611,10 @@ class XLNetModel(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def input_embeddings(self):
+    def get_input_embeddings(self):
         return self.word_embedding
 
-    @input_embeddings.setter
-    def input_embeddings(self, new_embeddings):
+    def set_input_embeddings(self, new_embeddings):
         self.word_embedding = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -923,8 +921,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.lm_loss
 
     def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,

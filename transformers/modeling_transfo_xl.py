@@ -639,12 +639,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def input_embeddings(self):
+    def get_input_embeddings(self):
         return self.word_emb
 
-    @input_embeddings.setter
-    def input_embeddings(self, new_embeddings):
+    def set_input_embeddings(self, new_embeddings):
         self.word_emb = new_embeddings
 
     def backward_compatible(self):

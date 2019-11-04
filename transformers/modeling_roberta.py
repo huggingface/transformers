@@ -169,10 +169,11 @@ class RobertaModel(BertModel):
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
 
-    @property
-    def input_embeddings(self):
+    def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
+    def set_input_embeddings(self, value):
+        self.embeddings.word_emebddings = value
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """,
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
@@ -218,8 +219,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.lm_head.decoder
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,

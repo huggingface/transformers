@@ -357,12 +357,10 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def input_embeddings(self):
+    def get_input_embeddings(self):
         return self.wte
 
-    @input_embeddings.setter
-    def input_embeddings(self, new_embeddings):
+    def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -519,8 +517,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.lm_head
 
     def forward(self, input_ids, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
@@ -623,8 +620,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
         self.init_weights()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.lm_head
 
     def forward(self, input_ids, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
