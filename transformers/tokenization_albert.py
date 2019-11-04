@@ -29,18 +29,26 @@ VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
-    'albert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-spiece.model",
-    'albert-large': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-spiece.model",
-    'albert-xlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-spiece.model",
-    'albert-xxlarge': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-spiece.model",
+        'albert-base-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-spiece.model",
+        'albert-large-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-spiece.model",
+        'albert-xlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-spiece.model",
+        'albert-xxlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-spiece.model",
+        'albert-base-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-spiece.model",
+        'albert-large-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-spiece.model",
+        'albert-xlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-spiece.model",
+        'albert-xxlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'albert-base': 512,
-    'albert-large': 512,
-    'albert-xlarge': 512,
-    'albert-xxlarge': 512,
+    'albert-base-v1': 512,
+    'albert-large-v1': 512,
+    'albert-xlarge-v1': 512,
+    'albert-xxlarge-v1': 512,
+    'albert-base-v2': 512,
+    'albert-large-v2': 512,
+    'albert-xlarge-v2': 512,
+    'albert-xxlarge-v2': 512,
 }
 
 SPIECE_UNDERLINE = u'▁'
