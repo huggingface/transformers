@@ -62,6 +62,8 @@ Awesome! Please provide the following information:
 If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
+We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder.
+
 ### Do you want a new feature (that is not a model)?
 
 A world-class feature request addresses the following points:
@@ -80,6 +82,8 @@ A world-class feature request addresses the following points:
 
 If your issue is well written we're already 80% of the way there by the time you
 post it.
+
+We have added **templates** to guide you in the process of adding a new example script for training or testing the models in the library. You can find them in the [`templates`](./templates) folder.
 
 ## Start contributing! (Pull Requests)
 

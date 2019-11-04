@@ -73,15 +73,15 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     """
     Generate hidden states mask, and optionally an attention mask.
     """
-    bs = lengths.size(0)
+    alen = torch.arange(slen, dtype=torch.long, device=lengths.device)
     if padding_mask is not None:
         mask = padding_mask
     else:
         assert lengths.max().item() <= slen
-        alen = torch.arange(slen, dtype=torch.long, device=lengths.device)
         mask = alen < lengths[:, None]
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
+    bs = lengths.size(0)
     if causal:
         attn_mask = alen[None, None, :].repeat(bs, slen, 1) <= alen[None, :, None]
     else:
