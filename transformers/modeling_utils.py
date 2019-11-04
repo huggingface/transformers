@@ -284,6 +284,7 @@ class PreTrainedModel(nn.Module):
                 pretrained_model_name_or_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
+                proxies=proxies,
                 **kwargs
             )
         else:
@@ -383,6 +384,8 @@ class PreTrainedModel(nn.Module):
             if metadata is not None:
                 state_dict._metadata = metadata
 
+            # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
+            # so we need to apply the function recursively.
             def load(module, prefix=''):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
                 module._load_from_state_dict(

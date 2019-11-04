@@ -70,19 +70,19 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
         tokenizer = self.get_tokenizer()
 
         self.assertListEqual(
-            tokenizer.encode('Hello world!'),
+            tokenizer.encode('Hello world!', add_special_tokens=False),
             [0, 31414, 232, 328, 2]
         )
         self.assertListEqual(
-            tokenizer.encode('Hello world! cécé herlolip 418'),
+            tokenizer.encode('Hello world! cécé herlolip 418', add_special_tokens=False),
             [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
         )
 
     def test_sequence_builders(self):
         tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
-        text = tokenizer.encode("sequence builders")
-        text_2 = tokenizer.encode("multi-sequence build")
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_text_from_decode = tokenizer.encode("sequence builders", add_special_tokens=True)
         encoded_pair_from_decode = tokenizer.encode("sequence builders", "multi-sequence build", add_special_tokens=True)
