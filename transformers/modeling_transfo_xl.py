@@ -639,8 +639,13 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    @property
+    def input_embeddings(self):
         return self.word_emb
+
+    @input_embeddings.setter
+    def input_embeddings(self, new_embeddings):
+        self.word_emb = new_embeddings
 
     def backward_compatible(self):
         self.sample_softmax = -1
@@ -826,7 +831,6 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model,
                                                     config.cutoffs, div_val=config.div_val)
         self.init_weights()
-        self.tie_weights()
 
     def tie_weights(self):
         """

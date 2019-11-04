@@ -463,6 +463,15 @@ class CommonTestCases:
 
                 self.assertTrue(models_equal)
 
+        def test_model_common_attributes(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                self.assertTrue(hasattr(model, 'input_embeddings'))
+                setattr(model, 'input_embeddings', torch.nn.Embedding(10, 10))
+                self.assertTrue(hasattr(model, 'output_embeddings'))
+
         def test_tie_model_weights(self):
             if not self.test_torchscript:
                 return

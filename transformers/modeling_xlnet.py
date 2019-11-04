@@ -611,9 +611,13 @@ class XLNetModel(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        self.word_embedding = self._get_resized_embeddings(self.word_embedding, new_num_tokens)
+    @property
+    def input_embeddings(self):
         return self.word_embedding
+
+    @input_embeddings.setter
+    def input_embeddings(self, new_embeddings):
+        self.word_embedding = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -918,12 +922,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the embeddings
-        """
-        self._tie_or_clone_weights(self.lm_loss, self.transformer.word_embedding)
+    @property
+    def output_embeddings(self):
+        return self.lm_loss
 
     def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
                 token_type_ids=None, input_mask=None, head_mask=None, labels=None):
