@@ -36,7 +36,6 @@ from tqdm import trange
 from transformers import GPT2Tokenizer
 from transformers.file_utils import cached_path
 from transformers.modeling_gpt2 import GPT2LMHeadModel
-from IPython import embed
 
 PPLM_BOW = 1
 PPLM_DISCRIM = 2
