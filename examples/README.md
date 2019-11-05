@@ -623,7 +623,7 @@ export XNLI_DIR=/path/to/XNLI
 python run_xnli.py \
   --model_type bert \
   --model_name_or_path bert-base-multilingual-cased \
-  --language es \
+  --language de \
   --train_language en \
   --do_train \
   --do_eval \
@@ -636,8 +636,8 @@ python run_xnli.py \
   --save_steps -1
 ```
 
-Training with the previously defined hyper-parameters yields the following results on the dev set:
+Training with the previously defined hyper-parameters yields the following results on the **test** set:
 
 ```bash
-acc = 0.738152610441767
+acc = 0.7093812375249501
 ```
