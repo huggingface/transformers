@@ -21,7 +21,6 @@ import logging
 import os
 
 from .utils import DataProcessor, InputExample
-from transformers.data.metrics import simple_accuracy
 
 logger = logging.getLogger(__name__)
 
