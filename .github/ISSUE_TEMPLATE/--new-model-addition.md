@@ -17,6 +17,7 @@ assignees: ''
 
 * [ ] the model implementation is available: (give details)
 * [ ] the model weights are available: (give details)
+* [ ] who are the authors: (mention them)
 
 ## Additional context
 
