@@ -315,7 +315,8 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
         **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
             Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
-            This is useful if you want to input a probability distribution of tokens rather than actual tokens.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
