@@ -56,3 +56,26 @@ Example usage
 
 An example using these processors is given in the
 `run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py>`__ script.
+
+
+XNLI
+~~~~~~~~~~~~~~~~~~~~~
+
+`The Cross-Lingual NLI Corpus (XNLI) <https://www.nyu.edu/projects/bowman/xnli/>`__ is a benchmark that evaluates
+the quality of cross-lingual text representations. 
+XNLI is crowd-sourced dataset based on `MultiNLI <http://www.nyu.edu/projects/bowman/multinli/>`: pairs of text are labeled with textual entailment 
+annotations for 15 different languages (including both high-ressource language such as English and low-ressource languages such as Swahili).
+
+It was released together with the paper
+`XNLI: Evaluating Cross-lingual Sentence Representations <https://arxiv.org/abs/1809.05053>`__
+
+This library hosts the processor to load the XNLI data:
+    - :class:`~transformers.data.processors.utils.XnliProcessor`
+
+Please note that since the gold labels are available on the test set, evaluation is performed on the test set.
+
+Example usage
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+An example using these processors is given in the
+`run_xnli.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_xnli.py>`__ script.
