@@ -134,7 +134,6 @@ examples/runs
 
 # data
 /olid
-/origin_data
 /output
 serialization_dir
 

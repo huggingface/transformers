@@ -1,0 +1,73 @@
+1) Overview
+
+This task requires the annotators to give their judgements on whether a tweet is offensive or not. Please note that the data contains offensive or sensitive content, including profanity and racial slurs.
+
+Steps
+There are 3 steps to complete this task -
+
+In the first step, the annotators mark the tweet as being offensive or not offensive.
+If the tweet is offensive then the annotators need to tell if the offense is targeted towards somebody or something or it is not targeted.
+If the offense is targeted then the annotators also need to tell who it is targeted against.
+
+Rules & Tips
+Please rate the tweet according to whether it is offensive generally or to the target, not whether you are personally offended by it.
+
+Sub-task A: Offensive or not
+
+In this sub-task we are interested in the identification of offensive posts and posts containing any form of (untargeted) profanity. In this sub-task there are 2 categories in which the tweet could be classified -
+
+Not Offensive - This post does not contain offense or profanity.  Non-offensive posts do not include any form of offense or profanity.
+Offensive - This post contains offensive language or a targeted (veiled or direct) offense.  In our annotation, we label a post as offensive if it  contains any form of non-acceptable language (profanity) or a targeted offense which can be veiled or direct. To sum up this category includes insults, threats, and posts containing profane language and swear words.
+Sub-task B: Offense types
+
+In this sub-task we are interested in categorizing offenses. Only posts containing offenses are included in sub-task B. In this sub-task, annotators need to label from one of the following categories -
+
+Targeted Insult - A post containing an insult or a threat to an individual, group, or others;
+Untargeted - A post containing non-targeted profanity and swearing. 
+Posts containing general profanity are not targeted but they contain non-acceptable language. On the other hand, insults and threats are targeted at an individual or group.
+
+Sub-task C: Offense target
+
+Finally, in sub-task C we are interested in the target of offenses. Only posts which are either insults or threats are included in this sub-task. The three categories included in sub-task C are the following:
+
+Individual - The target of the offensive post is an individual: a famous person, named individual or an unnamed person interacting in the conversation.
+Group - The target of the offensive post is a group of people considered as a unity due to the same ethnicity, gender or sexual orientation, political affiliation, religious belief, or something else.
+Other – The target of the offensive post does not belong to any of the previous two categories (e.g. an organization, a situation, an event, or an issue).
+
+All possible label combinations across all the sub-tasks are as below:
+
+Not offensive
+Offensive, Untargeted
+Offensive, Targeted Insult, (Individual | Group | Other)
+
+2) Examples
+
+Sub-task A: Offensive language identification
+
+Some of the examples include:
+
+@thecomeback @JABItalia Fuck @APrecourt - Offensive
+Hey @LIRR , you are disgusting. Offensive
+A true American literary icon. #PhilipRoth will be missed. - Not offensive
+
+Sub-task B: Automatic categorization of offense types
+
+Some of the examples include:
+
+@thecomeback @JABItalia Fuck @APrecourt - Offensive Untargeted
+I mean I'm dating to get fucking attention - Offensive Untargeted
+Hey @LIRR , you are disgusting. Offensive, Targeted Insult
+@BreFields1 @jonesebonee18 fuck you lol - Offensive, Targeted Insult
+@karlsantix You are a complete knob! It's ppl like you who are messing up this country - Offensive, Targeted Insult
+If I pull up to yo crib and you offer me cockroach milk you getting yo ass beaten - Offensive, Targeted Insult
+@Top_Sergeant Assuming liberals are unarmed would be a grave mistake by the deplorables. - Offensive, Targeted Insult
+
+Sub-task C: Offense target identification
+
+Some of the examples include:
+
+Hey @LIRR , you are disgusting. - Offensive, Targeted Insult, Other
+@BreFields1 @jonesebonee18 fuck you lol - Offensive, Targeted Insult, Individual
+@karlsantix You are a complete knob! It's ppl like you who are messing up this country - Offensive, Targeted Insult, Individual
+If I pull up to yo crib and you offer me cockroach milk you getting yo ass beaten - Offensive, Targeted Threat, Individual
+@Top_Sergeant Assuming liberals are unarmed would be a grave mistake by the deplorables. - Offensive, Targeted Insult, Group
