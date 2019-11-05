@@ -36,7 +36,7 @@ class XnliProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
         lg = self.language if self.train_language is None else self.train_language
-        lines = self._read_tsv(os.path.join(data_dir, f"XNLI-MT-1.0/multinli/multinli.train.{lg}.tsv"))
+        lines = self._read_tsv(os.path.join(data_dir, "XNLI-MT-1.0/multinli/multinli.train.{lg}.tsv".format(lg)))
         examples = []
         for (i, line) in enumerate(lines):
             if i == 0:
@@ -78,7 +78,7 @@ def xnli_compute_metrics(task_name, preds, labels):
     if task_name == "xnli":
         return {"acc": simple_accuracy(preds, labels)}
     else:
-        raise ValueError(f'{task_name} is not a supported task.')
+        raise ValueError('{} is not a supported task.'.format(task_name))
 
 xnli_processors = {
     "xnli": XnliProcessor,
