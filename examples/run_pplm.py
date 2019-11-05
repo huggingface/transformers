@@ -373,7 +373,7 @@ def get_bag_of_words_indices(bag_of_words_ids_or_paths: List[str]) -> List[List[
             filepath = id_or_path
         with open(filepath, "r") as f:
             words = f.read().split("\n")
-        bow_indices.append([TOKENIZER.encode(word) for word in words])
+        bow_indices.append([TOKENIZER.encode(word, add_prefix_space=True) for word in words])
     return bow_indices
 
 
