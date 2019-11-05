@@ -44,9 +44,9 @@ from transformers import (WEIGHTS_NAME,
 
 from transformers import AdamW, WarmupLinearSchedule
 
-from utils_xnli import xnli_compute_metrics as compute_metrics
-from utils_xnli import xnli_output_modes as output_modes
-from utils_xnli import xnli_processors as processors
+from transformers import xnli_compute_metrics as compute_metrics
+from transformers import xnli_output_modes as output_modes
+from transformers import xnli_processors as processors
 
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 
