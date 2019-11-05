@@ -32,8 +32,9 @@ class ConstantLRSchedule(LambdaLR):
 
 class WarmupConstantSchedule(LambdaLR):
     """ Linear warmup and then constant.
-        Linearly increases learning rate schedule from 0 to 1 over `warmup_steps` training steps.
-        Keeps learning rate schedule equal to 1. after warmup_steps.
+        Multiplies the learning rate defined in the optimizer by a dynamic variable determined by the current step.
+        Linearly increases the multiplicative variable from 0. to 1. over `warmup_steps` training steps.
+        Keeps multiplicative variable equal to 1. after warmup_steps.
     """
     def __init__(self, optimizer, warmup_steps, last_epoch=-1):
         self.warmup_steps = warmup_steps
@@ -47,8 +48,9 @@ class WarmupConstantSchedule(LambdaLR):
 
 class WarmupLinearSchedule(LambdaLR):
     """ Linear warmup and then linear decay.
-        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
-        Linearly decreases learning rate from 1. to 0. over remaining `t_total - warmup_steps` steps.
+        Multiplies the learning rate defined in the optimizer by a dynamic variable determined by the current step.
+        Linearly increases the multiplicative variable from 0. to 1. over `warmup_steps` training steps.
+        Linearly decreases the multiplicative variable from 1. to 0. over remaining `t_total - warmup_steps` steps.
     """
     def __init__(self, optimizer, warmup_steps, t_total, last_epoch=-1):
         self.warmup_steps = warmup_steps
@@ -63,9 +65,10 @@ class WarmupLinearSchedule(LambdaLR):
 
 class WarmupCosineSchedule(LambdaLR):
     """ Linear warmup and then cosine decay.
-        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
-        Decreases learning rate from 1. to 0. over remaining `t_total - warmup_steps` steps following a cosine curve.
-        If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
+        Multiplies the learning rate defined in the optimizer by a dynamic variable determined by the current step.
+        Linearly increases the multiplicative variable from 0. to 1. over `warmup_steps` training steps.
+        Decreases the multiplicative variable from 1. to 0. over remaining `t_total - warmup_steps` steps following a cosine curve.
+        If `cycles` (default=0.5) is different from default, then the multiplicative variable follows cosine function after warmup.
     """
     def __init__(self, optimizer, warmup_steps, t_total, cycles=.5, last_epoch=-1):
         self.warmup_steps = warmup_steps
@@ -83,8 +86,9 @@ class WarmupCosineSchedule(LambdaLR):
 
 class WarmupCosineWithHardRestartsSchedule(LambdaLR):
     """ Linear warmup and then cosine cycles with hard restarts.
-        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
-        If `cycles` (default=1.) is different from default, learning rate follows `cycles` times a cosine decaying
+        Multiplies the learning rate defined in the optimizer by a dynamic variable determined by the current step.
+        Linearly increases the multiplicative variable from 0. to 1. over `warmup_steps` training steps.
+        If `cycles` (default=1.) is different from default, learning rate  follows `cycles` times a cosine decaying
         learning rate (with hard restarts).
     """
     def __init__(self, optimizer, warmup_steps, t_total, cycles=1., last_epoch=-1):
