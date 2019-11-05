@@ -20,7 +20,7 @@ from __future__ import absolute_import, division, print_function
 import logging
 import os
 
-from transformers.data.processors import DataProcessor, InputExample
+from .utils import DataProcessor, InputExample
 from transformers.data.metrics import simple_accuracy
 
 logger = logging.getLogger(__name__)
