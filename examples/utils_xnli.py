@@ -50,9 +50,9 @@ class XnliProcessor(DataProcessor):
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
-    def get_dev_examples(self, data_dir):
+    def get_test_examples(self, data_dir):
         """See base class."""
-        lines = self._read_tsv(os.path.join(data_dir, "XNLI-1.0/xnli.dev.tsv"))
+        lines = self._read_tsv(os.path.join(data_dir, "XNLI-1.0/xnli.test.tsv"))
         examples = []
         for (i, line) in enumerate(lines):
             if i == 0:
@@ -60,7 +60,7 @@ class XnliProcessor(DataProcessor):
             language = line[0]
             if language != self.language:
                 continue
-            guid = "%s-%s" % ('dev', i)
+            guid = "%s-%s" % ('test', i)
             text_a = line[6]
             text_b = line[7]
             label = line[1]
