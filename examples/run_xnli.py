@@ -248,7 +248,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
         else:
-            raise ValueError(f'No other `output_mode` for XNLI.')
+            raise ValueError('No other `output_mode` for XNLI.')
         result = compute_metrics(eval_task, preds, out_label_ids)
         results.update(result)
 
@@ -305,7 +305,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     if output_mode == "classification":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
     else:
-        raise ValueError(f'No other `output_mode` for XNLI.')
+        raise ValueError('No other `output_mode` for XNLI.')
 
     dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
