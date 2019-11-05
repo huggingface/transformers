@@ -23,6 +23,7 @@ import logging
 import math
 import collections
 from io import open
+from tqdm import tqdm
 
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 
@@ -202,7 +203,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     # f = np.zeros((max_N, max_M), dtype=np.float32)
 
     features = []
-    for (example_index, example) in enumerate(examples):
+    for (example_index, example) in enumerate(tqdm(examples)):
 
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
