@@ -29,7 +29,7 @@ from .data import (is_sklearn_available,
                    xnli_output_modes, xnli_processors, xnli_tasks_num_labels)
 
 if is_sklearn_available():
-    from .data import glue_compute_metrics
+    from .data import glue_compute_metrics, xnli_compute_metrics
 
 # Tokenizers
 from .tokenization_utils import (PreTrainedTokenizer)

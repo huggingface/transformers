@@ -73,13 +73,6 @@ class XnliProcessor(DataProcessor):
         """See base class."""
         return ["contradiction", "entailment", "neutral"]
 
-def xnli_compute_metrics(task_name, preds, labels):
-    assert len(preds) == len(labels)
-    if task_name == "xnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    else:
-        raise ValueError('{} is not a supported task.'.format(task_name))
-
 xnli_processors = {
     "xnli": XnliProcessor,
 }
