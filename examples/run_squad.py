@@ -22,6 +22,7 @@ import logging
 import os
 import random
 import glob
+import timeit
 
 import numpy as np
 import torch
@@ -221,6 +222,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
     all_results = []
+    start_time = timeit.default_timer()
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
@@ -252,6 +254,9 @@ def evaluate(args, model, tokenizer, prefix=""):
                                    start_logits = to_list(outputs[0][i]),
                                    end_logits   = to_list(outputs[1][i]))
             all_results.append(result)
+
+    evalTime = timeit.default_timer() - start_time
+    logger.info("  Evaluation done in total %f secs (%f sec per example)", evalTime, evalTime / len(dataset))
 
     # Compute predictions
     output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
