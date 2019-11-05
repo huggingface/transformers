@@ -217,9 +217,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
         if encoder_hidden_states is None:
             encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[
-                0
-            ]  # output the last layer hidden state
+            encoder_hidden_states = encoder_outputs[0]
         else:
             encoder_outputs = ()
 
