@@ -84,7 +84,7 @@ class XxxConfig(PretrainedConfig):
                  summary_first_dropout=0.1,
                  **kwargs):
         super(XxxConfig, self).__init__(**kwargs)
-        self.vocab_size = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, six.string_types) else -1
+        self.vocab_size = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, int) else -1
         self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
