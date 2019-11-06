@@ -136,18 +136,11 @@ def encode_for_summarization(story_lines, summary_lines, tokenizer):
     as specified in [1] by using `[SEP] [CLS]` tokens to separate
     sentences.
     """
-    story_lines_token_ids = [
-        tokenizer.build_inputs_with_special_tokens(tokenizer.encode(line))
-        for line in story_lines
-    ]
-    summary_lines_token_ids = [
-        tokenizer.build_inputs_with_special_tokens(tokenizer.encode(line))
-        for line in summary_lines
-    ]
-
+    story_lines_token_ids = [tokenizer.encode(line) for line in story_lines]
     story_token_ids = [
         token for sentence in story_lines_token_ids for token in sentence
     ]
+    summary_lines_token_ids = [tokenizer.encode(line) for line in summary_lines]
     summary_token_ids = [
         token for sentence in summary_lines_token_ids for token in sentence
     ]
