@@ -49,7 +49,7 @@ TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
 # - tf.keras.layers.Layer for the layers and
-# - TFPreTrainedModel for the models (it-self a sub-class of tf.keras.Model)
+# - TFPreTrainedModel for the models (itself a sub-class of tf.keras.Model)
 ####################################################
 
 ####################################################

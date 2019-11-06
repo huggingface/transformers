@@ -238,7 +238,7 @@ class PreTrainedModel(nn.Module):
         """
         assert os.path.isdir(save_directory), "Saving path should be a directory where the model and configuration can be saved"
 
-        # Only save the model it-self if we are using distributed training
+        # Only save the model itself if we are using distributed training
         model_to_save = self.module if hasattr(self, 'module') else self
 
         # Save configuration file

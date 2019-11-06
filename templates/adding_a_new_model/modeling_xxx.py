@@ -120,7 +120,7 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
 ####################################################
 # PyTorch Models are constructed by sub-classing
 # - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
+# - PreTrainedModel for the models (itself a sub-class of torch.nn.Module)
 ####################################################
 
 ####################################################
@@ -300,10 +300,19 @@ class XxxModel(XxxPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
+            attention_mask = torch.ones(input_shape)
         if token_type_ids is None:
-            token_type_ids = torch.zeros_like(input_ids)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -337,7 +346,7 @@ class XxxModel(XxxPreTrainedModel):
 
         ##################################
         # Replace this with your model code
-        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
+        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds)
         encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
@@ -388,14 +397,15 @@ class XxxForMaskedLM(XxxPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 masked_lm_labels=None):
 
         outputs = self.transformer(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
                             position_ids=position_ids, 
-                            head_mask=head_mask)
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
