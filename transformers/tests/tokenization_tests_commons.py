@@ -110,6 +110,36 @@ class CommonTestCases:
 
             self.assertListEqual(subwords, subwords_loaded)
 
+        def test_added_tokens_do_lower_case(self):
+            tokenizer = self.get_tokenizer(do_lower_case=True)
+
+            text = "aaaaa bbbbbb low cccccccccdddddddd l"
+            text2 = "AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l"
+
+            toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
+
+            new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd", 'AAAAA BBBBBB', 'CCCCCCCCCDDDDDDDD']
+            added = tokenizer.add_tokens(new_toks)
+            self.assertEqual(added, 2)
+
+            toks = tokenizer.tokenize(text)
+            toks2 = tokenizer.tokenize(text2)
+
+            self.assertEqual(len(toks), len(toks2))
+            self.assertNotEqual(len(toks), len(toks0))  # toks0 should be longer
+            self.assertListEqual(toks, toks2)
+
+            tokenizer = self.get_tokenizer(do_lower_case=False)
+
+            added = tokenizer.add_tokens(new_toks)
+            self.assertEqual(added, 4)
+
+            toks = tokenizer.tokenize(text)
+            toks2 = tokenizer.tokenize(text2)
+
+            self.assertEqual(len(toks), len(toks2))  # Length should still be the same
+            self.assertNotEqual(len(toks), len(toks0))
+            self.assertNotEqual(toks[0], toks2[0])  # But at least the first tokens should differ
 
         def test_add_tokens_tokenizer(self):
             tokenizer = self.get_tokenizer()
@@ -159,7 +189,6 @@ class CommonTestCases:
             self.assertGreater(tokens[-2], tokens[-3])
             self.assertEqual(tokens[0], tokenizer.eos_token_id)
             self.assertEqual(tokens[-2], tokenizer.pad_token_id)
-
 
         def test_required_methods_tokenizer(self):
             tokenizer = self.get_tokenizer()
