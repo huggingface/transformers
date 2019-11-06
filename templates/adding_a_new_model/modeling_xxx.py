@@ -280,7 +280,6 @@ class XxxModel(XxxPreTrainedModel):
 
         self.init_weights()
 
-    @property
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
