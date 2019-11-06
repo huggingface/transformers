@@ -309,10 +309,12 @@ class XxxModel(XxxPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape)
+            attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
