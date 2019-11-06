@@ -73,6 +73,7 @@ class CommonTestCases:
         test_pruning = True
         test_resize_embeddings = True
         test_head_masking = True
+        is_encoder_decoder = False
 
         def test_save_load(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -114,9 +115,8 @@ class CommonTestCases:
             for model_class in self.all_model_classes:
                 model = model_class(config)
                 model.eval()
-                first, second = model(inputs_dict["input_ids"])[0], model(inputs_dict["input_ids"])[0]
+                first, second = model(**inputs_dict)[0], model(**inputs_dict)[0]
                 self.assertEqual(first.ne(second).sum().item(), 0)
-
 
         def test_attention_outputs(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -127,16 +127,27 @@ class CommonTestCases:
                 model = model_class(config)
                 model.eval()
                 outputs = model(**inputs_dict)
-                attentions = outputs[-1]
+                self_attentions = outputs[-1]
                 self.assertEqual(model.config.output_attentions, True)
                 self.assertEqual(model.config.output_hidden_states, False)
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
+                    list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
                     self.model_tester.seq_length,
                     self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
                 out_len = len(outputs)
+
+                if self.is_encoder_decoder:
+                    cross_attentions = outputs[-2]
+                    self.assertEqual(model.config.output_attentions, True)
+                    self.assertEqual(model.config.output_hidden_states, False)
+                    self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(cross_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads,
+                        self.model_tester.seq_length,
+                        self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
 
                 # Check attention is always last and order is fine
                 config.output_attentions = True
@@ -144,14 +155,14 @@ class CommonTestCases:
                 model = model_class(config)
                 model.eval()
                 outputs = model(**inputs_dict)
-                self.assertEqual(out_len+1, len(outputs))
+                self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
                 self.assertEqual(model.config.output_attentions, True)
                 self.assertEqual(model.config.output_hidden_states, True)
 
-                attentions = outputs[-1]
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self_attentions = outputs[-1]
+                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
+                    list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
                     self.model_tester.seq_length,
                     self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
@@ -214,7 +225,6 @@ class CommonTestCases:
 
                 self.assertTrue(models_equal)
 
-
         def test_headmasking(self):
             if not self.test_head_masking:
                 return
@@ -267,7 +277,6 @@ class CommonTestCases:
                     attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
                 self.assertNotEqual(
                     attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
-
 
         def test_head_pruning(self):
             if not self.test_pruning:
@@ -410,7 +419,6 @@ class CommonTestCases:
                 self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
                 self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2], 2: [1, 2]})
-
 
         def test_hidden_states_output(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
