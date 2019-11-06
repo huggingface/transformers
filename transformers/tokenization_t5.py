@@ -16,15 +16,14 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import collections
 import logging
 import os
-import unicodedata
-from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
+
+SPIECE_UNDERLINE = u'▁'
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
@@ -39,8 +38,7 @@ VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
-        't5-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-uncased-vocab.txt",
-        't5-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-uncased-vocab.txt",
+        't5': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
     }
 }
 
@@ -48,167 +46,83 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Mapping from model shortcut names to max length of inputs
 ####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    't5-base-uncased': 512,
-    't5-large-uncased': 512,
+    't5': 512,
 }
-
-####################################################
-# Mapping from model shortcut names to a dictionary of additional
-# keyword arguments for Tokenizer `__init__`.
-# To be used for checkpoint specific configurations.
-####################################################
-PRETRAINED_INIT_CONFIGURATION = {
-    't5-base-uncased': {'do_lower_case': True},
-    't5-large-uncased': {'do_lower_case': True},
-}
-
-
-def load_vocab(vocab_file):
-    """Loads a vocabulary file into a dictionary."""
-    vocab = collections.OrderedDict()
-    with open(vocab_file, "r", encoding="utf-8") as reader:
-        tokens = reader.readlines()
-    for index, token in enumerate(tokens):
-        token = token.rstrip('\n')
-        vocab[token] = index
-    return vocab
-
 
 class T5Tokenizer(PreTrainedTokenizer):
-    r"""
-    Constructs a T5Tokenizer.
-    :class:`~transformers.T5Tokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
-
-    Args:
-        vocab_file: Path to a one-wordpiece-per-line vocabulary file
-        do_lower_case: Whether to lower case the input. Only has an effect when do_wordpiece_only=False
     """
+        SentencePiece based tokenizer. Peculiarities:
 
+            - requires `SentencePiece <https://github.com/google/sentencepiece>`_
+    """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, do_lower_case=True,
-                 unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
-                 mask_token="[MASK]", **kwargs):
-        """Constructs a T5Tokenizer.
+    def __init__(self, vocab_file, eos_token="</s>", unk_token="<unk>",
+                 pad_token="<pad>", **kwargs):
+        super(T5Tokenizer, self).__init__(eos_token=eos_token, unk_token=unk_token,
+                                          pad_token=pad_token, **kwargs)
 
-        Args:
-            **vocab_file**: Path to a one-wordpiece-per-line vocabulary file
-            **do_lower_case**: (`optional`) boolean (default True)
-                Whether to lower case the input
-                Only has an effect when do_basic_tokenize=True
-        """
-        super(T5Tokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
-                                           pad_token=pad_token, cls_token=cls_token,
-                                           mask_token=mask_token, **kwargs)
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning("You need to install SentencePiece to use T5Tokenizer:"
+                           "https://github.com/google/sentencepiece"
+                           "pip install sentencepiece")
 
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = T5Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
-        self.vocab = load_vocab(vocab_file)
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
-        return len(self.vocab)
+        return self.sp_model.get_piece_size()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                           "pip install sentencepiece")
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
 
     def _tokenize(self, text):
         """ Take as input a string and return a list of strings (tokens) for words/sub-words
         """
-        split_tokens = []
-        if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-                for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                    split_tokens.append(sub_token)
-        else:
-            split_tokens = self.wordpiece_tokenizer.tokenize(text)
-        return split_tokens
+        return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
-        return self.vocab.get(token, self.vocab.get(self.unk_token))
+        return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
-        return self.ids_to_tokens.get(index, self.unk_token)
+        return self.sp_model.id_to_piece(index)
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
-        out_string = ' '.join(tokens).replace(' ##', '').strip()
+        out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+    def save_vocabulary(self, save_directory):
+        """ Save the sentencepiece vocabulary (copy original file) and special tokens file
+            to a directory.
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A BERT sequence has the following format:
-            single sequence: [CLS] X [SEP]
-            pair of sequences: [CLS] A [SEP] B [SEP]
-        """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES['vocab_file'])
 
-    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
-        """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
 
-        Args:
-            token_ids_0: list of ids (must not contain special tokens)
-            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
-                for sequence pairs
-            already_has_special_tokens: (default False) Set to True if the token list is already formated with
-                special tokens for the model
-
-        Returns:
-            A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError("You should not supply a second sequence if the provided sequence of "
-                                 "ids is already formated with special tokens for the model.")
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-
-        if token_ids_1 is not None:
-            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1]
-
-    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
-        """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A BERT sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence
-
-        if token_ids_1 is None, only returns the first portion of the mask (0's).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    def save_vocabulary(self, vocab_path):
-        """Save the tokenizer vocabulary to a directory or file."""
-        index = 0
-        if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
-        else:
-            vocab_file = vocab_path
-        with open(vocab_file, "w", encoding="utf-8") as writer:
-            for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning("Saving vocabulary to {}: vocabulary indices are not consecutive."
-                                   " Please check that the vocabulary is not corrupted!".format(vocab_file))
-                    index = token_index
-                writer.write(token + u'\n')
-                index += 1
-        return (vocab_file,)
+        return (out_vocab_file,)
