@@ -7,6 +7,9 @@ def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
+    parser.addoption(
+        "--use_cuda", action="store_true", default=False, help="run tests on gpu"
+    )
 
 
 def pytest_configure(config):
@@ -21,3 +24,8 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "slow" in item.keywords:
             item.add_marker(skip_slow)
+
+@pytest.fixture
+def use_cuda(request):
+    """ Run test on gpu """
+    return request.config.getoption("--use_cuda")
