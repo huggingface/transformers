@@ -138,7 +138,11 @@ def swish(x):
     return x * torch.sigmoid(x)
 
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new}
+def mish(x):
+    return x * torch.tanh(nn.functional.softplus(x))
+
+
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 
 BertLayerNorm = torch.nn.LayerNorm
