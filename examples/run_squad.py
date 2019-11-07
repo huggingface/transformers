@@ -45,7 +45,7 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetTokenizer,
                                   DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
 
-from transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, WarmupLinearSchedule, WarmupLinearSchedule, WarmupCosineSchedule, WarmupCosineWithHardRestartsSchedule
 
 from utils_squad import (read_squad_examples, convert_examples_to_features,
                          RawResult, write_predictions,
@@ -99,8 +99,18 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    
+        
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, betas = (args.beta1, args.beta2), eps=args.adam_epsilon)
+
+    # Set the learning rate schedule
+    if args.lr_scheduler == 'linear':
+        scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    elif args.lr_scheduler == 'cosine':
+        scheduler = WarmupCosineSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    elif args.lr_scheduler == 'cosine_restart':
+        scheduler = WarmupCosineWithHardRestartsSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+
     if args.fp16:
         try:
             from apex import amp
@@ -399,6 +409,10 @@ def main():
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--weight_decay", default=0.0, type=float,
                         help="Weight deay if we apply some.")
+    parser.add_argument("--beta1", default=0.9, type=float,
+                        help="Value for beta1")
+    parser.add_argument("--beta2", default=0.999, type=float,
+                        help="Value for beta2")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
@@ -442,6 +456,8 @@ def main():
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument('--lr_scheduler', type=str, default='linear', help='Specify LR schedule. Can be linear, cosine, or cosine_restart')
+
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
