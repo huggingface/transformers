@@ -112,8 +112,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    @staticmethod
-    def rel_shift(x, klen=-1):
+    def rel_shift(self, x, klen=-1):
         """perform relative shift to form the relative attention score."""
         x_size = shape_list(x)
 
@@ -122,7 +121,6 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (x_size[0], x_size[1] - 1, x_size[2], x_size[3]))
         x = x[:, 0:klen, :, :]
         # x = torch.index_select(x, 1, torch.arange(klen, device=x.device, dtype=torch.long))
-
         return x
 
     def rel_attn_core(self, inputs, training=False):
@@ -135,7 +133,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         # position based attention score
         bd = tf.einsum('ibnd,jbnd->ijbn', q_head + self.r_r_bias, k_head_r)
-        bd = self.rel_shift(bd, klen=ac.shape[1])
+        ac_shape = tf.shape(ac)
+        bd = self.rel_shift(bd, klen=ac_shape[1])
 
         # segment based attention score
         if seg_mat is None:
@@ -539,7 +538,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) " \
             "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
-            input_mask = 1.0 - attention_mask
+            input_mask = 1.0 - tf.cast(attention_mask, dtype=dtype_float)
         if input_mask is not None and perm_mask is not None:
             data_mask = input_mask[None] + perm_mask
         elif input_mask is not None and perm_mask is None:
