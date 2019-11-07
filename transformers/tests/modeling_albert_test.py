@@ -35,7 +35,6 @@ else:
 class AlbertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (AlbertModel, AlbertForMaskedLM) if is_torch_available() else ()
-    test_head_masking = False
 
     class AlbertModelTester(object):
 
