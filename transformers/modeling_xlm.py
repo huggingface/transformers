@@ -73,15 +73,15 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     """
     Generate hidden states mask, and optionally an attention mask.
     """
-    bs = lengths.size(0)
+    alen = torch.arange(slen, dtype=torch.long, device=lengths.device)
     if padding_mask is not None:
         mask = padding_mask
     else:
         assert lengths.max().item() <= slen
-        alen = torch.arange(slen, dtype=torch.long, device=lengths.device)
         mask = alen < lengths[:, None]
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
+    bs = lengths.size(0)
     if causal:
         attn_mask = alen[None, None, :].repeat(bs, slen, 1) <= alen[None, :, None]
     else:
@@ -311,6 +311,10 @@ XLM_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
@@ -407,9 +411,11 @@ class XLMModel(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        self.embeddings = self._get_resized_embeddings(self.embeddings, new_num_tokens)
+    def get_input_embeddings(self):
         return self.embeddings
+
+    def set_input_embeddings(self, new_embeddings):
+        self.embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -419,14 +425,21 @@ class XLMModel(XLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None):  # removed: src_enc=None, src_len=None
+    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, inputs_embeds=None):  # removed: src_enc=None, src_len=None
+        if input_ids is not None:
+            bs, slen = input_ids.size()
+        else:
+            bs, slen = inputs_embeds.size()[:-1]
+
         if lengths is None:
-            lengths = (input_ids != self.pad_index).sum(dim=1).long()
+            if input_ids is not None:
+                lengths = (input_ids != self.pad_index).sum(dim=1).long()
+            else:
+                lengths = torch.LongTensor([slen]*bs)
         # mask = input_ids != self.pad_index
 
         # check inputs
-        bs, slen = input_ids.size()
         assert lengths.size(0) == bs
         assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
@@ -440,10 +453,12 @@ class XLMModel(XLMPreTrainedModel):
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         # position_ids
         if position_ids is None:
-            position_ids = input_ids.new((slen,)).long()
-            position_ids = torch.arange(slen, out=position_ids).unsqueeze(0)
+            position_ids = torch.arange(slen, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).expand((bs, slen))
         else:
             assert position_ids.size() == (bs, slen)  # (slen, bs)
             # position_ids = position_ids.transpose(0, 1)
@@ -469,7 +484,7 @@ class XLMModel(XLMPreTrainedModel):
             head_mask = [None] * self.n_layers
 
         # do not recompute cached elements
-        if cache is not None:
+        if cache is not None and input_ids is not None:
             _slen = slen - cache['slen']
             input_ids = input_ids[:, -_slen:]
             position_ids = position_ids[:, -_slen:]
@@ -479,8 +494,10 @@ class XLMModel(XLMPreTrainedModel):
             attn_mask = attn_mask[:, -_slen:]
 
         # embeddings
-        tensor = self.embeddings(input_ids)
-        tensor = tensor + self.position_embeddings(position_ids).expand_as(tensor)
+        if inputs_embeds is None:
+            inputs_embeds = self.embeddings(input_ids)
+
+        tensor = inputs_embeds + self.position_embeddings(position_ids).expand_as(inputs_embeds)
         if langs is not None and self.use_lang_emb:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
@@ -618,15 +635,12 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         self.pred_layer = XLMPredLayer(config)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the embeddings
-        """
-        self._tie_or_clone_weights(self.pred_layer.proj, self.transformer.embeddings)
+    def get_output_embeddings(self):
+        return self.pred_layer.proj
 
-    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                langs=langs,
@@ -634,7 +648,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
                                                position_ids=position_ids,
                                                lengths=lengths, 
                                                cache=cache,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
 
         output = transformer_outputs[0]
         outputs = self.pred_layer(output, labels)
@@ -686,8 +701,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                langs=langs,
@@ -695,7 +710,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
                                                position_ids=position_ids,
                                                lengths=lengths, 
                                                cache=cache,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
 
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
@@ -769,8 +785,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, start_positions=None, end_positions=None):
+    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, inputs_embeds=None, start_positions=None, end_positions=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                langs=langs,
@@ -778,7 +794,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
                                                position_ids=position_ids,
                                                lengths=lengths, 
                                                cache=cache,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
 
         sequence_output = transformer_outputs[0]
 
@@ -864,8 +881,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, start_positions=None, end_positions=None,
+    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
+                lengths=None, cache=None, head_mask=None, inputs_embeds=None, start_positions=None, end_positions=None,
                 is_impossible=None, cls_index=None, p_mask=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
@@ -874,7 +891,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
                                                position_ids=position_ids,
                                                lengths=lengths, 
                                                cache=cache,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
 
         output = transformer_outputs[0]
 

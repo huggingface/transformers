@@ -1,31 +1,47 @@
 # Distil*
 
-This folder contains the original code used to train Distil* as well as examples showcasing how to use DistilBERT and DistilGPT2.
+This folder contains the original code used to train Distil* as well as examples showcasing how to use DistilBERT, DistilRoBERTa and DistilGPT2.
 
-**2019, October 3rd - Update** We release our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108) explaining our approach on **DistilBERT**. It includes updated results and further experiments. We applied the same method to GPT2 and release the weights of **DistilGPT2**. DistilGPT2 is two times faster and 33% smaller than GPT2.
+**October 23rd, 2019 - Update** We release **DistilRoBERTa**: 95% of `RoBERTa-base`'s performance on GLUE, twice as fast as RoBERTa while being 35% smaller.
 
-**2019, September 19th - Update:** We fixed bugs in the code and released an upadted version of the weights trained with a modification of the distillation loss. DistilBERT now reaches 97% of `BERT-base`'s performance on GLUE, and 86.9 F1 score on SQuAD v1.1 dev set (compared to 88.5 for `BERT-base`). We will publish a formal write-up of our approach in the near future!
+**October 3rd, 2019 - Update** We release our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108) explaining our approach on **DistilBERT**. It includes updated results and further experiments. We applied the same method to GPT2 and release the weights of **DistilGPT2**. DistilGPT2 is two times faster and 33% smaller than GPT2. **The paper superseeds our [previous blogpost](https://medium.com/huggingface/distilbert-8cf3380435b5) with a different distillation loss and better performances. Please use the paper as a reference when comparing/reporting results on DistilBERT.**
+
+**September 19th, 2019 - Update:** We fixed bugs in the code and released an upadted version of the weights trained with a modification of the distillation loss. DistilBERT now reaches 97% of `BERT-base`'s performance on GLUE, and 86.9 F1 score on SQuAD v1.1 dev set (compared to 88.5 for `BERT-base`). We will publish a formal write-up of our approach in the near future!
+
 
 ## What is Distil*
 
 Distil* is a class of compressed models that started with DistilBERT. DistilBERT stands for Distillated-BERT. DistilBERT is a small, fast, cheap and light Transformer model based on Bert architecture. It has 40% less parameters than `bert-base-uncased`, runs 60% faster while preserving 97% of BERT's performances as measured on the GLUE language understanding benchmark. DistilBERT is trained using knowledge distillation, a technique to compress a large model called the teacher into a smaller model called the student. By distillating Bert, we obtain a smaller Transformer model that bears a lot of similarities with the original BERT model while being lighter, smaller and faster to run. DistilBERT is thus an interesting option to put large-scaled trained Transformer model into production.
 
-We have applied the same method to GPT2 and release the weights of the compressed model. On the [WikiText-103](https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/) benchmark, GPT2 reaches a perplexity on the test set of 15.0 compared to 18.5 for DistilGPT2 (after fine-tuning on the train set).
+We have applied the same method to other Transformer architectures and released the weights:
+- GPT2: on the [WikiText-103](https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/) benchmark, GPT2 reaches a perplexity on the test set of 15.0 compared to 18.5 for **DistilGPT2** (after fine-tuning on the train set).
+- RoBERTa: **DistilRoBERTa** reaches 95% of `RoBERTa-base` performance on GLUE while being twice faster and 35% smaller.
+- and more to come! 🤗🤗🤗
 
-For more information on DistilBERT, please refer to our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108). The paper superseeds our [previous blogpost](https://medium.com/huggingface/distilbert-8cf3380435b5) with a different distillation loss and better performances.
+For more information on DistilBERT, please refer to our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108).
 
 Here are the results on the dev sets of GLUE:
 
-| Model      | Macro-score | CoLA | MNLI | MRPC | QNLI | QQP  | RTE  | SST-2| STS-B| WNLI |
-| :---:      |    :---:    | :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:|
-| BERT-base  |  **77.6**   | 48.9 | 84.3 | 88.6 | 89.3 | 89.5 | 71.3 | 91.7 | 91.2 | 43.7 |
-| DistilBERT |  **76.8**   | 49.1 | 81.8 | 90.2 | 90.2 | 89.2 | 62.9 | 92.7 | 90.7 | 44.4 |
+| Model                     | Macro-score                    | CoLA | MNLI | MRPC | QNLI | QQP  | RTE  | SST-2| STS-B| WNLI              |
+| :---:                     |    :---:                       | :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:| :---:             |
+| BERT-base                 |  **77.6**                      | 48.9 | 84.3 | 88.6 | 89.3 | 89.5 | 71.3 | 91.7 | 91.2 | 43.7              |
+| DistilBERT                |  **76.8**                      | 49.1 | 81.8 | 90.2 | 90.2 | 89.2 | 62.9 | 92.7 | 90.7 | 44.4              |
+| ---                       |    ---                         |  --- |  --- |  --- |  --- |  --- |  --- |  --- |  --- |  ---              |
+| RoBERTa-base (reported)   |  **83.2**/**86.4**<sup>2</sup> | 63.6 | 87.6 | 90.2 | 92.8 | 91.9 | 78.7 | 94.8 | 91.2 | 57.7<sup>3</sup> |
+| DistilRoBERTa<sup>1</sup> |  **79.0**/**82.3**<sup>2</sup> | 59.4 | 83.9 | 86.6 | 90.8 | 89.4 | 67.9 | 92.5 | 88.3 | 52.1              |
+
+<sup>1</sup> We did not use the MNLI checkpoint for fine-tuning but directy perform transfer learning on the pre-trained DistilRoBERTa.
+
+<sup>2</sup> Macro-score computed without WNLI.
+
+<sup>3</sup> We compute this score ourselves for completeness.
 
 ## Setup
 
 This part of the library has only be tested with Python3.6+. There are few specific dependencies to install before launching a distillation, you can install them with the command `pip install -r requirements.txt`. 
 
-**Important note:** The training scripts have been updated to support PyTorch v1.2.0 (there are breakings changes compared to v1.1.0). It is important to note that there is a small internal bug in the current version of PyTorch available on pip that causes a memory leak in our training/distillation. It has been recently fixed and will likely be integrated into the next release. For the moment, we recommend to [compile PyTorch from source](https://github.com/pytorch/pytorch#from-source). Please refer to [issue 1179](https://github.com/huggingface/transformers/issues/1179) for more details.
+**Important note:** The training scripts have been updated to support PyTorch v1.2.0 (there are breakings changes compared to v1.1.0).
+
 
 ## How to use DistilBERT
 
@@ -33,7 +49,8 @@ Transformers includes two pre-trained Distil* models, currently only provided fo
 
 - `distilbert-base-uncased`: DistilBERT English language model pretrained on the same data used to pretrain Bert (concatenation of the Toronto Book Corpus and full English Wikipedia) using distillation with the supervision of the `bert-base-uncased` version of Bert. The model has 6 layers, 768 dimension and 12 heads, totalizing 66M parameters.
 - `distilbert-base-uncased-distilled-squad`: A finetuned version of `distilbert-base-uncased` finetuned using (a second step of) knwoledge distillation on SQuAD 1.0. This model reaches a F1 score of 86.9 on the dev set (for comparison, Bert `bert-base-uncased` version reaches a 88.5 F1 score).
-- `distilgpt2`: DistilGPT2 English language model pretrained with the supervision of `gpt2` (the smallest version of GPT2) on [OpenWebTextCorpus](https://skylion007.github.io/OpenWebTextCorpus/), a reproduction of OpenAI's WebText dataset and . The model has 6 layers, 768 dimension and 12 heads, totalizing 82M (compared to 124M parameters for GPT2). On average, DistilGPT2 is two times faster than GPT2.
+- `distilgpt2`: DistilGPT2 English language model pretrained with the supervision of `gpt2` (the smallest version of GPT2) on [OpenWebTextCorpus](https://skylion007.github.io/OpenWebTextCorpus/), a reproduction of OpenAI's WebText dataset. The model has 6 layers, 768 dimension and 12 heads, totalizing 82M parameters (compared to 124M parameters for GPT2). On average, DistilGPT2 is two times faster than GPT2.
+- `distilroberta-base`: DistilRoBERTa English language model pretrained with the supervision of `roberta-base` solely on [OpenWebTextCorpus](https://skylion007.github.io/OpenWebTextCorpus/), a reproduction of OpenAI's WebText dataset (it is ~4 times less training data than the teacher RoBERTa). The model has 6 layers, 768 dimension and 12 heads, totalizing 82M parameters (compared to 125M parameters for RoBERTa-base). On average DistilRoBERTa is twice as fast as Roberta-base.
 - and more to come! 🤗🤗🤗
 
 Using DistilBERT is very similar to using BERT. DistilBERT share the same tokenizer as BERT's `bert-base-uncased` even though we provide a link to this tokenizer under the `DistilBertTokenizer` name to have a consistent naming between the library models.
@@ -47,7 +64,10 @@ outputs = model(input_ids)
 last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 ```
 
-Similarly, using DistilGPT2 simply consists in calling the GPT2 classes from a different pretrained checkpoint: `model = GPT2Model.from_pretrained('distilgpt2')`.
+Similarly, using the other Distil* models simply consists in calling the base classes with a different pretrained checkpoint:
+- DistilGPT2: `model = GPT2Model.from_pretrained('distilgpt2')`
+- DistilRoBERTa: `model = RobertaModel.from_pretrained('distilroberta-base')`
+
 
 ## How to train Distil*
 
@@ -88,7 +108,7 @@ python train.py \
     --student_config training_configs/distilbert-base-uncased.json \
     --teacher_type bert \
     --teacher_name bert-base-uncased \
-    --alpha_ce 5.0 --alpha_mlm 2.0 --alpha_cos 1.0 --mlm \
+    --alpha_ce 5.0 --alpha_mlm 2.0 --alpha_cos 1.0 --alpha_clm 0.0 --mlm \
     --freeze_pos_embs \
     --dump_path serialization_dir/my_first_training \
     --data_file data/binarized_text.bert-base-uncased.pickle \
@@ -124,7 +144,7 @@ python -m torch.distributed.launch \
         --student_config training_configs/distilbert-base-uncased.json \
         --teacher_type bert \
         --teacher_name bert-base-uncased \
-        --alpha_ce 0.33 --alpha_mlm 0.33 --alpha_cos 0.33 --mlm \
+        --alpha_ce 0.33 --alpha_mlm 0.33 --alpha_cos 0.33 --alpha_clm 0.0 --mlm \
         --freeze_pos_embs \
         --dump_path serialization_dir/my_first_training \
         --data_file data/binarized_text.bert-base-uncased.pickle \
@@ -134,3 +154,16 @@ python -m torch.distributed.launch \
 **Tips:** Starting distillated training with good initialization of the model weights is crucial to reach decent performance. In our experiments, we initialized our model from a few layers of the teacher (Bert) itself! Please refer to `scripts/extract.py` and `scripts/extract_distilbert.py` to create a valid initialization checkpoint and use `--student_pretrained_weights` argument to use this initialization for the distilled training!
 
 Happy distillation!
+
+## Citation
+
+If you find the ressource useful, you should cite the following paper:
+
+```
+@inproceedings{sanh2019distilbert,
+  title={DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter},
+  author={Sanh, Victor and Debut, Lysandre and Chaumond, Julien and Wolf, Thomas},
+  booktitle={NeurIPS EMC^2 Workshop},
+  year={2019}
+}
+```

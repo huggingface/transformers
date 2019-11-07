@@ -63,6 +63,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     bertology
     torchscript
     multilingual
+    benchmarks
 
 .. toctree::
     :maxdepth: 2
@@ -87,3 +88,4 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/xlnet
     model_doc/roberta
     model_doc/distilbert
+    model_doc/ctrl

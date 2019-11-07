@@ -32,19 +32,10 @@ from .modeling_tf_utils import (TFPreTrainedModel, TFConv1D, TFSharedEmbeddings,
                                 TFSequenceSummary, shape_list, get_initializer)
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
 TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-tf_model.h5"}
-
-
-def load_openai_gpt_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
 
 
 def gelu(x):
@@ -335,7 +326,6 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     """
     config_class = OpenAIGPTConfig
     pretrained_model_archive_map = TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_openai_gpt_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 
@@ -399,6 +389,10 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare OpenAI GPT transformer model outputing raw hidden-states without any specific head on top.",

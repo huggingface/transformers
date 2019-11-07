@@ -188,11 +188,8 @@ def swish(x):
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
 
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as XLNetLayerNorm
-except (ImportError, AttributeError) as e:
-    logger.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    from torch.nn import LayerNorm as XLNetLayerNorm
+XLNetLayerNorm = nn.LayerNorm
+
 
 class XLNetRelativeAttention(nn.Module):
     def __init__(self, config):
@@ -239,45 +236,60 @@ class XLNetRelativeAttention(nn.Module):
 
         return x
 
+    @staticmethod
+    def rel_shift_bnij(x, klen=-1):
+        x_size = x.shape
+
+        x = x.reshape(x_size[0], x_size[1], x_size[3], x_size[2])
+        x = x[:, :, 1:, :]
+        x = x.reshape(x_size[0], x_size[1], x_size[2], x_size[3]-1)
+        # Note: the tensor-slice form was faster in my testing than torch.index_select
+        #       However, tracing doesn't like the nature of the slice, and if klen changes
+        #       during the run then it'll fail, whereas index_select will be fine.
+        x = torch.index_select(x, 3, torch.arange(klen, device=x.device, dtype=torch.long))
+        # x = x[:, :, :, :klen]
+
+        return x
+
     def rel_attn_core(self, q_head, k_head_h, v_head_h, k_head_r, seg_mat=None, attn_mask=None, head_mask=None):
         """Core relative positional attention operations."""
 
         # content based attention score
-        ac = torch.einsum('ibnd,jbnd->ijbn', q_head + self.r_w_bias, k_head_h)
+        ac = torch.einsum('ibnd,jbnd->bnij', q_head + self.r_w_bias, k_head_h)
 
         # position based attention score
-        bd = torch.einsum('ibnd,jbnd->ijbn', q_head + self.r_r_bias, k_head_r)
-        bd = self.rel_shift(bd, klen=ac.shape[1])
+        bd = torch.einsum('ibnd,jbnd->bnij', q_head + self.r_r_bias, k_head_r)
+        bd = self.rel_shift_bnij(bd, klen=ac.shape[3])
 
         # segment based attention score
         if seg_mat is None:
             ef = 0
         else:
             ef = torch.einsum('ibnd,snd->ibns', q_head + self.r_s_bias, self.seg_embed)
-            ef = torch.einsum('ijbs,ibns->ijbn', seg_mat, ef)
+            ef = torch.einsum('ijbs,ibns->bnij', seg_mat, ef)
 
         # merge attention scores and perform masking
         attn_score = (ac + bd + ef) * self.scale
         if attn_mask is not None:
             # attn_score = attn_score * (1 - attn_mask) - 1e30 * attn_mask
             if attn_mask.dtype == torch.float16:
-                attn_score = attn_score - 65500 * attn_mask
+                attn_score = attn_score - 65500 * torch.einsum('ijbn->bnij', attn_mask)
             else:
-                attn_score = attn_score - 1e30 * attn_mask
+                attn_score = attn_score - 1e30 * torch.einsum('ijbn->bnij', attn_mask)
 
         # attention probability
-        attn_prob = F.softmax(attn_score, dim=1)
+        attn_prob = F.softmax(attn_score, dim=3)
         attn_prob = self.dropout(attn_prob)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attn_prob = attn_prob * head_mask
+            attn_prob = attn_prob * torch.einsum('ijbn->bnij', head_mask)
 
         # attention output
-        attn_vec = torch.einsum('ijbn,jbnd->ibnd', attn_prob, v_head_h)
+        attn_vec = torch.einsum('bnij,jbnd->ibnd', attn_prob, v_head_h)
 
         if self.output_attentions:
-            return attn_vec, attn_prob
+            return attn_vec, torch.einsum('bnij->ijbn', attn_prob)
 
         return attn_vec
 
@@ -546,6 +558,10 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare XLNet Model transformer outputting raw hidden-states without any specific head on top.",
@@ -555,7 +571,7 @@ class XLNetModel(XLNetPreTrainedModel):
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -581,6 +597,7 @@ class XLNetModel(XLNetPreTrainedModel):
         super(XLNetModel, self).__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.output_past = config.output_past
 
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
@@ -598,9 +615,11 @@ class XLNetModel(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        self.word_embedding = self._get_resized_embeddings(self.word_embedding, new_num_tokens)
+    def get_input_embeddings(self):
         return self.word_embedding
+
+    def set_input_embeddings(self, new_embeddings):
+        self.word_embedding = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -637,16 +656,13 @@ class XLNetModel(XLNetPreTrainedModel):
 
     def cache_mem(self, curr_out, prev_mem):
         """cache hidden states into memory."""
-        if self.mem_len is None or self.mem_len == 0:
-            return None
-        else:
-            if self.reuse_len is not None and self.reuse_len > 0:
-                curr_out = curr_out[:self.reuse_len]
+        if self.reuse_len is not None and self.reuse_len > 0:
+            curr_out = curr_out[:self.reuse_len]
 
-            if prev_mem is None:
-                new_mem = curr_out[-self.mem_len:]
-            else:
-                new_mem = torch.cat([prev_mem, curr_out], dim=0)[-self.mem_len:]
+        if prev_mem is None:
+            new_mem = curr_out[-self.mem_len:]
+        else:
+            new_mem = torch.cat([prev_mem, curr_out], dim=0)[-self.mem_len:]
 
         return new_mem.detach()
 
@@ -700,19 +716,29 @@ class XLNetModel(XLNetPreTrainedModel):
         pos_emb = pos_emb.to(next(self.parameters()))
         return pos_emb
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None):
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None):
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
-        input_ids = input_ids.transpose(0, 1).contiguous()
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_ids = input_ids.transpose(0, 1).contiguous()
+            qlen, bsz = input_ids.shape[0], input_ids.shape[1]
+        elif inputs_embeds is not None:
+            inputs_embeds.transpose(0, 1).contiguous()
+            qlen, bsz = inputs_embeds.shape[0], inputs_embeds.shape[1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         token_type_ids = token_type_ids.transpose(0, 1).contiguous() if token_type_ids is not None else None
         input_mask = input_mask.transpose(0, 1).contiguous() if input_mask is not None else None
         attention_mask = attention_mask.transpose(0, 1).contiguous() if attention_mask is not None else None
         perm_mask = perm_mask.permute(1, 2, 0).contiguous() if perm_mask is not None else None
         target_mapping = target_mapping.permute(1, 2, 0).contiguous() if target_mapping is not None else None
 
-        qlen, bsz = input_ids.shape[0], input_ids.shape[1]
+
         mlen = mems[0].shape[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
 
@@ -765,7 +791,10 @@ class XLNetModel(XLNetPreTrainedModel):
             non_tgt_mask = None
 
         ##### Word embeddings and prepare h & g hidden states
-        word_emb_k = self.word_embedding(input_ids)
+        if inputs_embeds is not None:
+            word_emb_k = inputs_embeds
+        else:
+            word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k)
         if target_mapping is not None:
             word_emb_q = self.mask_emb.expand(target_mapping.shape[0], bsz, -1)
@@ -817,8 +846,9 @@ class XLNetModel(XLNetPreTrainedModel):
         attentions = []
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
-            # cache new mems
-            new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
+            if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+                # cache new mems
+                new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
@@ -836,7 +866,11 @@ class XLNetModel(XLNetPreTrainedModel):
         output = self.dropout(output_g if output_g is not None else output_h)
 
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
-        outputs = (output.permute(1, 0, 2).contiguous(), new_mems)
+        outputs = (output.permute(1, 0, 2).contiguous(),)
+
+        if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+            outputs = outputs + (new_mems,)
+
         if self.output_hidden_states:
             if output_g is not None:
                 hidden_states = tuple(h.permute(1, 0, 2).contiguous() for hs in hidden_states for h in hs)
@@ -847,7 +881,7 @@ class XLNetModel(XLNetPreTrainedModel):
             attentions = tuple(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
             outputs = outputs + (attentions,)
 
-        return outputs  # outputs, new_mems, (hidden_states), (attentions)
+        return outputs  # outputs, (new_mems), (hidden_states), (attentions)
 
 
 @add_start_docstrings("""XLNet Model with a language modeling head on top
@@ -867,7 +901,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             Language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -903,23 +937,21 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the embeddings
-        """
-        self._tie_or_clone_weights(self.lm_loss, self.transformer.word_embedding)
+    def get_output_embeddings(self):
+        return self.lm_loss
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                mems=mems,
                                                perm_mask=perm_mask,
                                                target_mapping=target_mapping,
                                                token_type_ids=token_type_ids,
-                                               input_mask=input_mask, 
-                                               head_mask=head_mask)
+                                               input_mask=input_mask,
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
 
         logits = self.lm_loss(transformer_outputs[0])
 
@@ -932,7 +964,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
                             labels.view(-1))
             outputs = (loss,) + outputs
 
-        return outputs  # return (loss), logits, mems, (hidden states), (attentions)
+        return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
 
 @add_start_docstrings("""XLNet Model with a sequence classification/regression head on top (a linear layer on top of
@@ -951,7 +983,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             Classification (or regression if config.num_labels==1) loss.
         **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -984,16 +1016,17 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                mems=mems,
                                                perm_mask=perm_mask,
                                                target_mapping=target_mapping,
                                                token_type_ids=token_type_ids,
-                                               input_mask=input_mask, 
-                                               head_mask=head_mask)
+                                               input_mask=input_mask,
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
         output = transformer_outputs[0]
 
         output = self.sequence_summary(output)
@@ -1011,7 +1044,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             outputs = (loss,) + outputs
 
-        return outputs  # return (loss), logits, mems, (hidden states), (attentions)
+        return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
 @add_start_docstrings("""XLNet Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RACE/SWAG tasks. """,
@@ -1035,6 +1068,10 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
@@ -1046,6 +1083,11 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         **classification_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above).
             Classification scores (before SoftMax).
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
+            list of ``torch.FloatTensor`` (one for each layer):
+            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
+            if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
+            See details in the docstring of the `mems` input above.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -1074,9 +1116,9 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
+    def forward(self, input_ids=None, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
-                labels=None, head_mask=None):
+                labels=None, head_mask=None, inputs_embeds=None):
         num_choices = input_ids.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
@@ -1087,7 +1129,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         transformer_outputs = self.transformer(flat_input_ids, token_type_ids=flat_token_type_ids,
                                                input_mask=flat_input_mask, attention_mask=flat_attention_mask,
                                                mems=mems, perm_mask=perm_mask, target_mapping=target_mapping,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask, inputs_embeds=inputs_embeds)
 
 
         output = transformer_outputs[0]
@@ -1102,7 +1144,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels.view(-1))
             outputs = (loss,) + outputs
 
-        return outputs  # return (loss), logits, mems, (hidden states), (attentions)
+        return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
 
 @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
@@ -1126,7 +1168,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             Span-start scores (before SoftMax).
         **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
             Span-end scores (before SoftMax).
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -1159,8 +1201,8 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None,
                 start_positions=None, end_positions=None):
 
         outputs = self.transformer(input_ids,
@@ -1169,8 +1211,9 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
                                     perm_mask=perm_mask,
                                     target_mapping=target_mapping,
                                     token_type_ids=token_type_ids,
-                                    input_mask=input_mask, 
-                                    head_mask=head_mask)
+                                    input_mask=input_mask,
+                                    head_mask=head_mask,
+                                    inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
 
@@ -1197,7 +1240,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
             outputs = (total_loss,) + outputs
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        return outputs  # (loss), start_logits, end_logits, (mems), (hidden_states), (attentions)
 
 
 @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
@@ -1239,7 +1282,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         **cls_logits**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
             ``torch.FloatTensor`` of shape ``(batch_size,)``
             Log probabilities for the ``is_impossible`` label of the answers.
-        **mems**:
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
@@ -1275,8 +1318,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None,
                 start_positions=None, end_positions=None, is_impossible=None, cls_index=None, p_mask=None,):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
@@ -1284,8 +1327,9 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                                                perm_mask=perm_mask,
                                                target_mapping=target_mapping,
                                                token_type_ids=token_type_ids,
-                                               input_mask=input_mask, 
-                                               head_mask=head_mask)
+                                               input_mask=input_mask,
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 

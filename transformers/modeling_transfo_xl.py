@@ -553,6 +553,10 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
@@ -639,8 +643,11 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def get_input_embeddings(self):
         return self.word_emb
+
+    def set_input_embeddings(self, new_embeddings):
+        self.word_emb = new_embeddings
 
     def backward_compatible(self):
         self.sample_softmax = -1
@@ -654,12 +661,12 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         logger.info("Head pruning is not implemented for Transformer-XL model")
         pass
 
-    def init_mems(self, data):
+    def init_mems(self, bsz):
         if self.mem_len > 0:
             mems = []
             param = next(self.parameters())
             for i in range(self.n_layer):
-                empty = torch.zeros(self.mem_len, data.size(1), self.config.d_model,
+                empty = torch.zeros(self.mem_len, bsz, self.config.d_model,
                                     dtype=param.dtype, device=param.device)
                 mems.append(empty)
 
@@ -690,15 +697,22 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         return new_mems
 
-    def forward(self, input_ids, mems=None, head_mask=None):
+    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None):
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
-        input_ids = input_ids.transpose(0, 1).contiguous()
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_ids = input_ids.transpose(0, 1).contiguous()
+            qlen, bsz = input_ids.size()
+        elif inputs_embeds is not None:
+            inputs_embeds = inputs_embeds.transpose(0, 1).contiguous()
+            qlen, bsz = inputs_embeds.shape[0], inputs_embeds.shape[1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if mems is None:
-            mems = self.init_mems(input_ids)
-
-        qlen, bsz = input_ids.size()
+            mems = self.init_mems(bsz)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -715,7 +729,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         else:
             head_mask = [None] * self.n_layer
 
-        word_emb = self.word_emb(input_ids)
+        if inputs_embeds is not None:
+            word_emb = inputs_embeds
+        else:
+            word_emb = self.word_emb(input_ids)
 
         mlen = mems[0].size(0) if mems is not None else 0
         klen = mlen + qlen
@@ -826,7 +843,6 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model,
                                                     config.cutoffs, div_val=config.div_val)
         self.init_weights()
-        self.tie_weights()
 
     def tie_weights(self):
         """
@@ -858,14 +874,18 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
 
-    def init_mems(self, data):
-        return self.transformer.init_mems(data)
+    def init_mems(self, bsz):
+        return self.transformer.init_mems(bsz)
 
-    def forward(self, input_ids, mems=None, head_mask=None, labels=None):
-        bsz = input_ids.size(0)
-        tgt_len = input_ids.size(1)
+    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, labels=None):
+        if input_ids is not None:
+            bsz, tgt_len = input_ids.size(0), input_ids.size(1)
+        elif inputs_embeds is not None:
+            bsz, tgt_len = inputs_embeds.size(0), inputs_embeds.size(1)
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        transformer_outputs = self.transformer(input_ids, mems=mems, head_mask=head_mask)
+        transformer_outputs = self.transformer(input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds)
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]

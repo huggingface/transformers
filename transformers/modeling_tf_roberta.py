@@ -26,7 +26,6 @@ import tensorflow as tf
 from .configuration_roberta import RobertaConfig
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu, gelu_new
 
@@ -36,15 +35,8 @@ TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-tf_model.h5",
     'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-tf_model.h5",
     'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-tf_model.h5",
+    'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-tf_model.h5",
 }
-
-def load_roberta_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
-
 
 class TFRobertaEmbeddings(TFBertEmbeddings):
     """
@@ -73,22 +65,6 @@ class TFRobertaMainLayer(TFBertMainLayer):
         super(TFRobertaMainLayer, self).__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name='embeddings')
 
-    def call(self, inputs, **kwargs):
-        # Check that input_ids starts with control token
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-        elif isinstance(inputs, dict):
-            input_ids = inputs.get('input_ids')
-        else:
-            input_ids = inputs
-
-        if tf.not_equal(tf.reduce_sum(input_ids[:, 0]), 0):
-            logger.warning("A sequence with no special tokens has been passed to the RoBERTa model. "
-                           "This model requires special tokens in order to work. "
-                           "Please specify add_special_tokens=True in your encoding.")
-
-        return super(TFRobertaMainLayer, self).call(inputs, **kwargs)
-
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
@@ -96,7 +72,6 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """
     config_class = RobertaConfig
     pretrained_model_archive_map = TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_roberta_pt_weights_in_tf2
     base_model_prefix = "roberta"
 
 
@@ -182,6 +157,10 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare RoBERTa Model transformer outputing raw hidden-states without any specific head on top.",
@@ -380,3 +359,54 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         outputs = (logits,) + outputs[2:]
 
         return outputs  # logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""RoBERTa Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
+class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
+    r"""
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import RobertaTokenizer, TFRobertaForTokenClassification
+
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        model = TFRobertaForTokenClassification.from_pretrained('roberta-base')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+
+    """
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFRobertaForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.roberta = TFRobertaMainLayer(config, name='roberta')
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='classifier')
+
+    def call(self, inputs, **kwargs):
+        outputs = self.roberta(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=kwargs.get('training', False))
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # scores, (hidden_states), (attentions)

@@ -17,8 +17,10 @@ from __future__ import division
 from __future__ import print_function
 
 import copy
+import sys
 import os
 import shutil
+import tempfile
 import json
 import random
 import uuid
@@ -31,6 +33,7 @@ from transformers import is_torch_available
 
 if is_torch_available():
     import torch
+    import numpy as np
 
     from transformers import (PretrainedConfig, PreTrainedModel,
                                     BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -38,6 +41,20 @@ if is_torch_available():
 else:
     pytestmark = pytest.mark.skip("Require Torch")
 
+if sys.version_info[0] == 2:
+    import cPickle as pickle
+
+    class TemporaryDirectory(object):
+        """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
+        def __enter__(self):
+            self.name = tempfile.mkdtemp()
+            return self.name
+        def __exit__(self, exc_type, exc_value, traceback):
+            shutil.rmtree(self.name)
+else:
+    import pickle
+    TemporaryDirectory = tempfile.TemporaryDirectory
+    unicode = str
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -56,6 +73,29 @@ class CommonTestCases:
         test_pruning = True
         test_resize_embeddings = True
         test_head_masking = True
+
+        def test_save_load(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**inputs_dict)
+
+                with TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model = model_class.from_pretrained(tmpdirname)
+                    with torch.no_grad():
+                        after_outputs = model(**inputs_dict)
+
+                    # Make sure we don't have nans
+                    out_1 = after_outputs[0].numpy()
+                    out_2 = outputs[0].numpy()
+                    out_1 = out_1[~np.isnan(out_1)]
+                    out_2 = out_2[~np.isnan(out_2)]
+                    max_diff = np.amax(np.abs(out_1 - out_2))
+                    self.assertLessEqual(max_diff, 1e-5)
 
         def test_initialization(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -423,6 +463,15 @@ class CommonTestCases:
 
                 self.assertTrue(models_equal)
 
+        def test_model_common_attributes(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.get_input_embeddings()
+                model.set_input_embeddings(torch.nn.Embedding(10, 10))
+                model.get_output_embeddings()
+
         def test_tie_model_weights(self):
             if not self.test_torchscript:
                 return
@@ -437,11 +486,11 @@ class CommonTestCases:
                 return equal
 
             for model_class in self.all_model_classes:
-                if not hasattr(model_class, 'tie_weights'):
-                    continue
-
                 config.torchscript = True
                 model_not_tied = model_class(config)
+                if model_not_tied.get_output_embeddings() is None:
+                    continue
+
                 params_not_tied = list(model_not_tied.parameters())
 
                 config_tied = copy.deepcopy(config)
@@ -475,6 +524,19 @@ class CommonTestCases:
                 # # Check that the embedding layer and decoding layer are the same in size and in value
                 # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
                 # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+        def test_inputs_embeds(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            input_ids = inputs_dict["input_ids"]
+            del inputs_dict["input_ids"]
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.eval()
+
+                wte = model.get_input_embeddings()
+                inputs_dict["inputs_embeds"] = wte(input_ids)
+                outputs = model(**inputs_dict)
 
 
     class GPTModelTester(CommonModelTester):
@@ -648,6 +710,7 @@ class CommonTestCases:
                 config_and_inputs = self.prepare_config_and_inputs()
                 self.create_and_check_presents(*config_and_inputs)
 
+        @pytest.mark.slow
         def run_slow_tests(self):
             self.create_and_check_model_from_pretrained()
 
@@ -704,7 +767,24 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
+def floats_tensor(shape, scale=1.0, rng=None, name=None):
+    """Creates a random float32 tensor of the shape within the vocab size."""
+    if rng is None:
+        rng = global_rng
+
+    total_dims = 1
+    for dim in shape:
+        total_dims *= dim
+
+    values = []
+    for _ in range(total_dims):
+        values.append(rng.random() * scale)
+
+    return torch.tensor(data=values, dtype=torch.float).view(shape).contiguous()
+
+
 class ModelUtilsTest(unittest.TestCase):
+    @pytest.mark.slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
