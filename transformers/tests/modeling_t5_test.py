@@ -57,7 +57,7 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
                      d_ff=37,
                      relative_attention_num_buckets=8,
                      dropout_rate=0.1,
-                     initializer_range=0.02,
+                     initializer_factor=0.002,
                      scope=None,
                     ):
             self.parent = parent
@@ -74,7 +74,7 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
             self.d_ff = d_ff
             self.relative_attention_num_buckets = relative_attention_num_buckets
             self.dropout_rate = dropout_rate
-            self.initializer_range = initializer_range
+            self.initializer_factor = initializer_factor
             self.scope = scope
 
         def prepare_config_and_inputs(self):
@@ -93,11 +93,12 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
                 n_positions=self.n_positions,
                 d_model=self.hidden_size,
                 d_ff=self.d_ff,
+                d_kv=self.hidden_size // self.num_attention_heads,
                 num_layers=self.num_hidden_layers,
                 num_heads=self.num_attention_heads,
                 relative_attention_num_buckets=self.relative_attention_num_buckets,
                 dropout_rate=self.dropout_rate,
-                initializer_range=self.initializer_range)
+                initializer_factor=self.initializer_factor)
 
             return (config, input_ids, input_mask, token_labels)
 
@@ -130,8 +131,9 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
             model = T5WithLMHeadModel(config=config)
             model.eval()
-            loss, prediction_scores = model(encoder_input_ids=input_ids, decoder_input_ids=input_ids,
-                                            decoder_attention_mask=input_mask, decoder_lm_labels=token_labels)
+            outputs = model(encoder_input_ids=input_ids, decoder_input_ids=input_ids,
+                            decoder_attention_mask=input_mask, decoder_lm_labels=token_labels)
+            loss, prediction_scores = outputs[0], outputs[1]
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
