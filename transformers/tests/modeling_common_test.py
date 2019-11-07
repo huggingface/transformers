@@ -59,7 +59,7 @@ else:
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
-        if '_range' in key or '_std' in key:
+        if '_range' in key or '_std' in key or 'initializer_factor' in key:
             setattr(configs_no_init, key, 0.0)
     return configs_no_init
 
@@ -83,20 +83,24 @@ class CommonTestCases:
                 model.eval()
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
+                out_2 = outputs[0].numpy()
+                out_2[np.isnan(out_2)] = 0
 
                 with TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
                     model = model_class.from_pretrained(tmpdirname)
-                    with torch.no_grad():
-                        after_outputs = model(**inputs_dict)
 
-                    # Make sure we don't have nans
-                    out_1 = after_outputs[0].numpy()
-                    out_2 = outputs[0].numpy()
-                    out_1 = out_1[~np.isnan(out_1)]
-                    out_2 = out_2[~np.isnan(out_2)]
-                    max_diff = np.amax(np.abs(out_1 - out_2))
-                    self.assertLessEqual(max_diff, 1e-5)
+                with torch.no_grad():
+                    after_outputs = model(**inputs_dict)
+
+                # # Make sure we don't have nans
+                out_1 = after_outputs[0].numpy()
+                out_1[np.isnan(out_1)] = 0
+
+                out_1 = out_1 - out_2
+                amax = np.amax(out_1)
+                amin = np.amin(out_1)
+                self.assertLessEqual(max(amax, -amin), 1e-5)
 
         def test_initialization(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -127,27 +131,28 @@ class CommonTestCases:
                 model = model_class(config)
                 model.eval()
                 outputs = model(**inputs_dict)
-                self_attentions = outputs[-1]
+                attentions = outputs[-1]
                 self.assertEqual(model.config.output_attentions, True)
                 self.assertEqual(model.config.output_hidden_states, False)
-                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
+                    list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
                     self.model_tester.seq_length,
                     self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
                 out_len = len(outputs)
 
                 if self.is_encoder_decoder:
-                    cross_attentions = outputs[-2]
+                    self.assertEqual(out_len % 2, 0)
+                    decoder_attentions = outputs[(out_len // 2)-1]
                     self.assertEqual(model.config.output_attentions, True)
                     self.assertEqual(model.config.output_hidden_states, False)
-                    self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                     self.assertListEqual(
-                        list(cross_attentions[0].shape[-3:]),
+                        list(decoder_attentions[0].shape[-3:]),
                         [self.model_tester.num_attention_heads,
-                        self.model_tester.seq_length,
-                        self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                         self.model_tester.seq_length,
+                         self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
 
                 # Check attention is always last and order is fine
                 config.output_attentions = True

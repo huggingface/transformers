@@ -18,6 +18,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
+from shutil import copyfile
 
 from .tokenization_utils import PreTrainedTokenizer
 

@@ -57,8 +57,7 @@ class T5Config(PretrainedConfig):
                 (e.g., 512 or 1024 or 2048).
             type_vocab_size: The vocabulary size of the `token_type_ids` passed into
                 `T5Model`.
-            initializer_range: The sttdev of the truncated_normal_initializer for
-                initializing all weight matrices.
+            initializer_factor: A factor for initializing all weight matrices (should be kept to 1.0, used for initialization testing).
             layer_norm_eps: The epsilon used by LayerNorm.
     """
     pretrained_config_archive_map = T5_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -67,25 +66,27 @@ class T5Config(PretrainedConfig):
                  vocab_size_or_config_json_file=32128,
                  n_positions=512,
                  d_model=512,
+                 d_kv=64,
                  d_ff=2048,
-                 num_layers=12,
-                 num_heads=12,
+                 num_layers=6,
+                 num_heads=8,
                  relative_attention_num_buckets=32,
                  dropout_rate=0.1,
                  layer_norm_epsilon=1e-6,
-                 initializer_range=0.02,
+                 initializer_factor=1.0,
                  **kwargs):
         super(T5Config, self).__init__(**kwargs)
         self.vocab_size = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, int) else -1
         self.n_positions = n_positions
         self.d_model = d_model
+        self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
 
         if isinstance(vocab_size_or_config_json_file, six.string_types):
             with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:

@@ -97,6 +97,7 @@ if is_torch_available():
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
     from .modeling_t5 import (T5PreTrainedModel, T5Model, T5WithLMHeadModel,
+                              load_tf_weights_in_t5,
                               T5_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     # Optimization
