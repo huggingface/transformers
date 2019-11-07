@@ -18,7 +18,8 @@ import os
 import unittest
 import pytest
 
-from transformers.tokenization_t5 import (T5Tokenizer, SPIECE_UNDERLINE)
+from transformers.tokenization_t5 import (T5Tokenizer)
+from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
 from .tokenization_tests_commons import CommonTestCases
 
@@ -33,7 +34,7 @@ class T5TokenizationTest(CommonTestCases.CommonTokenizerTester):
         super(T5TokenizationTest, self).setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = T5Tokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -45,7 +46,7 @@ class T5TokenizationTest(CommonTestCases.CommonTokenizerTester):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = T5Tokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB)
 
         tokens = tokenizer.tokenize(u'This is a test')
         self.assertListEqual(tokens, [u'▁This', u'▁is', u'▁a', u'▁t', u'est'])
