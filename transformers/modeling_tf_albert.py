@@ -16,13 +16,18 @@
 """ TF 2.0 ALBERT model. """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import logging
+import math
+import os
 import sys
+from io import open
 
+import numpy as np
 import tensorflow as tf
 
 from .configuration_albert import AlbertConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .file_utils import add_start_docstrings
 
@@ -31,14 +36,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'albert-base-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v1-tf_model.h5",
-    'albert-large-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v1-tf_model.h5",
-    'albert-xlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v1-tf_model.h5",
-    'albert-xxlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v1-tf_model.h5",
-    'albert-base-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-tf_model.h5",
-    'albert-large-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-tf_model.h5",
-    'albert-xlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-tf_model.h5",
-    'albert-xxlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-tf_model.h5",
+    # TODO FILL THAT UP
 }
 
 
@@ -102,25 +100,19 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
 
     def _embedding(self, inputs, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
+        input_ids, position_ids, token_type_ids = inputs
 
-        if input_ids is not None:
-            input_shape = shape_list(input_ids)
-        else:
-            input_shape = shape_list(inputs_embeds)[:-1]
-
-        seq_length = input_shape[1]
+        seq_length = tf.shape(input_ids)[1]
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+            token_type_ids = tf.fill(tf.shape(input_ids), 0)
 
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
+        words_embeddings = tf.gather(self.word_embeddings, input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+        embeddings = words_embeddings + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
@@ -132,10 +124,18 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
             Returns:
                 float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
+        batch_size = tf.shape(inputs)[0]
+        length = tf.shape(inputs)[1]
+
+        print(inputs.shape)
+
         x = tf.reshape(inputs, [-1, self.config.embedding_size])
+
+        print(x.shape, self.word_embeddings)
+
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
+
+        print([batch_size, length, self.config.vocab_size])
         return tf.reshape(logits, [batch_size, length, self.config.vocab_size])
 
 
@@ -178,7 +178,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -191,7 +191,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
         # scale attention_scores
-        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)
+        dk = tf.cast(tf.shape(key_layer)[-1], tf.float32)
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -259,7 +259,7 @@ class TFAlbertAttention(TFBertSelfAttention):
     def call(self, inputs, training=False):
         input_tensor, attention_mask, head_mask = inputs
 
-        batch_size = shape_list(input_tensor)[0]
+        batch_size = tf.shape(input_tensor)[0]
         mixed_query_layer = self.query(input_tensor)
         mixed_key_layer = self.key(input_tensor)
         mixed_value_layer = self.value(input_tensor)
@@ -272,7 +272,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
         # scale attention_scores
-        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)
+        dk = tf.cast(tf.shape(key_layer)[-1], tf.float32)
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -460,38 +460,35 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = input_embeddings
+        self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,),
                                     initializer='zeros',
                                     trainable=True,
                                     name='bias')
-        self.decoder_bias = self.add_weight(shape=(self.vocab_size,),
-                                    initializer='zeros',
-                                    trainable=True,
-                                    name='decoder/bias')
         super(TFAlbertMLMHead, self).build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
-        hidden_states = self.decoder(hidden_states, mode="linear") + self.decoder_bias
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
         return hidden_states
 
 
 ALBERT_START_DOCSTRING = r"""    The ALBERT model was proposed in
-    `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations`_
-    by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut. It presents
-    two parameter-reduction techniques to lower memory consumption and increase the trainig speed of BERT.
+    `ALBERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_
+    by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It's a bidirectional transformer
+    pre-trained using a combination of masked language modeling objective and next sentence prediction
+    on a large corpus comprising the Toronto Book Corpus and Wikipedia.
 
     This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
-    .. _`ALBERT: A Lite BERT for Self-supervised Learning of Language Representations`:
-        https://arxiv.org/abs/1909.11942
+    .. _`ALBERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`:
+        https://arxiv.org/abs/1810.04805
 
     .. _`tf.keras.Model`:
         https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
@@ -604,9 +601,6 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         self.pooler = tf.keras.layers.Dense(config.hidden_size, kernel_initializer=get_initializer(
             config.initializer_range), activation='tanh', name='pooler')
 
-    def get_input_embeddings(self):
-        return self.embeddings
-
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -617,39 +611,28 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         """
         raise NotImplementedError
 
-    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, training=False):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            assert len(inputs) <= 6, "Too many inputs."
+            assert len(inputs) <= 5, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             attention_mask = inputs.get('attention_mask', attention_mask)
             token_type_ids = inputs.get('token_type_ids', token_type_ids)
             position_ids = inputs.get('position_ids', position_ids)
             head_mask = inputs.get('head_mask', head_mask)
-            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
-            assert len(inputs) <= 6, "Too many inputs."
+            assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
         if attention_mask is None:
-            attention_mask = tf.fill(input_shape, 1)
+            attention_mask = tf.fill(tf.shape(input_ids), 1)
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+            token_type_ids = tf.fill(tf.shape(input_ids), 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -679,12 +662,12 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            [input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+            [input_ids, position_ids, token_type_ids], training=training)
         encoder_outputs = self.encoder(
             [embedding_output, extended_attention_mask, head_mask], training=training)
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output[:, 0])
+        pooled_output = self.pooler(sequence_output)
 
         # add hidden_states and attentions if they are here
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]
@@ -712,8 +695,8 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         import tensorflow as tf
         from transformers import AlbertTokenizer, TFAlbertForMaskedLM
 
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForMaskedLM.from_pretrained('albert-base-v2')
+        tokenizer = AlbertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFAlbertForMaskedLM.from_pretrained('bert-base-uncased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores = outputs[0]
@@ -727,9 +710,6 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         self.predictions = TFAlbertMLMHead(
             config, self.albert.embeddings, name='predictions')
 
-    def get_output_embeddings(self):
-        return self.albert.embeddings
-
     def call(self, inputs, **kwargs):
         outputs = self.albert(inputs, **kwargs)
 
@@ -741,54 +721,3 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         outputs = (prediction_scores,) + outputs[2:]
 
         return outputs  # prediction_scores, (hidden_states), (attentions)
-
-
-@add_start_docstrings("""Albert Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
-    ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
-class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **logits**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, config.num_labels)``
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForSequenceClassification
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForSequenceClassification.from_pretrained('albert-base-v2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        logits = outputs[0]
-
-    """
-    def __init__(self, config, *inputs, **kwargs):
-        super(TFAlbertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
-
-        self.albert = TFAlbertModel(config, name='albert')
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(config.initializer_range),
-                                                name='classifier')
-
-    def call(self, inputs, **kwargs):
-        outputs = self.albert(inputs, **kwargs)
-
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output, training=kwargs.get('training', False))
-        logits = self.classifier(pooled_output)
-
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-
-        return outputs  # logits, (hidden_states), (attentions)
