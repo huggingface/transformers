@@ -408,7 +408,7 @@ class T5Block(nn.Module):
                                                 position_bias=position_bias,
                                                 head_mask=head_mask)
         hidden_states = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]
+        outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         if not self.is_decoder:
             hidden_states = self.layer[1](hidden_states)
@@ -419,11 +419,11 @@ class T5Block(nn.Module):
                                                     position_bias=encoder_decoder_position_bias,
                                                     head_mask=head_mask)
             hidden_states = cross_attention_outputs[0]
-            outputs = cross_attention_outputs[1:] + outputs
+            outputs = outputs + cross_attention_outputs[1:]  # Keep cross-attention outputs and relative position weights
             hidden_states = self.layer[2](hidden_states)
 
         outputs = (hidden_states,) + outputs  # add attentions if we output them
-        return outputs
+        return outputs  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
 class T5PreTrainedModel(PreTrainedModel):
@@ -564,14 +564,17 @@ class T5Stack(T5PreTrainedModel):
                                          encoder_attention_mask=encoder_extended_attention_mask,
                                          encoder_decoder_position_bias=encoder_decoder_position_bias,
                                          head_mask=head_mask[i])
+            # layer_outputs is a tuple with:
+            # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states = layer_outputs[0]
             if i == 0:
+                # We share the position biases between the layers - the first layer store them
                 position_bias = layer_outputs[2 if self.output_attentions else 1]
                 if self.is_decoder:
                     encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 2]
 
             if self.output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[1],)  # We keep only self-attention weights for now
 
         hidden_states = self.final_layer_norm(hidden_states)
         layer_output = self.dropout(hidden_states)
