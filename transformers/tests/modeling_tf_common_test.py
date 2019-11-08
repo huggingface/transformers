@@ -194,7 +194,7 @@ class TFCommonTestCases:
                 outputs_dict = model(inputs_dict)
 
                 inputs_keywords = copy.deepcopy(inputs_dict)
-                input_ids = inputs_keywords.pop('input_ids', inputs_keywords.pop('decoder_input_ids'))
+                input_ids = inputs_keywords.pop('input_ids' if not self.is_encoder_decoder else 'decoder_input_ids', None)
                 outputs_keywords = model(input_ids, **inputs_keywords)
 
                 output_dict = outputs_dict[0].numpy()
