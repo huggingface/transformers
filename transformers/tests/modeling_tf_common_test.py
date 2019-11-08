@@ -69,6 +69,7 @@ class TFCommonTestCases:
         test_torchscript = True
         test_pruning = True
         test_resize_embeddings = True
+        is_encoder_decoder = False
 
         def test_initialization(self):
             pass
@@ -156,7 +157,11 @@ class TFCommonTestCases:
         def test_compile_tf_model(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-            input_ids = tf.keras.Input(batch_shape=(2, 2000), name='input_ids', dtype='int32')
+            if self.is_encoder_decoder:
+                input_ids = {'decoder_input_ids': tf.keras.Input(batch_shape=(2, 2000), name='decoder_input_ids', dtype='int32'),
+                             'encoder_input_ids': tf.keras.Input(batch_shape=(2, 2000), name='encoder_input_ids', dtype='int32')}
+            else:
+                input_ids = tf.keras.Input(batch_shape=(2, 2000), name='input_ids', dtype='int32')
             optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
             loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
             metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
@@ -189,7 +194,7 @@ class TFCommonTestCases:
                 outputs_dict = model(inputs_dict)
 
                 inputs_keywords = copy.deepcopy(inputs_dict)
-                input_ids = inputs_keywords.pop('input_ids')
+                input_ids = inputs_keywords.pop('input_ids', inputs_keywords.pop('decoder_input_ids'))
                 outputs_keywords = model(input_ids, **inputs_keywords)
 
                 output_dict = outputs_dict[0].numpy()
@@ -216,12 +221,24 @@ class TFCommonTestCases:
                     self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
                 out_len = len(outputs)
 
+                if self.is_encoder_decoder:
+                    self.assertEqual(out_len % 2, 0)
+                    decoder_attentions = outputs[(out_len // 2)-1]
+                    self.assertEqual(model.config.output_attentions, True)
+                    self.assertEqual(model.config.output_hidden_states, False)
+                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(decoder_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads,
+                         self.model_tester.seq_length,
+                         self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+
                 # Check attention is always last and order is fine
                 config.output_attentions = True
                 config.output_hidden_states = True
                 model = model_class(config)
                 outputs = model(inputs_dict)
-                self.assertEqual(out_len+1, len(outputs))
+                self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
                 self.assertEqual(model.config.output_attentions, True)
                 self.assertEqual(model.config.output_hidden_states, True)
 
