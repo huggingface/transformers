@@ -169,6 +169,7 @@ if is_tf_available():
                                     TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
+                                     TFAlbertForSequenceClassification,
                                     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # TF 2.0 <=> PyTorch conversion utilities
