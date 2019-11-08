@@ -173,6 +173,7 @@ if is_tf_available():
     from .optimization_tf import (WarmUp, create_optimizer, AdamWeightDecay)
 
     from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
+                                     TFAlbertForSequenceClassification,
                                     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # TF 2.0 <=> PyTorch conversion utilities
