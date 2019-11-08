@@ -10,5 +10,3 @@ regex
 sentencepiece
 # For XLM
 sacremoses
-# For ROUGE
-pyrouge

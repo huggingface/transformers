@@ -166,7 +166,7 @@ class BeamSearch(object):
         for step in range(self.max_length):
 
             decoder_input = fit_to_block_size(self.growing_beams, block_size, self.pad_token_id)
-            kwargs_decoder["attention_mask"] = build_mask(decoder_input)
+            kwargs_decoder["attention_mask"] = build_mask(decoder_input, self.pad_token_id)
             outputs = self.model.decoder(decoder_input, **kwargs_decoder)
 
             next_token_scores = outputs[0][:, -1, :].squeeze(1)
