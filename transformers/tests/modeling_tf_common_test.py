@@ -131,7 +131,11 @@ class TFCommonTestCases:
                 with torch.no_grad():
                     pto = pt_model(**pt_inputs_dict)
                 tfo = tf_model(inputs_dict)
-                max_diff = np.amax(np.abs(tfo[0].numpy() - pto[0].numpy()))
+                tfo = tfo[0].numpy()
+                pto = pto[0].numpy()
+                tfo[np.isnan(tfo)] = 0
+                pto[np.isnan(pto)] = 0
+                max_diff = np.amax(np.abs(tfo - pto))
                 self.assertLessEqual(max_diff, 2e-2)
 
                 # Check we can load pt model in tf and vice-versa with checkpoint => model functions
@@ -151,7 +155,11 @@ class TFCommonTestCases:
                 with torch.no_grad():
                     pto = pt_model(**pt_inputs_dict)
                 tfo = tf_model(inputs_dict)
-                max_diff = np.amax(np.abs(tfo[0].numpy() - pto[0].numpy()))
+                tfo = tfo[0].numpy()
+                pto = pto[0].numpy()
+                tfo[np.isnan(tfo)] = 0
+                pto[np.isnan(pto)] = 0
+                max_diff = np.amax(np.abs(tfo - pto))
                 self.assertLessEqual(max_diff, 2e-2)
 
         def test_compile_tf_model(self):
