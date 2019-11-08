@@ -656,7 +656,7 @@ class BertModel(BertPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
-        if encoder_attention_mask is None:
+        if self.config.is_decoder and encoder_attention_mask is None:
             encoder_attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
