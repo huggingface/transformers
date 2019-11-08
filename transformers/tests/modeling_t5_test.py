@@ -45,9 +45,10 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
         def __init__(self,
                      parent,
                      batch_size=13,
-                     seq_length=7,
+                     encoder_seq_length=7,
+                     decoder_seq_length=9,
                      is_training=True,
-                     use_input_mask=True,
+                     use_attention_mask=True,
                      use_labels=True,
                      vocab_size=99,
                      n_positions=14,
@@ -62,9 +63,10 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
                     ):
             self.parent = parent
             self.batch_size = batch_size
-            self.seq_length = seq_length
+            self.encoder_seq_length = encoder_seq_length
+            self.decoder_seq_length = decoder_seq_length
             self.is_training = is_training
-            self.use_input_mask = use_input_mask
+            self.use_attention_mask = use_attention_mask
             self.use_labels = use_labels
             self.vocab_size = vocab_size
             self.n_positions = n_positions
@@ -78,15 +80,18 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
             self.scope = scope
 
         def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            encoder_input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+            decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-            input_mask = None
-            if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            encoder_attention_mask = None
+            decoder_attention_mask = None
+            if self.use_attention_mask:
+                encoder_attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+                decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
 
-            token_labels = None
+            decoder_lm_labels = None
             if self.use_labels:
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+                decoder_lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
             config = T5Config(
                 vocab_size_or_config_json_file=self.vocab_size,
@@ -100,21 +105,22 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
                 dropout_rate=self.dropout_rate,
                 initializer_factor=self.initializer_factor)
 
-            return (config, input_ids, input_mask, token_labels)
+            return (config, encoder_input_ids, decoder_input_ids, encoder_attention_mask, decoder_attention_mask, decoder_lm_labels)
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(
                 list(result["loss"].size()),
                 [])
 
-        def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
+        def create_and_check_t5_model(self, config, encoder_input_ids, decoder_input_ids, encoder_attention_mask, decoder_attention_mask, decoder_lm_labels):
             model = T5Model(config=config)
             model.eval()
-            encoder_output, decoder_output = model(encoder_input_ids=input_ids,
-                                                   decoder_input_ids=input_ids,
-                                                   decoder_attention_mask=input_mask)
-            encoder_output, decoder_output = model(encoder_input_ids=input_ids,
-                                                   decoder_input_ids=input_ids)
+            decoder_output, encoder_output = model(encoder_input_ids=encoder_input_ids,
+                                                   decoder_input_ids=decoder_input_ids,
+                                                   encoder_attention_mask=encoder_attention_mask,
+                                                   decoder_attention_mask=decoder_attention_mask)
+            decoder_output, encoder_output = model(encoder_input_ids=encoder_input_ids,
+                                                   decoder_input_ids=decoder_input_ids)
 
             result = {
                 "encoder_output": encoder_output,
@@ -122,17 +128,17 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
             }
             self.parent.assertListEqual(
                 list(result["encoder_output"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                [self.batch_size, self.encoder_seq_length, self.hidden_size])
             self.parent.assertListEqual(
                 list(result["decoder_output"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                [self.batch_size, self.decoder_seq_length, self.hidden_size])
 
 
-        def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
+        def create_and_check_t5_with_lm_head(self, config, encoder_input_ids, decoder_input_ids, encoder_attention_mask, decoder_attention_mask, decoder_lm_labels):
             model = T5WithLMHeadModel(config=config)
             model.eval()
-            outputs = model(encoder_input_ids=input_ids, decoder_input_ids=input_ids,
-                            decoder_attention_mask=input_mask, decoder_lm_labels=token_labels)
+            outputs = model(encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids,
+                            decoder_attention_mask=decoder_attention_mask, decoder_lm_labels=decoder_lm_labels)
             loss, prediction_scores = outputs[0], outputs[1]
             result = {
                 "loss": loss,
@@ -140,15 +146,17 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
             }
             self.parent.assertListEqual(
                 list(result["prediction_scores"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                [self.batch_size, self.decoder_seq_length, self.vocab_size])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, input_mask, token_labels) = config_and_inputs
-            inputs_dict = {'encoder_input_ids': input_ids,
-                           'decoder_input_ids': input_ids,
-                           'decoder_attention_mask': input_mask}
+            (config, encoder_input_ids, decoder_input_ids, encoder_attention_mask,
+             decoder_attention_mask, decoder_lm_labels) = config_and_inputs
+            inputs_dict = {'encoder_input_ids': encoder_input_ids,
+                           'decoder_input_ids': decoder_input_ids,
+                           'decoder_attention_mask': decoder_attention_mask,
+                           'encoder_attention_mask': encoder_attention_mask}
             return config, inputs_dict
 
     def setUp(self):
