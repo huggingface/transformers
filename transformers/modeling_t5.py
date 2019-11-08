@@ -41,8 +41,7 @@ logger = logging.getLogger(__name__)
 # for the pretrained weights provided with the models
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    't5-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-uncased-pytorch_model.bin",
-    't5-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-uncased-pytorch_model.bin",
+    't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-pytorch_model.bin",
 }
 
 ####################################################
@@ -442,7 +441,7 @@ class T5PreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(factor*1.0)
-        elif isinstance(module, T5Model):
+        elif isinstance(module, (T5Model, T5WithLMHeadModel)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor*1.0)
@@ -502,11 +501,10 @@ class T5Stack(T5PreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
             extended_attention_mask = attention_mask[:, None, :, :]
-
+        elif attention_mask.dim() == 2:
         # Provided a padding mask of dimensions [batch_size, seq_length]
         # - if the model is a decoder, apply a causal mask in addition to the padding mask
         # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if attention_mask.dim() == 2:
             if self.config.is_decoder:
                 seq_ids = torch.arange(seq_length, device=hidden_states.device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -593,7 +591,7 @@ class T5Stack(T5PreTrainedModel):
 T5_START_DOCSTRING = r"""    The T5 model was proposed in
     `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`_
     by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
-    It's an encoder decoder pre-trained transformer.
+    It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
@@ -634,16 +632,13 @@ T5_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
         **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare single stack (encoder or decoder) of a T5 Model transformer outputting raw hidden-states"
+@add_start_docstrings("The bare T5 Model transformer outputting raw hidden-states"
                       "without any specific head on top.",
                       T5_START_DOCSTRING, T5_INPUTS_DOCSTRING)
 class T5Model(T5PreTrainedModel):
@@ -661,8 +656,8 @@ class T5Model(T5PreTrainedModel):
 
     Examples::
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-base-uncased')
-        model = T5Model.from_pretrained('t5-base-uncased')
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5Model.from_pretrained('t5-small')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -752,8 +747,8 @@ class T5WithLMHeadModel(T5PreTrainedModel):
 
     Examples::
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-base-uncased')
-        model = T5WithLMHeadModel.from_pretrained('t5-base-uncased')
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5WithLMHeadModel.from_pretrained('t5-small')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
@@ -763,31 +758,73 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         super(T5WithLMHeadModel, self).__init__(config)
         self.model_dim = config.d_model
 
-        self.transformer = T5Model(config)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        encoder_config = copy.deepcopy(config)
+        self.encoder = T5Stack(encoder_config)
+
+        decoder_config = copy.deepcopy(config)
+        decoder_config.is_decoder = True
+        self.decoder = T5Stack(decoder_config)
+
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
 
     def get_output_embeddings(self):
         return self.lm_head
 
     def forward(self, **kwargs):
-        lm_labels = kwargs.pop('decoder_lm_labels', None)
-        outputs = self.transformer(**kwargs)
+        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
+        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
+        # that apply to the model as whole.
+        # We let the specific kwargs override the common ones in case of conflict.
 
-        sequence_output = outputs[0]
+        lm_labels = kwargs.pop('decoder_lm_labels', None)
+
+        kwargs_common = dict((k, v) for k, v in kwargs.items()
+                             if not k.startswith("encoder_") and not k.startswith("decoder_"))
+        kwargs_encoder = kwargs_common.copy()
+        kwargs_decoder = kwargs_common.copy()
+        kwargs_encoder.update(dict((k[len("encoder_"):], v) for k, v in kwargs.items() if k.startswith("encoder_")))
+        kwargs_decoder.update(dict((k[len("decoder_"):], v) for k, v in kwargs.items() if k.startswith("decoder_")))
+
+        # Encode if needed (training, first prediction pass)
+        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
+        if encoder_hidden_states is None:
+            encoder_inputs_ids = kwargs_encoder.pop("input_ids")
+            hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+            encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
+            encoder_hidden_states = encoder_outputs[0]
+        else:
+            encoder_outputs = ()
+
+        # Decode
+        decoder_inputs_ids = kwargs_decoder.pop("input_ids")
+        hidden_states = self.shared(decoder_inputs_ids)  # Convert inputs in embeddings
+        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
+        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
+        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
+
+        sequence_output = decoder_outputs[0]
         # Rescale output before projecting on vocab
         # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
         sequence_output = sequence_output * (self.model_dim ** -0.5)
         lm_logits = self.lm_head(sequence_output)
 
-        outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
+        decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss(ignore_index=-1)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
-            outputs = (loss,) + outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+            decoder_outputs = (loss,) + decoder_outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
-        return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
+        return decoder_outputs + encoder_outputs

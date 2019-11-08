@@ -27,8 +27,7 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    't5-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-uncased-config.json",
-    't5-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-uncased-config.json",
+    't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-config.json",
 }
 
 

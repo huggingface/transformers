@@ -27,6 +27,7 @@ from .configuration_xlm import XLMConfig
 from .configuration_roberta import RobertaConfig
 from .configuration_distilbert import DistilBertConfig
 from .configuration_ctrl import CTRLConfig
+from .configuration_t5 import T5Config
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class AutoConfig(object):
 
         The configuration class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Config (T5 model)
             - contains `distilbert`: DistilBertConfig (DistilBERT model)
             - contains `bert`: BertConfig (Bert model)
             - contains `openai-gpt`: OpenAIGPTConfig (OpenAI GPT model)
@@ -114,7 +116,9 @@ class AutoConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return T5Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)

@@ -26,7 +26,7 @@ from .configuration_common_test import ConfigTester
 
 from transformers import T5Config, is_tf_available
 
-if False:  # is_tf_available():
+if is_tf_available():
     import tensorflow as tf
     from transformers.modeling_tf_t5 import (TFT5Model, TFT5WithLMHeadModel,TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
@@ -35,7 +35,8 @@ else:
 
 class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if False  else () # is_tf_available() else ()
+    is_encoder_decoder = True
+    all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if is_tf_available() else ()
 
     class TFT5ModelTester(object):
 
@@ -45,22 +46,16 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
                      seq_length=7,
                      is_training=True,
                      use_input_mask=True,
-                     use_token_type_ids=True,
                      use_labels=True,
                      vocab_size=99,
+                     n_positions=14,
                      hidden_size=32,
                      num_hidden_layers=5,
                      num_attention_heads=4,
-                     intermediate_size=37,
-                     hidden_act="gelu",
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
+                     d_ff=37,
+                     relative_attention_num_buckets=8,
+                     dropout_rate=0.1,
+                     initializer_factor=0.002,
                      scope=None,
                     ):
             self.parent = parent
@@ -68,22 +63,16 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
             self.seq_length = seq_length
             self.is_training = is_training
             self.use_input_mask = use_input_mask
-            self.use_token_type_ids = use_token_type_ids
             self.use_labels = use_labels
             self.vocab_size = vocab_size
+            self.n_positions = n_positions
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
             self.num_attention_heads = num_attention_heads
-            self.intermediate_size = intermediate_size
-            self.hidden_act = hidden_act
-            self.hidden_dropout_prob = hidden_dropout_prob
-            self.attention_probs_dropout_prob = attention_probs_dropout_prob
-            self.max_position_embeddings = max_position_embeddings
-            self.type_vocab_size = type_vocab_size
-            self.type_sequence_label_size = type_sequence_label_size
-            self.initializer_range = initializer_range
-            self.num_labels = num_labels
-            self.num_choices = num_choices
+            self.d_ff = d_ff
+            self.relative_attention_num_buckets = relative_attention_num_buckets
+            self.dropout_rate = dropout_rate
+            self.initializer_factor = initializer_factor
             self.scope = scope
 
         def prepare_config_and_inputs(self):
@@ -93,61 +82,53 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
             if self.use_input_mask:
                 input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
-            token_type_ids = None
-            if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-            sequence_labels = None
             token_labels = None
-            choice_labels = None
             if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                choice_labels = ids_tensor([self.batch_size], self.num_choices)
+                token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = T5Config(
                 vocab_size_or_config_json_file=self.vocab_size,
-                hidden_size=self.hidden_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                intermediate_size=self.intermediate_size,
-                hidden_act=self.hidden_act,
-                hidden_dropout_prob=self.hidden_dropout_prob,
-                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-                max_position_embeddings=self.max_position_embeddings,
-                type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range)
+                n_positions=self.n_positions,
+                d_model=self.hidden_size,
+                d_ff=self.d_ff,
+                d_kv=self.hidden_size // self.num_attention_heads,
+                num_layers=self.num_hidden_layers,
+                num_heads=self.num_attention_heads,
+                relative_attention_num_buckets=self.relative_attention_num_buckets,
+                dropout_rate=self.dropout_rate,
+                initializer_factor=self.initializer_factor)
 
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            return (config, input_ids, input_mask, token_labels)
 
-        def create_and_check_t5_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
             model = TFT5Model(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
-            sequence_output, pooled_output = model(inputs)
+            inputs = {'encoder_input_ids': input_ids,
+                      'decoder_input_ids': input_ids,
+                      'decoder_attention_mask': input_mask}
+            encoder_output, decoder_output = model(inputs)
 
-            inputs = [input_ids, input_mask]
-            sequence_output, pooled_output = model(inputs)
-
-            sequence_output, pooled_output = model(input_ids)
+            encoder_output, decoder_output = model(input_ids,
+                                                   decoder_attention_mask=input_mask,
+                                                   encoder_input_ids=input_ids)
 
             result = {
-                "sequence_output": sequence_output.numpy(),
-                "pooled_output": pooled_output.numpy(),
+                "encoder_output": encoder_output.numpy(),
+                "decoder_output": decoder_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape),
+                list(result["encoder_output"].shape),
                 [self.batch_size, self.seq_length, self.hidden_size])
-            self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
+            self.parent.assertListEqual(
+                list(result["decoder_output"].shape),
+                [self.batch_size, self.seq_length, self.hidden_size])
 
 
-        def create_and_check_t5_with_lm_head(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
             model = TFT5WithLMHeadModel(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
-            prediction_scores, = model(inputs)
+            inputs = {'encoder_input_ids': input_ids,
+                      'decoder_input_ids': input_ids,
+                      'decoder_attention_mask': input_mask}
+            prediction_scores, decoder_output = model(inputs)
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
@@ -158,14 +139,15 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, token_type_ids, input_mask,
-             sequence_labels, token_labels, choice_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
+            (config, input_ids, input_mask, token_labels) = config_and_inputs
+            inputs_dict = {'encoder_input_ids': input_ids,
+                           'decoder_input_ids': input_ids,
+                           'decoder_attention_mask': input_mask}
             return config, inputs_dict
 
     def setUp(self):
         self.model_tester = TFT5ModelTest.TFT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=T5Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -181,7 +163,7 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
     @pytest.mark.slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
-        for model_name in ['t5-base']:
+        for model_name in ['t5-small']:
             model = TFT5Model.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)

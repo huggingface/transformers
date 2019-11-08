@@ -160,8 +160,7 @@ class PreTrainedModel(nn.Module):
         base_model.vocab_size = new_num_tokens
 
         # Tie weights again if needed
-        if hasattr(self, 'tie_weights'):
-            self.tie_weights()
+        self.tie_weights()
 
         return model_embeds
 
@@ -458,8 +457,7 @@ class PreTrainedModel(nn.Module):
                 raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                 model.__class__.__name__, "\n\t".join(error_msgs)))
 
-        if hasattr(model, 'tie_weights'):
-            model.tie_weights()  # make sure word embedding weights are still tied
+        model.tie_weights()  # make sure word embedding weights are still tied if needed
 
         # Set model in evaluation mode to desactivate DropOut modules by default
         model.eval()
