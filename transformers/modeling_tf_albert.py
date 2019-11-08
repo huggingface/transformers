@@ -126,16 +126,8 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         """
         batch_size = tf.shape(inputs)[0]
         length = tf.shape(inputs)[1]
-
-        print(inputs.shape)
-
         x = tf.reshape(inputs, [-1, self.config.embedding_size])
-
-        print(x.shape, self.word_embeddings)
-
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        print([batch_size, length, self.config.vocab_size])
         return tf.reshape(logits, [batch_size, length, self.config.vocab_size])
 
 
@@ -460,20 +452,24 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
+        self.decoder = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,),
                                     initializer='zeros',
                                     trainable=True,
                                     name='bias')
+        self.decoder_bias = self.add_weight(shape=(self.vocab_size,),
+                                    initializer='zeros',
+                                    trainable=True,
+                                    name='decoder/bias')
         super(TFAlbertMLMHead, self).build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = self.decoder(hidden_states, mode="linear") + self.decoder_bias
         hidden_states = hidden_states + self.bias
         return hidden_states
 
@@ -666,7 +662,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
             [embedding_output, extended_attention_mask, head_mask], training=training)
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output[:, 0])
 
         # add hidden_states and attentions if they are here
         outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]
