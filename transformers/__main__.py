@@ -6,6 +6,7 @@ def main():
         "This command line utility let you convert original (author released) model checkpoint to pytorch.\n"
         "It should be used as one of: \n"
         ">> transformers bert TF_CHECKPOINT TF_CONFIG PYTORCH_DUMP_OUTPUT, \n"
+        ">> transformers t5 TF_CHECKPOINT TF_CONFIG PYTORCH_DUMP_OUTPUT, \n"
         ">> transformers gpt OPENAI_GPT_CHECKPOINT_FOLDER_PATH PYTORCH_DUMP_OUTPUT [OPENAI_GPT_CONFIG], \n"
         ">> transformers transfo_xl TF_CHECKPOINT_OR_DATASET PYTORCH_DUMP_OUTPUT [TF_CONFIG] or \n"
         ">> transformers gpt2 TF_CHECKPOINT PYTORCH_DUMP_OUTPUT [GPT2_CONFIG] or \n"
@@ -15,6 +16,23 @@ def main():
         if sys.argv[1] == "bert":
             try:
                 from .convert_bert_original_tf_checkpoint_to_pytorch import convert_tf_checkpoint_to_pytorch
+            except ImportError:
+                print("transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions.")
+                raise
+
+            if len(sys.argv) != 5:
+                # pylint: disable=line-too-long
+                print("Should be used as `transformers bert TF_CHECKPOINT TF_CONFIG PYTORCH_DUMP_OUTPUT`")
+            else:
+                PYTORCH_DUMP_OUTPUT = sys.argv.pop()
+                TF_CONFIG = sys.argv.pop()
+                TF_CHECKPOINT = sys.argv.pop()
+                convert_tf_checkpoint_to_pytorch(TF_CHECKPOINT, TF_CONFIG, PYTORCH_DUMP_OUTPUT)
+        elif sys.argv[1] == "t5":
+            try:
+                from .convert_t5_original_tf_checkpoint_to_pytorch import convert_tf_checkpoint_to_pytorch
             except ImportError:
                 print("transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
                     "In that case, it requires TensorFlow to be installed. Please see "

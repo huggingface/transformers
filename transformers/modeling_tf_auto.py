@@ -27,6 +27,7 @@ from .modeling_tf_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceC
 from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification
 from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification
 from .modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel
+from .modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel
 
 from .file_utils import add_start_docstrings
 
@@ -45,6 +46,7 @@ class TFAutoModel(object):
 
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5Model (T5 model)
             - contains `distilbert`: TFDistilBertModel (DistilBERT model)
             - contains `roberta`: TFRobertaModel (RoBERTa model)
             - contains `bert`: TFBertModel (Bert model)
@@ -68,6 +70,7 @@ class TFAutoModel(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5Model (T5 model)
             - contains `distilbert`: TFDistilBertModel (DistilBERT model)
             - contains `roberta`: TFRobertaModel (RoBERTa model)
             - contains `bert`: TFTFBertModel (Bert model)
@@ -133,7 +136,9 @@ class TFAutoModel(object):
             model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return TFT5Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return TFDistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return TFRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -169,6 +174,7 @@ class TFAutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5WithLMHeadModel (T5 model)
             - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
             - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
             - contains `bert`: TFBertForMaskedLM (Bert model)
@@ -195,6 +201,7 @@ class TFAutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5WithLMHeadModel (T5 model)
             - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
             - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
             - contains `bert`: TFBertForMaskedLM (Bert model)
@@ -261,7 +268,9 @@ class TFAutoModelWithLMHead(object):
             model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return TFT5WithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return TFDistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return TFRobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
