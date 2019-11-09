@@ -118,6 +118,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_key = key.replace('gamma', 'weight')
         if 'beta' in key:
             new_key = key.replace('beta', 'bias')
+        # DialoGPT format
+        if key == 'lm_head.decoder.weight':
+            new_key = 'lm_head.weight'
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
