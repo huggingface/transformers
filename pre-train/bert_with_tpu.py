@@ -18,7 +18,6 @@
 """
 
 import sys, os
-from google.colab import auth
 import tensorflow as tf
 import logging
 log = logging.getLogger('tensorflow')
@@ -46,11 +45,9 @@ fine_tuning_name = "gs://{}/{}/{}".format(BUCKET_NAME, NEW_MODEL_DIR, MODEL_NAME
 #! gsutil rm -rf $fine_tuning_name
 #! gsutil cp -r $base_model_name $fine_tuning_name
 
-from google.cloud import storage
-from google.colab import auth, drive
-
-storage_client = storage.Client()
-bucket = storage_client.get_bucket(BUCKET_NAME)
+#
+# storage_client = storage.Client()
+# bucket = storage_client.get_bucket(BUCKET_NAME)
 
 VOC_FNAME = "gs://{}/{}/{}/vocab.txt".format(BUCKET_NAME, NEW_MODEL_DIR, MODEL_NAME)
 TF_RECORD_DIR = "gs://{}/{}_tfrecord".format(BUCKET_NAME, INPUT_DATA_DIR)
@@ -59,11 +56,11 @@ file_partitions = [[]]
 index = 0
 
 
-def list_files(bucketFolder):
-    """List all files in GCP bucket."""
-    files = bucket.list_blobs(prefix=bucketFolder, max_results=1000)
-    fileList = [file.name for file in files]
-    return fileList
+# def list_files(bucketFolder):
+#     """List all files in GCP bucket."""
+#     files = bucket.list_blobs(prefix=bucketFolder, max_results=1000)
+#     fileList = [file.name for file in files]
+#     return fileList
 
 
 print(INPUT_DATA_DIR)
@@ -72,13 +69,13 @@ FULL_INPUT_DATA_DIR = "gs://{}/{}".format(BUCKET_NAME, INPUT_DATA_DIR)
 # ! gsutil ls $FULL_INPUT_DATA_DIR
 
 
-for filename in list_files(INPUT_DATA_DIR):
-    if filename.find("tf") != -1 or filename.endswith("/"):
-        continue
-    if len(file_partitions[index]) == PROCESSES:
-        file_partitions.append([])
-        index += 1
-    file_partitions[index].append("gs://{}/{}".format(BUCKET_NAME, filename))
+# for filename in list_files(INPUT_DATA_DIR):
+#     if filename.find("tf") != -1 or filename.endswith("/"):
+#         continue
+#     if len(file_partitions[index]) == PROCESSES:
+#         file_partitions.append([])
+#         index += 1
+#     file_partitions[index].append("gs://{}/{}".format(BUCKET_NAME, filename))
 
 #! gsutil
 #mkdir $TF_RECORD_DIR
@@ -89,39 +86,39 @@ for filename in list_files(INPUT_DATA_DIR):
 #! gsutil
 #ls $TF_RECORD_DIR
 
-index = 0
-for partition in file_partitions:
-
-    for filename in partition:
-        print(filename, "----", index)
-    index += 1
-
-    XARGS_CMD = ("gsutil ls {} | "
-                 "awk 'BEGIN{{FS=\"/\"}}{{print $NF}}' | "
-                 "xargs -n 1 -P {} -I{} "
-                 "python3 bert/create_pretraining_data.py "
-                 "--input_file=gs://{}/{}/{} "
-                 "--output_file={}/{}.tfrecord "
-                 "--vocab_file={} "
-                 "--do_lower_case={} "
-                 "--max_predictions_per_seq={} "
-                 "--max_seq_length={} "
-                 "--masked_lm_prob={} "
-                 "--random_seed=34 "
-                 "--dupe_factor=5")
-
-    XARGS_CMD = XARGS_CMD.format(" ".join(partition),
-                                 PROCESSES, '{}', BUCKET_NAME, INPUT_DATA_DIR, '{}',
-                                 TF_RECORD_DIR, '{}',
-                                 VOC_FNAME, DO_LOWER_CASE,
-                                 MAX_PREDICTIONS, MAX_SEQ_LENGTH, MASKED_LM_PROB)
-
-    print(XARGS_CMD)
-
-    # ! $XARGS_CMD
-
-    if index == 2:
-        break
+# index = 0
+# for partition in file_partitions:
+#
+#     for filename in partition:
+#         print(filename, "----", index)
+#     index += 1
+#
+#     XARGS_CMD = ("gsutil ls {} | "
+#                  "awk 'BEGIN{{FS=\"/\"}}{{print $NF}}' | "
+#                  "xargs -n 1 -P {} -I{} "
+#                  "python3 bert/create_pretraining_data.py "
+#                  "--input_file=gs://{}/{}/{} "
+#                  "--output_file={}/{}.tfrecord "
+#                  "--vocab_file={} "
+#                  "--do_lower_case={} "
+#                  "--max_predictions_per_seq={} "
+#                  "--max_seq_length={} "
+#                  "--masked_lm_prob={} "
+#                  "--random_seed=34 "
+#                  "--dupe_factor=5")
+#
+#     XARGS_CMD = XARGS_CMD.format(" ".join(partition),
+#                                  PROCESSES, '{}', BUCKET_NAME, INPUT_DATA_DIR, '{}',
+#                                  TF_RECORD_DIR, '{}',
+#                                  VOC_FNAME, DO_LOWER_CASE,
+#                                  MAX_PREDICTIONS, MAX_SEQ_LENGTH, MASKED_LM_PROB)
+#
+#     print(XARGS_CMD)
+#
+#     # ! $XARGS_CMD
+#
+#     if index == 2:
+#         break
 from bert import modeling, optimization, tokenization
 
 # Input data pipeline config
@@ -176,7 +173,7 @@ import sys
 sys.path.append("bert")
 from bert.run_pretraining import input_fn_builder, model_fn_builder
 from bert import modeling, optimization, tokenization
-
+USE_TPU=True
 model_fn = model_fn_builder(
     bert_config=bert_config,
     init_checkpoint=INIT_CHECKPOINT,
