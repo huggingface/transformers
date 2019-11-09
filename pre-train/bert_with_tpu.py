@@ -174,6 +174,7 @@ sys.path.append("bert")
 from bert.run_pretraining import input_fn_builder, model_fn_builder
 from bert import modeling, optimization, tokenization
 USE_TPU=True
+TPU_ADDRESS = "taey2113"
 model_fn = model_fn_builder(
     bert_config=bert_config,
     init_checkpoint=INIT_CHECKPOINT,
