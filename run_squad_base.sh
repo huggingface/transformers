@@ -4,7 +4,10 @@ srun --mem=12G -c 2 --gres=gpu:1 -p nlp --pty bash
 
 # train and eval on SQUAD
 python ./run_squad.py \
+    # bert, xlnet, or xlm
     --model_type bert \
+    # for xlnet: xlnet-large-cased or xlnet-base-cased (dont set --do_lower_case)
+    # for xlm: xlm-mlm-en-2048 (dont set --do_lower_case)
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
