@@ -138,3 +138,4 @@ serialization_dir
 
 # emacs
 *.*~
+debug.env
