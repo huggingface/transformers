@@ -398,6 +398,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFEmbeddings(config, name="embeddings")   # Embeddings
         self.transformer = TFTransformer(config, name="transformer") # Encoder
 
+    def get_input_embeddings(self):
+        return self.embeddings
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -612,6 +615,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         self.act = tf.keras.layers.Activation(gelu)
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
+
+    def get_output_embeddings(self):
+        return self.vocab_projector.input_embeddings
 
     def call(self, inputs, **kwargs):
         distilbert_output = self.distilbert(inputs, **kwargs)

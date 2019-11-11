@@ -413,6 +413,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                                             name='r_r_bias')
         super(TFTransfoXLMainLayer, self).build(input_shape)
 
+    def get_input_embeddings(self):
+        return self.word_emb
+
     def _resize_token_embeddings(self, new_num_tokens):
         return self.word_emb
 

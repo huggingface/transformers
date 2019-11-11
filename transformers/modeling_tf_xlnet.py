@@ -371,6 +371,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.layer = [TFXLNetLayer(config, name='layer_._{}'.format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
+    def get_input_embeddings(self):
+        return self.word_embedding
+
     def build(self, input_shape):
         initializer = get_initializer(self.initializer_range)
         self.mask_emb = self.add_weight(shape=(1, 1, self.d_model),
@@ -853,6 +856,9 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         super(TFXLNetLMHeadModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name='transformer')
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name='lm_loss')
+
+    def get_output_embeddings(self):
+        return self.lm_loss.input_embeddings
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
