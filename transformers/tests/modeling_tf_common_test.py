@@ -367,7 +367,7 @@ class TFCommonTestCases:
                 model = model_class(config)
                 assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
                 x = model.get_output_embeddings()
-                assert x is None or instanceof(x, tf.keras.layers.Layer)
+                assert x is None or isinstance(x, tf.keras.layers.Layer)
 
 
         def test_tie_model_weights(self):
