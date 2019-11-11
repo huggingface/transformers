@@ -3,7 +3,7 @@
 srun --mem=12G -c 2 --gres=gpu:1 -p nlp --pty bash
 
 # train and eval on SQUAD
-python ./run_squad_base.py \
+python ./run_squad.py \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
