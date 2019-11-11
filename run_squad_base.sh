@@ -19,9 +19,11 @@ python ./run_squad.py \
     --lr_scheduler 'linear' \
     --num_train_epochs 2 \
     --max_steps -1 \ # if >0, overrides num_train_epochs
+    --save_steps 30000 \
     --warmup_steps 0 \
     --max_seq_length 384 \
     --doc_stride 128 \
     --output_dir ../models/wwm_uncased_finetuned_squad/ \
+    --gradient_accumulation_steps 1\ # 6 was used in bioASQ
     --per_gpu_eval_batch_size=3   \
     --per_gpu_train_batch_size=3   \
