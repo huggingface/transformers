@@ -277,6 +277,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     self.prune_heads({int(layer): list(map(int, heads))})
 
 
+    def get_input_embeddings(self):
+        return self.embeddings
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -641,6 +644,8 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name='transformer')
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name='pred_layer_._proj')
 
+    def get_output_embeddings(self):
+        return self.pred_layer.input_embeddings
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)

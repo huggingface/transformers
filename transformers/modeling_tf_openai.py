@@ -217,6 +217,9 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
                           scale=True,
                           name='h_._{}'.format(i)) for i in range(config.n_layer)]
 
+    def get_input_embeddings(self):
+        return self.tokens_embed
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -462,6 +465,9 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
         super(TFOpenAIGPTLMHeadModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
 
+    def get_output_embeddings(self):
+        return self.transformer.tokens_embed
+
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
         hidden_states = transformer_outputs[0]
@@ -523,6 +529,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         super(TFOpenAIGPTDoubleHeadsModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name='transformer')
         self.multiple_choice_head = TFSequenceSummary(config, initializer_range=config.initializer_range, name='multiple_choice_head')
+
+    def get_output_embeddings(self):
+        return self.transformer.tokens_embed
 
     def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, mc_token_ids=None, training=False):
         if isinstance(inputs, (tuple, list)):
