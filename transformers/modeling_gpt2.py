@@ -298,7 +298,8 @@ GPT2_INPUTS_DOCSTRING = r"""    Inputs:
         **past**:
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see `past` output below). Can be used to speed up sequential decoding.
+            (see `past` output below). Can be used to speed up sequential decoding. The token ids which have their past given to this model 
+            should not be passed as input ids as they have already been computed.
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -330,7 +331,8 @@ class GPT2Model(GPT2PreTrainedModel):
         **past**:
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
+            should not be passed as input ids as they have already been computed.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -503,7 +505,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         **past**:
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
+            should not be passed as input ids as they have already been computed.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
@@ -595,7 +598,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         **past**:
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding.
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
+            should not be passed as input ids as they have already been computed.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
