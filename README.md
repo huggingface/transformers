@@ -171,8 +171,7 @@ for model_class, tokenizer_class, pretrained_weights in MODELS:
 
 # Each architecture is provided with several class for fine-tuning on down-stream tasks, e.g.
 BERT_MODEL_CLASSES = [BertModel, BertForPreTraining, BertForMaskedLM, BertForNextSentencePrediction,
-                      BertForSequenceClassification, BertForMultipleChoice, BertForTokenClassification,
-                      BertForQuestionAnswering]
+                      BertForSequenceClassification, BertForTokenClassification, BertForQuestionAnswering]
 
 # All the classes for an architecture can be initiated from pretrained weights for this architecture
 # Note that additional weights added for fine-tuning are only initialized
