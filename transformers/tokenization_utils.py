@@ -1055,7 +1055,7 @@ class PreTrainedTokenizer(object):
             class attributes (cls_token, unk_token...).
         """
         all_toks = self.all_special_tokens
-        all_ids = list(self._convert_token_to_id(t) for t in all_toks)
+        all_ids = self.convert_tokens_to_ids(all_toks)
         return all_ids
 
     @staticmethod
