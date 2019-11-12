@@ -487,7 +487,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         return pos_emb
 
     def call(self, inputs, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-            token_type_ids=None, input_mask=None, head_mask=None, training=False):
+            token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
@@ -497,7 +497,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             token_type_ids = inputs[5] if len(inputs) > 5 else token_type_ids
             input_mask = inputs[6] if len(inputs) > 6 else input_mask
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
-            assert len(inputs) <= 8, "Too many inputs."
+            inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             attention_mask = inputs.get('attention_mask', attention_mask)
@@ -507,7 +508,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             token_type_ids = inputs.get('token_type_ids', token_type_ids)
             input_mask = inputs.get('input_mask', input_mask)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 8, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -515,14 +517,23 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
 
-        input_ids = tf.transpose(input_ids, perm=(1, 0))
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_ids = tf.transpose(input_ids, perm=(1, 0))
+            qlen, bsz = shape_list(input_ids)[:2]
+        elif inputs_embeds is not None:
+            inputs_embeds = tf.transpose(inputs_embeds, perm=(1, 0, 2))
+            qlen, bsz = shape_list(inputs_embeds)[:2]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         token_type_ids = tf.transpose(token_type_ids, perm=(1, 0)) if token_type_ids is not None else None
         input_mask = tf.transpose(input_mask, perm=(1, 0)) if input_mask is not None else None
         attention_mask = tf.transpose(attention_mask, perm=(1, 0)) if attention_mask is not None else None
         perm_mask = tf.transpose(perm_mask, perm=(1, 2, 0)) if perm_mask is not None else None
         target_mapping = tf.transpose(target_mapping, perm=(1, 2, 0)) if target_mapping is not None else None
 
-        qlen, bsz = shape_list(input_ids)[:2]
         mlen = shape_list(mems[0])[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
 
@@ -573,7 +584,10 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             non_tgt_mask = None
 
         ##### Word embeddings and prepare h & g hidden states
-        word_emb_k = self.word_embedding(input_ids)
+        if inputs_embeds is not None:
+            word_emb_k = inputs_embeds
+        else:
+            word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k, training=training)
         if target_mapping is not None:
             word_emb_q = tf.tile(self.mask_emb, [tf.shape(target_mapping)[0], bsz, 1])
