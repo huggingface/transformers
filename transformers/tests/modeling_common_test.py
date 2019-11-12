@@ -468,9 +468,15 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
-                model.get_input_embeddings()
+                self.assertIsInstance(
+                    model.get_input_embeddings(),
+                    torch.nn.Embedding
+                )
                 model.set_input_embeddings(torch.nn.Embedding(10, 10))
-                model.get_output_embeddings()
+                x = model.get_output_embeddings()
+                self.assertTrue(
+                    x is None or isinstance(x, torch.nn.Linear)
+                )
 
         def test_tie_model_weights(self):
             if not self.test_torchscript:
