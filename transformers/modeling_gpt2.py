@@ -69,6 +69,10 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
         name = name[6:]  # skip "model/"
         name = name.split('/')
         pointer = model
+        
+        if isinstance(model, GPT2LMHeadModel):
+            pointer = model.transformer
+            
         for m_name in name:
             if re.fullmatch(r'[A-Za-z]+\d+', m_name):
                 l = re.split(r'(\d+)', m_name)
