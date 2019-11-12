@@ -229,6 +229,10 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
         eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
+        # multi-gpu evaluate
+        if args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
+
         # Eval!
         logger.info("***** Running evaluation {} *****".format(prefix))
         logger.info("  Num examples = %d", len(eval_dataset))
