@@ -147,6 +147,8 @@ def train(args, train_dataset, model, tokenizer):
             if args.model_type in ['xlnet', 'xlm']:
                 inputs.update({'cls_index': batch[5],
                                'p_mask':       batch[6]})
+                if args.version_2_with_negative:
+                    inputs.update({'is_impossible': batch[7]})
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -339,9 +341,10 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     else:
         all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+        all_is_impossible = torch.tensor([1.0 if f.is_impossible == True else 0.0 for f in features], dtype=torch.float)
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
                                 all_start_positions, all_end_positions,
-                                all_cls_index, all_p_mask)
+                                all_cls_index, all_p_mask, all_is_impossible)
 
     if output_examples:
         return dataset, examples, features
