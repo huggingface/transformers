@@ -78,16 +78,14 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
 
         ### self attention
         self_attn: BertSelfAttention = layer.attention.self
-        assert(
-            roberta_layer.self_attn.in_proj_weight.shape == torch.Size((3 * config.hidden_size, config.hidden_size))
-        )
-        # we use three distinct linear layers so we split the source layer here.
-        self_attn.query.weight.data = roberta_layer.self_attn.in_proj_weight[:config.hidden_size, :]
-        self_attn.query.bias.data = roberta_layer.self_attn.in_proj_bias[:config.hidden_size]
-        self_attn.key.weight.data = roberta_layer.self_attn.in_proj_weight[config.hidden_size:2*config.hidden_size, :]
-        self_attn.key.bias.data = roberta_layer.self_attn.in_proj_bias[config.hidden_size:2*config.hidden_size]
-        self_attn.value.weight.data = roberta_layer.self_attn.in_proj_weight[2*config.hidden_size:, :]
-        self_attn.value.bias.data = roberta_layer.self_attn.in_proj_bias[2*config.hidden_size:]
+
+        ### extract self attention weight
+        self_attn.query.weight.data = roberta_layer.self_attn.q_proj.weight
+        self_attn.query.bias.data = roberta_layer.self_attn.q_proj.bias
+        self_attn.key.weight.data = roberta_layer.self_attn.k_proj.weight
+        self_attn.key.bias.data = roberta_layer.self_attn.k_proj.bias
+        self_attn.value.weight.data = roberta_layer.self_attn.v_proj.weight
+        self_attn.value.bias.data = roberta_layer.self_attn.v_proj.bias
 
         ### self-attention output
         self_output: BertSelfOutput = layer.attention.output
@@ -117,7 +115,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         bert_output.LayerNorm.weight = roberta_layer.final_layer_norm.weight
         bert_output.LayerNorm.bias = roberta_layer.final_layer_norm.bias
         #### end of layer
-    
+
     if classification_head:
         model.classifier.dense.weight = roberta.model.classification_heads['mnli'].dense.weight
         model.classifier.dense.bias = roberta.model.classification_heads['mnli'].dense.bias
