@@ -3,13 +3,15 @@
 srun --mem=12G -c 2 --gres=gpu:1 -p nlp --pty bash
 
 # train and eval on SQUAD
+# model_type: bert or xlnet or xlm
+# model_name_or_path:
+# for bert: bert-large-uncased-whole-word-masking
 # for xlnet: xlnet-large-cased or xlnet-base-cased (dont set --do_lower_case)
 # for xlm: xlm-mlm-en-2048 (dont set --do_lower_case)
 # max_steps: if >0, overrides num_train_epochs
 # gradient_accumulation_steps: 6 was used in bioASQ
-python ./examples/run_squad.py \
+python3 ./examples/run_squad.py \
     --model_type bert \
-
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
