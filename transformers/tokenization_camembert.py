@@ -11,7 +11,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+# limitations under the License
 """ Tokenization classes for Camembert model."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
@@ -20,6 +20,19 @@ import sentencepiece as spm
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 
+VOCAB_FILES_NAMES = {'vocab_file': 'sentencepiece.bpe.model'}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    'vocab_file':
+    {
+    'camembert-base': "https://dl.fbaipublicfiles.com/camembert/camembert-base-v0-sentencepiece.bpe.model",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    'camembert-base': None,
+}
+
 class CamembertTokenizer(PreTrainedTokenizer):
     """
         Adapted from RobertaTokenizer and XLNetTokenizer
@@ -27,7 +40,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
             - requires `SentencePiece <https://github.com/google/sentencepiece>`_
     """
-    vocab_files_names = {'vocab_file': None}
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, bos_token="<s>", eos_token="</s>", sep_token="</s>",
                  cls_token="<s>", unk_token="<unk>", pad_token='<pad>', mask_token='<mask>', **kwargs):
