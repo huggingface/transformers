@@ -554,6 +554,16 @@ On the test dataset the following results could be achieved:
 10/04/2019 00:42:42 - INFO - __main__ -     recall = 0.8624150210424085
 ```
 
+### Comparing BERT (large, cased), RoBERTa (large, cased) and DistilBERT (base, uncased)
+
+Here is a small comparison between BERT (large, cased), RoBERTa (large, cased) and DistilBERT (base, uncased) with the same hyperparameters as specified in the [example documentation](https://huggingface.co/transformers/examples.html#named-entity-recognition) (one run):
+
+| Model | F-Score Dev | F-Score Test
+| --------------------------------- | ------- | --------
+| `bert-large-cased`            | 95.59 | 91.70
+| `roberta-large`                  | 95.96 | 91.87
+| `distilbert-base-uncased` | 94.34 | 90.32
+
 ## Abstractive summarization
 
 Based on the script
