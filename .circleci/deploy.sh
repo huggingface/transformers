@@ -5,7 +5,7 @@ function deploy_doc(){
 	git checkout $1
 	if [ ! -z "$2" ] 
 	then
-		if [ -d "$DIRECTORY" ]; then
+		if [ -d "$dir/$2" ]; then
 			echo "Directory" $2 "already exists"
 		else
 			echo "Pushing version" $2
