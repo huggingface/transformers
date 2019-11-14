@@ -84,12 +84,12 @@ Here is a conversion examples from `BertAdam` with a linear warmup and decay sch
 # Parameters:
 lr = 1e-3
 max_grad_norm = 1.0
-num_total_steps = 1000
+num_training_steps = 1000
 num_warmup_steps = 100
-warmup_proportion = float(num_warmup_steps) / float(num_total_steps)  # 0.1
+warmup_proportion = float(num_warmup_steps) / float(num_training_steps)  # 0.1
 
 ### Previously BertAdam optimizer was instantiated like this:
-optimizer = BertAdam(model.parameters(), lr=lr, schedule='warmup_linear', warmup=warmup_proportion, t_total=num_total_steps)
+optimizer = BertAdam(model.parameters(), lr=lr, schedule='warmup_linear', warmup=warmup_proportion, num_training_steps=num_training_steps)
 ### and used like this:
 for batch in train_data:
     loss = model(batch)
@@ -98,7 +98,7 @@ for batch in train_data:
 
 ### In Transformers, optimizer and schedules are splitted and instantiated like this:
 optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
-scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, t_total=num_total_steps)  # PyTorch scheduler
+scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)  # PyTorch scheduler
 ### and used like this:
 for batch in train_data:
     loss = model(batch)
