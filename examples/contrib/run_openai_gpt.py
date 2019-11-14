@@ -237,7 +237,7 @@ def main():
     # Save a trained model
     if args.do_train:
         # Save a trained model, configuration and tokenizer
-        model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
+        model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model itself
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)

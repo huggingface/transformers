@@ -26,6 +26,7 @@ from transformers import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2_PRETRAINED_CON
 
 
 class AutoTokenizerTest(unittest.TestCase):
+    @pytest.mark.slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:

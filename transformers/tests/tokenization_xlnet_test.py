@@ -16,6 +16,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
+import pytest
 
 from transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE)
 
@@ -89,11 +90,12 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
                                       u'9', u'2', u'0', u'0', u'0', u',', SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
                                       SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u'se', u'.'])
 
+    @pytest.mark.slow
     def test_sequence_builders(self):
         tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
 
-        text = tokenizer.encode("sequence builders")
-        text_2 = tokenizer.encode("multi-sequence build")
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)

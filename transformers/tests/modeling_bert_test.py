@@ -22,24 +22,25 @@ import pytest
 
 from transformers import is_torch_available
 
-from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ids_tensor, floats_tensor)
 from .configuration_common_test import ConfigTester
 
 if is_torch_available():
     from transformers import (BertConfig, BertModel, BertForMaskedLM,
-                                        BertForNextSentencePrediction, BertForPreTraining,
-                                        BertForQuestionAnswering, BertForSequenceClassification,
-                                        BertForTokenClassification, BertForMultipleChoice)
+                              BertForNextSentencePrediction, BertForPreTraining,
+                              BertForQuestionAnswering, BertForSequenceClassification,
+                              BertForTokenClassification, BertForMultipleChoice)
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 
+@pytest.mark.usefixtures("use_cuda")
 class BertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
-            BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
-            BertForTokenClassification) if is_torch_available() else ()
+                         BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification,
+                         BertForTokenClassification) if is_torch_available() else ()
 
     class BertModelTester(object):
 
@@ -66,7 +67,8 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                      num_labels=3,
                      num_choices=4,
                      scope=None,
-                    ):
+                     device='cpu',
+                     ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -89,25 +91,26 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.device = device
 
         def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(self.device)
 
             input_mask = None
             if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2).to(self.device)
 
             token_type_ids = None
             if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size).to(self.device)
 
             sequence_labels = None
             token_labels = None
             choice_labels = None
             if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                choice_labels = ids_tensor([self.batch_size], self.num_choices)
+                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size).to(self.device)
+                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(self.device)
+                choice_labels = ids_tensor([self.batch_size], self.num_choices).to(self.device)
 
             config = BertConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
@@ -120,9 +123,19 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 type_vocab_size=self.type_vocab_size,
+                is_decoder=False,
                 initializer_range=self.initializer_range)
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+        def prepare_config_and_inputs_for_decoder(self):
+            config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels = self.prepare_config_and_inputs()
+
+            config.is_decoder = True
+            encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+            encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, encoder_hidden_states, encoder_attention_mask
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(
@@ -131,6 +144,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_bert_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertModel(config=config)
+            model.to(input_ids.device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -145,11 +159,40 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length, self.hidden_size])
             self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
+        def create_and_check_bert_model_as_decoder(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, encoder_hidden_states, encoder_attention_mask):
+            model = BertModel(config)
+            model.eval()
+            sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states, encoder_attention_mask=encoder_attention_mask)
+            sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, encoder_hidden_states=encoder_hidden_states)
+            sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+
+            result = {
+                "sequence_output": sequence_output,
+                "pooled_output": pooled_output,
+            }
+            self.parent.assertListEqual(
+                list(result["sequence_output"].size()),
+                [self.batch_size, self.seq_length, self.hidden_size])
+            self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
         def create_and_check_bert_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertForMaskedLM(config=config)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
+            result = {
+                "loss": loss,
+                "prediction_scores": prediction_scores,
+            }
+            self.parent.assertListEqual(
+                list(result["prediction_scores"].size()),
+                [self.batch_size, self.seq_length, self.vocab_size])
+            self.check_loss_output(result)
+
+        def create_and_check_bert_model_for_masked_lm_as_decoder(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, encoder_hidden_states, encoder_attention_mask):
+            model = BertForMaskedLM(config=config)
+            model.eval()
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels, encoder_hidden_states=encoder_hidden_states, encoder_attention_mask=encoder_attention_mask)
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels, encoder_hidden_states=encoder_hidden_states)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
@@ -172,7 +215,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, 2])
             self.check_loss_output(result)
 
-
         def create_and_check_bert_for_pretraining(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertForPreTraining(config=config)
             model.eval()
@@ -190,7 +232,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 list(result["seq_relationship_score"].size()),
                 [self.batch_size, 2])
             self.check_loss_output(result)
-
 
         def create_and_check_bert_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertForQuestionAnswering(config=config)
@@ -210,7 +251,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
-
         def create_and_check_bert_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = BertForSequenceClassification(config)
@@ -225,7 +265,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
-
         def create_and_check_bert_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = BertForTokenClassification(config=config)
@@ -239,7 +278,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 list(result["logits"].size()),
                 [self.batch_size, self.seq_length, self.num_labels])
             self.check_loss_output(result)
-
 
         def create_and_check_bert_for_multiple_choice(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_choices = self.num_choices
@@ -261,7 +299,6 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.num_choices])
             self.check_loss_output(result)
 
-
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, token_type_ids, input_mask,
@@ -276,13 +313,24 @@ class BertModelTest(CommonTestCases.CommonModelTester):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_bert_model(self):
+    def test_bert_model(self, use_cuda=False):
+        # ^^ This could be a real fixture
+        if use_cuda:
+            self.model_tester.device = "cuda"
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_model(*config_and_inputs)
+
+    def test_bert_model_as_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_bert_model_as_decoder(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
+
+    def test_for_masked_lm_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_bert_model_for_masked_lm_as_decoder(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -315,6 +363,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             model = BertModel.from_pretrained(model_name, cache_dir=cache_dir)
             shutil.rmtree(cache_dir)
             self.assertIsNotNone(model)
+
 
 if __name__ == "__main__":
     unittest.main()

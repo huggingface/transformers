@@ -57,6 +57,7 @@ class PretrainedConfig(object):
         self.torchscript = kwargs.pop('torchscript', False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop('use_bfloat16', False)
         self.pruned_heads = kwargs.pop('pruned_heads', {})
+        self.is_decoder = kwargs.pop('is_decoder', False)
 
     def save_pretrained(self, save_directory):
         """ Save a configuration object to the directory `save_directory`, so that it

@@ -322,6 +322,10 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
@@ -360,9 +364,11 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        self.tokens_embed = self._get_resized_embeddings(self.tokens_embed, new_num_tokens)
+    def get_input_embeddings(self):
         return self.tokens_embed
+
+    def set_input_embeddings(self, new_embeddings):
+        self.tokens_embed = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -371,14 +377,22 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if position_ids is None:
-            # This was used when we had a single embedding matrice from position and token embeddings
-            # start = self.config.vocab_size + self.config.n_special
-            # end = start + input_ids.size(-1)
-            # position_ids = torch.arange(start, end, dtype=torch.long, device=input_ids.device)
-            position_ids = torch.arange(input_ids.size(-1), dtype=torch.long, device=input_ids.device)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+            # Code is different from when we had a single embedding matrice from position and token embeddings
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = torch.arange(input_shape[-1], dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # Attention mask.
         if attention_mask is not None:
@@ -411,11 +425,8 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         else:
             head_mask = [None] * self.config.n_layer
 
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_ids.size(-1))
-        position_ids = position_ids.view(-1, position_ids.size(-1))
-
-        inputs_embeds = self.tokens_embed(input_ids)
+        if inputs_embeds is None:
+            inputs_embeds = self.tokens_embed(input_ids)
         position_embeds = self.positions_embed(position_ids)
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
@@ -489,22 +500,18 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
-        """
-        self._tie_or_clone_weights(self.lm_head,
-                                   self.transformer.tokens_embed)
+    def get_output_embeddings(self):
+        return self.lm_head
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                token_type_ids=token_type_ids,
                                                position_ids=position_ids,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
 
@@ -568,9 +575,12 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
+        model.resize_token_embeddings(len(tokenizer))
+
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        mc_token_ids = torch.tensor([input_ids.size(-1), input_ids.size(-1)]).unsqueeze(0)  # Batch size 1
+        mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
+
         outputs = model(input_ids, mc_token_ids=mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
@@ -583,22 +593,18 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         self.multiple_choice_head = SequenceSummary(config)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
-        """
-        self._tie_or_clone_weights(self.lm_head,
-                                   self.transformer.tokens_embed)
+    def get_output_embeddings(self):
+        return self.lm_head
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 mc_token_ids=None, lm_labels=None, mc_labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                token_type_ids=token_type_ids,
                                                position_ids=position_ids,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)

@@ -39,8 +39,9 @@ from transformers import (WEIGHTS_NAME,
 
 from run_glue import set_seed, load_and_cache_examples, ALL_MODELS, MODEL_CLASSES
 
-from utils_glue import (compute_metrics, convert_examples_to_features,
-                        output_modes, processors)
+from transformers import glue_compute_metrics as compute_metrics
+from transformers import glue_output_modes as output_modes
+from transformers import glue_processors as processors
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +234,8 @@ def main():
                         help="If > 0: limit the data to a subset of data_subset instances.")
     parser.add_argument("--overwrite_output_dir", action='store_true',
                         help="Whether to overwrite data in output directory")
+    parser.add_argument('--overwrite_cache', action='store_true',
+                        help="Overwrite the cached training and evaluation sets")
 
     parser.add_argument("--dont_normalize_importance_by_layer", action='store_true',
                         help="Don't normalize importance score by layers")
@@ -304,10 +307,16 @@ def main():
             break
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
-                                          num_labels=num_labels, finetuning_task=args.task_name,
-                                          output_attentions=True)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path)
-    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+                                          num_labels=num_labels,
+                                          finetuning_task=args.task_name,
+                                          output_attentions=True,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                cache_dir=args.cache_dir if args.cache_dir else None)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        config=config,
+                                        cache_dir=args.cache_dir if args.cache_dir else None)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
