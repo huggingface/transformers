@@ -135,6 +135,9 @@ examples/runs
 # data
 /olid
 /output
+/data
+/origin_data
+
 serialization_dir
 
 # emacs

@@ -23,20 +23,15 @@ from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH
                          WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME,
                          is_tf_available, is_torch_available)
 
-'''
-添加olid 配置
-2019.11.2
-mofeng
-'''
+# 自定义任务部分
 from .data import (is_sklearn_available,
                    InputExample, InputFeatures, DataProcessor,
                    glue_output_modes, glue_convert_examples_to_features,
                    glue_processors, glue_tasks_num_labels,
 
 
-                   Olid_A_InputExample, Olid_A_InputFeatures, Olid_A_DataProcessor,
-                   olid_a_output_modes, olid_a_convert_examples_to_features,
-                   olid_a_processors, olid_a_tasks_num_labels
+                   me_output_modes, me_convert_examples_to_features,
+                   me_processors, me_tasks_num_labels
                    )
 
 if is_sklearn_available():

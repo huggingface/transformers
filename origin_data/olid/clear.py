@@ -9,14 +9,14 @@ def task_a(text, label):
 
 
 def task_b(text, label):
-    with open('./clear/task_b_train.tsv', 'a+', encoding="utf-8") as task_b:
+    with open('./clear/train.tsv', 'a+', encoding="utf-8") as task_b:
         line = label + '\t' + text + '\n'
         csv.writer(task_b)
         task_b.write(line)
 
 
 def task_c(text, label):
-    with open('./clear/task_c_train.tsv', 'a+', encoding="utf-8") as task_c:
+    with open('./clear/train.tsv', 'a+', encoding="utf-8") as task_c:
         line = label + '\t' + text + '\n'
         csv.writer(task_c)
         task_c.write(line)
@@ -66,4 +66,4 @@ def main_dev(text_file, label_file, dev_file):
 
 if __name__ == "__main__":
     # main()
-    main_dev("testset-levelc.tsv", "labels-levelc.csv", "task_c_dev.tsv")
+    main_dev("testset-levelc.tsv", "labels-levelc.csv", "dev.tsv")

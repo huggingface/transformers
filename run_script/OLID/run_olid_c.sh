@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-export DATA_DIR=data/olid/task_a
-export TASK_NAME=MRPC
-export OUTPUT=output/olid/task_a
+export DATA_DIR=data/olid/task_c
+export TASK_NAME=offensevaltask3
+export OUTPUT=output/olid/task_c
 
-python ./examples/run_glue_olid_a.py \
+python ./examples/run_classification.py \
     --model_type bert \
     --model_name_or_path bert-base-uncased \
     --task_name $TASK_NAME \
@@ -15,5 +15,5 @@ python ./examples/run_glue_olid_a.py \
     --per_gpu_eval_batch_size=64   \
     --per_gpu_train_batch_size=64   \
     --learning_rate 2e-5 \
-    --num_train_epochs 2.0 \
+    --num_train_epochs 3.0 \
     --output_dir $OUTPUT

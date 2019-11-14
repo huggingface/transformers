@@ -6,10 +6,15 @@
 
 1.task A
 ```shell
-./run_script/run_olid_a.sh
+./run_script/OLID/run_olid_a.sh
 ```
 
 2.task B
 ```shell
-./run_script/run_olid_b.sh
+./run_script/OLID/run_olid_b.sh
+```
+
+3.task C
+```shell
+./run_script/OLID/run_olid_c.sh
 ```
