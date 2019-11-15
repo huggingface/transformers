@@ -78,10 +78,10 @@ class BertForQuestionAnswering_GNN(BertPreTrainedModel):
 
 
         sequence_output = outputs[0]
-        document_output = outputs[1].unsqueeze(1).to(device)
+        document_output = outputs[1].unsqueeze(1)
 
         if adjm is None:
-            adjm = torch.full((batch_size, 1, 1, 1), 0.25)
+            adjm = torch.full((batch_size, 1, 1, 1), 0.25).to(device)
 
         docs = self.bridge(document_output, adjm)
 
