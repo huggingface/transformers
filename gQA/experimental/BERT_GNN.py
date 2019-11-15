@@ -49,7 +49,10 @@ class BertForQuestionAnswering_GNN(BertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
-        self.bridge = GNN_Layer(config.hidden_size, config.hidden_size, False)
+        self.bridge = GNN_Att_Layer(config.num_attention_heads, \
+            config.hidden_size, config.hidden_size, False)
+
+        #GNN_Layer(config.hidden_size, config.hidden_size, False)
 
         #Linear map for word embeddings
         self.L = nn.Linear(config.hidden_size, config.hidden_size)
@@ -81,7 +84,7 @@ class BertForQuestionAnswering_GNN(BertPreTrainedModel):
         document_output = outputs[1].unsqueeze(1)
 
         if adjm is None:
-            adjm = torch.full((batch_size, 1, 1, 1), 0.25).to(device)
+            adjm = torch.full((batch_size, 1, 1, 1), 0.1).to(device)
 
         docs = self.bridge(document_output, adjm)
 
