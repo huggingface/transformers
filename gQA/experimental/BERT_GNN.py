@@ -81,7 +81,8 @@ class BertForQuestionAnswering_GNN(BertPreTrainedModel):
         document_output = outputs[1]
 
         if adjm is None:
-            adjm = torch.ones((batch_size, 1, 1))
+            adjm = torch.full((batch_size, 1, 1), 0.25)
+            
         docs = self.bridge(document_output, adjm)
 
         logits = self.qa_outputs(self.L(sequence_output) + self.W(docs))
