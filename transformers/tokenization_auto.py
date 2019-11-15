@@ -19,6 +19,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import logging
 
 from .tokenization_bert import BertTokenizer
+from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_ctrl import CTRLTokenizer
@@ -118,6 +119,8 @@ class AutoTokenizer(object):
             return CamembertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'bert-japanese' in pretrained_model_name_or_path:
+            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
