@@ -972,6 +972,40 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
+    def _prepare_inputs_for_decoding(self, input_ids, **model_kwargs):
+        input_ids = self._add_dummy_token(input_ids)
+        perm_mask = self._create_perm_mask(input_ids)
+        target_mapping = self._create_target_mapping(input_ids)
+        arguments = {
+            "input_ids": input_ids,
+            "perm_mask": perm_mask,
+            "target_mapping": target_mapping,
+        }
+        return arguments
+
+    @staticmethod
+    def _add_dummy_token(sequence):
+        dummy = torch.zeros((sequence.size(0), 1), dtype=torch.long)
+        return torch.cat((sequence, dummy), dim=1)
+
+    @staticmethod
+    def _create_perm_mask(sequence):
+        mask = torch.zeros(
+            (sequence.shape[0], sequence.shape[1], sequence.shape[1]),
+            dtype=torch.float,
+        )
+        mask[:, :, -1] = 1.0  # Previous tokens don't see last token
+        return mask
+
+    @staticmethod
+    def _create_target_mapping(sequence):
+        target_mapping = torch.zeros(
+            (sequence.shape[0], 1, sequence.shape[1]),
+            dtype=torch.float,
+        )
+        target_mapping[0, 0, -1] = 1.0  # predict last token
+        return target_mapping
+
 
 @add_start_docstrings("""XLNet Model with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
