@@ -65,7 +65,7 @@ class BertForQuestionAnswering_GNN(BertPreTrainedModel):
                 token_type_ids=None, position_ids=None, 
                 head_mask=None, inputs_embeds=None,
                 start_positions=None, end_positions=None,
-                adjm=None):
+                adjm=None, device=None):
 
         batch_size, _ = input_ids.size()
 
@@ -78,7 +78,7 @@ class BertForQuestionAnswering_GNN(BertPreTrainedModel):
 
 
         sequence_output = outputs[0]
-        document_output = outputs[1].unsqueeze(1)
+        document_output = outputs[1].unsqueeze(1).to(device)
 
         if adjm is None:
             adjm = torch.full((batch_size, 1, 1, 1), 0.25)
