@@ -36,6 +36,7 @@ except:
     from tensorboardX import SummaryWriter
 
 from tqdm import tqdm, trange
+from gQA.experimental.BERT_GNN import BertForQuestionAnswering_GNN
 
 from transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForQuestionAnswering, BertTokenizer,
@@ -62,7 +63,7 @@ ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
                   for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
 
 MODEL_CLASSES = {
-    'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
+    'bert': (BertConfig, BertForQuestionAnswering_GNN, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)

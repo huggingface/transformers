@@ -4,91 +4,103 @@ from gQA.model_code.state import State
 import sys
 
 class BertForQuestionAnswering_GNN(BertPreTrainedModel):
+    r"""
+        **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        **end_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
 
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+        **start_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
+            Span-start scores (before SoftMax).
+        **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
+            Span-end scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_text = "[CLS] " + question + " [SEP] " + text + " [SEP]"
+        input_ids = tokenizer.encode(input_text)
+        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))] 
+        start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)  
+        print(' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1]))
+        # a nice puppet
+
+
+    """
     def __init__(self, config):
         super(BertForQuestionAnswering_GNN, self).__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
-        self.bridge = GNN_Bridge(config.hidden_size, 48, config)
-        d_hs = config.hidden_size + 0
+        self.bridge = GNN_Layer(config.hidden_size, config.hidden_size, False)
+
         #Linear map for word embeddings
-        self.L = nn.Linear(config.hidden_size, d_hs)
-        #Linear map for enriched sentence embeddings
-        self.W = nn.Linear(config.hidden_size, d_hs)
-        #Linear map for the enriched question embedding
-        self.H = nn.Linear(config.hidden_size, d_hs)
-        #Linear map for the enriched document embedding
-        self.G = nn.Linear(config.hidden_size, d_hs)
+        self.L = nn.Linear(config.hidden_size, config.hidden_size)
+        #Linear map for enriched document embeddings
+        self.W = nn.Linear(config.hidden_size, config.hidden_size)
+
         #Combine the above embeddings
-        self.qa_outputs = nn.Linear(d_hs, config.num_labels)
-        
-        self.config = config
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, adjm=None, 
-    sent_attn_mask=None, token_type_ids=None, position_ids=None, 
-    head_mask=None, start_positions=None, end_positions=None,
-    addrx=None, addry=None, device=None):
+    def forward(self, input_ids=None, attention_mask=None, 
+                token_type_ids=None, position_ids=None, 
+                head_mask=None, inputs_embeds=None,
+                start_positions=None, end_positions=None,
+                adjm=None):
 
-        _, batch_size, docu_len, sent_len = input_ids.size()
+        batch_size, _ = input_ids.size()
 
-        input_ids = input_ids.view(batch_size * docu_len, sent_len)
-        attention_mask = attention_mask.view(batch_size * docu_len, sent_len)
-        token_type_ids = token_type_ids.view(batch_size * docu_len, sent_len)
-        if position_ids is not None:
-            position_ids = position_ids.view(batch_size * docu_len, sent_len)
-
-        adjm = adjm.view(batch_size, docu_len, docu_len)
         outputs = self.bert(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
-                            position_ids=None,
-                            head_mask=head_mask)
-        #h_word = outputs[0].view(batch_size, docu_len, sent_len, -1)
-        h_sent = outputs[1].view(batch_size, docu_len, -1)
+                            position_ids=position_ids,
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
 
 
-        questions = h_sent[0:, 0, 0:]
-
-        bridge_input = State(
-            outputs=h_sent,
-            mask=sent_attn_mask,
-            other=[adjm, device, [batch_size, docu_len, sent_len]])
-
-        doc_embd, h_gcn = self.bridge(bridge_input, questions)
-
-        #Appropriate resizing
         sequence_output = outputs[0]
-        questions = questions.unsqueeze(1).expand(batch_size, docu_len, self.config.hidden_size).contiguous()
-        questions = questions.view(batch_size * docu_len, 1, -1).expand(sequence_output.size()).contiguous()
-        doc_embd = doc_embd.view(batch_size * docu_len, 1, -1).expand(sequence_output.size()).contiguous()
-        h_gcn = h_gcn.view(batch_size * docu_len, 1, -1).expand(sequence_output.size()).contiguous()
+        document_output = outputs[1]
 
-        #Compute logits
-        logits = self.qa_outputs(self.L(sequence_output) + self.G(doc_embd))
+        if adjm is None:
+            adjm = torch.ones((batch_size, 1, 1))
+        docs = self.bridge(document_output, adjm)
+
+        logits = self.qa_outputs(self.L(sequence_output) + self.W(docs))
+
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        #Resize to acocunt for sentence length
-        start_logits = start_logits.view(batch_size, docu_len * sent_len)
-        end_logits = end_logits.view(batch_size, docu_len * sent_len)
-
-        #start_logits = start_logits.view(batch_size, docu_len,)
         outputs = (start_logits, end_logits,) + outputs[2:]
-
         if start_positions is not None and end_positions is not None:
-            
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
-            
-            addrx = addrx.squeeze(0)
-            addry = addry.squeeze(0)
-            start_positions = start_positions.squeeze().to(device)
-            end_positions = end_positions.squeeze().to(device)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)

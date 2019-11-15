@@ -63,9 +63,7 @@ class GNN_Bridge(nn.Module):
         for i in range(len(self.gnn_layer)):
             h_gcn = self.gnn_layer[i](h_gcn, adj)
             gcn_layers.append(h_gcn)
-        if question is not None:
-            question = question.unsqueeze(1).expand(question.size(0), h_gcn.size(1), question.size(1)).contiguous()
-            gcn_layers.append(question)
+
         gcn_layers_stacked = torch.stack(gcn_layers)
         # gcn_layers: num layeres, batch, max article len, sent dim
         h_gcn = h_gcn.to(dev)
