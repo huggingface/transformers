@@ -646,7 +646,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
                                                langs=langs,
                                                token_type_ids=token_type_ids,
                                                position_ids=position_ids,
-                                               lengths=lengths, 
+                                               lengths=lengths,
                                                cache=cache,
                                                head_mask=head_mask,
                                                inputs_embeds=inputs_embeds)
@@ -656,6 +656,33 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         outputs = outputs + transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 
         return outputs
+
+    def _prepare_inputs_for_decoding(self, input_ids, **model_kwargs):
+        mask_token = model_kwargs.pop("mask_token", None)
+        language = model_kwargs.pop("language", None)
+        input_ids = self._append_mask_token(input_ids, mask_token)
+        langs = self._create_language_embeddings(input_ids, language)
+        arguments = {"input_ids": input_ids, "langs": langs}
+        arguments.update(model_kwargs)
+
+        return arguments
+
+    @staticmethod
+    def _append_mask_token(sequence, mask_token_id):
+        """ Append a [MASK] token at the end of the sequence that the MLM model
+        is going to try to predict.
+        """
+        if mask_token_id is not None:
+            tokens_to_append = torch.full((1, 1), mask_token_id, dtype=torch.long)
+            return torch.cat((sequence, tokens_to_append), dim=1)
+
+        return sequence
+
+    @staticmethod
+    def _create_language_embeddings(sequence, language):
+        if language is not None:
+            return torch.tensor([language] * sequence.shape[1]).view(1, -1)
+        return None
 
 
 @add_start_docstrings("""XLM Model with a sequence classification/regression head on top (a linear layer on top of

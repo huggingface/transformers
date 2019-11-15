@@ -18,11 +18,14 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
+import warnings
 
 import torch
 from torch import nn
+from tqdm import trange
 
 from .modeling_auto import AutoModel, AutoModelWithLMHead
+from .modeling_utils import Sampler
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +120,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         kwargs_common = {
             argument: value
             for argument, value in kwargs.items()
-            if not argument.startswith("encoder_")
-            and not argument.startswith("decoder_")
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
         }
         kwargs_decoder = kwargs_common.copy()
         kwargs_encoder = kwargs_common.copy()
@@ -186,51 +188,151 @@ class PreTrainedEncoderDecoder(nn.Module):
                 Indices of decoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
-        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
-        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
-        # that apply to the model as whole.
-        # We let the specific kwargs override the common ones in case of conflict.
+        kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
+
+        # Encode if needed (training, first prediction pass)
+        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
+        if encoder_hidden_states is None:
+            encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
+            encoder_hidden_states = encoder_outputs[0]
+        else:
+            encoder_outputs = ()
+
+        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
+        decoder_outputs = self.decoder(decoder_input_ids, encoder_hidden_states, **kwargs_decoder)
+
+        return decoder_outputs + encoder_outputs
+
+    def decode(
+        self,
+        encoder_input_ids,
+        decoder_prompt_ids=None,
+        device=torch.device("cpu"),
+        length=10,
+        do_sample=False,
+        temperature=1.0,
+        k=9,
+        p=0.,
+        repetition_penalty=1.,
+        **kwargs
+    ):
+        """ Generic sequence generator for encoder-decoder models.
+
+        For encoder-decoders the generation consists in:
+        - Performing a forward pass through the encoder once;
+        - Pass the encoder's hidden states to a decoding mechanism that
+          repeatedly calls the decoder to generate sequences.
+
+        The method currently supports greedy decoding and sampling. See the
+        documentation of the `Sampler` class for more information about the
+        parameters related to sampling.
+
+        Params:
+            **encoder_input_ids**: `torch.LongTensor` of shape (1, sequence_length)
+                The sequence to encode.
+            **decoder_prompt_ids**: (`optional`) `torch.LongTensor` of shape (1, sequence_length)
+                The sequence used as a prompt for the generation. If `None` the method initializes
+                it as an empty `torch.LongTensor` of shape (1,)
+            **device**: (`optional`) `torch.device`
+                The device on which the prompt_ids will be initialized if not provided.
+            **length**: (`optional`) int
+                The length of the sequence to be generated.
+            **do_sample**: (`optional`) bool
+                If set to `False` we use greedy decoding; otherwise sampling.
+            **temperature**: (`optional`) float
+                The value used to module the next token probabilities.
+            **k**: (`optional`) int
+                The parameter used for k-filtering.
+            **p**: (`optional`) float
+                The parameter for nucleus sampling. Must be between 0 and 1.
+            **repetition_penalty**: (`optional`) float
+                The parameter for repetition penalty.
+        """
+        if decoder_prompt_ids is None:
+            decoder_prompt_ids = torch.tensor([[]], dtype=torch.long, device=device)
+
+        # When the model does not have a LM head `get_output_embeddings`
+        # returns `None`. We use this mechanism to determine whether we
+        # should proceed with decoding or not.
+        if self.decoder.get_output_embeddings() is None:
+            raise AttributeError("You tried do generated sequences with a decoder that does not have a LM Head.")
+
+        # The followings checks that the decoder is on the same device as the one
+        # that is specified. It only works for models that fit on one GPU.
+        decoder_device = next(self.decoder.parameters()).device
+        if decoder_device != decoder_prompt_ids.device:
+            warnings.warn(
+                "The decoder is not on the same device as the prompt. Expected {}, got {}.".format(
+                    decoder_prompt_ids.device, decoder_device
+                )
+            )
+
+        kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
+        with torch.no_grad():
+            encoder_outputs = self.encoder(encoder_input_ids, **kwargs)
+            encoder_hidden_states = encoder_outputs[0]
+            kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
+
+        sampler_config = {
+            "k": k,
+            "p": p,
+            "do_sample": do_sample,
+            "temperature": temperature,
+            "repetition_penalty": repetition_penalty,
+        }
+        return self._greedy_decode_or_sample(
+            decoder_prompt_ids, length, sampler_config, **kwargs_decoder
+        )
+
+    def _greedy_decode_or_sample(self, prompt_ids, length, sampler_config, **kwargs_decoder):
+        sampler = Sampler(**sampler_config)
+        with torch.no_grad():
+            generated_sequence = prompt_ids
+            for _ in trange(length):
+                arguments = self.decoder._prepare_inputs_for_decoding(generated_sequence, **kwargs_decoder)
+                outputs = self.decoder(**arguments)
+                next_tokens_logits = outputs[0][:, -1, :]
+                next_tokens = sampler.get_one_token(next_tokens_logits, generated_sequence)
+                generated_sequence = torch.cat((generated_sequence, next_tokens), dim=1)
+
+        return generated_sequence.squeeze(0)
+
+    @staticmethod
+    def prepare_model_kwargs(**kwargs):
+        """ Prepare the encoder and decoder's keyword arguments.
+
+        Keyword arguments come in 3 flavors:
+        - encoder-specific (prefixed by `encoder_`)
+        - decoder-specific (prefixed by `decoder_`)
+        - those that apply to the model as whole.
+
+        We let the specific kwargs override the common ones in case of
+        conflict.
+        """
         kwargs_common = {
             argument: value
             for argument, value in kwargs.items()
-            if not argument.startswith("encoder_")
-            and not argument.startswith("decoder_")
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
         }
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_encoder.update(
+        decoder_kwargs = kwargs_common.copy()
+        encoder_kwargs = kwargs_common.copy()
+        encoder_kwargs.update(
             {
                 argument[len("encoder_") :]: value
                 for argument, value in kwargs.items()
                 if argument.startswith("encoder_")
             }
         )
-        kwargs_decoder.update(
+        decoder_kwargs.update(
             {
                 argument[len("decoder_") :]: value
                 for argument, value in kwargs.items()
                 if argument.startswith("decoder_")
             }
         )
+        decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)
 
-        # Encode if needed (training, first prediction pass)
-        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-        if encoder_hidden_states is None:
-            encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[
-                0
-            ]  # output the last layer hidden state
-        else:
-            encoder_outputs = ()
-
-        # Decode
-        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get(
-            "attention_mask", None
-        )
-        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
-
-        return decoder_outputs + encoder_outputs
+        return encoder_kwargs, decoder_kwargs
 
 
 class Model2Model(PreTrainedEncoderDecoder):
