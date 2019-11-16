@@ -37,7 +37,7 @@ CAMEMBERT_START_DOCSTRING = r"""    The CamemBERT model was proposed in
     
     It is a model trained on 138GB of French text.
     
-    This implementation is the same RoBERTa.
+    This implementation is the same as RoBERTa.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
@@ -94,6 +94,10 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
@@ -143,7 +147,6 @@ class CamembertModel(RobertaModel):
     """
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = "camembert"
 
 
 @add_start_docstrings("""CamemBERT Model with a `language modeling` head on top. """,
@@ -180,7 +183,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
     """
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = "camembert"
 
 
 @add_start_docstrings("""CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer 
@@ -219,7 +221,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
     """
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = "camembert"
 
 
 @add_start_docstrings("""CamemBERT Model with a multiple choice classification head on top (a linear layer on top of
@@ -254,4 +255,3 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
     """
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = "camembert"
