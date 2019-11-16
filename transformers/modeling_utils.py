@@ -728,7 +728,7 @@ class SequenceSummary(nn.Module):
     def __init__(self, config):
         super(SequenceSummary, self).__init__()
 
-        self.summary_type = config.summary_type if hasattr(config, 'summary_use_proj') else 'last'
+        self.summary_type = config.summary_type if hasattr(config, 'summary_type') else 'last'
         if self.summary_type == 'attn':
             # We should use a standard multi-head attention module with absolute positional embedding for that.
             # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
