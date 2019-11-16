@@ -35,6 +35,7 @@ from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_
 
 logger = logging.getLogger(__name__)
 
+DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 
 try:
     from torch.nn import Identity
