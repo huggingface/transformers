@@ -27,7 +27,7 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'camembert-base': "https://dl.fbaipublicfiles.com/camembert/camembert-base-v0-pytorch_model.bin",
+    'camembert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
 }
 
 
