@@ -155,5 +155,9 @@ Here is the full list of the currently provided pretrained models together with 
 | CTRL              | ``ctrl``                                                   | | 48-layer, 1280-hidden, 16-heads, 1.6B parameters                                                                                    |
 |                   |                                                            | | Salesforce's Large-sized CTRL English model                                                                                         |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| CamemBERT         | ``camembert-base``                                         | | 12-layer, 768-hidden, 12-heads, 110M parameters                                                                                     |
+|                   |                                                            | | CamemBERT using the BERT-base architecture                                                                                          |
+|                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/camembert>`__)                                                 |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 .. <https://huggingface.co/transformers/examples.html>`__
