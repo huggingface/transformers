@@ -37,6 +37,7 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
 from transformers import DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer
+from transformers import CamembertConfig, CamembertForTokenClassification, CamembertTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,8 @@ ALL_MODELS = sum(
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
     "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer)
+    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
+    "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
 }
 
 
