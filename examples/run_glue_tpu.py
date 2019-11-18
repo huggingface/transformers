@@ -1,5 +1,6 @@
 # coding=utf-8
 # Copyright 2019 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -77,8 +78,8 @@ def set_seed(args):
 def get_sampler(dataset):
     if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
-    return DistributedSampler(dataset,
-            num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+    return DistributedSampler(
+            dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
 
 
 def train(args, train_dataset, model, tokenizer, disable_logging=False):
@@ -97,8 +98,14 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
-        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
+        {
+            'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            'weight_decay': args.weight_decay,
+        },
+        {
+            'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            'weight_decay': 0.0,
+        },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
@@ -129,8 +136,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
                 logger.info("Saving model checkpoint to %s", output_dir)
                 if not os.path.exists(output_dir):
                     os.makedirs(output_dir)
-                model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-                model_to_save.save_pretrained(output_dir, xla_device=True)
+                model.save_pretrained(output_dir, xla_device=True)
                 torch.save(args, os.path.join(output_dir, 'training_args.bin'))
 
             model.train()
@@ -144,6 +150,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.gradient_accumulation_steps > 1:
+                xm.mark_step()  # Mark step to evaluate graph so far or else graph will grow too big and OOM.
                 loss = loss / args.gradient_accumulation_steps
 
             loss.backward()
@@ -350,16 +357,16 @@ def main(args):
 
     logger.info("Training/evaluation parameters %s", args)
 
-    # Training
     if args.do_train:
+        # Train the model.
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, disable_logging=disable_logging)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
+        # Save trained model.
+        # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
+        output_dir = os.path.join(args.output_dir, 'final-xla{}'.format(xm.get_ordinal()))
 
-    # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-    output_dir = os.path.join(args.output_dir, 'final-xla{}'.format(xm.get_ordinal()))
-    if args.do_train:
         # Create output directory if needed
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -367,8 +374,7 @@ def main(args):
         logger.info("Saving model checkpoint to %s", output_dir)
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-        model_to_save.save_pretrained(output_dir, xla_device=True)
+        model.save_pretrained(output_dir, xla_device=True)
         tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained.
