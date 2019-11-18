@@ -161,6 +161,8 @@ def main():
                         help="Whether to use XLA (Accelerated Linear Algebra).")
     parser.add_argument("--amp", action='store_true',
                         help="Whether to use AMP (Automatic Mixed Precision).")
+    parser.add_argument("--force_download", action='store_true',
+                        help="Whether to force download the weights from S3 (useful if the file is corrupted).")
     args = parser.parse_args()
 
     # Setup logging
@@ -199,19 +201,22 @@ def main():
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task=args.task_name,
-        cache_dir=args.cache_dir if args.cache_dir else None
+        cache_dir=args.cache_dir if args.cache_dir else None,
+        force_download=args.force_download
     )
 
     tokenizer = tokenizer_class.from_pretrained(
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         do_lower_case=args.do_lower_case,
-        cache_dir=args.cache_dir if args.cache_dir else None
+        cache_dir=args.cache_dir if args.cache_dir else None,
+        force_download=args.force_download
     )
 
     model = model_class.from_pretrained(
         args.model_name_or_path,
         config=config,
-        cache_dir=args.cache_dir if args.cache_dir else None
+        cache_dir=args.cache_dir if args.cache_dir else None,
+        force_download=args.force_download
     )
 
     # Load dataset via TensorFlow Datasets
