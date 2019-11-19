@@ -136,6 +136,7 @@ if is_tf_available():
     from .modeling_tf_xlnet import (TFXLNetPreTrainedModel, TFXLNetMainLayer,
                                     TFXLNetModel, TFXLNetLMHeadModel,
                                     TFXLNetForSequenceClassification,
+                                    TFXLNetForTokenClassification,
                                     TFXLNetForQuestionAnsweringSimple,
                                     TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 
