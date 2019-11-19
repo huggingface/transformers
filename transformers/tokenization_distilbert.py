@@ -40,6 +40,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'distilbert-base-uncased': 512,
     'distilbert-base-uncased-distilled-squad': 512,
+    'distilbert-base-german-cased': 512,
 }
 
 
