@@ -605,6 +605,10 @@ class PreTrainedTokenizer(object):
             vocabularies (BPE/SentencePieces/WordPieces).
 
             Take care of added tokens.
+
+            text: The sequence to be encoded.
+            return_tokens_mapped_to_origin: (optional) Set to True to return the index of each token in the initial whitespace tokenization. (default False).
+            **kwargs: passed to the child `self.tokenize()` method
         """
         def split_on_token(tok, text):
             result = []
