@@ -624,29 +624,28 @@ class PreTrainedTokenizer(object):
                     result += [tok]
             return result
 
-        def split_on_tokens(tok_list, text):
+        def split_on_tokens(tok_set, text):
             if not text:
                 return []
-            if not tok_list:
+            if not tok_set:
                 return self._tokenize(text, **kwargs)
 
             tokenized_text = []
             text_list = [text]
-            for tok in tok_list:
+            for tok in tok_set:
                 tokenized_text = []
                 for sub_text in text_list:
-                    if sub_text not in self.added_tokens_encoder \
-                            and sub_text not in self.all_special_tokens:
+                    if sub_text not in tok_set:
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
                 text_list = tokenized_text
 
             return list(itertools.chain.from_iterable((self._tokenize(token, **kwargs) if token not \
-                    in self.added_tokens_encoder and token not in self.all_special_tokens \
-                    else [token] for token in tokenized_text)))
+                    in tok_set else [token] for token in tokenized_text)))
 
-        added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
+        added_tokens =set(list(self.added_tokens_encoder.keys()) + self.all_special_tokens)
+        
         tokenized_text = split_on_tokens(added_tokens, text)
         return tokenized_text
 
