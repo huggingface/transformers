@@ -3,6 +3,15 @@
 In this section a few examples are put together. All of these examples work for several models, making use of the very
 similar API between the different models.
 
+**Important**  
+To use the examples, execute the following steps in a new virtual environment:
+
+```bash
+git clone git@github.com:huggingface/transformers
+cd transformers
+pip install .
+```
+
 | Section                    | Description                                                                                                                                                |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [TensorFlow 2.0 models on GLUE](#TensorFlow-2.0-Bert-models-on-GLUE) | Examples running BERT TensorFlow 2.0 model on the GLUE tasks. 
