@@ -28,8 +28,6 @@ from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassifica
 from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification
 from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification
 from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
-from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
-from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, AlbertForQuestionAnswering
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
@@ -51,8 +49,7 @@ class AutoModel(object):
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertModel (DistilBERT model)
-            - contains `albert`: AlbertModel (ALBERT model)
-            - contains `camembert`: CamembertModel (CamemBERT model)
+            - contains `camembert`: CamemBERTModel (CamemBERT model)
             - contains `roberta`: RobertaModel (RoBERTa model)
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
@@ -76,8 +73,7 @@ class AutoModel(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertModel (DistilBERT model)
-            - contains `albert`: AlbertModel (ALBERT model)
-            - contains `camembert`: CamembertModel (CamemBERT model)
+            - contains `camembert`: CamemBERTModel (CamemBERT model)
             - contains `roberta`: RobertaModel (RoBERTa model)
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
@@ -148,8 +144,6 @@ class AutoModel(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
-            return AlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'camembert' in pretrained_model_name_or_path:
             return CamembertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
@@ -186,8 +180,7 @@ class AutoModelWithLMHead(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
-            - contains `albert`: AlbertForMaskedLM (ALBERT model)
-            - contains `camembert`: CamembertForMaskedLM (CamemBERT model)
+            - contains `camembert`: CamemBERTModel (CamemBERT model)
             - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
             - contains `bert`: BertForMaskedLM (Bert model)
             - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
@@ -214,8 +207,7 @@ class AutoModelWithLMHead(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
-            - contains `albert`: AlbertForMaskedLM (ALBERT model)
-            - contains `camembert`: CamembertForMaskedLM (CamemBERT model)
+            - contains `camembert`: CamemBERTModel (CamemBERT model)
             - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
             - contains `bert`: BertForMaskedLM (Bert model)
             - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
@@ -285,9 +277,7 @@ class AutoModelWithLMHead(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
-            return AlbertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
+        if 'camembert' in pretrained_model_name_or_path:
             return CamembertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -323,8 +313,7 @@ class AutoModelForSequenceClassification(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForSequenceClassification (DistilBERT model)
-            - contains `albert`: AlbertForSequenceClassification (ALBERT model)
-            - contains `camembert`: CamembertForSequenceClassification (CamemBERT model)
+            - contains `camembert`: CamemBERTModel (CamemBERT model)
             - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: BertForSequenceClassification (Bert model)
             - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
@@ -347,8 +336,7 @@ class AutoModelForSequenceClassification(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForSequenceClassification (DistilBERT model)
-            - contains `albert`: AlbertForSequenceClassification (ALBERT model)
-            - contains `camembert`: CamembertForSequenceClassification (CamemBERT model)
+            - contains `camembert`: CamemBERTModel (CamemBERT model)
             - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: BertForSequenceClassification (Bert model)
             - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
@@ -415,9 +403,7 @@ class AutoModelForSequenceClassification(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
-            return AlbertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
+        if 'camembert' in pretrained_model_name_or_path:
             return CamembertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
