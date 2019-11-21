@@ -360,6 +360,16 @@ class TFCommonTestCases:
             #     self.assertTrue(models_equal)
 
 
+        def test_model_common_attributes(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+                x = model.get_output_embeddings()
+                assert x is None or isinstance(x, tf.keras.layers.Layer)
+
+
         def test_tie_model_weights(self):
             pass
             # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -400,6 +410,27 @@ class TFCommonTestCases:
                 model = model_class(config)
                 first, second = model(inputs_dict, training=False)[0], model(inputs_dict, training=False)[0]
                 self.assertTrue(tf.math.equal(first, second).numpy().all())
+
+        def test_inputs_embeds(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            input_ids = inputs_dict["input_ids"]
+            del inputs_dict["input_ids"]
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+
+                wte = model.get_input_embeddings()
+                try:
+                    x = wte(input_ids, mode="embedding")
+                except:
+                    try:
+                        x = wte([input_ids], mode="embedding")
+                    except:
+                        x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
+                # ^^ In our TF models, the input_embeddings can take slightly different forms,
+                # so we try two of them and fall back to just synthetically creating a dummy tensor of ones.
+                inputs_dict["inputs_embeds"] = x
+                outputs = model(inputs_dict)
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):

@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     import numpy as np
 
-    from transformers import (PretrainedConfig, PreTrainedModel,
+    from transformers import (AdaptiveEmbedding, PretrainedConfig, PreTrainedModel,
                                     BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
@@ -463,6 +463,21 @@ class CommonTestCases:
 
                 self.assertTrue(models_equal)
 
+        def test_model_common_attributes(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                self.assertIsInstance(
+                    model.get_input_embeddings(),
+                    (torch.nn.Embedding, AdaptiveEmbedding)
+                )
+                model.set_input_embeddings(torch.nn.Embedding(10, 10))
+                x = model.get_output_embeddings()
+                self.assertTrue(
+                    x is None or isinstance(x, torch.nn.Linear)
+                )
+
         def test_tie_model_weights(self):
             if not self.test_torchscript:
                 return
@@ -477,11 +492,11 @@ class CommonTestCases:
                 return equal
 
             for model_class in self.all_model_classes:
-                if not hasattr(model_class, 'tie_weights'):
-                    continue
-
                 config.torchscript = True
                 model_not_tied = model_class(config)
+                if model_not_tied.get_output_embeddings() is None:
+                    continue
+
                 params_not_tied = list(model_not_tied.parameters())
 
                 config_tied = copy.deepcopy(config)
@@ -515,6 +530,19 @@ class CommonTestCases:
                 # # Check that the embedding layer and decoding layer are the same in size and in value
                 # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
                 # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+        def test_inputs_embeds(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            input_ids = inputs_dict["input_ids"]
+            del inputs_dict["input_ids"]
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.eval()
+
+                wte = model.get_input_embeddings()
+                inputs_dict["inputs_embeds"] = wte(input_ids)
+                outputs = model(**inputs_dict)
 
 
     class GPTModelTester(CommonModelTester):
@@ -688,6 +716,7 @@ class CommonTestCases:
                 config_and_inputs = self.prepare_config_and_inputs()
                 self.create_and_check_presents(*config_and_inputs)
 
+        @pytest.mark.slow
         def run_slow_tests(self):
             self.create_and_check_model_from_pretrained()
 
@@ -761,6 +790,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 
 
 class ModelUtilsTest(unittest.TestCase):
+    @pytest.mark.slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

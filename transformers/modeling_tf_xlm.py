@@ -277,6 +277,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     self.prune_heads({int(layer): list(map(int, heads))})
 
 
+    def get_input_embeddings(self):
+        return self.embeddings
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -288,7 +291,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(self, inputs, attention_mask=None, langs=None, token_type_ids=None,
-             position_ids=None, lengths=None, cache=None, head_mask=None,
+             position_ids=None, lengths=None, cache=None, head_mask=None, inputs_embeds=None,
              training=False):  # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -299,7 +302,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             lengths = inputs[5] if len(inputs) > 5 else lengths
             cache = inputs[6] if len(inputs) > 6 else cache
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
-            assert len(inputs) <= 8, "Too many inputs."
+            inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             attention_mask = inputs.get('attention_mask', attention_mask)
@@ -309,16 +313,28 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             lengths = inputs.get('lengths', lengths)
             cache = inputs.get('cache', cache)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 8, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            bs, slen = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            bs, slen = shape_list(inputs_embeds)[:2]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if lengths is None:
-            lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.pad_index), dtype=tf.int32), axis=1)
+            if input_ids is not None:
+                lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.pad_index), dtype=tf.int32), axis=1)
+            else:
+                lengths = tf.convert_to_tensor([slen]*bs, tf.int32)
         # mask = input_ids != self.pad_index
 
         # check inputs
-        bs, slen = shape_list(input_ids)
         # assert shape_list(lengths)[0] == bs
         tf.debugging.assert_equal(shape_list(lengths)[0], bs)
         # assert lengths.max().item() <= slen
@@ -358,7 +374,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.n_layers
 
         # do not recompute cached elements
-        if cache is not None:
+        if cache is not None and input_ids is not None:
             _slen = slen - cache['slen']
             input_ids = input_ids[:, -_slen:]
             position_ids = position_ids[:, -_slen:]
@@ -368,8 +384,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             attn_mask = attn_mask[:, -_slen:]
 
         # embeddings
-        tensor = self.embeddings(input_ids)
-        tensor = tensor + self.position_embeddings(position_ids)
+        if inputs_embeds is None:
+            inputs_embeds = self.embeddings(input_ids)
+
+        tensor = inputs_embeds + self.position_embeddings(position_ids)
         if langs is not None and self.use_lang_emb:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
@@ -530,6 +548,10 @@ XLM_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare XLM Model transformer outputing raw hidden-states without any specific head on top.",
@@ -637,6 +659,8 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name='transformer')
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name='pred_layer_._proj')
 
+    def get_output_embeddings(self):
+        return self.pred_layer.input_embeddings
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)

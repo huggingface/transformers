@@ -35,6 +35,8 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-pytorch_model.bin",
     'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-pytorch_model.bin",
     'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-pytorch_model.bin",
+    'roberta-base-openai-detector': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-openai-detector-pytorch_model.bin",
+    'roberta-large-openai-detector': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-openai-detector-pytorch_model.bin",
 }
 
 class RobertaEmbeddings(BertEmbeddings):
@@ -48,16 +50,24 @@ class RobertaEmbeddings(BertEmbeddings):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size,
                                                 padding_idx=self.padding_idx)
 
-    def forward(self, input_ids, token_type_ids=None, position_ids=None):
-        seq_length = input_ids.size(1)
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if position_ids is None:
             # Position numbers begin at padding_idx+1. Padding symbols are ignored.
             # cf. fairseq's `utils.make_positions`
-            position_ids = torch.arange(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=torch.long, device=input_ids.device)
-            position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+            position_ids = torch.arange(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).expand(input_shape)
         return super(RobertaEmbeddings, self).forward(input_ids,
                                                       token_type_ids=token_type_ids,
-                                                      position_ids=position_ids)
+                                                      position_ids=position_ids,
+                                                      inputs_embeds=inputs_embeds)
 
 
 ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
@@ -126,6 +136,10 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
@@ -169,6 +183,11 @@ class RobertaModel(BertModel):
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
 
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """,
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
@@ -213,21 +232,18 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         self.lm_head = RobertaLMHead(config)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
-        """
-        self._tie_or_clone_weights(self.lm_head.decoder, self.roberta.embeddings.word_embeddings)
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 masked_lm_labels=None):
         outputs = self.roberta(input_ids,
                                attention_mask=attention_mask,
                                token_type_ids=token_type_ids,
                                position_ids=position_ids,
-                               head_mask=head_mask)
+                               head_mask=head_mask,
+                               inputs_embeds=inputs_embeds)
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
 
@@ -308,13 +324,14 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         self.roberta = RobertaModel(config)
         self.classifier = RobertaClassificationHead(config)
     
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 labels=None):
         outputs = self.roberta(input_ids,
                                attention_mask=attention_mask,
                                token_type_ids=token_type_ids,
                                position_ids=position_ids,
-                               head_mask=head_mask)
+                               head_mask=head_mask,
+                               inputs_embeds=inputs_embeds)
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
 
@@ -371,6 +388,10 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
@@ -414,8 +435,8 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
-                position_ids=None, head_mask=None):
+    def forward(self, input_ids=None, token_type_ids=None, attention_mask=None, labels=None,
+                position_ids=None, head_mask=None, inputs_embeds=None):
         num_choices = input_ids.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
@@ -486,14 +507,15 @@ class RobertaForTokenClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
+                position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
 
         outputs = self.roberta(input_ids,
                                attention_mask=attention_mask,
                                token_type_ids=token_type_ids,
                                position_ids=position_ids,
-                               head_mask=head_mask)
+                               head_mask=head_mask,
+                               inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
 

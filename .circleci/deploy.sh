@@ -5,8 +5,12 @@ function deploy_doc(){
 	git checkout $1
 	if [ ! -z "$2" ] 
 	then
-		echo "Pushing version" $2
-		make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html $doc:$dir/$2
+		if [ -d "$dir/$2" ]; then
+			echo "Directory" $2 "already exists"
+		else
+			echo "Pushing version" $2
+			make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html $doc:$dir/$2
+		fi
 	else
 		echo "Pushing master"
 		make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir

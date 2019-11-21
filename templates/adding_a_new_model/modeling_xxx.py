@@ -120,7 +120,7 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
 ####################################################
 # PyTorch Models are constructed by sub-classing
 # - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
+# - PreTrainedModel for the models (itself a sub-class of torch.nn.Module)
 ####################################################
 
 ####################################################
@@ -238,6 +238,10 @@ XXX_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare Xxx Model transformer outputting raw hidden-states without any specific head on top.",
@@ -280,11 +284,11 @@ class XxxModel(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        old_embeddings = self.embeddings.word_embeddings
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-        self.embeddings.word_embeddings = new_embeddings
+    def get_input_embeddings(self):
         return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, new_embeddings):
+        self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -294,11 +298,22 @@ class XxxModel(XxxPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
+            attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
-            token_type_ids = torch.zeros_like(input_ids)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -332,7 +347,7 @@ class XxxModel(XxxPreTrainedModel):
 
         ##################################
         # Replace this with your model code
-        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
+        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds)
         encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
@@ -376,26 +391,22 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         super(XxxForMaskedLM, self).__init__(config)
 
         self.transformer = XxxModel(config)
-        self.cls = XxxOnlyMLMHead(config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
-        """
-        self._tie_or_clone_weights(self.cls.predictions.decoder,
-                                   self.transformer.embeddings.word_embeddings)
+    def get_output_embeddings(self):
+        return self.lm_head
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 masked_lm_labels=None):
 
         outputs = self.transformer(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
                             position_ids=position_ids, 
-                            head_mask=head_mask)
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
@@ -453,14 +464,15 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
+                position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
 
         outputs = self.transformer(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
                             position_ids=position_ids, 
-                            head_mask=head_mask)
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
 
         pooled_output = outputs[1]
 
@@ -524,14 +536,15 @@ class XxxForTokenClassification(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
+                position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
 
         outputs = self.transformer(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
                             position_ids=position_ids, 
-                            head_mask=head_mask)
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
 
@@ -607,14 +620,15 @@ class XxxForQuestionAnswering(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
                 start_positions=None, end_positions=None):
 
         outputs = self.transformer(input_ids,
                             attention_mask=attention_mask,
                             token_type_ids=token_type_ids,
                             position_ids=position_ids, 
-                            head_mask=head_mask)
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
 

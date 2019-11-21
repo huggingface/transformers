@@ -23,6 +23,7 @@ from transformers import is_torch_available
 
 if is_torch_available():
     from transformers import (DistilBertConfig, DistilBertModel, DistilBertForMaskedLM,
+                                    DistilBertForTokenClassification,
                                     DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
 else:
     pytestmark = pytest.mark.skip("Require Torch")
@@ -180,6 +181,21 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
                 [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
+        def create_and_check_distilbert_for_token_classification(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            config.num_labels = self.num_labels
+            model = DistilBertForTokenClassification(config=config)
+            model.eval()
+
+            loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()),
+                [self.batch_size, self.seq_length, self.num_labels])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask, sequence_labels, token_labels, choice_labels) = config_and_inputs
@@ -208,6 +224,10 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_distilbert_for_token_classification(*config_and_inputs)
 
     # @pytest.mark.slow
     # def test_model_from_pretrained(self):

@@ -9,7 +9,7 @@ similar API between the different models.
 | [Language Model fine-tuning](#language-model-fine-tuning) | Fine-tuning the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
-| [SQuAD](#squad) | Using BERT/XLM/XLNet/RoBERTa for question answering, examples with distributed training.                                                                                  |
+| [SQuAD](#squad) | Using BERT/RoBERTa/XLNet/XLM for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
 | [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
@@ -415,6 +415,44 @@ exact_match = 86.91
 This fine-tuned model is available as a checkpoint under the reference
 `bert-large-uncased-whole-word-masking-finetuned-squad`.
 
+#### Fine-tuning XLNet on SQuAD
+
+This example code fine-tunes XLNet on the SQuAD dataset. See above to download the data for SQuAD .
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+
+python /data/home/hlu/transformers/examples/run_squad.py \
+    --model_type xlnet \
+    --model_name_or_path xlnet-large-cased \
+    --do_train \
+    --do_eval \
+    --do_lower_case \
+    --train_file /data/home/hlu/notebooks/NLP/examples/question_answering/train-v1.1.json \
+    --predict_file /data/home/hlu/notebooks/NLP/examples/question_answering/dev-v1.1.json \
+    --learning_rate 3e-5 \
+    --num_train_epochs 2 \
+    --max_seq_length 384 \
+    --doc_stride 128 \
+    --output_dir ./wwm_cased_finetuned_squad/ \
+    --per_gpu_eval_batch_size=4  \
+    --per_gpu_train_batch_size=4   \
+    --save_steps 5000
+```
+
+Training with the previously defined hyper-parameters yields the following results:
+
+```python
+{
+"exact": 85.45884578997162,
+"f1": 92.5974600601065,
+"total": 10570,
+"HasAns_exact": 85.45884578997162,
+"HasAns_f1": 92.59746006010651,
+"HasAns_total": 10570
+}
+```
+
 ## Named Entity Recognition
 
 Based on the script [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/run_ner.py).
@@ -515,6 +553,16 @@ On the test dataset the following results could be achieved:
 10/04/2019 00:42:42 - INFO - __main__ -     precision = 0.8604651162790697
 10/04/2019 00:42:42 - INFO - __main__ -     recall = 0.8624150210424085
 ```
+
+### Comparing BERT (large, cased), RoBERTa (large, cased) and DistilBERT (base, uncased)
+
+Here is a small comparison between BERT (large, cased), RoBERTa (large, cased) and DistilBERT (base, uncased) with the same hyperparameters as specified in the [example documentation](https://huggingface.co/transformers/examples.html#named-entity-recognition) (one run):
+
+| Model | F-Score Dev | F-Score Test
+| --------------------------------- | ------- | --------
+| `bert-large-cased`            | 95.59 | 91.70
+| `roberta-large`                  | 95.96 | 91.87
+| `distilbert-base-uncased` | 94.34 | 90.32
 
 ## Abstractive summarization
 

@@ -16,6 +16,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
+import pytest
 from io import open
 
 from transformers.tokenization_bert import (BasicTokenizer,
@@ -125,6 +126,7 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertFalse(_is_punctuation(u"A"))
         self.assertFalse(_is_punctuation(u" "))
 
+    @pytest.mark.slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
 

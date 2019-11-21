@@ -96,7 +96,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range))
         super(TFEmbeddings, self).build(input_shape)
 
-    def call(self, inputs, mode="embedding", training=False):
+    def call(self, inputs, inputs_embeds=None, mode="embedding", training=False):
         """Get token embeddings of inputs.
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
@@ -112,13 +112,13 @@ class TFEmbeddings(tf.keras.layers.Layer):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(inputs, training=training)
+            return self._embedding(inputs, inputs_embeds=inputs_embeds, training=training)
         elif mode == "linear":
             return self._linear(inputs)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    def _embedding(self, inputs, training=False):
+    def _embedding(self, inputs, inputs_embeds=None, training=False):
         """
         Parameters
         ----------
@@ -136,14 +136,19 @@ class TFEmbeddings(tf.keras.layers.Layer):
         else:
             input_ids, position_ids = inputs
 
-        seq_length = tf.shape(input_ids)[1]
+        if input_ids is not None:
+            seq_length = tf.shape(input_ids)[1]
+        else:
+            seq_length = tf.shape(inputs_embeds)[1]
+
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
 
-        word_embeddings = tf.gather(self.word_embeddings, input_ids)
+        if inputs_embeds is None:
+            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = word_embeddings + position_embeddings            # (bs, max_seq_length, dim)
+        embeddings = inputs_embeds + position_embeddings              # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)                       # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings, training=training)      # (bs, max_seq_length, dim)
         return embeddings
@@ -398,28 +403,42 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFEmbeddings(config, name="embeddings")   # Embeddings
         self.transformer = TFTransformer(config, name="transformer") # Encoder
 
+    def get_input_embeddings(self):
+        return self.embeddings
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def call(self, inputs, attention_mask=None, head_mask=None, training=False):
+    def call(self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
-            assert len(inputs) <= 3, "Too many inputs."
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            assert len(inputs) <= 4, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             attention_mask = inputs.get('attention_mask', attention_mask)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 3, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 4, "Too many inputs."
         else:
             input_ids = inputs
 
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if attention_mask is None:
-            attention_mask = tf.ones(shape_list(input_ids)) # (bs, seq_length)
+            attention_mask = tf.ones(input_shape) # (bs, seq_length)
         attention_mask = tf.cast(attention_mask, dtype=tf.float32)
 
         # Prepare head mask if needed
@@ -432,7 +451,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         else:
             head_mask = [None] * self.num_hidden_layers
 
-        embedding_output = self.embeddings(input_ids)   # (bs, seq_length, dim)
+        embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)   # (bs, seq_length, dim)
         tfmr_output = self.transformer([embedding_output, attention_mask, head_mask], training=training)
 
         return tfmr_output # last-layer hidden-state, (all hidden_states), (all attentions)
@@ -508,6 +527,10 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare DistilBERT encoder/transformer outputing raw hidden-states without any specific head on top.",
@@ -608,6 +631,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         self.act = tf.keras.layers.Activation(gelu)
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
+
+    def get_output_embeddings(self):
+        return self.vocab_projector.input_embeddings
 
     def call(self, inputs, **kwargs):
         distilbert_output = self.distilbert(inputs, **kwargs)
