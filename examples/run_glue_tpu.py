@@ -150,7 +150,6 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.gradient_accumulation_steps > 1:
-                xm.mark_step()  # Mark step to evaluate graph so far or else graph will grow too big and OOM.
                 loss = loss / args.gradient_accumulation_steps
 
             loss.backward()
