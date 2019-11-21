@@ -100,6 +100,7 @@ if is_torch_available():
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_camembert import (CamembertForMaskedLM, CamembertModel,
                                 CamembertForSequenceClassification, CamembertForMultipleChoice,
+                                CamembertForTokenClassification,
                                 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
 
