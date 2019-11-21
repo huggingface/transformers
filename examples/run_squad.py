@@ -45,7 +45,8 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetTokenizer,
                                   DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
 
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AdamW
+from transformers import WarmupLinearSchedule as get_linear_schedule_with_warmup
 
 from utils_squad import (read_squad_examples, convert_examples_to_features,
                          RawResult, write_predictions,
