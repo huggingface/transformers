@@ -21,7 +21,6 @@ from utils_summarization import (
     compute_token_type_ids,
     fit_to_block_size,
     build_mask,
-    build_lm_labels,
     process_story,
 )
 
@@ -88,20 +87,6 @@ class SummarizationDataProcessingTest(unittest.TestCase):
         expected_summary_lines = ["It was the best of times."]
         self.assertEqual(expected_summary_lines, summary_lines)
 
-    def test_build_lm_labels_no_padding(self):
-        sequence = torch.tensor([1, 2, 3, 4])
-        expected = sequence
-        np.testing.assert_array_equal(
-            build_lm_labels(sequence, 0).numpy(), expected.numpy()
-        )
-
-    def test_build_lm_labels(self):
-        sequence = torch.tensor([1, 2, 3, 4, 0, 0, 0])
-        expected = torch.tensor([1, 2, 3, 4, -1, -1, -1])
-        np.testing.assert_array_equal(
-            build_lm_labels(sequence, 0).numpy(), expected.numpy()
-        )
-
     def test_build_mask_no_padding(self):
         sequence = torch.tensor([1, 2, 3, 4])
         expected = torch.tensor([1, 1, 1, 1])
@@ -125,7 +110,7 @@ class SummarizationDataProcessingTest(unittest.TestCase):
             [[1, 2, 3, 4, 5, 6], [1, 2, 3, 101, 5, 6], [1, 101, 3, 4, 101, 6]]
         )
         expected = torch.tensor(
-            [[0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 1, 1], [0, 1, 1, 1, 0, 0]]
+            [[1, 1, 1, 1, 1, 1], [1, 1, 1, 0, 0, 0], [1, 0, 0, 0, 1, 1]]
         )
 
         result = compute_token_type_ids(batch, separator)
