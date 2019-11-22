@@ -25,7 +25,6 @@ Use Beam Search to generate sequences using encoder-decoder models.
 """
 import torch
 from torch import nn
-
 import logging
 
 
@@ -45,6 +44,7 @@ class BeamSearch(object):
         max_length,
         alpha=0,
         block_repeating_trigrams=True,
+        device=torch.device("cpu"),
     ):
         r"""
         Inputs:
@@ -156,18 +156,24 @@ class BeamSearch(object):
         kwargs_decoder["encoder_hidden_states"] = tile(
             encoder_hidden_states, self.beam_size, dim=0
         )
-        kwargs_decoder["encoder_attention_mask"] = tile(
-            kwargs_encoder["attention_mask"], self.beam_size, dim=0
+        try:
+            kwargs_decoder["encoder_attention_mask"] = tile(
+                kwargs_encoder["attention_mask"], self.beam_size, dim=0
+            )
+        except:
+            pass
+        kwargs_decoder["state"].src = tile(
+            kwargs_decoder["state"].src, self.beam_size, dim=0
         )
 
         # grow the beam iteratively
         batch_size, block_size = encoder_input_ids.size()
         self._init_beam_state(batch_size)
         for step in range(self.max_length):
-
             decoder_input = fit_to_block_size(self.growing_beams, block_size, self.pad_token_id)
             kwargs_decoder["attention_mask"] = build_mask(decoder_input, self.pad_token_id)
-            outputs = self.model.decoder(decoder_input, **kwargs_decoder)
+
+            outputs, state = self.model.decoder(decoder_input, **kwargs_decoder)
 
             next_token_scores = outputs[0][:, -1, :].squeeze(1)
             log_probabilities = torch.nn.functional.log_softmax(next_token_scores, dim=0)
@@ -178,9 +184,13 @@ class BeamSearch(object):
             kwargs_decoder["encoder_hidden_states"] = kwargs_decoder[
                 "encoder_hidden_states"
             ].index_select(0, surviving_beams_rows)
-            kwargs_decoder["encoder_attention_mask"] = kwargs_decoder[
-                "encoder_attention_mask"
-            ].index_select(0, surviving_beams_rows)
+            try:
+                kwargs_decoder["encoder_attention_mask"] = kwargs_decoder[
+                    "encoder_attention_mask"
+                ].index_select(0, surviving_beams_rows)
+            except:
+                pass
+            kwargs_decoder["state"] = state
 
         return self.results
 
