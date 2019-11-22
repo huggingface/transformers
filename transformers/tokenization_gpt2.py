@@ -184,7 +184,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         """ Tokenize a string.
             Args:
                 - add_prefix_space (boolean, default False):
-                    Begin the sentence with at least one space toto get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
+                    Begin the sentence with at least one space to get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
         """
         if add_prefix_space:
             text = ' ' + text
