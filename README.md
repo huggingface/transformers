@@ -89,13 +89,12 @@ pip install [--editable] .
 ### Run the examples
 
 Examples are included in the repository but are not shipped with the library.
-Therefore, in order to run the examples you will first need to clone the
-repository and install the bleeding edge version of the library. To do so, create a new virtual environment and follow these steps:
+Therefore, in order to run the latest versions of the examples you also need to install from source. To do so, create a new virtual environment and follow these steps:
 
 ```bash
 git clone git@github.com:huggingface/transformers
 cd transformers
-pip install .
+pip install [--editable] .
 ```
 
 ### Tests
