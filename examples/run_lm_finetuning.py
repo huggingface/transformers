@@ -68,7 +68,7 @@ class TextDataset(Dataset):
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(directory, args.model_name_or_path + '_cached_lm_' + str(block_size) + '_' + filename)
 
-        if os.path.exists(cached_features_file):
+        if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             with open(cached_features_file, 'rb') as handle:
                 self.examples = pickle.load(handle)
