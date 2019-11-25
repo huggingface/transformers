@@ -104,7 +104,11 @@ def convert_examples_to_features(examples,
         `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
     """
 
-    label_map = {label: i for i, label in enumerate(label_list)}
+    # Tensorflow cannot handle negative labels
+    if pad_token_label_id == 0:
+        label_map = {label: i for i, label in enumerate(label_list, 1)}
+    else:
+        label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
     for (ex_index, example) in enumerate(examples):
