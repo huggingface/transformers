@@ -197,7 +197,7 @@ def train(args, strategy, train_dataset, model, train_number_examples, num_label
                 loss_metric(loss)
                 epoch_bar.child.comment = f'loss : {loss_metric.result()}'
 
-            epoch_bar.write(f'loss epoch {epoch}: {loss_metric.result()}')
+            epoch_bar.write(f'loss epoch {epoch + 1}: {loss_metric.result()}')
 
             loss_metric.reset_states()
 
@@ -385,7 +385,6 @@ def main(_):
         
         model.save_pretrained(args['output_dir'])
         tokenizer.save_pretrained(args['output_dir'])
-        tf.saved_model.save(model, args['output_dir'])
     
     # Evaluation
     if args['do_eval']:
