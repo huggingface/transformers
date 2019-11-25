@@ -168,6 +168,8 @@ if is_tf_available():
     from .modeling_tf_ctrl import (TFCTRLPreTrainedModel, TFCTRLModel,
                                     TFCTRLLMHeadModel,
                                     TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
+    # Optimization
+    from .optimization_tf import (WarmUp, create_optimizer, AdamWeightDecay)
 
     from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
                                      TFAlbertForSequenceClassification,
