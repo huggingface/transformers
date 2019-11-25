@@ -331,6 +331,7 @@ class PreTrainedModel(nn.Module):
         force_download = kwargs.pop('force_download', False)
         proxies = kwargs.pop('proxies', None)
         output_loading_info = kwargs.pop('output_loading_info', False)
+        xla_device = kwargs.pop('xla_device', False)
 
         # Load config
         if config is None:
@@ -370,7 +371,8 @@ class PreTrainedModel(nn.Module):
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
+                    proxies=proxies, xla_device=xla_device)
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                     msg = "Couldn't reach server at '{}' to download pretrained weights.".format(
