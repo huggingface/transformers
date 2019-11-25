@@ -368,6 +368,7 @@ def main(_):
                                             from_pt=bool(".bin" in args['model_name_or_path']),
                                             config=config,
                                             cache_dir=args['cache_dir'] if args['cache_dir'] else None)
+        model.layers[-1].activation = tf.keras.activations.softmax
 
     logging.info("Training/evaluation parameters %s", args)
 
