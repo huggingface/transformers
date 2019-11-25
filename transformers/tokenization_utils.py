@@ -24,6 +24,7 @@ import copy
 import itertools
 from io import open
 
+from tqdm.auto import tqdm
 from .file_utils import cached_path, is_tf_available, is_torch_available
 
 if is_tf_available():
@@ -644,7 +645,7 @@ class PreTrainedTokenizer(object):
 
             return list(itertools.chain.from_iterable((self._tokenize(token, **kwargs) if token not \
                     in self.added_tokens_encoder and token not in self.all_special_tokens \
-                    else [token] for token in tokenized_text)))
+                    else [token] for token in tqdm(tokenized_text, desc="tokenization"))))
 
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
