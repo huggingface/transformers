@@ -9,8 +9,6 @@ from seqeval import metrics
 import _pickle as pickle
 from absl import logging
 from transformers import BertConfig, BertTokenizer, TFBertForTokenClassification
-from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
-from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForTokenClassification
 from transformers import create_optimizer
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 from fastprogress import master_bar, progress_bar
@@ -20,13 +18,11 @@ import re
 
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, DistilBertConfig)),
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig,)),
     ())
 
 MODEL_CLASSES = {
     "bert": (BertConfig, TFBertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, TFRobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, TFDistilBertForTokenClassification, DistilBertTokenizer)
 }
 
 
@@ -92,7 +88,7 @@ flags.DEFINE_boolean(
     "Whether to run predictions on the test set.")
 
 flags.DEFINE_boolean(
-    "evaluate_during_training", False,
+    "evaluate_during_training", True,
     "Whether to run evaluation during training at each logging step.")
 
 flags.DEFINE_boolean(
@@ -119,10 +115,6 @@ flags.DEFINE_float(
     "adam_epsilon", 1e-8,
     "Epsilon for Adam optimizer.")
 
-flags.DEFINE_float(
-    "max_grad_norm", 1.0,
-    "Max gradient norm.")
-
 flags.DEFINE_integer(
     "num_train_epochs", 3,
     "Total number of training epochs to perform.")
@@ -132,11 +124,11 @@ flags.DEFINE_integer(
     "Linear warmup over warmup_steps.")
 
 flags.DEFINE_boolean(
-    "overwrite_output_dir", False,
+    "overwrite_output_dir", True,
     "Overwrite the content of the output directory")
 
 flags.DEFINE_boolean(
-    "overwrite_cache", False,
+    "overwrite_cache", True,
     "Overwrite the cached training and evaluation sets")
 
 flags.DEFINE_integer(
@@ -153,9 +145,9 @@ flags.DEFINE_string(
     "gpu strategy, if None takes all the gpus available.")
 
 
-def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size, pad_token_label_id):
-    num_train_optimization_steps = num_train_examples * args['num_train_epochs']
-    num_train_steps = int(num_train_examples // train_batch_size)
+def train(args, strategy, train_dataset, model, train_number_examples, num_labels, batch_size):
+    num_train_optimization_steps = train_number_examples * args['num_train_epochs']
+    num_train_steps = int(train_number_examples // batch_size)
     num_warmup_steps = int(args['warmup_steps'] * num_train_optimization_steps)
 
     with strategy.scope():
@@ -167,39 +159,30 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
         
         loss_metric = tf.keras.metrics.Mean()
     
-    logging.info("***** Running training *****")
-    logging.info("  Num examples = %d", num_train_examples)
-    logging.info("  Num Epochs = %d", args['num_train_epochs'])
-    logging.info("  Instantaneous batch size per GPU = %d", args['per_gpu_train_batch_size'])
-
     model.summary()
 
     @tf.function
-    def train_step(train_features, train_labels):
-        def step_fn(train_features, train_labels):
-            inputs = {'attention_mask': train_features['input_mask'], 'training': True}
-
-            if args['model_type'] != "distilbert":
-                inputs["token_type_ids"] = train_features['segment_ids'] if args['model_type'] in ["bert", "xlnet"] else None
+    def train_step(features, labels):
+        def step_fn(features, labels):
+            inputs = {'attention_mask': features['input_mask'], 'token_type_ids': features['segment_ids'], 'training': True}
 
             with tf.GradientTape() as tape:
-                logits = model(train_features['input_ids'], **inputs)[0]
-                logits = tf.reshape(logits, (-1, len(labels) + 1))
-                active_loss = tf.reshape(train_features['input_mask'], (-1,))
+                logits = model(features['input_ids'], **inputs)[0]
+                logits = tf.reshape(logits,(-1, num_labels))
+                active_loss = tf.reshape(features['input_mask'], (-1,))
                 active_logits = tf.boolean_mask(logits, active_loss)
-                train_labels = tf.reshape(train_labels, (-1,))
-                active_labels = tf.boolean_mask(train_labels, active_loss)
+                labels = tf.reshape(labels,(-1,))
+                active_labels = tf.boolean_mask(labels, active_loss)
                 cross_entropy = loss_fct(active_labels, active_logits)
-                loss = tf.reduce_sum(cross_entropy) * (1.0 / train_batch_size)
+                loss = tf.reduce_sum(cross_entropy) * (1.0 / batch_size)
 
             grads = tape.gradient(loss, model.trainable_variables)
-            grads = [(tf.clip_by_value(grad, -1.0, args['max_grad_norm'])) if grad is not None else grad for grad in grads]
 
             optimizer.apply_gradients(list(zip(grads, model.trainable_variables)))
 
             return cross_entropy
 
-        per_example_losses = strategy.experimental_run_v2(step_fn, args=(train_features, train_labels))
+        per_example_losses = strategy.experimental_run_v2(step_fn, args=(features, labels))
         mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
 
         return mean_loss
@@ -209,49 +192,32 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
 
     for epoch in epoch_bar:
         with strategy.scope():
-            for (train_features, train_labels) in progress_bar(train_dataset, total=num_train_steps, parent=epoch_bar):
-                loss = train_step(train_features, train_labels)
+            for (features, labels) in progress_bar(train_dataset, total=num_train_steps, parent=epoch_bar):
+                loss = train_step(features, labels)
                 loss_metric(loss)
                 epoch_bar.child.comment = f'loss : {loss_metric.result()}'
 
-            epoch_bar.write(f'loss epoch {epoch + 1}: {loss_metric.result()}')
+            epoch_bar.write(f'loss epoch {epoch}: {loss_metric.result()}')
 
             loss_metric.reset_states()
-
-            if args['evaluate_during_training']:
-                y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
-                report = metrics.classification_report(y_true, y_pred, digits=4)
-                logging.info(report)
 
     logging.info("  Training took time = {}".format(datetime.datetime.now() - current_time))
 
 
 
-def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode):
-    eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
-    eval_dataset, size = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode=mode)
-    eval_dataset = strategy.experimental_distribute_dataset(eval_dataset)
+def evaluate(model, labels_list, eval_dataset, pad_token_label_id):
     preds = None
 
-    logging.info("***** Running evaluation *****")
-    logging.info("  Num examples = %d", size)
-    logging.info("  Batch size = %d", eval_batch_size)
-
-    for eval_features, eval_labels in eval_dataset:
-        inputs = {'attention_mask': eval_features['input_mask'], 'training': False}
-
-        if args['model_type'] != "distilbert":
-            inputs["token_type_ids"] = eval_features['segment_ids'] if args['model_type'] in ["bert", "xlnet"] else None
-        
-        with strategy.scope():
-            logits = model(eval_features['input_ids'], **inputs)[0]
+    for features, labels in eval_dataset:
+        inputs = {'attention_mask': features['input_mask'], 'token_type_ids': features['segment_ids'], 'training': False}
+        logits = model(features['input_ids'], **inputs)[0]
 
         if preds is None:
             preds = logits.numpy()
-            label_ids = eval_labels.numpy()
+            label_ids = labels.numpy()
         else:
             preds = np.append(preds, logits.numpy(), axis=0)
-            label_ids = np.append(label_ids, eval_labels.numpy(), axis=0)
+            label_ids = np.append(label_ids, labels.numpy(), axis=0)
 
     preds = np.argmax(preds, axis=2)
     y_pred = [[] for _ in range(label_ids.shape[0])]
@@ -260,8 +226,8 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     for i in range(label_ids.shape[0]):
         for j in range(label_ids.shape[1]):
             if label_ids[i, j] != pad_token_label_id:
-                y_pred[i].append(labels[preds[i, j] - 1])
-                y_true[i].append(labels[label_ids[i, j] - 1])
+                y_pred[i].append(labels_list[preds[i, j] - 1])
+                y_true[i].append(labels_list[label_ids[i, j] - 1])
 
     return y_true, y_pred
 
@@ -393,26 +359,24 @@ def main(_):
     config = config_class.from_pretrained(args['config_name'] if args['config_name'] else args['model_name_or_path'],
                                           num_labels=num_labels,
                                           cache_dir=args['cache_dir'] if args['cache_dir'] else None)
+    tokenizer = tokenizer_class.from_pretrained(args['tokenizer_name'] if args['tokenizer_name'] else args['model_name_or_path'],
+                                                do_lower_case=args['do_lower_case'],
+                                                cache_dir=args['cache_dir'] if args['cache_dir'] else None)
+    
+    with strategy.scope():
+        model = model_class.from_pretrained(args['model_name_or_path'],
+                                            from_pt=bool(".bin" in args['model_name_or_path']),
+                                            config=config,
+                                            cache_dir=args['cache_dir'] if args['cache_dir'] else None)
 
     logging.info("Training/evaluation parameters %s", args)
 
     # Training
     if args['do_train']:
-        tokenizer = tokenizer_class.from_pretrained(args['tokenizer_name'] if args['tokenizer_name'] else args['model_name_or_path'],
-                                                    do_lower_case=args['do_lower_case'],
-                                                    cache_dir=args['cache_dir'] if args['cache_dir'] else None)
-
-        with strategy.scope():
-            model = model_class.from_pretrained(args['model_name_or_path'],
-                                                from_pt=bool(".bin" in args['model_name_or_path']),
-                                                config=config,
-                                                cache_dir=args['cache_dir'] if args['cache_dir'] else None)
-            model.layers[-1].activation = tf.keras.activations.softmax  
-
         train_batch_size = args['per_gpu_train_batch_size'] * max(1, len(args['n_gpu']))
-        train_dataset, num_train_examples = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, train_batch_size, mode="train")
+        train_dataset, num_train_example = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, train_batch_size, mode="train")
         train_dataset = strategy.experimental_distribute_dataset(train_dataset)
-        train(args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size, pad_token_label_id)
+        train(args, strategy, train_dataset, model, num_train_example, num_labels, train_batch_size)
 
         if not os.path.exists(args['output_dir']):
             os.makedirs(args['output_dir'])
@@ -421,15 +385,15 @@ def main(_):
         
         model.save_pretrained(args['output_dir'])
         tokenizer.save_pretrained(args['output_dir'])
+        tf.saved_model.save(model, args['output_dir'])
     
     # Evaluation
     if args['do_eval']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
-        
-        with strategy.scope():
-            model = model_class.from_pretrained(args['output_dir'])
-        
-        y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
+        model = model_class.from_pretrained(args['output_dir'])
+        eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
+        eval_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="dev")
+        y_true, y_pred = evaluate(model, labels, eval_dataset, pad_token_label_id)
         output_eval_file = os.path.join(args['output_dir'], "eval_results.txt")
 
         with tf.io.gfile.GFile(output_eval_file, "w") as writer:
@@ -442,17 +406,15 @@ def main(_):
         model = model_class.from_pretrained(args['output_dir'])
         eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
         predict_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test")
-        y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test")
-        output_test_predictions_file = os.path.join(args['output_dir'], "test_predictions.txt")
+        y_true, y_pred = evaluate(model, labels, eval_dataset, pad_token_label_id)
+        output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
 
         with tf.io.gfile.GFile(output_test_predictions_file, "w") as writer:
-            with tf.io.gfile.GFile(os.path.join(args['data_dir'], "test.txt"), "r") as f:
+            with tf.io.gfile.GFile(os.path.join(args.data_dir, "test.txt"), "r") as f:
                 example_id = 0
-                
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                         writer.write(line)
-                        
                         if not y_pred[example_id]:
                             example_id += 1
                     elif y_pred[example_id]:
