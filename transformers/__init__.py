@@ -155,6 +155,7 @@ if is_tf_available():
     from .modeling_tf_distilbert import (TFDistilBertPreTrainedModel, TFDistilBertMainLayer,
                                          TFDistilBertModel, TFDistilBertForMaskedLM,
                                          TFDistilBertForSequenceClassification,
+                                         TFDistilBertForTokenClassification,
                                          TFDistilBertForQuestionAnswering,
                                          TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
