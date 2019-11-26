@@ -74,7 +74,7 @@ def tokenize_map(orig_tokens,tokenizer):
         bert_tokens.extend(tokenizer.tokenize(orig_token))
     return bert_tokens,orig_to_tok_map
 
-def convert_examples_to_features(examples, seq_length, tokenizer):
+def convert_examples_to_features(examples, seq_length, tokenizer,args):
     """Loads a data file into a list of `InputBatch`s."""
 
     features = []
@@ -124,15 +124,17 @@ def convert_examples_to_features(examples, seq_length, tokenizer):
         for token in tokens_a:
             tokens.append(token)
             input_type_ids.append(0)
-        tokens.append("[SEP]")
-        input_type_ids.append(0)
+        if not args.vocab:
+            tokens.append("[SEP]")
+            input_type_ids.append(0)
 
         if tokens_b:
             for token in tokens_b:
                 tokens.append(token)
                 input_type_ids.append(1)
-            tokens.append("[SEP]")
-            input_type_ids.append(1)
+            if not args.vocab:
+                tokens.append("[SEP]")
+                input_type_ids.append(1)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -224,6 +226,38 @@ def read_examples(input_file,example_batch):
 def get_orig_seq(input_mask_batch):
     seq=[i for i in input_mask_batch if i!=0]
     return seq
+
+def feature_orig_to_tok_map_vocab(average_layer_batch, orig_to_token_map_batch,input_mask_batch):
+    average_layer_batch_out=[]
+    cls_embed_batch_out=[]
+    for sent_i, sent_embed in enumerate(average_layer_batch):
+        sent_embed_out=[]
+        orig_to_token_map_batch_sent=get_orig_seq(orig_to_token_map_batch[sent_i])
+        seq_len = len(get_orig_seq(input_mask_batch[sent_i]))
+
+        for i in range(len(orig_to_token_map_batch_sent)):
+            start = orig_to_token_map_batch_sent[i]
+            if i==(len(orig_to_token_map_batch_sent)-1):
+                sent_embed_out.append(sum(sent_embed[start:seq_len]) / (seq_len - start))
+                continue
+            end = orig_to_token_map_batch_sent[i+1]
+            sent_embed_out.append(sum(sent_embed[start:end])/(end-start))
+        try:
+            average_layer_batch_out.append(numpy.array(sent_embed_out))
+        except ValueError as e:
+            print (e,)
+            average_layer_batch_out.append(None)
+
+        #add cls sentence embed
+        try:
+            cls_embed_batch_out.append(numpy.array([sent_embed[0]]))
+        except ValueError as e:
+            print (e,)
+            cls_embed_batch_out.append(None)
+
+
+    return average_layer_batch_out,cls_embed_batch_out
+
 def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_mask_batch):
     average_layer_batch_out=[]
     cls_embed_batch_out=[]
@@ -257,7 +291,7 @@ def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_m
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
     features = convert_examples_to_features(
-        examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer)
+        examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer,args=args)
 
     unique_id_to_feature = {}
     for feature in features:
@@ -292,7 +326,12 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         average_layer_batch = sum(all_encoder_layers[-12:]) / 12
         # if orig_to_token_map_batch!=None:
         try:
-            average_layer_batch, cls_embed_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
+            if args.vocab:
+                average_layer_batch, cls_embed_batch = feature_orig_to_tok_map_vocab(
+                    average_layer_batch.cpu().detach().numpy(),
+                    input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
+            else:
+                average_layer_batch, cls_embed_batch = feature_orig_to_tok_map(average_layer_batch.cpu().detach().numpy(),
                                                       input_orig_to_token_maps.cpu().detach().numpy(), input_mask)
         except ValueError as e:
             print (e, examples[example_indices])
@@ -367,13 +406,14 @@ def main():
                         action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument('--gpu', type=int,help='specify the gpu to use')
+    parser.add_argument('--vocab',action='store_true', default=None,help='whether vocab')
 
     args = parser.parse_args()
 
     writer= h5py.File(args.output_file, 'w')
 
     if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda:{0}".format(args.gpu) if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        device = torch.device("cuda:{0}".format(args.gpu) if torch.cuda.is_available() and not args.no_cuda and args.gpu>=0 else "cpu")
         # n_gpu = torch.cuda.device_count()
         n_gpu=1
     else:
