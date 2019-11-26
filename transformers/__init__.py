@@ -27,7 +27,7 @@ from .data import (is_sklearn_available,
                    glue_output_modes, glue_convert_examples_to_features,
                    glue_processors, glue_tasks_num_labels,
                    squad_convert_examples_to_features, SquadFeatures, 
-                   SquadExample, read_squad_examples)
+                   SquadExample)
 
 if is_sklearn_available():
     from .data import glue_compute_metrics
