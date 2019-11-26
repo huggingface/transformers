@@ -9,6 +9,7 @@ from seqeval import metrics
 import _pickle as pickle
 from absl import logging
 from transformers import BertConfig, BertTokenizer, TFBertForTokenClassification
+from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
 from transformers import create_optimizer
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 from fastprogress import master_bar, progress_bar
@@ -18,11 +19,12 @@ import re
 
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig,)),
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
     ())
 
 MODEL_CLASSES = {
     "bert": (BertConfig, TFBertForTokenClassification, BertTokenizer),
+    "roberta": (RobertaConfig, TFRobertaForTokenClassification, RobertaTokenizer)
 }
 
 
