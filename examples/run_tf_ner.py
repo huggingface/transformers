@@ -10,6 +10,7 @@ import _pickle as pickle
 from absl import logging
 from transformers import BertConfig, BertTokenizer, TFBertForTokenClassification
 from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
+from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForTokenClassification
 from transformers import create_optimizer
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 from fastprogress import master_bar, progress_bar
@@ -19,12 +20,13 @@ import re
 
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig)),
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, DistilBertConfig)),
     ())
 
 MODEL_CLASSES = {
     "bert": (BertConfig, TFBertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, TFRobertaForTokenClassification, RobertaTokenizer)
+    "roberta": (RobertaConfig, TFRobertaForTokenClassification, RobertaTokenizer),
+    "distilbert": (DistilBertConfig, TFDistilBertForTokenClassification, DistilBertTokenizer)
 }
 
 
@@ -166,7 +168,10 @@ def train(args, strategy, train_dataset, model, train_number_examples, num_label
     @tf.function
     def train_step(features, labels):
         def step_fn(features, labels):
-            inputs = {'attention_mask': features['input_mask'], 'token_type_ids': features['segment_ids'], 'training': True}
+            inputs = {'attention_mask': features['input_mask'], 'training': True}
+
+            if args['model_type'] != "distilbert":
+                inputs["token_type_ids"] = features['segment_ids'] if args['model_type'] in ["bert", "xlnet"] else None
 
             with tf.GradientTape() as tape:
                 logits = model(features['input_ids'], **inputs)[0]
@@ -207,11 +212,15 @@ def train(args, strategy, train_dataset, model, train_number_examples, num_label
 
 
 
-def evaluate(model, labels_list, eval_dataset, pad_token_label_id):
+def evaluate(args, model, labels_list, eval_dataset, pad_token_label_id):
     preds = None
 
     for features, labels in eval_dataset:
-        inputs = {'attention_mask': features['input_mask'], 'token_type_ids': features['segment_ids'], 'training': False}
+        inputs = {'attention_mask': features['input_mask'], 'training': False}
+
+        if args['model_type'] != "distilbert":
+            inputs["token_type_ids"] = features['segment_ids'] if args['model_type'] in ["bert", "xlnet"] else None
+        
         logits = model(features['input_ids'], **inputs)[0]
 
         if preds is None:
@@ -395,7 +404,7 @@ def main(_):
         model = model_class.from_pretrained(args['output_dir'])
         eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
         eval_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="dev")
-        y_true, y_pred = evaluate(model, labels, eval_dataset, pad_token_label_id)
+        y_true, y_pred = evaluate(args, model, labels, eval_dataset, pad_token_label_id)
         output_eval_file = os.path.join(args['output_dir'], "eval_results.txt")
 
         with tf.io.gfile.GFile(output_eval_file, "w") as writer:
@@ -408,7 +417,7 @@ def main(_):
         model = model_class.from_pretrained(args['output_dir'])
         eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
         predict_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test")
-        y_true, y_pred = evaluate(model, labels, predict_dataset, pad_token_label_id)
+        y_true, y_pred = evaluate(args, model, labels, predict_dataset, pad_token_label_id)
         output_test_predictions_file = os.path.join(args['output_dir'], "test_predictions.txt")
 
         with tf.io.gfile.GFile(output_test_predictions_file, "w") as writer:
