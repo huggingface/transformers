@@ -571,8 +571,8 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     def get_output_embeddings(self):
         return self.predictions.decoder
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
-                masked_lm_labels=None, inputs_embeds=None):
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
+                masked_lm_labels=None):
         outputs = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
