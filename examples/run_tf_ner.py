@@ -90,7 +90,7 @@ flags.DEFINE_boolean(
     "Whether to run predictions on the test set.")
 
 flags.DEFINE_boolean(
-    "evaluate_during_training", True,
+    "evaluate_during_training", False,
     "Whether to run evaluation during training at each logging step.")
 
 flags.DEFINE_boolean(
@@ -126,11 +126,11 @@ flags.DEFINE_integer(
     "Linear warmup over warmup_steps.")
 
 flags.DEFINE_boolean(
-    "overwrite_output_dir", True,
+    "overwrite_output_dir", False,
     "Overwrite the content of the output directory")
 
 flags.DEFINE_boolean(
-    "overwrite_cache", True,
+    "overwrite_cache", False,
     "Overwrite the cached training and evaluation sets")
 
 flags.DEFINE_integer(
@@ -408,11 +408,11 @@ def main(_):
         model = model_class.from_pretrained(args['output_dir'])
         eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
         predict_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test")
-        y_true, y_pred = evaluate(model, labels, eval_dataset, pad_token_label_id)
-        output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
+        y_true, y_pred = evaluate(model, labels, predict_dataset, pad_token_label_id)
+        output_test_predictions_file = os.path.join(args['output_dir'], "test_predictions.txt")
 
         with tf.io.gfile.GFile(output_test_predictions_file, "w") as writer:
-            with tf.io.gfile.GFile(os.path.join(args.data_dir, "test.txt"), "r") as f:
+            with tf.io.gfile.GFile(os.path.join(args['data_dir'], "test.txt"), "r") as f:
                 example_id = 0
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
