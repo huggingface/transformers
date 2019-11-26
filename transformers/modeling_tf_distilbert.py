@@ -735,14 +735,14 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
         super(TFDistilBertForTokenClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.bert = TFDistilBertMainLayer(config, name='bert')
+        self.distilbert = TFDistilBertMainLayer(config, name='distilbert')
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(config.num_labels,
                                                 kernel_initializer=get_initializer(config.initializer_range),
                                                 name='classifier')
 
     def call(self, inputs, **kwargs):
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.distilbert(inputs, **kwargs)
 
         sequence_output = outputs[0]
 
