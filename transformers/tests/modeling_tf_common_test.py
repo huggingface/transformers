@@ -426,15 +426,17 @@ class TFCommonTestCases:
                     try:
                         x = wte([input_ids], mode="embedding")
                     except:
-                        x = wte([input_ids, None, None, None], mode="embedding")
+                        try:
+                            x = wte([input_ids, None, None, None], mode="embedding")
+                        except:
+                            if hasattr(self.model_tester, "embedding_size"):
+                                x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
+                            else:
+                                x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
                 # ^^ In our TF models, the input_embeddings can take slightly different forms,
                 # so we try a few of them.
                 # We used to fall back to just synthetically creating a dummy tensor of ones:
                 #
-                # if hasattr(self.model_tester, "embedding_size"):
-                #     x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
-                # else:
-                #     x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
                 inputs_dict["inputs_embeds"] = x
                 outputs = model(inputs_dict)
 
