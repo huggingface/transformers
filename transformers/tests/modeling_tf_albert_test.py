@@ -54,6 +54,7 @@ class TFAlbertModelTest(TFCommonTestCases.TFCommonModelTester):
                      use_token_type_ids=True,
                      use_labels=True,
                      vocab_size=99,
+                     embedding_size=16,
                      hidden_size=32,
                      num_hidden_layers=5,
                      num_attention_heads=4,
@@ -77,6 +78,7 @@ class TFAlbertModelTest(TFCommonTestCases.TFCommonModelTester):
             self.use_token_type_ids = use_token_type_ids
             self.use_labels = use_labels
             self.vocab_size = vocab_size
+            self.embedding_size = embedding_size
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
             self.num_attention_heads = num_attention_heads
