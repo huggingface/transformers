@@ -190,7 +190,7 @@ Here is the full list of the currently provided pretrained models together with 
 |                   | ``albert-xxlarge-v2``                                      | | 12 repeating layer, 128 embedding, 4096-hidden, 64-heads, 223M parameters                                                           |
 |                   |                                                            | | ALBERT xxlarge model with no dropout, additional training data and longer training                                                  |
 |                   |                                                            | (see `details <https://github.com/google-research/google-research/tree/master/albert>`__)                                             |
-+--------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
 .. <https://huggingface.co/transformers/examples.html>`__
