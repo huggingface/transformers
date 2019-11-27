@@ -3,15 +3,26 @@
 In this section a few examples are put together. All of these examples work for several models, making use of the very
 similar API between the different models.
 
+**Important**  
+To run the latest versions of the examples, you have to install from source. Execute the following steps in a new virtual environment:
+
+```bash
+git clone https://github.com/huggingface/transformers
+cd transformers
+pip install [--editable] .
+```
+
 | Section                    | Description                                                                                                                                                |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [TensorFlow 2.0 models on GLUE](#TensorFlow-2.0-Bert-models-on-GLUE) | Examples running BERT TensorFlow 2.0 model on the GLUE tasks. 
 | [Language Model fine-tuning](#language-model-fine-tuning) | Fine-tuning the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.                                         |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision.                              |
-| [SQuAD](#squad) | Using BERT/XLM/XLNet/RoBERTa for question answering, examples with distributed training.                                                                                  |
+| [SQuAD](#squad) | Using BERT/RoBERTa/XLNet/XLM for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
+| [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
+| [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
 
 ## TensorFlow 2.0 Bert models on GLUE
 
@@ -101,7 +112,7 @@ python run_lm_finetuning.py \
 
 Based on the script [`run_generation.py`](https://github.com/huggingface/transformers/blob/master/examples/run_generation.py).
 
-Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet.
+Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL, XLNet, CTRL.
 A similar script is used for our official demo [Write With Transfomer](https://transformer.huggingface.co), where you
 can try out the different models available in the library.
 
@@ -411,8 +422,46 @@ f1 = 93.15
 exact_match = 86.91
 ```
 
-This fine-tuneds model is available as a checkpoint under the reference
+This fine-tuned model is available as a checkpoint under the reference
 `bert-large-uncased-whole-word-masking-finetuned-squad`.
+
+#### Fine-tuning XLNet on SQuAD
+
+This example code fine-tunes XLNet on the SQuAD dataset. See above to download the data for SQuAD .
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+
+python /data/home/hlu/transformers/examples/run_squad.py \
+    --model_type xlnet \
+    --model_name_or_path xlnet-large-cased \
+    --do_train \
+    --do_eval \
+    --do_lower_case \
+    --train_file /data/home/hlu/notebooks/NLP/examples/question_answering/train-v1.1.json \
+    --predict_file /data/home/hlu/notebooks/NLP/examples/question_answering/dev-v1.1.json \
+    --learning_rate 3e-5 \
+    --num_train_epochs 2 \
+    --max_seq_length 384 \
+    --doc_stride 128 \
+    --output_dir ./wwm_cased_finetuned_squad/ \
+    --per_gpu_eval_batch_size=4  \
+    --per_gpu_train_batch_size=4   \
+    --save_steps 5000
+```
+
+Training with the previously defined hyper-parameters yields the following results:
+
+```python
+{
+"exact": 85.45884578997162,
+"f1": 92.5974600601065,
+"total": 10570,
+"HasAns_exact": 85.45884578997162,
+"HasAns_f1": 92.59746006010651,
+"HasAns_total": 10570
+}
+```
 
 ## Named Entity Recognition
 
@@ -513,4 +562,82 @@ On the test dataset the following results could be achieved:
 10/04/2019 00:42:42 - INFO - __main__ -     loss = 0.07064602487454782
 10/04/2019 00:42:42 - INFO - __main__ -     precision = 0.8604651162790697
 10/04/2019 00:42:42 - INFO - __main__ -     recall = 0.8624150210424085
+```
+
+### Comparing BERT (large, cased), RoBERTa (large, cased) and DistilBERT (base, uncased)
+
+Here is a small comparison between BERT (large, cased), RoBERTa (large, cased) and DistilBERT (base, uncased) with the same hyperparameters as specified in the [example documentation](https://huggingface.co/transformers/examples.html#named-entity-recognition) (one run):
+
+| Model | F-Score Dev | F-Score Test
+| --------------------------------- | ------- | --------
+| `bert-large-cased`            | 95.59 | 91.70
+| `roberta-large`                  | 95.96 | 91.87
+| `distilbert-base-uncased` | 94.34 | 90.32
+
+## Abstractive summarization
+
+Based on the script
+[`run_summarization_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_summarization_finetuning.py).
+
+Before running this script you should download **both** CNN and Daily Mail
+datasets from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/)  (the
+links next to "Stories") in the same folder. Then uncompress the archives by running:
+
+```bash
+tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
+```
+
+note that the finetuning script **will not work** if you do not download both
+datasets. We will refer as `$DATA_PATH` the path to where you uncompressed both
+archive.
+
+```bash
+export DATA_PATH=/path/to/dataset/
+
+python run_summarization_finetuning.py \
+    --output_dir=output \
+    --model_type=bert2bert \
+    --model_name_or_path=bert2bert \
+    --do_train \
+    --data_path=$DATA_PATH \
+```
+
+## XNLI
+
+Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/run_xnli.py).
+
+[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-ressource language such as English and low-ressource languages such as Swahili).
+
+#### Fine-tuning on XNLI
+
+This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins
+on a single tesla V100 16GB. The data for XNLI can be downloaded with the following links and should be both saved (and un-zipped) in a 
+`$XNLI_DIR` directory.
+
+* [XNLI 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-1.0.zip)
+* [XNLI-MT 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-MT-1.0.zip)
+
+```bash
+export XNLI_DIR=/path/to/XNLI
+
+python run_xnli.py \
+  --model_type bert \
+  --model_name_or_path bert-base-multilingual-cased \
+  --language de \
+  --train_language en \
+  --do_train \
+  --do_eval \
+  --data_dir $XNLI_DIR \
+  --per_gpu_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 128 \
+  --output_dir /tmp/debug_xnli/ \
+  --save_steps -1
+```
+
+Training with the previously defined hyper-parameters yields the following results on the **test** set:
+
+```bash
+acc = 0.7093812375249501
 ```

@@ -23,6 +23,7 @@ import logging
 import math
 import collections
 from io import open
+from tqdm import tqdm
 
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 
@@ -192,7 +193,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
                                  sequence_a_segment_id=0, sequence_b_segment_id=1,
                                  cls_token_segment_id=0, pad_token_segment_id=0,
-                                 mask_padding_with_zero=True):
+                                 mask_padding_with_zero=True,
+                                 sequence_a_is_doc=False):
     """Loads a data file into a list of `InputBatch`s."""
 
     unique_id = 1000000000
@@ -201,7 +203,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     # f = np.zeros((max_N, max_M), dtype=np.float32)
 
     features = []
-    for (example_index, example) in enumerate(examples):
+    for (example_index, example) in enumerate(tqdm(examples)):
 
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
@@ -238,6 +240,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
+        assert max_tokens_for_doc > 0
 
         # We can have documents that are longer than the maximum sequence length.
         # To deal with this we do a sliding window approach, where we take chunks
@@ -272,16 +275,18 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 p_mask.append(0)
                 cls_index = 0
 
-            # Query
-            for token in query_tokens:
-                tokens.append(token)
+            # XLNet: P SEP Q SEP CLS
+            # Others: CLS Q SEP P SEP
+            if not sequence_a_is_doc:
+                # Query
+                tokens += query_tokens
+                segment_ids += [sequence_a_segment_id] * len(query_tokens)
+                p_mask += [1] * len(query_tokens)
+
+                # SEP token
+                tokens.append(sep_token)
                 segment_ids.append(sequence_a_segment_id)
                 p_mask.append(1)
-
-            # SEP token
-            tokens.append(sep_token)
-            segment_ids.append(sequence_a_segment_id)
-            p_mask.append(1)
 
             # Paragraph
             for i in range(doc_span.length):
@@ -292,9 +297,22 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                                        split_token_index)
                 token_is_max_context[len(tokens)] = is_max_context
                 tokens.append(all_doc_tokens[split_token_index])
-                segment_ids.append(sequence_b_segment_id)
+                if not sequence_a_is_doc:
+                    segment_ids.append(sequence_b_segment_id)
+                else:
+                    segment_ids.append(sequence_a_segment_id)
                 p_mask.append(0)
             paragraph_len = doc_span.length
+
+            if sequence_a_is_doc:
+                # SEP token
+                tokens.append(sep_token)
+                segment_ids.append(sequence_a_segment_id)
+                p_mask.append(1)
+
+                tokens += query_tokens
+                segment_ids += [sequence_b_segment_id] * len(query_tokens)
+                p_mask += [1] * len(query_tokens)
 
             # SEP token
             tokens.append(sep_token)
@@ -342,7 +360,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     end_position = 0
                     span_is_impossible = True
                 else:
-                    doc_offset = len(query_tokens) + 2
+                    if sequence_a_is_doc:
+                        doc_offset = 0
+                    else:
+                        doc_offset = len(query_tokens) + 2
                     start_position = tok_start_position - doc_start + doc_offset
                     end_position = tok_end_position - doc_start + doc_offset
 

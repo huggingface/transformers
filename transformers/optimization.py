@@ -23,85 +23,65 @@ from torch.optim.lr_scheduler import LambdaLR
 
 logger = logging.getLogger(__name__)
 
-class ConstantLRSchedule(LambdaLR):
-    """ Constant learning rate schedule.
+
+def get_constant_schedule(optimizer, last_epoch=-1):
+    """ Create a schedule with a constant learning rate.
     """
-    def __init__(self, optimizer, last_epoch=-1):
-        super(ConstantLRSchedule, self).__init__(optimizer, lambda _: 1.0, last_epoch=last_epoch)
+    return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
 
 
-class WarmupConstantSchedule(LambdaLR):
-    """ Linear warmup and then constant.
-        Linearly increases learning rate schedule from 0 to 1 over `warmup_steps` training steps.
-        Keeps learning rate schedule equal to 1. after warmup_steps.
+def get_constant_schedule_with_warmup(optimizer, num_warmup_steps, last_epoch=-1):
+    """ Create a schedule with a constant learning rate preceded by a warmup
+    period during which the learning rate increases linearly between 0 and 1.
     """
-    def __init__(self, optimizer, warmup_steps, last_epoch=-1):
-        self.warmup_steps = warmup_steps
-        super(WarmupConstantSchedule, self).__init__(optimizer, self.lr_lambda, last_epoch=last_epoch)
-
-    def lr_lambda(self, step):
-        if step < self.warmup_steps:
-            return float(step) / float(max(1.0, self.warmup_steps))
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1.0, num_warmup_steps))
         return 1.
 
+    return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
-class WarmupLinearSchedule(LambdaLR):
-    """ Linear warmup and then linear decay.
-        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
-        Linearly decreases learning rate from 1. to 0. over remaining `t_total - warmup_steps` steps.
+
+def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
+    """ Create a schedule with a learning rate that decreases linearly after
+    linearly increasing during a warmup period.
     """
-    def __init__(self, optimizer, warmup_steps, t_total, last_epoch=-1):
-        self.warmup_steps = warmup_steps
-        self.t_total = t_total
-        super(WarmupLinearSchedule, self).__init__(optimizer, self.lr_lambda, last_epoch=last_epoch)
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
 
-    def lr_lambda(self, step):
-        if step < self.warmup_steps:
-            return float(step) / float(max(1, self.warmup_steps))
-        return max(0.0, float(self.t_total - step) / float(max(1.0, self.t_total - self.warmup_steps)))
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-class WarmupCosineSchedule(LambdaLR):
-    """ Linear warmup and then cosine decay.
-        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
-        Decreases learning rate from 1. to 0. over remaining `t_total - warmup_steps` steps following a cosine curve.
-        If `cycles` (default=0.5) is different from default, learning rate follows cosine function after warmup.
+def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=.5, last_epoch=-1):
+    """ Create a schedule with a learning rate that decreases following the
+    values of the cosine function between 0 and `pi * cycles` after a warmup
+    period during which it increases linearly between 0 and 1.
     """
-    def __init__(self, optimizer, warmup_steps, t_total, cycles=.5, last_epoch=-1):
-        self.warmup_steps = warmup_steps
-        self.t_total = t_total
-        self.cycles = cycles
-        super(WarmupCosineSchedule, self).__init__(optimizer, self.lr_lambda, last_epoch=last_epoch)
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        return max(0., 0.5 * (1. + math.cos(math.pi * float(num_cycles) * 2. * progress)))
 
-    def lr_lambda(self, step):
-        if step < self.warmup_steps:
-            return float(step) / float(max(1.0, self.warmup_steps))
-        # progress after warmup
-        progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
-        return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-class WarmupCosineWithHardRestartsSchedule(LambdaLR):
-    """ Linear warmup and then cosine cycles with hard restarts.
-        Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
-        If `cycles` (default=1.) is different from default, learning rate follows `cycles` times a cosine decaying
-        learning rate (with hard restarts).
+def get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=1., last_epoch=-1):
+    """ Create a schedule with a learning rate that decreases following the
+    values of the cosine function with several hard restarts, after a warmup
+    period during which it increases linearly between 0 and 1.
     """
-    def __init__(self, optimizer, warmup_steps, t_total, cycles=1., last_epoch=-1):
-        self.warmup_steps = warmup_steps
-        self.t_total = t_total
-        self.cycles = cycles
-        super(WarmupCosineWithHardRestartsSchedule, self).__init__(optimizer, self.lr_lambda, last_epoch=last_epoch)
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        if progress >= 1.:
+            return 0.
+        return max(0., 0.5 * (1. + math.cos(math.pi * ((float(num_cycles) * progress) % 1.))))
 
-    def lr_lambda(self, step):
-        if step < self.warmup_steps:
-            return float(step) / float(max(1, self.warmup_steps))
-        # progress after warmup
-        progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
-        if progress >= 1.0:
-            return 0.0
-        return max(0.0, 0.5 * (1. + math.cos(math.pi * ((float(self.cycles) * progress) % 1.0))))
-
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
 class AdamW(Optimizer):

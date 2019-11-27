@@ -16,6 +16,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
+import pytest
 from io import open
 
 from transformers.tokenization_distilbert import (DistilBertTokenizer)
@@ -30,11 +31,12 @@ class DistilBertTokenizationTest(BertTokenizationTest):
     def get_tokenizer(self, **kwargs):
         return DistilBertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
+    @pytest.mark.slow
     def test_sequence_builders(self):
         tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
-        text = tokenizer.encode("sequence builders")
-        text_2 = tokenizer.encode("multi-sequence build")
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)

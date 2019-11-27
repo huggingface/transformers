@@ -185,9 +185,9 @@ class XLNetTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
-            single sequence: <s> X </s>
-            pair of sequences: <s> A </s></s> B </s>
+        An XLNet sequence has the following format:
+            single sequence: X <sep> <cls>
+            pair of sequences: A <sep> B <sep> <cls>
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -208,7 +208,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 special tokens for the model
 
         Returns:
-            A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -224,7 +224,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A BERT sequence pair mask has the following format:
+        An XLNet sequence pair mask has the following format:
         0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 2
         | first sequence    | second sequence     | CLS segment ID
         
