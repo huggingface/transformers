@@ -175,6 +175,10 @@ if is_tf_available():
                                      TFAlbertForSequenceClassification,
                                     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
+    from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
+                                     TFAlbertForSequenceClassification,
+                                    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,
                                         load_pytorch_checkpoint_in_tf2_model,
