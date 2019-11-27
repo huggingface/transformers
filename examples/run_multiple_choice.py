@@ -43,7 +43,7 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetTokenizer, RobertaConfig,
                                   RobertaForMultipleChoice, RobertaTokenizer)
 
-from transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from utils_multiple_choice import (convert_examples_to_features, processors)
 
@@ -101,7 +101,7 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
@@ -228,6 +228,10 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
         # Note that DistributedSampler samples randomly
         eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+        # multi-gpu evaluate
+        if args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
 
         # Eval!
         logger.info("***** Running evaluation {} *****".format(prefix))
@@ -464,9 +468,17 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
-    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                          num_labels=num_labels,
+                                          finetuning_task=args.task_name,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                do_lower_case=args.do_lower_case,
+                                                cache_dir=args.cache_dir if args.cache_dir else None)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        config=config,
+                                        cache_dir=args.cache_dir if args.cache_dir else None)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab

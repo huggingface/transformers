@@ -39,7 +39,7 @@ State-of-the-art NLP for everyone
 Lower compute costs, smaller carbon footprint
 - Researchers can share trained models instead of always retraining
 - Practitioners can reduce compute time and production costs
-- 8 architectures with over 30 pretrained models, some in more than 100 languages
+- 10 architectures with over 30 pretrained models, some in more than 100 languages
 
 Choose the right framework for every part of a model's lifetime
 - Train state-of-the-art models in 3 lines of code
@@ -58,7 +58,7 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
+| [Documentation][(v2.2.0)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
 
 ## Installation
 
@@ -83,6 +83,17 @@ Please refer to [TensorFlow installation page](https://www.tensorflow.org/instal
 When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and running:
 
 ```bash
+pip install [--editable] .
+```
+
+### Run the examples
+
+Examples are included in the repository but are not shipped with the library.
+Therefore, in order to run the latest versions of the examples you also need to install from source. To do so, create a new virtual environment and follow these steps:
+
+```bash
+git clone https://github.com/huggingface/transformers
+cd transformers
 pip install [--editable] .
 ```
 
@@ -111,7 +122,7 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 
 ## Model architectures
 
-🤗 Transformers currently provides 8 NLU/NLG architectures:
+🤗 Transformers currently provides 10 NLU/NLG architectures:
 
 1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
@@ -122,6 +133,9 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 7. **[RoBERTa](https://github.com/pytorch/fairseq/tree/master/examples/roberta)** (from Facebook), released together with the paper a [Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
 8. **[DistilBERT](https://github.com/huggingface/transformers/tree/master/examples/distillation)** (from HuggingFace), released together with the paper [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108) by Victor Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into [DistilGPT2](https://github.com/huggingface/transformers/tree/master/examples/distillation).
 9. **[CTRL](https://github.com/salesforce/ctrl/)** (from Salesforce) released with the paper [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
+10. **[CamemBERT](https://camembert-model.fr)** (from Inria/Facebook/Sorbonne) released with the paper [CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) by Louis Martin*, Benjamin Muller*, Pedro Javier Ortiz Suárez*, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah and Benoît Sagot.
+11. **[ALBERT](https://github.com/google-research/google-research/tree/master/albert)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
+11. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
@@ -170,8 +184,7 @@ for model_class, tokenizer_class, pretrained_weights in MODELS:
 
 # Each architecture is provided with several class for fine-tuning on down-stream tasks, e.g.
 BERT_MODEL_CLASSES = [BertModel, BertForPreTraining, BertForMaskedLM, BertForNextSentencePrediction,
-                      BertForSequenceClassification, BertForMultipleChoice, BertForTokenClassification,
-                      BertForQuestionAnswering]
+                      BertForSequenceClassification, BertForTokenClassification, BertForQuestionAnswering]
 
 # All the classes for an architecture can be initiated from pretrained weights for this architecture
 # Note that additional weights added for fine-tuning are only initialized
@@ -251,6 +264,11 @@ print("sentence_2 is", "a paraphrase" if pred_2 else "not a paraphrase", "of sen
 ```
 
 ## Quick tour of the fine-tuning/usage scripts
+
+**Important**  
+Before running the fine-tuning scripts, please read the
+[instructions](#run-the-examples) on how to
+setup your environment to run the examples.
 
 The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
@@ -413,7 +431,7 @@ and from the Salesforce CTRL model:
 python ./examples/run_generation.py \
     --model_type=ctrl \
     --length=20 \
-    --model_name_or_path=gpt2 \
+    --model_name_or_path=ctrl \
     --temperature=0 \
     --repetition_penalty=1.2 \
 ```
@@ -520,12 +538,12 @@ Here is a conversion examples from `BertAdam` with a linear warmup and decay sch
 # Parameters:
 lr = 1e-3
 max_grad_norm = 1.0
-num_total_steps = 1000
+num_training_steps = 1000
 num_warmup_steps = 100
-warmup_proportion = float(num_warmup_steps) / float(num_total_steps)  # 0.1
+warmup_proportion = float(num_warmup_steps) / float(num_training_steps)  # 0.1
 
 ### Previously BertAdam optimizer was instantiated like this:
-optimizer = BertAdam(model.parameters(), lr=lr, schedule='warmup_linear', warmup=warmup_proportion, t_total=num_total_steps)
+optimizer = BertAdam(model.parameters(), lr=lr, schedule='warmup_linear', warmup=warmup_proportion, t_total=num_training_steps)
 ### and used like this:
 for batch in train_data:
     loss = model(batch)
@@ -534,9 +552,10 @@ for batch in train_data:
 
 ### In Transformers, optimizer and schedules are splitted and instantiated like this:
 optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
-scheduler = WarmupLinearSchedule(optimizer, warmup_steps=num_warmup_steps, t_total=num_total_steps)  # PyTorch scheduler
+scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)  # PyTorch scheduler
 ### and used like this:
 for batch in train_data:
+    model.train()
     loss = model(batch)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
@@ -549,12 +568,11 @@ for batch in train_data:
 
 We now have a paper you can cite for the 🤗 Transformers library:
 ```
-@misc{wolf2019transformers,
-    title={Transformers: State-of-the-art Natural Language Processing},
-    author={Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Jamie Brew},
-    year={2019},
-    eprint={1910.03771},
-    archivePrefix={arXiv},
-    primaryClass={cs.CL}
+@article{Wolf2019HuggingFacesTS,
+  title={HuggingFace's Transformers: State-of-the-art Natural Language Processing},
+  author={Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and R'emi Louf and Morgan Funtowicz and Jamie Brew},
+  journal={ArXiv},
+  year={2019},
+  volume={abs/1910.03771}
 }
 ```

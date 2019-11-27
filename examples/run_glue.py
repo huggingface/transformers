@@ -47,9 +47,13 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetTokenizer,
                                   DistilBertConfig,
                                   DistilBertForSequenceClassification,
-                                  DistilBertTokenizer)
+                                  DistilBertTokenizer,
+                                  AlbertConfig,
+                                  AlbertForSequenceClassification, 
+                                  AlbertTokenizer,
+                                )
 
-from transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_output_modes as output_modes
@@ -66,7 +70,8 @@ MODEL_CLASSES = {
     'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
+    'albert': (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer)
 }
 
 
@@ -99,8 +104,9 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
@@ -154,13 +160,16 @@ def train(args, train_dataset, model, tokenizer):
             if args.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
-            if (step + 1) % args.gradient_accumulation_steps == 0 and not args.tpu:
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                if args.fp16:
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
@@ -185,11 +194,6 @@ def train(args, train_dataset, model, tokenizer):
                     model_to_save.save_pretrained(output_dir)
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
-
-            if args.tpu:
-                args.xla_model.optimizer_step(optimizer, barrier=True)
-                model.zero_grad()
-                global_step += 1
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -220,6 +224,10 @@ def evaluate(args, model, tokenizer, prefix=""):
         # Note that DistributedSampler samples randomly
         eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+        # multi-gpu eval
+        if args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
 
         # Eval!
         logger.info("***** Running evaluation {} *****".format(prefix))
@@ -315,7 +323,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
     elif output_mode == "regression":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
-
+ 
     dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
 
@@ -359,7 +367,7 @@ def main():
     parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")     
     parser.add_argument("--learning_rate", default=5e-5, type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--weight_decay", default=0.0, type=float,
@@ -389,15 +397,6 @@ def main():
                         help="Overwrite the cached training and evaluation sets")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
-
-    parser.add_argument('--tpu', action='store_true',
-                        help="Whether to run on the TPU defined in the environment variables")
-    parser.add_argument('--tpu_ip_address', type=str, default='',
-                        help="TPU IP address if none are set in the environment variables")
-    parser.add_argument('--tpu_name', type=str, default='',
-                        help="TPU name if none are set in the environment variables")
-    parser.add_argument('--xrt_tpu_config', type=str, default='',
-                        help="XRT TPU config if none are set in the environment variables")
 
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
@@ -432,23 +431,6 @@ def main():
         args.n_gpu = 1
     args.device = device
 
-    if args.tpu:
-        if args.tpu_ip_address:
-            os.environ["TPU_IP_ADDRESS"] = args.tpu_ip_address
-        if args.tpu_name:
-            os.environ["TPU_NAME"] = args.tpu_name
-        if args.xrt_tpu_config:
-            os.environ["XRT_TPU_CONFIG"] = args.xrt_tpu_config
-
-        assert "TPU_IP_ADDRESS" in os.environ
-        assert "TPU_NAME" in os.environ
-        assert "XRT_TPU_CONFIG" in os.environ
-
-        import torch_xla
-        import torch_xla.core.xla_model as xm
-        args.device = xm.xla_device()
-        args.xla_model = xm
-
     # Setup logging
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                         datefmt = '%m/%d/%Y %H:%M:%S',
@@ -474,9 +456,17 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
-    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                          num_labels=num_labels,
+                                          finetuning_task=args.task_name,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                do_lower_case=args.do_lower_case,
+                                                cache_dir=args.cache_dir if args.cache_dir else None)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        config=config,
+                                        cache_dir=args.cache_dir if args.cache_dir else None)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -494,7 +484,7 @@ def main():
 
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0) and not args.tpu:
+    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         # Create output directory if needed
         if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(args.output_dir)
@@ -511,7 +501,7 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = model_class.from_pretrained(args.output_dir)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
         model.to(args.device)
 
 

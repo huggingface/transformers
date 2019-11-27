@@ -35,7 +35,7 @@ try:
 except:
     from tensorboardX import SummaryWriter
 
-from transformers import WarmupLinearSchedule
+from transformers import get_linear_schedule_with_warmup
 
 from utils import logger
 from lm_seqs_dataset import LmSeqsDataset
@@ -137,9 +137,9 @@ class Distiller:
                                betas=(0.9, 0.98))
 
         warmup_steps = math.ceil(num_train_optimization_steps * params.warmup_prop)
-        self.scheduler = WarmupLinearSchedule(self.optimizer,
-                                                warmup_steps=warmup_steps,
-                                                t_total=num_train_optimization_steps)
+        self.scheduler = get_linear_schedule_with_warmup(self.optimizer,
+                                                num_warmup_steps=warmup_steps,
+                                                num_training_steps=num_train_optimization_steps)
 
         if self.fp16:
             try:

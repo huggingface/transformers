@@ -22,6 +22,7 @@ import logging
 import os
 import random
 import glob
+import timeit
 
 import numpy as np
 import torch
@@ -42,9 +43,10 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForQuestionAnswering,
                                   XLNetTokenizer,
-                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer,
+                                  AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer)
 
-from transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from utils_squad import (read_squad_examples, convert_examples_to_features,
                          RawResult, write_predictions,
@@ -64,7 +66,8 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer),
+    'albert': (AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer)
 }
 
 def set_seed(args):
@@ -99,7 +102,7 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
@@ -127,7 +130,7 @@ def train(args, train_dataset, model, tokenizer):
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
 
-    global_step = 0
+    global_step = 1
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
@@ -157,13 +160,16 @@ def train(args, train_dataset, model, tokenizer):
             if args.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
+                if args.fp16:
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
@@ -213,11 +219,16 @@ def evaluate(args, model, tokenizer, prefix=""):
     eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
+    # multi-gpu evaluate
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
     logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
     all_results = []
+    start_time = timeit.default_timer()
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
@@ -249,6 +260,9 @@ def evaluate(args, model, tokenizer, prefix=""):
                                    start_logits = to_list(outputs[0][i]),
                                    end_logits   = to_list(outputs[1][i]))
             all_results.append(result)
+
+    evalTime = timeit.default_timer() - start_time
+    logger.info("  Evaluation done in total %f secs (%f sec per example)", evalTime, evalTime / len(dataset))
 
     # Compute predictions
     output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
@@ -302,7 +316,11 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                                                 max_seq_length=args.max_seq_length,
                                                 doc_stride=args.doc_stride,
                                                 max_query_length=args.max_query_length,
-                                                is_training=not evaluate)
+                                                is_training=not evaluate,
+                                                cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
+                                                pad_token_segment_id=3 if args.model_type in ['xlnet'] else 0,
+                                                cls_token_at_end=True if args.model_type in ['xlnet'] else False,
+                                                sequence_a_is_doc=True if args.model_type in ['xlnet'] else False)
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -386,7 +404,7 @@ def main():
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--weight_decay", default=0.0, type=float,
-                        help="Weight deay if we apply some.")
+                        help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
@@ -470,9 +488,15 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
-    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                do_lower_case=args.do_lower_case,
+                                                cache_dir=args.cache_dir if args.cache_dir else None)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        config=config,
+                                        cache_dir=args.cache_dir if args.cache_dir else None)
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -515,7 +539,7 @@ def main():
         torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(args.output_dir)
+        model = model_class.from_pretrained(args.output_dir, force_download=True)
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         model.to(args.device)
 
@@ -533,7 +557,7 @@ def main():
         for checkpoint in checkpoints:
             # Reload the model
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
-            model = model_class.from_pretrained(checkpoint)
+            model = model_class.from_pretrained(checkpoint, force_download=True)
             model.to(args.device)
 
             # Evaluate

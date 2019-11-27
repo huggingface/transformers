@@ -30,6 +30,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .configuration_distilbert import DistilBertConfig
@@ -41,7 +42,8 @@ logger = logging.getLogger(__name__)
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-pytorch_model.bin",
-    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-pytorch_model.bin"
+    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-pytorch_model.bin",
+    'distilbert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-pytorch_model.bin",
 }
 
 
@@ -334,9 +336,6 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "distilbert"
 
-    def __init__(self, *inputs, **kwargs):
-        super(DistilBertPreTrainedModel, self).__init__(*inputs, **kwargs)
-    
     def _init_weights(self, module):
         """ Initialize the weights.
         """
@@ -390,6 +389,10 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
@@ -424,11 +427,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        old_embeddings = self.embeddings.word_embeddings
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-        self.embeddings.word_embeddings = new_embeddings
+    def get_input_embeddings(self):
         return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, new_embeddings):
+        self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -439,9 +442,20 @@ class DistilBertModel(DistilBertPreTrainedModel):
             self.transformer.layer[layer].attention.prune_heads(heads)
 
     def forward(self,
-                input_ids, attention_mask=None, head_mask=None):
+                input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None):
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids) # (bs, seq_length)
+            attention_mask = torch.ones(input_shape, device=device) # (bs, seq_length)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -458,8 +472,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(input_ids)   # (bs, seq_length, dim)
-        tfmr_output = self.transformer(x=embedding_output,
+        if inputs_embeds is None:
+            inputs_embeds = self.embeddings(input_ids)   # (bs, seq_length, dim)
+        tfmr_output = self.transformer(x=inputs_embeds,
                                        attn_mask=attention_mask,
                                        head_mask=head_mask)
         hidden_state = tfmr_output[0]
@@ -511,21 +526,17 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
 
         self.init_weights()
-        self.tie_weights()
 
         self.mlm_loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
 
-    def tie_weights(self):
-        """ Make sure we are sharing the input and output embeddings.
-            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
-        """
-        self._tie_or_clone_weights(self.vocab_projector,
-                                   self.distilbert.embeddings.word_embeddings)
+    def get_output_embeddings(self):
+        return self.vocab_projector
 
-    def forward(self, input_ids, attention_mask=None, head_mask=None, masked_lm_labels=None):
+    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, masked_lm_labels=None):
         dlbrt_output = self.distilbert(input_ids=input_ids,
                                        attention_mask=attention_mask,
-                                       head_mask=head_mask)
+                                       head_mask=head_mask,
+                                       inputs_embeds=inputs_embeds)
         hidden_states = dlbrt_output[0]                              # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)      # (bs, seq_length, dim)
         prediction_logits = gelu(prediction_logits)                  # (bs, seq_length, dim)
@@ -586,10 +597,11 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids,  attention_mask=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         distilbert_output = self.distilbert(input_ids=input_ids,
                                             attention_mask=attention_mask,
-                                            head_mask=head_mask)
+                                            head_mask=head_mask,
+                                            inputs_embeds=inputs_embeds)
         hidden_state = distilbert_output[0]                    # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]                    # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)   # (bs, dim)
@@ -660,10 +672,11 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.init_weights()
         
-    def forward(self, input_ids, attention_mask=None, head_mask=None, start_positions=None, end_positions=None):
+    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, start_positions=None, end_positions=None):
         distilbert_output = self.distilbert(input_ids=input_ids,
                                             attention_mask=attention_mask,
-                                            head_mask=head_mask)
+                                            head_mask=head_mask,
+                                            inputs_embeds=inputs_embeds)
         hidden_states = distilbert_output[0]                                 # (bs, max_query_len, dim)
 
         hidden_states = self.dropout(hidden_states)                       # (bs, max_query_len, dim)
@@ -691,3 +704,75 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""DistilBert Model with a token classification head on top (a linear layer on top of
+                      the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+                      DISTILBERT_START_DOCSTRING,
+                      DISTILBERT_INPUTS_DOCSTRING)
+class DistilBertForTokenClassification(DistilBertPreTrainedModel):
+    r"""
+        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification loss.
+        **scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        model = DistilBertForTokenClassification.from_pretrained('distilbert-base-uncased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
+
+    """
+    def __init__(self, config):
+        super(DistilBertForTokenClassification, self).__init__(config)
+        self.num_labels = config.num_labels
+
+        self.distilbert = DistilBertModel(config)
+        self.dropout = nn.Dropout(config.dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def forward(self, input_ids=None, attention_mask=None, head_mask=None,
+                inputs_embeds=None, labels=None):
+
+        outputs = self.distilbert(input_ids,
+                            attention_mask=attention_mask,
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), scores, (hidden_states), (attentions)

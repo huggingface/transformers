@@ -558,6 +558,10 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare XLNet Model transformer outputting raw hidden-states without any specific head on top.",
@@ -611,9 +615,11 @@ class XLNetModel(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        self.word_embedding = self._get_resized_embeddings(self.word_embedding, new_num_tokens)
+    def get_input_embeddings(self):
         return self.word_embedding
+
+    def set_input_embeddings(self, new_embeddings):
+        self.word_embedding = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -710,19 +716,29 @@ class XLNetModel(XLNetPreTrainedModel):
         pos_emb = pos_emb.to(next(self.parameters()))
         return pos_emb
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None):
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None):
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
-        input_ids = input_ids.transpose(0, 1).contiguous()
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_ids = input_ids.transpose(0, 1).contiguous()
+            qlen, bsz = input_ids.shape[0], input_ids.shape[1]
+        elif inputs_embeds is not None:
+            inputs_embeds.transpose(0, 1).contiguous()
+            qlen, bsz = inputs_embeds.shape[0], inputs_embeds.shape[1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         token_type_ids = token_type_ids.transpose(0, 1).contiguous() if token_type_ids is not None else None
         input_mask = input_mask.transpose(0, 1).contiguous() if input_mask is not None else None
         attention_mask = attention_mask.transpose(0, 1).contiguous() if attention_mask is not None else None
         perm_mask = perm_mask.permute(1, 2, 0).contiguous() if perm_mask is not None else None
         target_mapping = target_mapping.permute(1, 2, 0).contiguous() if target_mapping is not None else None
 
-        qlen, bsz = input_ids.shape[0], input_ids.shape[1]
+
         mlen = mems[0].shape[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
 
@@ -775,7 +791,10 @@ class XLNetModel(XLNetPreTrainedModel):
             non_tgt_mask = None
 
         ##### Word embeddings and prepare h & g hidden states
-        word_emb_k = self.word_embedding(input_ids)
+        if inputs_embeds is not None:
+            word_emb_k = inputs_embeds
+        else:
+            word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k)
         if target_mapping is not None:
             word_emb_q = self.mask_emb.expand(target_mapping.shape[0], bsz, -1)
@@ -918,15 +937,12 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
 
         self.init_weights()
-        self.tie_weights()
 
-    def tie_weights(self):
-        """ Make sure we are sharing the embeddings
-        """
-        self._tie_or_clone_weights(self.lm_loss, self.transformer.word_embedding)
+    def get_output_embeddings(self):
+        return self.lm_loss
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                mems=mems,
@@ -934,7 +950,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
                                                target_mapping=target_mapping,
                                                token_type_ids=token_type_ids,
                                                input_mask=input_mask,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
 
         logits = self.lm_loss(transformer_outputs[0])
 
@@ -999,8 +1016,8 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None, labels=None):
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
                                                mems=mems,
@@ -1008,7 +1025,8 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                                                target_mapping=target_mapping,
                                                token_type_ids=token_type_ids,
                                                input_mask=input_mask,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
         output = transformer_outputs[0]
 
         output = self.sequence_summary(output)
@@ -1050,6 +1068,10 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
@@ -1094,9 +1116,9 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, token_type_ids=None, input_mask=None, attention_mask=None,
+    def forward(self, input_ids=None, token_type_ids=None, input_mask=None, attention_mask=None,
                 mems=None, perm_mask=None, target_mapping=None,
-                labels=None, head_mask=None):
+                labels=None, head_mask=None, inputs_embeds=None):
         num_choices = input_ids.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
@@ -1107,7 +1129,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         transformer_outputs = self.transformer(flat_input_ids, token_type_ids=flat_token_type_ids,
                                                input_mask=flat_input_mask, attention_mask=flat_attention_mask,
                                                mems=mems, perm_mask=perm_mask, target_mapping=target_mapping,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask, inputs_embeds=inputs_embeds)
 
 
         output = transformer_outputs[0]
@@ -1179,8 +1201,8 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None,
                 start_positions=None, end_positions=None):
 
         outputs = self.transformer(input_ids,
@@ -1190,7 +1212,8 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
                                     target_mapping=target_mapping,
                                     token_type_ids=token_type_ids,
                                     input_mask=input_mask,
-                                    head_mask=head_mask)
+                                    head_mask=head_mask,
+                                    inputs_embeds=inputs_embeds)
 
         sequence_output = outputs[0]
 
@@ -1295,8 +1318,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-                token_type_ids=None, input_mask=None, head_mask=None,
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None,
                 start_positions=None, end_positions=None, is_impossible=None, cls_index=None, p_mask=None,):
         transformer_outputs = self.transformer(input_ids,
                                                attention_mask=attention_mask,
@@ -1305,7 +1328,8 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                                                target_mapping=target_mapping,
                                                token_type_ids=token_type_ids,
                                                input_mask=input_mask,
-                                               head_mask=head_mask)
+                                               head_mask=head_mask,
+                                               inputs_embeds=inputs_embeds)
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
