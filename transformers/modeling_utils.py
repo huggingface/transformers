@@ -315,6 +315,10 @@ class PreTrainedModel(nn.Module):
             model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
+        if "albert" in pretrained_model_name_or_path and "v2" in pretrained_model_name_or_path:
+            logger.warning("There is currently an upstream reproducibility issue with ALBERT v2 models. Please see " +
+                           "https://github.com/google-research/google-research/issues/119 for more information.")
+
         config = kwargs.pop('config', None)
         state_dict = kwargs.pop('state_dict', None)
         cache_dir = kwargs.pop('cache_dir', None)

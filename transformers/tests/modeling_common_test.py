@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     import numpy as np
 
-    from transformers import (PretrainedConfig, PreTrainedModel,
+    from transformers import (AdaptiveEmbedding, PretrainedConfig, PreTrainedModel,
                                     BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
@@ -468,9 +468,15 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
-                model.get_input_embeddings()
+                self.assertIsInstance(
+                    model.get_input_embeddings(),
+                    (torch.nn.Embedding, AdaptiveEmbedding)
+                )
                 model.set_input_embeddings(torch.nn.Embedding(10, 10))
-                model.get_output_embeddings()
+                x = model.get_output_embeddings()
+                self.assertTrue(
+                    x is None or isinstance(x, torch.nn.Linear)
+                )
 
         def test_tie_model_weights(self):
             if not self.test_torchscript:
