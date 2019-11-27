@@ -119,6 +119,10 @@ flags.DEFINE_float(
     "adam_epsilon", 1e-8,
     "Epsilon for Adam optimizer.")
 
+flags.DEFINE_float(
+    "max_grad_norm", 1.0,
+    "Max gradient norm.")
+
 flags.DEFINE_integer(
     "num_train_epochs", 3,
     "Total number of training epochs to perform.")
@@ -184,6 +188,7 @@ def train(args, strategy, train_dataset, model, train_number_examples, num_label
                 loss = tf.reduce_sum(cross_entropy) * (1.0 / batch_size)
 
             grads = tape.gradient(loss, model.trainable_variables)
+            grads = [(tf.clip_by_value(grad, -1.0, args['max_grad_norm'])) for grad in grads]
 
             optimizer.apply_gradients(list(zip(grads, model.trainable_variables)))
 
