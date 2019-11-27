@@ -513,6 +513,8 @@ class PreTrainedTokenizer(object):
         to_add_tokens = []
         for token in new_tokens:
             assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))
+            if self.init_kwargs.get('do_lower_case', False):
+                token = token.lower()
             if token != self.unk_token and \
                     self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token) and \
                     token not in to_add_tokens:
@@ -606,6 +608,9 @@ class PreTrainedTokenizer(object):
 
             Take care of added tokens.
         """
+        if self.init_kwargs.get('do_lower_case', False):
+            text = text.lower()
+
         def split_on_token(tok, text):
             result = []
             split_text = text.split(tok)
