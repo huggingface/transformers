@@ -3,6 +3,15 @@
 In this section a few examples are put together. All of these examples work for several models, making use of the very
 similar API between the different models.
 
+**Important**  
+To run the latest versions of the examples, you have to install from source. Execute the following steps in a new virtual environment:
+
+```bash
+git clone https://github.com/huggingface/transformers
+cd transformers
+pip install [--editable] .
+```
+
 | Section                    | Description                                                                                                                                                |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [TensorFlow 2.0 models on GLUE](#TensorFlow-2.0-Bert-models-on-GLUE) | Examples running BERT TensorFlow 2.0 model on the GLUE tasks. 
@@ -12,6 +21,7 @@ similar API between the different models.
 | [SQuAD](#squad) | Using BERT/RoBERTa/XLNet/XLM for question answering, examples with distributed training.                                                                                  |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
+| [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
 | [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
 
 ## TensorFlow 2.0 Bert models on GLUE
@@ -590,4 +600,44 @@ python run_summarization_finetuning.py \
     --model_name_or_path=bert2bert \
     --do_train \
     --data_path=$DATA_PATH \
+```
+
+## XNLI
+
+Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/run_xnli.py).
+
+[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-ressource language such as English and low-ressource languages such as Swahili).
+
+#### Fine-tuning on XNLI
+
+This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins
+on a single tesla V100 16GB. The data for XNLI can be downloaded with the following links and should be both saved (and un-zipped) in a 
+`$XNLI_DIR` directory.
+
+* [XNLI 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-1.0.zip)
+* [XNLI-MT 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-MT-1.0.zip)
+
+```bash
+export XNLI_DIR=/path/to/XNLI
+
+python run_xnli.py \
+  --model_type bert \
+  --model_name_or_path bert-base-multilingual-cased \
+  --language de \
+  --train_language en \
+  --do_train \
+  --do_eval \
+  --data_dir $XNLI_DIR \
+  --per_gpu_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 128 \
+  --output_dir /tmp/debug_xnli/ \
+  --save_steps -1
+```
+
+Training with the previously defined hyper-parameters yields the following results on the **test** set:
+
+```bash
+acc = 0.7093812375249501
 ```

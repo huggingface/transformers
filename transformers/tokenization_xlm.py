@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for OpenAI GPT."""
+"""Tokenization classes for XLM."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -758,9 +758,9 @@ class XLMTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
+        A XLM sequence has the following format:
             single sequence: <s> X </s>
-            pair of sequences: <s> A </s></s> B </s>
+            pair of sequences: <s> A </s> B </s>
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
