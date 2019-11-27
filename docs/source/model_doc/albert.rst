@@ -50,13 +50,6 @@ ALBERT
     :members:
 
 
-``TFBertForPreTraining``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.TFBertForPreTraining
-    :members:
-
-
 ``TFAlbertForMaskedLM``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
