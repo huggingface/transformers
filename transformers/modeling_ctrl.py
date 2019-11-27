@@ -373,7 +373,7 @@ class CTRLModel(CTRLPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids)
         # inputs_embeds = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
-        seq_len = input_shape.shape[-1]
+        seq_len = input_shape[-1]
         mask = torch.triu(torch.ones(seq_len + past_length, seq_len + past_length), 1).to(inputs_embeds.device)
 
         inputs_embeds *= np.sqrt(self.d_model_size)
