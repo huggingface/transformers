@@ -18,19 +18,17 @@ Schedules
 Learning Rate Schedules
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: transformers.ConstantLRSchedule
-    :members:
+.. autofunction:: transformers.get_constant_schedule
 
 
-.. autoclass:: transformers.WarmupConstantSchedule
-    :members:
+.. autofunction:: transformers.get_constant_schedule_with_warmup
 
 .. image:: /imgs/warmup_constant_schedule.png
     :target: /imgs/warmup_constant_schedule.png
     :alt:
 
 
-.. autoclass:: transformers.WarmupCosineSchedule
+.. autofunction:: transformers.get_cosine_schedule_with_warmup
     :members:
 
 .. image:: /imgs/warmup_cosine_schedule.png
@@ -38,8 +36,7 @@ Learning Rate Schedules
     :alt:
 
 
-.. autoclass:: transformers.WarmupCosineWithHardRestartsSchedule
-    :members:
+.. autofunction:: transformers.get_cosine_with_hard_restarts_schedule_with_warmup
 
 .. image:: /imgs/warmup_cosine_hard_restarts_schedule.png
     :target: /imgs/warmup_cosine_hard_restarts_schedule.png
@@ -47,8 +44,7 @@ Learning Rate Schedules
 
 
 
-.. autoclass:: transformers.WarmupLinearSchedule
-    :members:
+.. autofunction:: transformers.get_linear_schedule_with_warmup
 
 .. image:: /imgs/warmup_linear_schedule.png
     :target: /imgs/warmup_linear_schedule.png

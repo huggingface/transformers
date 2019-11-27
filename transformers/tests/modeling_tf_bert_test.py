@@ -131,10 +131,6 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
         def create_and_check_bert_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = TFBertModel(config=config)
-            # inputs = {'input_ids': input_ids,
-            #           'attention_mask': input_mask,
-            #           'token_type_ids': token_type_ids}
-            # sequence_output, pooled_output = model(**inputs)
             inputs = {'input_ids': input_ids,
                       'attention_mask': input_mask,
                       'token_type_ids': token_type_ids}
