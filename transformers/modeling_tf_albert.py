@@ -645,7 +645,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.shape
+            input_shape = tf.shape(input_ids)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.shape[:-1]
         else:
