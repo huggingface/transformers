@@ -106,7 +106,7 @@ This section explain how you can save and re-load a fine-tuned model (BERT, GPT,
 There are three types of files you need to save to be able to reload a fine-tuned model:
 
 
-* the model it-self which should be saved following PyTorch serialization `best practices <https://pytorch.org/docs/stable/notes/serialization.html#best-practices>`__\ ,
+* the model itself which should be saved following PyTorch serialization `best practices <https://pytorch.org/docs/stable/notes/serialization.html#best-practices>`__\ ,
 * the configuration file of the model which is saved as a JSON file, and
 * the vocabulary (and the merges for the BPE-based models GPT and GPT-2).
 

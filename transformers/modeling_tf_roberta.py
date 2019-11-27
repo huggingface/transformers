@@ -48,13 +48,17 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
 
     def _embedding(self, inputs, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids = inputs
+        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
 
-        seq_length = tf.shape(input_ids)[1]
+        if input_ids is not None:
+            seq_length = tf.shape(input_ids)[1]
+        else:
+            seq_length = tf.shape(inputs_embeds)[1]
+
         if position_ids is None:
             position_ids = tf.range(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=tf.int32)[tf.newaxis, :]
 
-        return super(TFRobertaEmbeddings, self)._embedding([input_ids, position_ids, token_type_ids], training=training)
+        return super(TFRobertaEmbeddings, self)._embedding([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
 
 
 class TFRobertaMainLayer(TFBertMainLayer):
@@ -64,6 +68,9 @@ class TFRobertaMainLayer(TFBertMainLayer):
     def __init__(self, config, **kwargs):
         super(TFRobertaMainLayer, self).__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name='embeddings')
+
+    def get_input_embeddings(self):
+        return self.embeddings
 
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
@@ -157,6 +164,10 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare RoBERTa Model transformer outputing raw hidden-states without any specific head on top.",
@@ -275,6 +286,9 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
 
         self.roberta = TFRobertaMainLayer(config, name="roberta")
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
+
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
 
     def call(self, inputs, **kwargs):
         outputs = self.roberta(inputs, **kwargs)

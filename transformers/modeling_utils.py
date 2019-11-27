@@ -53,7 +53,7 @@ class PreTrainedModel(nn.Module):
     r""" Base class for all models.
 
         :class:`~transformers.PreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
-        as well as a few methods commons to all models to (i) resize the input embeddings and (ii) prune heads in the self-attention heads.
+        as well as a few methods common to all models to (i) resize the input embeddings and (ii) prune heads in the self-attention heads.
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
@@ -238,7 +238,7 @@ class PreTrainedModel(nn.Module):
         """
         assert os.path.isdir(save_directory), "Saving path should be a directory where the model and configuration can be saved"
 
-        # Only save the model it-self if we are using distributed training
+        # Only save the model itself if we are using distributed training
         model_to_save = self.module if hasattr(self, 'module') else self
 
         # Save configuration file
@@ -291,6 +291,9 @@ class PreTrainedModel(nn.Module):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -315,11 +318,16 @@ class PreTrainedModel(nn.Module):
             model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
+        if "albert" in pretrained_model_name_or_path and "v2" in pretrained_model_name_or_path:
+            logger.warning("There is currently an upstream reproducibility issue with ALBERT v2 models. Please see " +
+                           "https://github.com/google-research/google-research/issues/119 for more information.")
+
         config = kwargs.pop('config', None)
         state_dict = kwargs.pop('state_dict', None)
         cache_dir = kwargs.pop('cache_dir', None)
         from_tf = kwargs.pop('from_tf', False)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
         output_loading_info = kwargs.pop('output_loading_info', False)
 
@@ -329,6 +337,7 @@ class PreTrainedModel(nn.Module):
                 pretrained_model_name_or_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
+                resume_download=resume_download,
                 proxies=proxies,
                 **kwargs
             )
@@ -361,7 +370,8 @@ class PreTrainedModel(nn.Module):
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
+                                                    proxies=proxies, resume_download=resume_download)
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                     msg = "Couldn't reach server at '{}' to download pretrained weights.".format(
