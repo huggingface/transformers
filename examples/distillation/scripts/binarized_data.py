@@ -16,17 +16,25 @@
 Preprocessing script before distillation.
 """
 import argparse
+import logging
+import os
 import pickle
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
+from itertools import repeat
+
 import numpy as np
-from transformers import BertTokenizer, RobertaTokenizer, GPT2Tokenizer
-import logging
+from transformers import BertTokenizer, GPT2Tokenizer, RobertaTokenizer
+# from tqdm import tqdm
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
+
+def encode(tokenizer, text):
+    return tokenizer.encode(text, add_special_tokens=False)
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess the data to avoid re-doing it several times by (tokenization + token_to_ids).")
@@ -55,37 +63,29 @@ def main():
         sep = tokenizer.special_tokens_map['eos_token'] # `<|endoftext|>`    
 
     logger.info(f'Loading text from {args.file_path}')
-    with open(args.file_path, 'r', encoding='utf8') as fp:
-        data = fp.readlines()
-
+    data = []
+    with open(args.file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            data.append(f'{bos} {line.strip()} {sep}')
 
     logger.info(f'Start encoding')
     logger.info(f'{len(data)} examples to process.')
 
-    rslt = []
-    iter = 0
-    interval = 10000
-    start = time.time()
-    for text in data:
-        text = f'{bos} {text.strip()} {sep}'
-        token_ids = tokenizer.encode(text, add_special_tokens=False)
-        rslt.append(token_ids)
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        rslt = executor.map(encode, repeat(tokenizer), data)
+        # rslt = list(tqdm(executor.map(encode, repeat(tokenizer), data), total=len(data), desc='Encoding examples...'))
 
-        iter += 1
-        if iter % interval == 0:
-            end = time.time()
-            logger.info(f'{iter} examples processed. - {(end-start)/interval:.2f}s/expl')
-            start = time.time()
-    logger.info('Finished binarization')
-    logger.info(f'{len(data)} examples processed.')
+        logger.info('Finished binarization')
+        logger.info(f'{len(data)} examples processed.')
 
-
-    dp_file = f'{args.dump_file}.{args.tokenizer_name}.pickle'
-    rslt_ = [np.uint16(d) for d in rslt]
-    random.shuffle(rslt_)
-    logger.info(f'Dump to {dp_file}')
-    with open(dp_file, 'wb') as handle:
-        pickle.dump(rslt_, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        rslt_ = executor.map(np.uint16, rslt)
+        # rslt_ = list(tqdm(executor.map(np.uint16, rslt), total=len(rslt), desc='Converting examples...'))
+        
+        random.shuffle(rslt_)
+        
+        dp_file = f'{args.dump_file}.{args.tokenizer_name}.pickle'
+        logger.info(f'Dump to {dp_file}')
+        pickle.dump(rslt_, open(dp_file, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":
