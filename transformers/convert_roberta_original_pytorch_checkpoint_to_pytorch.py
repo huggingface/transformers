@@ -20,6 +20,7 @@ import argparse
 import logging
 import numpy as np
 import torch
+import pathlib
 
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
@@ -79,15 +80,18 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         ### self attention
         self_attn: BertSelfAttention = layer.attention.self
         assert(
-            roberta_layer.self_attn.in_proj_weight.shape == torch.Size((3 * config.hidden_size, config.hidden_size))
+            roberta_layer.self_attn.k_proj.weight.data.shape == \
+            roberta_layer.self_attn.q_proj.weight.data.shape == \
+            roberta_layer.self_attn.v_proj.weight.data.shape == \
+            torch.Size((config.hidden_size, config.hidden_size))
         )
-        # we use three distinct linear layers so we split the source layer here.
-        self_attn.query.weight.data = roberta_layer.self_attn.in_proj_weight[:config.hidden_size, :]
-        self_attn.query.bias.data = roberta_layer.self_attn.in_proj_bias[:config.hidden_size]
-        self_attn.key.weight.data = roberta_layer.self_attn.in_proj_weight[config.hidden_size:2*config.hidden_size, :]
-        self_attn.key.bias.data = roberta_layer.self_attn.in_proj_bias[config.hidden_size:2*config.hidden_size]
-        self_attn.value.weight.data = roberta_layer.self_attn.in_proj_weight[2*config.hidden_size:, :]
-        self_attn.value.bias.data = roberta_layer.self_attn.in_proj_bias[2*config.hidden_size:]
+
+        self_attn.query.weight.data = roberta_layer.self_attn.q_proj.weight
+        self_attn.query.bias.data = roberta_layer.self_attn.q_proj.bias
+        self_attn.key.weight.data = roberta_layer.self_attn.k_proj.weight
+        self_attn.key.bias.data = roberta_layer.self_attn.k_proj.bias
+        self_attn.value.weight.data = roberta_layer.self_attn.v_proj.weight
+        self_attn.value.bias.data = roberta_layer.self_attn.v_proj.bias
 
         ### self-attention output
         self_output: BertSelfOutput = layer.attention.output
@@ -151,6 +155,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
     if not success:
         raise Exception("Something went wRoNg")
 
+    pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
