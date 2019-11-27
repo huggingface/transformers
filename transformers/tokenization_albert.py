@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2018 Google AI, Google Brain and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,46 +12,48 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for XLNet model."""
+""" Tokenization classes for ALBERT model."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from .tokenization_utils import PreTrainedTokenizer
 import logging
+import unicodedata
+import six
 import os
 from shutil import copyfile
 
-import unicodedata
-import six
-
-from .tokenization_utils import PreTrainedTokenizer
-
 logger = logging.getLogger(__name__)
-
 VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
-    'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-spiece.model",
-    'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-spiece.model",
+        'albert-base-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-spiece.model",
+        'albert-large-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-spiece.model",
+        'albert-xlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-spiece.model",
+        'albert-xxlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-spiece.model",
+        'albert-base-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-spiece.model",
+        'albert-large-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-spiece.model",
+        'albert-xlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-spiece.model",
+        'albert-xxlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'xlnet-base-cased': None,
-    'xlnet-large-cased': None,
+    'albert-base-v1': 512,
+    'albert-large-v1': 512,
+    'albert-xlarge-v1': 512,
+    'albert-xxlarge-v1': 512,
+    'albert-base-v2': 512,
+    'albert-large-v2': 512,
+    'albert-xlarge-v2': 512,
+    'albert-xxlarge-v2': 512,
 }
 
 SPIECE_UNDERLINE = u'▁'
 
-# Segments (not really needed)
-SEG_ID_A   = 0
-SEG_ID_B   = 1
-SEG_ID_CLS = 2
-SEG_ID_SEP = 3
-SEG_ID_PAD = 4
-
-class XLNetTokenizer(PreTrainedTokenizer):
+class AlbertTokenizer(PreTrainedTokenizer):
     """
         SentencePiece based tokenizer. Peculiarities:
 
@@ -62,15 +64,13 @@ class XLNetTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file,
-                 do_lower_case=False, remove_space=True, keep_accents=False,
-                 bos_token="<s>", eos_token="</s>", unk_token="<unk>", sep_token="<sep>",
-                 pad_token="<pad>", cls_token="<cls>", mask_token="<mask>",
-                 additional_special_tokens=["<eop>", "<eod>"], **kwargs):
-        super(XLNetTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token,
+                 do_lower_case=True, remove_space=True, keep_accents=False,
+                 bos_token="[CLS]", eos_token="[SEP]", unk_token="<unk>", sep_token="[SEP]",
+                 pad_token="<pad>", cls_token="[CLS]", mask_token="[MASK]>", **kwargs):
+        super(AlbertTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token,
                                              unk_token=unk_token, sep_token=sep_token,
                                              pad_token=pad_token, cls_token=cls_token,
-                                             mask_token=mask_token, additional_special_tokens=
-                                             additional_special_tokens, **kwargs)
+                                             mask_token=mask_token, **kwargs)
 
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
@@ -78,7 +78,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         try:
             import sentencepiece as spm
         except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+            logger.warning("You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
                            "pip install sentencepiece")
 
         self.do_lower_case = do_lower_case
@@ -103,7 +103,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         try:
             import sentencepiece as spm
         except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+            logger.warning("You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
                            "pip install sentencepiece")
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
@@ -185,15 +185,15 @@ class XLNetTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        An XLNet sequence has the following format:
-            single sequence: X <sep> <cls>
-            pair of sequences: A <sep> B <sep> <cls>
+        An ALBERT sequence has the following format:
+            single sequence: [CLS] X [SEP]
+            pair of sequences: [CLS] A [SEP] B [SEP]
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
         if token_ids_1 is None:
-            return token_ids_0 + sep + cls
-        return token_ids_0 + sep + token_ids_1 + sep + cls
+            return cls + token_ids_0 + sep
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
         """
@@ -208,7 +208,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 special tokens for the model
 
         Returns:
-            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -218,25 +218,24 @@ class XLNetTokenizer(PreTrainedTokenizer):
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is not None:
-            return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1, 1]
-        return ([0] * len(token_ids_0)) + [1, 1]
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        An XLNet sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 2
-        | first sequence    | second sequence     | CLS segment ID
+        An ALBERT sequence pair mask has the following format:
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 
+        | first sequence    | second sequence     
         
         if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
-        cls_segment_id = [2]
 
         if token_ids_1 is None:
-            return len(token_ids_0 + sep + cls) * [0]
-        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file

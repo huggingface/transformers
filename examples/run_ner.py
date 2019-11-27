@@ -37,6 +37,7 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
 from transformers import DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer
+from transformers import CamembertConfig, CamembertForTokenClassification, CamembertTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,8 @@ ALL_MODELS = sum(
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
     "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer)
+    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
+    "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
 }
 
 
@@ -125,7 +127,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                       "attention_mask": batch[1],
                       "labels": batch[3]}
             if args.model_type != "distilbert":
-                inputs["token_type_ids"]: batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
+                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
 
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -215,7 +217,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
                       "attention_mask": batch[1],
                       "labels": batch[3]}
             if args.model_type != "distilbert":
-                inputs["token_type_ids"]: batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
+                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
             outputs = model(**inputs)
             tmp_eval_loss, logits = outputs[:2]
 
