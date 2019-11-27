@@ -7,7 +7,7 @@ similar API between the different models.
 To run the latest versions of the examples, you have to install from source. Execute the following steps in a new virtual environment:
 
 ```bash
-git clone git@github.com:huggingface/transformers
+git clone https://github.com/huggingface/transformers
 cd transformers
 pip install [--editable] .
 ```

@@ -92,7 +92,7 @@ Examples are included in the repository but are not shipped with the library.
 Therefore, in order to run the latest versions of the examples you also need to install from source. To do so, create a new virtual environment and follow these steps:
 
 ```bash
-git clone git@github.com:huggingface/transformers
+git clone https://github.com/huggingface/transformers
 cd transformers
 pip install [--editable] .
 ```
