@@ -27,6 +27,7 @@ from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassi
 from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering
 from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification
 from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification
+from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
@@ -48,6 +49,7 @@ class AutoModel(object):
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertModel (DistilBERT model)
+            - contains `camembert`: CamembertModel (CamemBERT model)
             - contains `roberta`: RobertaModel (RoBERTa model)
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
@@ -71,6 +73,7 @@ class AutoModel(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertModel (DistilBERT model)
+            - contains `camembert`: CamembertModel (CamemBERT model)
             - contains `roberta`: RobertaModel (RoBERTa model)
             - contains `bert`: BertModel (Bert model)
             - contains `openai-gpt`: OpenAIGPTModel (OpenAI GPT model)
@@ -112,6 +115,9 @@ class AutoModel(object):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -138,6 +144,8 @@ class AutoModel(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'camembert' in pretrained_model_name_or_path:
+            return CamembertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -172,6 +180,7 @@ class AutoModelWithLMHead(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
+            - contains `camembert`: CamembertForMaskedLM (CamemBERT model)
             - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
             - contains `bert`: BertForMaskedLM (Bert model)
             - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
@@ -198,6 +207,7 @@ class AutoModelWithLMHead(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
+            - contains `camembert`: CamembertForMaskedLM (CamemBERT model)
             - contains `roberta`: RobertaForMaskedLM (RoBERTa model)
             - contains `bert`: BertForMaskedLM (Bert model)
             - contains `openai-gpt`: OpenAIGPTLMHeadModel (OpenAI GPT model)
@@ -237,6 +247,8 @@ class AutoModelWithLMHead(object):
 
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
@@ -264,6 +276,8 @@ class AutoModelWithLMHead(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'camembert' in pretrained_model_name_or_path:
+            return CamembertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -298,6 +312,7 @@ class AutoModelForSequenceClassification(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForSequenceClassification (DistilBERT model)
+            - contains `camembert`: CamembertForSequenceClassification (CamemBERT model)
             - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: BertForSequenceClassification (Bert model)
             - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
@@ -320,6 +335,7 @@ class AutoModelForSequenceClassification(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertForSequenceClassification (DistilBERT model)
+            - contains `camembert`: CamembertForSequenceClassification (CamemBERT model)
             - contains `roberta`: RobertaForSequenceClassification (RoBERTa model)
             - contains `bert`: BertForSequenceClassification (Bert model)
             - contains `xlnet`: XLNetForSequenceClassification (XLNet model)
@@ -357,6 +373,9 @@ class AutoModelForSequenceClassification(object):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -383,6 +402,8 @@ class AutoModelForSequenceClassification(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'camembert' in pretrained_model_name_or_path:
+            return CamembertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
