@@ -27,6 +27,7 @@ from .configuration_xlm import XLMConfig
 from .configuration_roberta import RobertaConfig
 from .configuration_distilbert import DistilBertConfig
 from .configuration_ctrl import CTRLConfig
+from .configuration_camembert import CamembertConfig
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class AutoConfig(object):
             - contains `xlnet`: XLNetConfig (XLNet model)
             - contains `xlm`: XLMConfig (XLM model)
             - contains `roberta`: RobertaConfig (RoBERTa model)
+            - contains `camembert`: CamembertConfig (CamemBERT model)
             - contains `ctrl` : CTRLConfig (CTRL model)
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -72,6 +74,7 @@ class AutoConfig(object):
             - contains `xlnet`: XLNetConfig (XLNet model)
             - contains `xlm`: XLMConfig (XLM model)
             - contains `roberta`: RobertaConfig (RoBERTa model)
+            - contains `camembert`: CamembertConfig (CamemBERT model)
             - contains `ctrl` : CTRLConfig (CTRL model)
         Params:
             pretrained_model_name_or_path: either:
@@ -91,6 +94,9 @@ class AutoConfig(object):
 
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
@@ -116,6 +122,8 @@ class AutoConfig(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif 'camembert' in pretrained_model_name_or_path:
+            return CamembertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -134,4 +142,4 @@ class AutoConfig(object):
             return CTRLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta', 'camembert', 'ctrl'".format(pretrained_model_name_or_path))

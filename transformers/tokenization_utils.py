@@ -21,6 +21,7 @@ import os
 import json
 import six
 import copy
+import itertools
 from io import open
 
 from .file_utils import cached_path, is_tf_available, is_torch_available
@@ -251,6 +252,9 @@ class PreTrainedTokenizer(object):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the vocabulary files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -286,6 +290,7 @@ class PreTrainedTokenizer(object):
     def _from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
         cache_dir = kwargs.pop('cache_dir', None)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
@@ -352,7 +357,7 @@ class PreTrainedTokenizer(object):
                 if file_path is None:
                     resolved_vocab_files[file_id] = None
                 else:
-                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                    resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir, force_download=force_download, proxies=proxies, resume_download=resume_download)
         except EnvironmentError:
             if pretrained_model_name_or_path in s3_models:
                 msg = "Couldn't reach server at '{}' to download vocabulary files."
@@ -512,6 +517,8 @@ class PreTrainedTokenizer(object):
         to_add_tokens = []
         for token in new_tokens:
             assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))
+            if self.init_kwargs.get('do_lower_case', False):
+                token = token.lower()
             if token != self.unk_token and \
                     self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token) and \
                     token not in to_add_tokens:
@@ -605,6 +612,9 @@ class PreTrainedTokenizer(object):
 
             Take care of added tokens.
         """
+        if self.init_kwargs.get('do_lower_case', False):
+            text = text.lower()
+
         def split_on_token(tok, text):
             result = []
             split_text = text.split(tok)
@@ -641,9 +651,9 @@ class PreTrainedTokenizer(object):
                         tokenized_text += [sub_text]
                 text_list = tokenized_text
 
-            return sum((self._tokenize(token, **kwargs) if token not \
+            return list(itertools.chain.from_iterable((self._tokenize(token, **kwargs) if token not \
                     in self.added_tokens_encoder and token not in self.all_special_tokens \
-                    else [token] for token in tokenized_text), [])
+                    else [token] for token in tokenized_text)))
 
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
@@ -671,10 +681,6 @@ class PreTrainedTokenizer(object):
         ids = []
         for token in tokens:
             ids.append(self._convert_token_to_id_with_added_voc(token))
-        if len(ids) > self.max_len:
-            logger.warning("Token indices sequence length is longer than the specified maximum sequence length "
-                           "for this model ({} > {}). Running this sequence through the model will result in "
-                           "indexing errors".format(len(ids), self.max_len))
         return ids
 
     def _convert_token_to_id_with_added_voc(self, token):
@@ -744,6 +750,9 @@ class PreTrainedTokenizer(object):
                     stride=0,
                     truncation_strategy='longest_first',
                     return_tensors=None,
+                    return_token_type_ids=True,
+                    return_overflowing_tokens=False,
+                    return_special_tokens_mask=False,
                     **kwargs):
         """
         Returns a dictionary containing the encoded sequence or sequence pair and additional informations:
@@ -770,7 +779,30 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
+            return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
+            return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
+            return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
             **kwargs: passed to the `self.tokenize()` method
+
+        Return:
+            A Dictionary of shape::
+
+                {
+                    input_ids: list[int],
+                    token_type_ids: list[int] if return_token_type_ids is True (default)
+                    overflowing_tokens: list[int] if a ``max_length`` is specified and return_overflowing_tokens is True
+                    num_truncated_tokens: int if a ``max_length`` is specified and return_overflowing_tokens is True
+                    special_tokens_mask: list[int] if ``add_special_tokens`` if set to ``True`` and return_special_tokens_mask is True
+                }
+
+            With the fields:
+                ``input_ids``: list of token ids to be fed to a model
+                ``token_type_ids``: list of token type ids to be fed to a model
+
+                ``overflowing_tokens``: list of overflowing tokens if a max length is specified.
+                ``num_truncated_tokens``: number of overflowing tokens a ``max_length`` is specified
+                ``special_tokens_mask``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
+                tokens and 1 specifying sequence tokens.
         """
 
         def get_input_ids(text):
@@ -792,10 +824,17 @@ class PreTrainedTokenizer(object):
                                       add_special_tokens=add_special_tokens,
                                       stride=stride,
                                       truncation_strategy=truncation_strategy,
-                                      return_tensors=return_tensors)
+                                      return_tensors=return_tensors,
+                                      return_token_type_ids=return_token_type_ids,
+                                      return_overflowing_tokens=return_overflowing_tokens,
+                                      return_special_tokens_mask=return_special_tokens_mask)
 
     def prepare_for_model(self, ids, pair_ids=None, max_length=None, add_special_tokens=True, stride=0,
-                          truncation_strategy='longest_first', return_tensors=None):
+                          truncation_strategy='longest_first',
+                          return_tensors=None,
+                          return_token_type_ids=True,
+                          return_overflowing_tokens=False,
+                          return_special_tokens_mask=False):
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
         It adds special tokens, truncates
@@ -820,21 +859,27 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
+            return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
+            return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
+            return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
 
         Return:
             A Dictionary of shape::
 
                 {
                     input_ids: list[int],
-                    overflowing_tokens: list[int] if a ``max_length`` is specified, else None
-                    special_tokens_mask: list[int] if ``add_special_tokens`` if set to ``True``
+                    token_type_ids: list[int] if return_token_type_ids is True (default)
+                    overflowing_tokens: list[int] if a ``max_length`` is specified and return_overflowing_tokens is True
+                    num_truncated_tokens: int if a ``max_length`` is specified and return_overflowing_tokens is True
+                    special_tokens_mask: list[int] if ``add_special_tokens`` if set to ``True`` and return_special_tokens_mask is True
                 }
 
             With the fields:
-                ``input_ids``: list of tokens to be fed to a model
+                ``input_ids``: list of token ids to be fed to a model
+                ``token_type_ids``: list of token type ids to be fed to a model
 
                 ``overflowing_tokens``: list of overflowing tokens if a max length is specified.
-
+                ``num_truncated_tokens``: number of overflowing tokens a ``max_length`` is specified
                 ``special_tokens_mask``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
                 tokens and 1 specifying sequence tokens.
         """
@@ -843,23 +888,31 @@ class PreTrainedTokenizer(object):
         len_pair_ids = len(pair_ids) if pair else 0
 
         encoded_inputs = {}
+
+        # Handle max sequence length
         total_len = len_ids + len_pair_ids + (self.num_added_tokens(pair=pair) if add_special_tokens else 0)
         if max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(ids, pair_ids=pair_ids,
                                                                         num_tokens_to_remove=total_len-max_length,
                                                                         truncation_strategy=truncation_strategy,
                                                                         stride=stride)
-            encoded_inputs["overflowing_tokens"] = overflowing_tokens
-            encoded_inputs["num_truncated_tokens"] = total_len - max_length
+            if return_overflowing_tokens:
+                encoded_inputs["overflowing_tokens"] = overflowing_tokens
+                encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
+        # Handle special_tokens
         if add_special_tokens:
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
-            encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+            special_tokens_mask = self.get_special_tokens_mask(ids, pair_ids)
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
+            special_tokens_mask = [0] * (len(ids) + (len(pair_ids) if pair else 0))
+        if return_special_tokens_mask:
+            encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
 
+        # Prepare inputs as tensors if asked
         if return_tensors == 'tf' and is_tf_available():
             sequence = tf.constant([sequence])
             token_type_ids = tf.constant([token_type_ids])
@@ -870,13 +923,21 @@ class PreTrainedTokenizer(object):
             logger.warning("Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(return_tensors))
 
         encoded_inputs["input_ids"] = sequence
-        encoded_inputs["token_type_ids"] = token_type_ids
+        if return_token_type_ids:
+            encoded_inputs["token_type_ids"] = token_type_ids
 
         if max_length and len(encoded_inputs["input_ids"]) > max_length:
             encoded_inputs["input_ids"] = encoded_inputs["input_ids"][:max_length]
-            encoded_inputs["token_type_ids"] = encoded_inputs["token_type_ids"][:max_length]
-            encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"][:max_length]
+            if return_token_type_ids:
+                encoded_inputs["token_type_ids"] = encoded_inputs["token_type_ids"][:max_length]
+            if return_special_tokens_mask:
+                encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"][:max_length]
 
+        if max_length is None and len(encoded_inputs["input_ids"]) > self.max_len:
+            logger.warning("Token indices sequence length is longer than the specified maximum sequence length "
+                           "for this model ({} > {}). Running this sequence through the model will result in "
+                           "indexing errors".format(len(ids), self.max_len))
+                           
         return encoded_inputs
 
     def truncate_sequences(self, ids, pair_ids=None, num_tokens_to_remove=0, truncation_strategy='longest_first', stride=0):
@@ -951,7 +1012,7 @@ class PreTrainedTokenizer(object):
                 special tokens for the model
 
         Returns:
-            A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
@@ -1055,7 +1116,7 @@ class PreTrainedTokenizer(object):
             class attributes (cls_token, unk_token...).
         """
         all_toks = self.all_special_tokens
-        all_ids = list(self._convert_token_to_id(t) for t in all_toks)
+        all_ids = self.convert_tokens_to_ids(all_toks)
         return all_ids
 
     @staticmethod

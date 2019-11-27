@@ -7,7 +7,7 @@ The library is designed to incorporate a variety of models and code bases. As su
 One important point though is that the library has the following goals impacting the way models are incorporated:
 
 - one specific feature of the API is the capability to run the model and tokenizer inline. The tokenization code thus often have to be slightly adapted to allow for running in the python interpreter.
-- the package is also designed to be as self-consistent and with a small and reliable set of packages dependencies. In consequence, additional dependencies are usually not allowed when adding a model but can be allowed for the inclusion of a new tokenizer (recent examples of dependencies added for tokenizer specificites includes `sentencepiece` and `sacremoses`). Please make sure to check the existing dependencies when possible before adding a new one.
+- the package is also designed to be as self-consistent and with a small and reliable set of packages dependencies. In consequence, additional dependencies are usually not allowed when adding a model but can be allowed for the inclusion of a new tokenizer (recent examples of dependencies added for tokenizer specificities include `sentencepiece` and `sacremoses`). Please make sure to check the existing dependencies when possible before adding a new one.
 
 For a quick overview of the library organization, please check the [QuickStart section of the documentation](https://huggingface.co/transformers/quickstart.html).
 
@@ -20,7 +20,7 @@ Here an overview of the general workflow:
 - [ ] add tests
 - [ ] finalize
 
-Let's details what should be done at each step
+Let's detail what should be done at each step
 
 ## Adding model/configuration/tokenization classes
 
@@ -28,16 +28,16 @@ Here is the workflow for adding model/configuration/tokenization classes:
 
 - [ ] copy the python files from the present folder to the main folder and rename them, replacing `xxx` with your model name,
 - [ ] edit the files to replace `XXX` (with various casing) with your model name
-- [ ] copy-past or create a simple configuration class for your model in the `configuration_...` file
-- [ ] copy-past or create the code for your model in the `modeling_...` files (PyTorch and TF 2.0)
-- [ ] copy-past or create a tokenizer class for your model in the `tokenization_...` file
+- [ ] copy-paste or create a simple configuration class for your model in the `configuration_...` file
+- [ ] copy-paste or create the code for your model in the `modeling_...` files (PyTorch and TF 2.0)
+- [ ] copy-paste or create a tokenizer class for your model in the `tokenization_...` file
 
 # Adding conversion scripts
 
 Here is the workflow for the conversion scripts:
 
 - [ ] copy the conversion script (`convert_...`) from the present folder to the main folder.
-- [ ] edit this scipt to convert your original checkpoint weights to the current pytorch ones.
+- [ ] edit this script to convert your original checkpoint weights to the current pytorch ones.
 
 # Adding tests:
 
@@ -58,5 +58,5 @@ You can then finish the addition step by adding imports for your classes in the 
 - [ ] add your models and tokenizer to `pipeline.py`
 - [ ] add a link to your conversion script in the main conversion utility (currently in `__main__` but will be moved to the `commands` subfolder in the near future)
 - [ ] edit the PyTorch to TF 2.0 conversion script to add your model in the `convert_pytorch_checkpoint_to_tf2.py` file
-- [ ] add a mention of your model in the doc: `README.md` and the documentation it-self at `docs/source/pretrained_models.rst`.
+- [ ] add a mention of your model in the doc: `README.md` and the documentation itself at `docs/source/pretrained_models.rst`.
 - [ ] upload the pretrained weigths, configurations and vocabulary files.

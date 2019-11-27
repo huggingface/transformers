@@ -47,6 +47,9 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
 6. `XLM <https://github.com/facebookresearch/XLM>`_ (from Facebook) released together with the paper `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_ by Guillaume Lample and Alexis Conneau.
 7. `RoBERTa <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_ (from Facebook), released together with the paper a `Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_ by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
 8. `DistilBERT <https://huggingface.co/transformers/model_doc/distilbert.html>`_ (from HuggingFace) released together with the paper `DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`_ by Victor Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into `DistilGPT2 <https://github.com/huggingface/transformers/tree/master/examples/distillation>`_.
+9. `CTRL <https://github.com/pytorch/fairseq/tree/master/examples/ctrl>`_ (from Salesforce), released together with the paper `CTRL: A Conditional Transformer Language Model for Controllable Generation <https://www.github.com/salesforce/ctrl>`_ by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
+10. `CamemBERT <https://huggingface.co/transformers/model_doc/camembert.html>`_ (from FAIR, Inria, Sorbonne Université) released together with the paper `CamemBERT: a Tasty French Language Model <https://arxiv.org/abs/1911.03894>`_ by Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suarez, Yoann Dupont, Laurent Romary, Eric Villemonte de la Clergerie, Djame Seddah, and Benoît Sagot.
+11. `ALBERT <https://github.com/pytorch/fairseq/tree/master/examples/albert>`_ (from Google Research), released together with the paper a `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations <https://arxiv.org/abs/1909.11942>`_ by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
 
 .. toctree::
     :maxdepth: 2
@@ -89,3 +92,5 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/roberta
     model_doc/distilbert
     model_doc/ctrl
+    model_doc/camembert
+    model_doc/albert

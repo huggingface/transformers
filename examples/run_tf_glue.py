@@ -73,6 +73,8 @@ model.save_pretrained('./save/')
 
 if TASK == "mrpc":
     # Load the TensorFlow model in PyTorch for inspection
+    # This is to demo the interoperability between the two frameworks, you don't have to 
+    # do this in real life (you can run the inference on the TF model).
     pytorch_model = BertForSequenceClassification.from_pretrained('./save/', from_tf=True)
 
     # Quickly test a few predictions - MRPC is a paraphrasing task, let's see if our model learned the task

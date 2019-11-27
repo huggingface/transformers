@@ -46,6 +46,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
         'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
         'gpt2-large': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-vocab.json",
+        'gpt2-xl': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-vocab.json",
         'distilgpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-vocab.json",
     },
     'merges_file':
@@ -53,6 +54,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
         'gpt2-medium': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
         'gpt2-large': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-merges.txt",
+        'gpt2-xl': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-merges.txt",
         'distilgpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-merges.txt",
     },
 }
@@ -61,6 +63,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'gpt2': 1024,
     'gpt2-medium': 1024,
     'gpt2-large': 1024,
+    'gpt2-xl': 1024,
     'distilgpt2': 1024,
 }
 
@@ -104,10 +107,10 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     """
     GPT-2 BPE tokenizer. Peculiarities:
         - Byte-level Byte-Pair-Encoding
-        - Requires a space to start the input string => the encoding methods should be called with the
+        - Requires a space to start the input string => the encoding and tokenize methods should be called with the
           ``add_prefix_space`` flag set to ``True``.
-          Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-          the absence of a space at the beginning of a string: `tokenizer.decode(tokenizer.encode("Hello")) = " Hello"`
+          Otherwise, this tokenizer's ``encode``, ``decode``, and ``tokenize`` methods will not conserve
+          the spaces at the beginning of a string: `tokenizer.decode(tokenizer.encode(" Hello")) = "Hello"`
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -181,7 +184,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         """ Tokenize a string.
             Args:
                 - add_prefix_space (boolean, default False):
-                    Begin the sentence with at least one space toto get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
+                    Begin the sentence with at least one space to get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
         """
         if add_prefix_space:
             text = ' ' + text

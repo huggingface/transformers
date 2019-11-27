@@ -33,12 +33,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
     {
         'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
         'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        'distilbert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'distilbert-base-uncased': 512,
     'distilbert-base-uncased-distilled-squad': 512,
+    'distilbert-base-multilingual-cased': 512,
 }
 
 
