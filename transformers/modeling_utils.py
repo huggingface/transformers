@@ -427,6 +427,8 @@ class PreTrainedModel(nn.Module):
                     new_key = key.replace('gamma', 'weight')
                 if 'beta' in key:
                     new_key = key.replace('beta', 'bias')
+                if key == 'lm_head.decoder.weight':
+                    new_key = 'lm_head.weight'
                 if new_key:
                     old_keys.append(key)
                     new_keys.append(new_key)
