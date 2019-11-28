@@ -16,18 +16,13 @@
 """ TF 2.0 ALBERT model. """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import json
 import logging
-import math
-import os
 import sys
-from io import open
 
-import numpy as np
 import tensorflow as tf
 
 from .configuration_albert import AlbertConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .file_utils import add_start_docstrings
 
@@ -110,9 +105,9 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         input_ids, position_ids, token_type_ids, inputs_embeds = inputs
 
         if input_ids is not None:
-            input_shape = tf.shape(input_ids)
+            input_shape = shape_list(input_ids)
         else:
-            input_shape = tf.shape(inputs_embeds)[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
 
         seq_length = input_shape[1]
         if position_ids is None:
@@ -137,8 +132,8 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
             Returns:
                 float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = tf.shape(inputs)[0]
-        length = tf.shape(inputs)[1]
+        batch_size = shape_list(inputs)[0]
+        length = shape_list(inputs)[1]
         x = tf.reshape(inputs, [-1, self.config.embedding_size])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
         return tf.reshape(logits, [batch_size, length, self.config.vocab_size])
@@ -183,7 +178,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
-        batch_size = tf.shape(hidden_states)[0]
+        batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -196,7 +191,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
         # scale attention_scores
-        dk = tf.cast(tf.shape(key_layer)[-1], tf.float32)
+        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -264,7 +259,7 @@ class TFAlbertAttention(TFBertSelfAttention):
     def call(self, inputs, training=False):
         input_tensor, attention_mask, head_mask = inputs
 
-        batch_size = tf.shape(input_tensor)[0]
+        batch_size = shape_list(input_tensor)[0]
         mixed_query_layer = self.query(input_tensor)
         mixed_key_layer = self.key(input_tensor)
         mixed_value_layer = self.value(input_tensor)
@@ -277,7 +272,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
         # scale attention_scores
-        dk = tf.cast(tf.shape(key_layer)[-1], tf.float32)
+        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -645,9 +640,9 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = tf.shape(input_ids)
+            input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.shape[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
