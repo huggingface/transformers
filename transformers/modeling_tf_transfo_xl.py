@@ -337,7 +337,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                 emb_i = tf.einsum('id,de->ie', emb_i, self.emb_projs[i])
 
                 mask_idx = tf.cast(tf.where(mask_i), dtype=tf.int64)
-                emb_flat += tf.scatter_nd(mask_idx, emb_i, tf.cast(tf.shape(emb_flat), dtype=tf.int64))
+                emb_flat += tf.scatter_nd(mask_idx, emb_i, tf.cast(shape_list(emb_flat), dtype=tf.int64))
 
             embed_shape = shape_list(inp) + [self.d_proj]
             embed = tf.reshape(emb_flat, embed_shape)

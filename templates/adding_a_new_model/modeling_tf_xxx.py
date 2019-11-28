@@ -32,7 +32,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xxx import XxxConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -121,9 +121,9 @@ class TFXxxMainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         if attention_mask is None:
-            attention_mask = tf.fill(tf.shape(input_ids), 1)
+            attention_mask = tf.fill(shape_list(input_ids), 1)
         if token_type_ids is None:
-            token_type_ids = tf.fill(tf.shape(input_ids), 0)
+            token_type_ids = tf.fill(shape_list(input_ids), 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]

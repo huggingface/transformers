@@ -137,9 +137,9 @@ class TFEmbeddings(tf.keras.layers.Layer):
             input_ids, position_ids = inputs
 
         if input_ids is not None:
-            seq_length = tf.shape(input_ids)[1]
+            seq_length = shape_list(input_ids)[1]
         else:
-            seq_length = tf.shape(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[1]
 
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
@@ -160,8 +160,8 @@ class TFEmbeddings(tf.keras.layers.Layer):
             Returns:
                 float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = tf.shape(inputs)[0]
-        length = tf.shape(inputs)[1]
+        batch_size = shape_list(inputs)[0]
+        length = shape_list(inputs)[1]
 
         x = tf.reshape(inputs, [-1, self.dim])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
