@@ -74,26 +74,16 @@ def _is_whitespace(c):
 
 def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
                                        doc_stride, max_query_length, is_training,
-                                       cls_token_at_end=True,
-                                       cls_token='[CLS]', sep_token='[SEP]', pad_token=0,
-                                       sequence_a_segment_id=0, sequence_b_segment_id=1,
-                                       cls_token_segment_id=0, pad_token_segment_id=0,
-                                       mask_padding_with_zero=True,
                                        sequence_a_is_doc=False):
     """Loads a data file into a list of `InputBatch`s."""
-
-    cls_token = tokenizer.cls_token
-    sep_token = tokenizer.sep_token
 
     # Defining helper methods    
     unique_id = 1000000000
 
     features = []
-    new_features = []
     for (example_index, example) in enumerate(tqdm(examples)):
         if is_training and not example.is_impossible:
             # Get start and end position
-            answer_length = len(example.answer_text)
             start_position = example.start_position
             end_position = example.end_position
 
@@ -227,7 +217,7 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
                     end_position = tok_end_position - doc_start + doc_offset
 
 
-            new_features.append(NewSquadFeatures(
+            features.append(NewSquadFeatures(
                 span['input_ids'],
                 span['attention_mask'],
                 span['token_type_ids'],
@@ -247,7 +237,7 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
 
             unique_id += 1
 
-    return new_features
+    return features
 
 
 class SquadProcessor(DataProcessor):
