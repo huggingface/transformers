@@ -128,20 +128,6 @@ def perturb_past(
         decay=False,
         gamma=1.5,
 ):
-    # def perturb_past(past, model, prev, classifier, good_index=None,
-    #             stepsize=0.01, vocab_size=50257,
-    #             original_probs=None, accumulated_hidden=None, true_past=None,
-    #             grad_norms=None):
-
-    # one_hot_bows_vectors = []
-    # for good_list in good_index:
-    #     good_list = list(filter(lambda x: len(x) <= 1, good_list))
-    #     good_list = torch.tensor(good_list).cuda()
-    #     num_good = good_list.shape[0]
-    #     one_hot_good = torch.zeros(num_good, vocab_size).cuda()
-    #     one_hot_good.scatter_(1, good_list, 1)
-    #     one_hot_bows_vectors.append(one_hot_good)
-
     # Generate inital perturbed past
     past_perturb_orig = [
         (np.random.uniform(0.0, 0.0, p.shape).astype('float32'))
