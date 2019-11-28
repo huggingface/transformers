@@ -347,13 +347,6 @@ def get_bag_of_words_indices(bag_of_words_ids_or_paths: List[str]) -> List[
         bow_indices.append(
             [TOKENIZER.encode(word.strip(), add_prefix_space=True) for word in
              words])
-
-    #bow_words = set()
-    #for bow_list in bow_indices:
-    #    bow_list = list(filter(lambda x: len(x) <= 1, bow_list))
-    #    bow_words.update(
-    #        (TOKENIZER.decode(word).strip(), word) for word in bow_list)
-
     return bow_indices
 
 
