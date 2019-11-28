@@ -494,7 +494,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
 def shape_list(x):
     """Deal with dynamic shape in tensorflow cleanly."""
     static = x.shape.as_list()
-    dynamic = shape_list(x)
+    dynamic = tf.shape(x)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 def get_initializer(initializer_range=0.02):
