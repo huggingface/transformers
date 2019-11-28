@@ -112,8 +112,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    @staticmethod
-    def rel_shift(x, klen=-1):
+    def rel_shift(self, x, klen=-1):
         """perform relative shift to form the relative attention score."""
         x_size = shape_list(x)
 
@@ -135,7 +134,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         # position based attention score
         bd = tf.einsum('ibnd,jbnd->ijbn', q_head + self.r_r_bias, k_head_r)
-        bd = self.rel_shift(bd, klen=ac.shape[1])
+        bd = self.rel_shift(bd, klen=shape_list(ac)[1])
 
         # segment based attention score
         if seg_mat is None:
@@ -192,7 +191,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         if g is not None:
             ###### Two-stream attention with relative positional encoding.
             # content based attention score
-            if mems is not None and mems.shape.ndims > 1:
+            if mems is not None and len(shape_list(mems)) > 1:
                 cat = tf.concat([mems, h], axis=0)
             else:
                 cat = h
@@ -252,7 +251,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         else:
             ###### Multi-head attention with relative positional encoding
-            if mems is not None and mems.shape.ndims > 1:
+            if mems is not None and len(shape_list(mems)) > 1:
                 cat = tf.concat([mems, h], axis=0)
             else:
                 cat = h
@@ -565,7 +564,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         if data_mask is not None:
             # all mems can be attended to
-            mems_mask = tf.zeros([tf.shape(data_mask)[0], mlen, bsz],
+            mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz],
                                 dtype=dtype_float)
             data_mask = tf.concat([mems_mask, data_mask], axis=1)
             if attn_mask is None:
@@ -590,7 +589,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k, training=training)
         if target_mapping is not None:
-            word_emb_q = tf.tile(self.mask_emb, [tf.shape(target_mapping)[0], bsz, 1])
+            word_emb_q = tf.tile(self.mask_emb, [shape_list(target_mapping)[0], bsz, 1])
         # else:  # We removed the inp_q input which was same as target mapping
         #     inp_q_ext = inp_q[:, :, None]
         #     word_emb_q = inp_q_ext * self.mask_emb + (1 - inp_q_ext) * word_emb_k

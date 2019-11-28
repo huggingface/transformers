@@ -24,7 +24,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
 
 from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu, gelu_new
@@ -51,9 +51,9 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
         input_ids, position_ids, token_type_ids, inputs_embeds = inputs
 
         if input_ids is not None:
-            seq_length = tf.shape(input_ids)[1]
+            seq_length = shape_list(input_ids)[1]
         else:
-            seq_length = tf.shape(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[1]
 
         if position_ids is None:
             position_ids = tf.range(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=tf.int32)[tf.newaxis, :]

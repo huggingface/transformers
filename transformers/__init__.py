@@ -118,7 +118,7 @@ if is_torch_available():
 
 # TensorFlow
 if is_tf_available():
-    from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary
+    from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
                                    TFAutoModelWithLMHead)
 
