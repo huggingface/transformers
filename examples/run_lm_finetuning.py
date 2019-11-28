@@ -290,8 +290,7 @@ def train(args, train_dataset, model, tokenizer):
 
                     torch.save(optimizer.state_dict(), os.path.join(output_dir, 'optimizer.pt'))
                     torch.save(scheduler.state_dict(), os.path.join(output_dir, 'scheduler.pt'))
-                    torch.save(epoch, os.path.join(output_dir, 'training_state.pt'))
-                    logger.info("Saving training state to %s", output_dir)
+                    logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
