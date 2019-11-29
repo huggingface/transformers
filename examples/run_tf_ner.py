@@ -1,7 +1,7 @@
 # coding=utf-8
 import datetime
 import os
-
+import math
 import tensorflow as tf
 import collections
 import numpy as np
@@ -11,12 +11,11 @@ from absl import logging
 from transformers import BertConfig, BertTokenizer, TFBertForTokenClassification
 from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
 from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForTokenClassification
-from transformers import create_optimizer
+from transformers import create_optimizer, GradientAccumulator
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 from fastprogress import master_bar, progress_bar
 from absl import flags
 from absl import app
-import re
 
 
 ALL_MODELS = sum(
@@ -100,12 +99,16 @@ flags.DEFINE_boolean(
     "Set this flag if you are using an uncased model.")
 
 flags.DEFINE_integer(
-    "per_gpu_train_batch_size", 32,
-    "Batch size per GPU/CPU for training.")
+    "per_device_train_batch_size", 8,
+    "Batch size per GPU/CPU/TPU for training.")
 
 flags.DEFINE_integer(
-    "per_gpu_eval_batch_size", 32,
-    "Batch size per GPU/CPU for evaluation.")
+    "per_device_eval_batch_size", 8,
+    "Batch size per GPU/CPU/TPU for evaluation.")
+
+flags.DEFINE_integer(
+    "gradient_accumulation_steps", 1,
+    "Number of updates steps to accumulate before performing a backward/update pass.")
 
 flags.DEFINE_float(
     "learning_rate", 5e-5,
@@ -132,6 +135,10 @@ flags.DEFINE_integer(
     "Linear warmup over warmup_steps.")
 
 flags.DEFINE_boolean(
+    "no_cuda", False,
+    "Avoid using CUDA when available")
+
+flags.DEFINE_boolean(
     "overwrite_output_dir", False,
     "Overwrite the content of the output directory")
 
@@ -154,25 +161,44 @@ flags.DEFINE_string(
 
 
 def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size, pad_token_label_id):
-    num_train_optimization_steps = num_train_examples * args['num_train_epochs']
-    num_train_steps = int(num_train_examples // train_batch_size)
-    num_warmup_steps = int(args['warmup_steps'] * num_train_optimization_steps)
+    num_optimization_steps = math.ceil(num_train_examples / train_batch_size) // args['gradient_accumulation_steps'] * args['num_train_epochs']
+    num_train_steps = num_optimization_steps // args['num_train_epochs']
+    writer = tf.summary.create_file_writer("/tmp/mylogs")
 
     with strategy.scope():
         loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
-        optimizer = create_optimizer(args['learning_rate'], num_train_optimization_steps, num_warmup_steps)
+        optimizer = create_optimizer(args['learning_rate'], num_optimization_steps, args['warmup_steps'])
 
         if args['fp16']:
             optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, 'dynamic')
-        
-        loss_metric = tf.keras.metrics.Mean()
-    
+
+        loss_metric = tf.keras.metrics.Mean(name='loss', dtype=tf.float32)
+        gradient_accumulator = GradientAccumulator()
+
     logging.info("***** Running training *****")
     logging.info("  Num examples = %d", num_train_examples)
     logging.info("  Num Epochs = %d", args['num_train_epochs'])
-    logging.info("  Instantaneous batch size per GPU = %d", args['per_gpu_train_batch_size'])
+    logging.info("  Instantaneous batch size per device = %d", args['per_device_train_batch_size'])
+    logging.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
+                train_batch_size * args['gradient_accumulation_steps'])
+    logging.info("  Gradient Accumulation steps = %d", args['gradient_accumulation_steps'])
+    logging.info("  Total optimization steps = %d", num_optimization_steps)
 
     model.summary()
+
+    @tf.function
+    def apply_gradients():
+        grads_and_vars = []
+
+        for gradient, variable in zip(gradient_accumulator.gradients, model.trainable_variables):
+            if gradient is not None:
+                scaled_gradient = gradient / (strategy.num_replicas_in_sync * args['gradient_accumulation_steps'])
+                grads_and_vars.append((scaled_gradient, variable))
+            else:
+                grads_and_vars.append((gradient, variable))
+
+        optimizer.apply_gradients(grads_and_vars, args['max_grad_norm'])
+        gradient_accumulator.reset()
 
     @tf.function
     def train_step(train_features, train_labels):
@@ -191,44 +217,53 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
                 active_labels = tf.boolean_mask(train_labels, active_loss)
                 cross_entropy = loss_fct(active_labels, active_logits)
                 loss = tf.reduce_sum(cross_entropy) * (1.0 / train_batch_size)
+                grads = tape.gradient(loss, model.trainable_variables)
 
-            grads = tape.gradient(loss, model.trainable_variables)
-            grads = [(tf.clip_by_value(grad, -1.0, args['max_grad_norm'])) if grad is not None else grad for grad in grads]
-
-            optimizer.apply_gradients(list(zip(grads, model.trainable_variables)))
+                gradient_accumulator(grads)
 
             return cross_entropy
 
         per_example_losses = strategy.experimental_run_v2(step_fn, args=(train_features, train_labels))
-        mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+       mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
 
         return mean_loss
 
-    epoch_bar = master_bar(range(args['num_train_epochs']))
     current_time = datetime.datetime.now()
+    train_iterator = master_bar(range(args['num_train_epochs']))
 
-    for epoch in epoch_bar:
+    for epoch in train_iterator:
+        epoch_iterator = progress_bar(train_dataset, total=num_train_steps, parent=train_iterator, display=args['n_device'] > 1)
+        step = 1
+
         with strategy.scope():
-            for (train_features, train_labels) in progress_bar(train_dataset, total=num_train_steps, parent=epoch_bar):
+            for train_features, train_labels in epoch_iterator:
                 loss = train_step(train_features, train_labels)
-                loss_metric(loss)
-                epoch_bar.child.comment = f'loss : {loss_metric.result()}'
 
-            epoch_bar.write(f'loss epoch {epoch + 1}: {loss_metric.result()}')
+                if step % args['gradient_accumulation_steps'] == 0:
+                    strategy.experimental_run_v2(apply_gradients)
 
-            loss_metric.reset_states()
+                    loss_metric(loss)
 
-            if args['evaluate_during_training']:
-                y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
-                report = metrics.classification_report(y_true, y_pred, digits=4)
-                logging.info(report)
+                    with writer.as_default():
+                        tf.summary.scalar("loss", loss_metric.result(), step=step)
+
+                train_iterator.child.comment = f'loss : {loss_metric.result()}'
+                step += 1
+
+        train_iterator.write(f'loss epoch {epoch + 1}: {loss_metric.result()}')
+
+        loss_metric.reset_states()
+
+        if args['evaluate_during_training']:
+            y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
+            report = metrics.classification_report(y_true, y_pred, digits=4)
+            logging.info(report)
 
     logging.info("  Training took time = {}".format(datetime.datetime.now() - current_time))
 
 
-
 def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode):
-    eval_batch_size = args['per_gpu_eval_batch_size'] * max(1, len(args['n_gpu']))
+    eval_batch_size = args['per_device_eval_batch_size'] * args['n_device']
     eval_dataset, size = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode=mode)
     eval_dataset = strategy.experimental_distribute_dataset(eval_dataset)
     preds = None
@@ -242,7 +277,7 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
 
         if args['model_type'] != "distilbert":
             inputs["token_type_ids"] = eval_features['segment_ids'] if args['model_type'] in ["bert", "xlnet"] else None
-        
+
         with strategy.scope():
             logits = model(eval_features['input_ids'], **inputs)[0]
 
@@ -280,7 +315,7 @@ def load_cache(cached_file, max_seq_length):
         features['input_ids'] = example['input_ids']
         features['input_mask'] = example['input_mask']
         features['segment_ids'] = example['segment_ids']
-        
+
         return features, example['label_ids']
 
     d = tf.data.TFRecordDataset(cached_file)
@@ -300,7 +335,7 @@ def save_cache(features, cached_features_file):
         def create_int_feature(values):
             f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
             return f
-        
+
         record_feature = collections.OrderedDict()
         record_feature["input_ids"] = create_int_feature(feature.input_ids)
         record_feature["input_mask"] = create_int_feature(feature.input_mask)
@@ -308,7 +343,7 @@ def save_cache(features, cached_features_file):
         record_feature["label_ids"] = create_int_feature(feature.label_ids)
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=record_feature))
-        
+
         writer.write(tf_example.SerializeToString())
 
     writer.close()
@@ -316,7 +351,7 @@ def save_cache(features, cached_features_file):
 
 def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_size, mode):
     drop_remainder = True if args['tpu'] or mode == 'train' else False
-    
+
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args['data_dir'], "cached_{}_{}_{}.tf_record".format(mode,
         list(filter(None, args['model_name_or_path'].split("/"))).pop(),
@@ -364,28 +399,29 @@ def main(_):
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
                 args['output_dir']))
-    
+
     if args['fp16']:
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-
-    strategy = None
-    args['n_gpu'] = []
 
     if args['tpu']:
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=args['tpu'])
         tf.config.experimental_connect_to_cluster(resolver)
         tf.tpu.experimental.initialize_tpu_system(resolver)
         strategy = tf.distribute.experimental.TPUStrategy(resolver)
+        args['n_device'] = args['num_tpu_cores']
     elif len(args['gpus'].split(',')) > 1:
-        args['n_gpu'] = [f"/gpu:{gpu}" for gpu in args['gpus'].split(',')]
-        strategy = tf.distribute.MirroredStrategy(devices=args['n_gpu'])
+        args['n_device'] = len([f"/gpu:{gpu}" for gpu in args['gpus'].split(',')])
+        strategy = tf.distribute.MirroredStrategy(devices=[f"/gpu:{gpu}" for gpu in args['gpus'].split(',')])
+    elif args['no_cuda']:
+        args['n_device'] = 1
+        strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
     else:
-        args['n_gpu'] = args['gpus'].split(',')
-        strategy = tf.distribute.OneDeviceStrategy(device="/gpu:" + args['n_gpu'][0])
-    
-    logging.warning("n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                   args['n_gpu'], bool(len(args['n_gpu']) > 1), args['fp16'])
-    
+        args['n_device'] = len(args['gpus'].split(','))
+        strategy = tf.distribute.OneDeviceStrategy(device="/gpu:" + args['gpus'].split(',')[0])
+
+    logging.warning("n_device: %s, distributed training: %s, 16-bits training: %s",
+                   args['n_device'], bool(args['n_device'] > 1), args['fp16'])
+
     labels = get_labels(args['labels'])
     num_labels = len(labels) + 1
     pad_token_label_id = 0
@@ -394,7 +430,7 @@ def main(_):
                                           num_labels=num_labels,
                                           cache_dir=args['cache_dir'] if args['cache_dir'] else None)
 
-    logging.info("Training/evaluation parameters %s", args)
+   logging.info("Training/evaluation parameters %s", args)
 
     # Training
     if args['do_train']:
@@ -407,36 +443,36 @@ def main(_):
                                                 from_pt=bool(".bin" in args['model_name_or_path']),
                                                 config=config,
                                                 cache_dir=args['cache_dir'] if args['cache_dir'] else None)
-            model.layers[-1].activation = tf.keras.activations.softmax  
+            model.layers[-1].activation = tf.keras.activations.softmax
 
-        train_batch_size = args['per_gpu_train_batch_size'] * max(1, len(args['n_gpu']))
+        train_batch_size = args['per_device_train_batch_size'] * args['n_device']
         train_dataset, num_train_examples = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, train_batch_size, mode="train")
         train_dataset = strategy.experimental_distribute_dataset(train_dataset)
         train(args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size, pad_token_label_id)
 
         if not os.path.exists(args['output_dir']):
             os.makedirs(args['output_dir'])
-        
+
         logging.info("Saving model to %s", args['output_dir'])
-        
+
         model.save_pretrained(args['output_dir'])
         tokenizer.save_pretrained(args['output_dir'])
-    
+
     # Evaluation
     if args['do_eval']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
-        
+
         with strategy.scope():
             model = model_class.from_pretrained(args['output_dir'])
-        
+
         y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
         output_eval_file = os.path.join(args['output_dir'], "eval_results.txt")
 
         with tf.io.gfile.GFile(output_eval_file, "w") as writer:
-            report = metrics.classification_report(y_true, y_pred, digits=4)
+           report = metrics.classification_report(y_true, y_pred, digits=4)
             logging.info(report)
             writer.write(report)
-    
+
     if args['do_predict']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
         model = model_class.from_pretrained(args['output_dir'])
@@ -448,11 +484,11 @@ def main(_):
         with tf.io.gfile.GFile(output_test_predictions_file, "w") as writer:
             with tf.io.gfile.GFile(os.path.join(args['data_dir'], "test.txt"), "r") as f:
                 example_id = 0
-                
+
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                         writer.write(line)
-                        
+
                         if not y_pred[example_id]:
                             example_id += 1
                     elif y_pred[example_id]:
