@@ -460,7 +460,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         elif self.summary_type == 'first':
             output = hidden_states[:, 0]
         elif self.summary_type == 'mean':
-            output = tf.mean(hidden_states, axis=1)
+            output = tf.reduce_mean(hidden_states, axis=1)
         elif self.summary_type == 'cls_index':
             hidden_shape = shape_list(hidden_states)  # e.g. [batch, num choices, seq length, hidden dims]
             if cls_index is None:
