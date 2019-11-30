@@ -138,6 +138,10 @@ flags.DEFINE_integer(
     "warmup_steps", 0,
     "Linear warmup over warmup_steps.")
 
+flags.DEFINE_integer(
+    "logging_steps", 50,
+    "Log every X updates steps.")
+
 flags.DEFINE_boolean(
     "no_cuda", False,
     "Avoid using CUDA when available")
@@ -167,7 +171,7 @@ flags.DEFINE_string(
 def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size, pad_token_label_id):
     if args['max_steps'] > 0:
         num_train_steps = args['max_steps'] * args['gradient_accumulation_steps']
-        args['num_train_epochs'] = args['max_steps'] // (math.ceil(num_train_examples / train_batch_size) // args['gradient_accumulation_steps']) + 1
+        args['num_train_epochs'] = 1
     else:
         num_train_steps = math.ceil(num_train_examples / train_batch_size) // args['gradient_accumulation_steps'] * args['num_train_epochs']
 
@@ -238,6 +242,8 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
 
     current_time = datetime.datetime.now()
     train_iterator = master_bar(range(args['num_train_epochs']))
+    global_step = 0
+    logging_loss = 0.0
 
     for epoch in train_iterator:
         epoch_iterator = progress_bar(train_dataset, total=num_train_steps, parent=train_iterator, display=args['n_device'] > 1)
@@ -252,6 +258,30 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
 
                     loss_metric(loss)
 
+                    global_step += 1
+
+                    if args['n_device'] > 0 and args['logging_steps'] > 0 and global_step % args['logging_steps'] == 0:
+                        # Log metrics
+                        if args['n_device'] == 1 and args['evaluate_during_training']:  # Only evaluate when single GPU otherwise metrics may not average well
+                            y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
+                            report = metrics.classification_report(y_true, y_pred, digits=4)
+                            
+                            logging.info(report)
+                            
+                            precision = metrics.precision_score(y_true, y_pred)
+                            recall = metrics.recall_score(y_true, y_pred)
+                            f1 = metrics.f1_score(y_true, y_pred)
+
+                            with writer.as_default():
+                                tf.summary.scalar("precision", precision, global_step)
+                                tf.summary.scalar("recall", recall, global_step)
+                                tf.summary.scalar("f1", f1, global_step)
+                        
+                        with writer.as_default():
+                            tf.summary.scalar("loss", (loss_metric.result() - logging_loss) / args['logging_steps'], global_step)
+                        
+                        logging_loss = loss_metric.result()
+
                     with writer.as_default():
                         tf.summary.scalar("loss", loss_metric.result(), step=step)
 
@@ -262,11 +292,6 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
 
         loss_metric.reset_states()
 
-        if args['evaluate_during_training']:
-            y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
-            report = metrics.classification_report(y_true, y_pred, digits=4)
-            logging.info(report)
-
     logging.info("  Training took time = {}".format(datetime.datetime.now() - current_time))
 
 
@@ -275,12 +300,15 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     eval_dataset, size = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode=mode)
     eval_dataset = strategy.experimental_distribute_dataset(eval_dataset)
     preds = None
+    num_eval_steps = math.ceil(size / eval_batch_size)
+    master = master_bar(range(1))
+    eval_iterator = progress_bar(eval_dataset, total=num_eval_steps, parent=master, display=args['n_device'] > 1)
 
     logging.info("***** Running evaluation *****")
     logging.info("  Num examples = %d", size)
     logging.info("  Batch size = %d", eval_batch_size)
 
-    for eval_features, eval_labels in eval_dataset:
+    for eval_features, eval_labels in eval_iterator:
         inputs = {'attention_mask': eval_features['input_mask'], 'training': False}
 
         if args['model_type'] != "distilbert":
