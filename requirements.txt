@@ -1,5 +1,6 @@
 # progress bars in model download and training scripts
 tqdm
+fastprogress
 # Accessing files from S3 directly.
 boto3
 # Used for downloading models over HTTP
