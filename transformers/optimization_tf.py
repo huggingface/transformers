@@ -137,9 +137,9 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
           use_locking=self._use_locking)
     return tf.no_op()
 
-  def apply_gradients(self, grads_and_vars, name=None):
+  def apply_gradients(self, grads_and_vars, clip_norm, name=None):
     grads, tvars = list(zip(*grads_and_vars))
-    (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
+    (grads, _) = tf.clip_by_global_norm(grads, clip_norm=clip_norm)
     return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars))
 
   def _get_lr(self, var_device, var_dtype, apply_state):
