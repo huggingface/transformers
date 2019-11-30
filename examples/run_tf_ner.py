@@ -142,6 +142,10 @@ flags.DEFINE_integer(
     "logging_steps", 50,
     "Log every X updates steps.")
 
+flags.DEFINE_integer(
+    "save_steps", 50,
+    "Save checkpoint every X updates steps.")
+
 flags.DEFINE_boolean(
     "no_cuda", False,
     "Avoid using CUDA when available")
@@ -186,7 +190,7 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
 
         loss_metric = tf.keras.metrics.Mean(name='loss', dtype=tf.float32)
         gradient_accumulator = GradientAccumulator()
-
+        
     logging.info("***** Running training *****")
     logging.info("  Num examples = %d", num_train_examples)
     logging.info("  Num Epochs = %d", args['num_train_epochs'])
@@ -267,7 +271,7 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
                             report = metrics.classification_report(y_true, y_pred, digits=4)
                             
                             logging.info("Eval at step " + str(global_step) + "\n" + report)
-                            logging.info("eval_loss: " + str(eval_loss.numpy()))
+                            logging.info("eval_loss: " + str(eval_loss))
                             
                             precision = metrics.precision_score(y_true, y_pred)
                             recall = metrics.recall_score(y_true, y_pred)
@@ -291,6 +295,16 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
                     with writer.as_default():
                         tf.summary.scalar("loss", loss_metric.result(), step=step)
 
+                    if args['save_steps'] > 0 and global_step % args['save_steps'] == 0:
+                        # Save model checkpoint
+                        output_dir = os.path.join(args['output_dir'], "checkpoint-{}".format(global_step))
+
+                        if not os.path.exists(output_dir):
+                            os.makedirs(output_dir)
+                        
+                        model.save_pretrained(output_dir)
+                        logging.info("Saving model checkpoint to %s", output_dir)
+                
                 train_iterator.child.comment = f'loss : {loss_metric.result()}'
                 step += 1
 
@@ -350,7 +364,7 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
                 y_pred[i].append(labels[preds[i, j] - 1])
                 y_true[i].append(labels[label_ids[i, j] - 1])
 
-    return y_true, y_pred, loss
+    return y_true, y_pred, loss.numpy()
 
 
 def load_cache(cached_file, max_seq_length):
