@@ -163,6 +163,18 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 list(list(mem.size()) for mem in result["mems_1"]),
                 [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
+        def create_and_check_xlnet_base_model_with_att_output(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
+                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+            model = XLNetModel(config)
+            model.eval()
+
+            _, _, attentions = model(input_ids_1, target_mapping=target_mapping)
+
+            self.parent.assertEqual(len(attentions), config.n_layer)
+            self.parent.assertIsInstance(attentions[0], tuple)
+            self.parent.assertEqual(len(attentions[0]), 2)
+            self.parent.assertTrue(attentions[0][0].shape, attentions[0][0].shape)
+
         def create_and_check_xlnet_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
                 target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
             model = XLNetLMHeadModel(config)
@@ -305,6 +317,12 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
+
+    def test_xlnet_base_model_with_att_output(self):
+        self.model_tester.set_seed()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].output_attentions = True
+        self.model_tester.create_and_check_xlnet_base_model_with_att_output(*config_and_inputs)
 
     def test_xlnet_lm_head(self):
         self.model_tester.set_seed()
