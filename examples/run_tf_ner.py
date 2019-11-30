@@ -2,13 +2,15 @@
 import datetime
 import os
 import math
+import glob
+import re
 import tensorflow as tf
 import collections
 import numpy as np
 from seqeval import metrics
 import _pickle as pickle
 from absl import logging
-from transformers import BertConfig, BertTokenizer, TFBertForTokenClassification
+from transformers import TF2_WEIGHTS_NAME, BertConfig, BertTokenizer, TFBertForTokenClassification
 from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
 from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForTokenClassification
 from transformers import create_optimizer, GradientAccumulator
@@ -145,6 +147,10 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     "save_steps", 50,
     "Save checkpoint every X updates steps.")
+
+flags.DEFINE_boolean(
+    "eval_all_checkpoints", False,
+    "Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
 
 flags.DEFINE_boolean(
     "no_cuda", False,
@@ -527,20 +533,41 @@ def main(_):
     # Evaluation
     if args['do_eval']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
+        checkpoints = []
+        results = []
 
-        with strategy.scope():
-            model = model_class.from_pretrained(args['output_dir'])
+        if args['eval_all_checkpoints']:
+            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args['output_dir'] + "/**/" + TF2_WEIGHTS_NAME, recursive=True), key=lambda f: int(''.join(filter(str.isdigit, f)) or -1)))
+        
+        logging.info("Evaluate the following checkpoints: %s", checkpoints)
+        
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split("-")[-1] if re.match(".*checkpoint-[0-9]", checkpoint) else "final"
 
-        y_true, y_pred, eval_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
-        output_eval_file = os.path.join(args['output_dir'], "eval_results.txt")
+            with strategy.scope():
+                model = model_class.from_pretrained(checkpoint)
 
-        with tf.io.gfile.GFile(output_eval_file, "w") as writer:
+            y_true, y_pred, eval_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
             report = metrics.classification_report(y_true, y_pred, digits=4)
-            
-            logging.info("\n" + report)
-            
-            writer.write(report)
-            writer.write("\n\nloss = " + str(eval_loss))
+
+            if global_step:
+                results.append({global_step + "_report": report, global_step + "_loss": eval_loss})
+
+        output_eval_file = os.path.join(args['output_dir'], "eval_results.txt")
+        
+        with tf.io.gfile.GFile(output_eval_file, "w") as writer:
+            for res in results:
+                for key, val in res.items():
+                    if "loss" in key:
+                        logging.info(key + " = " + str(val))
+                        writer.write(key + " = " + str(val))
+                        writer.write("\n")
+                    else:
+                        logging.info(key)
+                        logging.info("\n" + report)
+                        writer.write(key + "\n")
+                        writer.write(report)
+                        writer.write("\n")
 
     if args['do_predict']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
