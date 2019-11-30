@@ -317,8 +317,11 @@ def get_classifier(
     ).to(device)
     if "url" in params:
         resolved_archive_file = cached_path(params["url"])
-    else:
+    elif "path" in params:
         resolved_archive_file = params["path"]
+    else:
+        raise ValueError("Either url or path have to be specified "
+                         "in the discriminator model parameters")
     classifier.load_state_dict(
         torch.load(resolved_archive_file, map_location=device))
     classifier.eval()
