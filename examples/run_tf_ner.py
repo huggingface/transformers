@@ -260,24 +260,30 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, l
 
                     global_step += 1
 
-                    if args['n_device'] > 0 and args['logging_steps'] > 0 and global_step % args['logging_steps'] == 0:
+                    if args['logging_steps'] > 0 and global_step % args['logging_steps'] == 0:
                         # Log metrics
                         if args['n_device'] == 1 and args['evaluate_during_training']:  # Only evaluate when single GPU otherwise metrics may not average well
-                            y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
+                            y_true, y_pred, eval_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
                             report = metrics.classification_report(y_true, y_pred, digits=4)
                             
-                            logging.info(report)
+                            logging.info("Eval at step " + str(global_step) + "\n" + report)
+                            logging.info("eval_loss: " + str(eval_loss.numpy()))
                             
                             precision = metrics.precision_score(y_true, y_pred)
                             recall = metrics.recall_score(y_true, y_pred)
                             f1 = metrics.f1_score(y_true, y_pred)
 
                             with writer.as_default():
+                                tf.summary.scalar("eval_loss", eval_loss, global_step)
                                 tf.summary.scalar("precision", precision, global_step)
                                 tf.summary.scalar("recall", recall, global_step)
                                 tf.summary.scalar("f1", f1, global_step)
                         
+                        lr = optimizer.learning_rate
+                        learning_rate = lr(step)
+
                         with writer.as_default():
+                            tf.summary.scalar("lr", learning_rate, global_step)
                             tf.summary.scalar("loss", (loss_metric.result() - logging_loss) / args['logging_steps'], global_step)
                         
                         logging_loss = loss_metric.result()
@@ -303,6 +309,8 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     num_eval_steps = math.ceil(size / eval_batch_size)
     master = master_bar(range(1))
     eval_iterator = progress_bar(eval_dataset, total=num_eval_steps, parent=master, display=args['n_device'] > 1)
+    loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
+    loss = 0.0
 
     logging.info("***** Running evaluation *****")
     logging.info("  Num examples = %d", size)
@@ -316,6 +324,13 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
 
         with strategy.scope():
             logits = model(eval_features['input_ids'], **inputs)[0]
+            tmp_logits = tf.reshape(logits, (-1, len(labels) + 1))
+            active_loss = tf.reshape(eval_features['input_mask'], (-1,))
+            active_logits = tf.boolean_mask(tmp_logits, active_loss)
+            tmp_eval_labels = tf.reshape(eval_labels, (-1,))
+            active_labels = tf.boolean_mask(tmp_eval_labels, active_loss)
+            cross_entropy = loss_fct(active_labels, active_logits)
+            loss += tf.reduce_sum(cross_entropy) * (1.0 / eval_batch_size)
 
         if preds is None:
             preds = logits.numpy()
@@ -327,6 +342,7 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     preds = np.argmax(preds, axis=2)
     y_pred = [[] for _ in range(label_ids.shape[0])]
     y_true = [[] for _ in range(label_ids.shape[0])]
+    loss = loss / num_eval_steps
 
     for i in range(label_ids.shape[0]):
         for j in range(label_ids.shape[1]):
@@ -334,7 +350,7 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
                 y_pred[i].append(labels[preds[i, j] - 1])
                 y_true[i].append(labels[label_ids[i, j] - 1])
 
-    return y_true, y_pred
+    return y_true, y_pred, loss
 
 
 def load_cache(cached_file, max_seq_length):
@@ -501,21 +517,34 @@ def main(_):
         with strategy.scope():
             model = model_class.from_pretrained(args['output_dir'])
 
-        y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
+        y_true, y_pred, eval_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev")
         output_eval_file = os.path.join(args['output_dir'], "eval_results.txt")
 
         with tf.io.gfile.GFile(output_eval_file, "w") as writer:
             report = metrics.classification_report(y_true, y_pred, digits=4)
-            logging.info(report)
+            
+            logging.info("\n" + report)
+            
             writer.write(report)
+            writer.write("\n\nloss = " + str(eval_loss))
 
     if args['do_predict']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
         model = model_class.from_pretrained(args['output_dir'])
         eval_batch_size = args['per_gpu_eval_batch_size'] * args['n_device']
         predict_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test")
-        y_true, y_pred = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test")
+        y_true, y_pred, pred_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test")
+        output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
         output_test_predictions_file = os.path.join(args['output_dir'], "test_predictions.txt")
+        report = metrics.classification_report(y_true, y_pred, digits=4)
+
+        with tf.io.gfile.GFile(output_test_results_file, "w") as writer:
+            report = metrics.classification_report(y_true, y_pred, digits=4)
+            
+            logging.info("\n" + report)
+            
+            writer.write(report)
+            writer.write("\n\nloss = " + str(pred_loss))
 
         with tf.io.gfile.GFile(output_test_predictions_file, "w") as writer:
             with tf.io.gfile.GFile(os.path.join(args['data_dir'], "test.txt"), "r") as f:
