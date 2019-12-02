@@ -99,8 +99,23 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         # Naming was changed to be more explicit
         name = name.replace("embeddings/attention", "embeddings")    
         name = name.replace("inner_group_", "albert_layers/") 
-        name = name.replace("group_", "albert_layer_groups/")    
+        name = name.replace("group_", "albert_layer_groups/")   
+
+        # Classifier
+        if len(name.split("/")) == 1 and ("output_bias" in name or "output_weights" in name):
+            name = "classifier/" + name
+
+        # No ALBERT model currently handles the next sentence prediction task 
+        if "seq_relationship" in name:
+            continue
+
         name = name.split('/')
+
+        # Ignore the gradients applied by the LAMB/ADAM optimizers.
+        if "adam_m" in name or "adam_v" in name or "global_step" in name:
+            logger.info("Skipping {}".format("/".join(name)))
+            continue
+
         pointer = model
         for m_name in name:
             if re.fullmatch(r'[A-Za-z]+_\d+', m_name):
