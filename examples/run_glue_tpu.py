@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert)."""
+""" Finetuning the library models for sequence classification on GLUE (Bert, XLNet)."""
 
 from __future__ import absolute_import, division, print_function
 
@@ -62,10 +62,11 @@ from transformers import glue_convert_examples_to_features as convert_examples_t
 logger = logging.getLogger(__name__)
 script_start_time = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig,)), ())
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
+    'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
 }
 
 
