@@ -59,7 +59,7 @@ BAG_OF_WORDS_ARCHIVE_MAP = {
 
 DISCRIMINATOR_MODELS_PARAMS = {
     "clickbait": {
-        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/clickbait_classifierhead.pt",
+        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/clickbait_classifier_head.pt",
         "class_size": 2,
         "embed_size": 1024,
         "class_vocab": {"non_clickbait": 0, "clickbait": 1},
@@ -67,7 +67,7 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "pretrained_model": "gpt2-medium",
     },
     "sentiment": {
-        "url": "http://s.yosinski.com/SST_classifier_head.pt",
+        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/SST_classifier_head.pt",
         "class_size": 5,
         "embed_size": 1024,
         "class_vocab": {"very_positive": 2, "very_negative": 3},
@@ -75,7 +75,7 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "pretrained_model": "gpt2-medium",
     },
     "toxicity": {
-        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/toxicity_classifierhead.pt",
+        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/toxic_classifier_head.pt",
         "class_size": 2,
         "embed_size": 1024,
         "class_vocab": {"non_toxic": 0, "toxic": 1},
