@@ -139,11 +139,11 @@ def encode_for_summarization(story_lines, summary_lines, tokenizer):
     sentences.
     """
     story_lines_token_ids = [
-        tokenizer.add_special_tokens_single_sequence(tokenizer.encode(line))
+        tokenizer.build_inputs_with_special_tokens(tokenizer.encode(line))
         for line in story_lines
     ]
     summary_lines_token_ids = [
-        tokenizer.add_special_tokens_single_sequence(tokenizer.encode(line))
+        tokenizer.build_inputs_with_special_tokens(tokenizer.encode(line))
         for line in summary_lines
     ]
 

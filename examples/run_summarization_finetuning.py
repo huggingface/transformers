@@ -360,7 +360,11 @@ def main():
         default=False,
         help="Run model evaluation on out-of-sample data.",
     )
-    parser.add_argument("--do_train", type=bool, default=False, help="Run training.")
+    parser.add_argument(
+        "--do_train", 
+        action='store_true', 
+        help="Whether to run training.",
+    )
     parser.add_argument(
         "--do_overwrite_output_dir",
         type=bool,

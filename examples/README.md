@@ -596,10 +596,10 @@ export DATA_PATH=/path/to/dataset/
 
 python run_summarization_finetuning.py \
     --output_dir=output \
-    --model_type=bert2bert \
-    --model_name_or_path=bert2bert \
+    --model_type=bert \
+    --model_name_or_path=bert-base-cased \
     --do_train \
-    --data_path=$DATA_PATH \
+    --data_dir=$DATA_PATH \
 ```
 
 ## XNLI
