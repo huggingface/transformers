@@ -1,7 +1,5 @@
 ''' Script for downloading all GLUE data.
-
-Original source: https://github.com/kamalkraj/ALBERT-TF2.0/blob/fa90194e5fe729dbb19f32ac29c8d6d6372c0f93/download_glue_data.py
-Original license: https://github.com/kamalkraj/ALBERT-TF2.0/blob/fa90194e5fe729dbb19f32ac29c8d6d6372c0f93/LICENSE (Apache-2.0)
+Original source: https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e
 
 Note: for legal reasons, we are unable to host MRPC.
 You can either use the version hosted by the SentEval team, which is already tokenized, 
