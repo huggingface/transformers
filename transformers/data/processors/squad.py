@@ -306,13 +306,13 @@ class SquadProcessor(DataProcessor):
                     else:
                         is_impossible = False
 
-                    if not is_impossible and is_training:
-                        if (len(qa["answers"]) != 1):
-                            raise ValueError(
-                                "For training, each question should have exactly 1 answer.")
-                        answer = qa["answers"][0]
-                        answer_text = answer['text']
-                        start_position_character = answer['answer_start']
+                    if not is_impossible:
+                        if is_training:
+                            answer = qa["answers"][0]
+                            answer_text = answer['text']
+                            start_position_character = answer['answer_start']
+                        else:
+                            answers = qa["answers"]
 
                     example = SquadExample(
                         qas_id=qas_id,
@@ -321,7 +321,8 @@ class SquadProcessor(DataProcessor):
                         answer_text=answer_text,
                         start_position_character=start_position_character,
                         title=title,
-                        is_impossible=is_impossible
+                        is_impossible=is_impossible,
+                        answers=answers
                     )
 
                     examples.append(example)
@@ -352,6 +353,7 @@ class SquadExample(object):
                  answer_text,
                  start_position_character,
                  title,
+                 answers=None,
                  is_impossible=False):
         self.qas_id = qas_id
         self.question_text = question_text
@@ -359,6 +361,7 @@ class SquadExample(object):
         self.answer_text = answer_text
         self.title = title
         self.is_impossible = is_impossible 
+        self.answers = answers
 
         self.start_position, self.end_position = 0, 0
 
