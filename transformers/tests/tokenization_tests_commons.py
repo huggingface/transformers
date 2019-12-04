@@ -115,8 +115,10 @@ class CommonTestCases:
         def test_added_tokens_do_lower_case(self):
             tokenizer = self.get_tokenizer(do_lower_case=True)
 
-            text = "aaaaa bbbbbb low cccccccccdddddddd l"
-            text2 = "AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l"
+            special_token = tokenizer.all_special_tokens[0]
+
+            text = special_token + " aaaaa bbbbbb low cccccccccdddddddd l " + special_token
+            text2 = special_token + " AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l " + special_token
 
             toks0 = tokenizer.tokenize(text)  # toks before adding new_toks
 
@@ -141,7 +143,7 @@ class CommonTestCases:
 
             self.assertEqual(len(toks), len(toks2))  # Length should still be the same
             self.assertNotEqual(len(toks), len(toks0))
-            self.assertNotEqual(toks[0], toks2[0])  # But at least the first tokens should differ
+            self.assertNotEqual(toks[1], toks2[1])  # But at least the first non-special tokens should differ
 
         def test_add_tokens_tokenizer(self):
             tokenizer = self.get_tokenizer()
