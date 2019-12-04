@@ -304,8 +304,8 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
-    input_file = args.predict_file if evaluate else args.train_file
-    cached_features_file = os.path.join(os.path.dirname(input_file), 'cached_{}_{}_{}'.format(
+    input_dir = args.data_dir if args.data_dir else "."
+    cached_features_file = os.path.join(input_dir, 'cached_{}_{}_{}'.format(
         'dev' if evaluate else 'train',
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
         str(args.max_seq_length)))
@@ -313,13 +313,22 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
-        logger.info("Creating features from dataset file at %s", input_file)
+        logger.info("Creating features from dataset file at %s", input_dir)
 
-        processor = SquadV2Processor()
-        examples = processor.get_dev_examples("examples/squad", only_first=100) if evaluate else processor.get_train_examples("examples/squad")
-        # import tensorflow_datasets as tfds
-        # tfds_examples = tfds.load("squad")
-        # examples = SquadV1Processor().get_examples_from_dataset(tfds_examples["validation"])
+        if not args.data_dir:
+            try:
+                import tensorflow_datasets as tfds
+            except ImportError:
+                raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
+
+            if args.version_2_with_negative:
+                logger.warn("tensorflow_datasets does not handle version 2 of SQuAD.")
+
+            tfds_examples = tfds.load("squad")
+            examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=evaluate)
+        else:
+            processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
+            examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
 
         features = squad_convert_examples_to_features( 
             examples=examples,
@@ -328,7 +337,6 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=not evaluate,
-            sequence_a_is_doc=True if args.model_type in ['xlnet'] else False
         )
 
 
@@ -365,10 +373,6 @@ def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--train_file", default=None, type=str, required=True,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--predict_file", default=None, type=str, required=True,
-                        help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
@@ -377,6 +381,8 @@ def main():
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     ## Other parameters
+    parser.add_argument("--data_dir", default=None, type=str,
+                        help="The input data dir. Should contain the .json files for the task. If not specified, will run with tensorflow_datasets.")
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
