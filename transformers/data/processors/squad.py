@@ -74,7 +74,35 @@ def _is_whitespace(c):
 
 def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
                                        doc_stride, max_query_length, is_training):
-    """Loads a data file into a list of `InputBatch`s."""
+    """
+    Converts a list of examples into a list of features that can be directly given as input to a model.
+    It is model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
+
+    Args:
+        examples: list of :class:`~transformers.data.processors.squad.SquadExample`
+        tokenizer: an instance of a child of :class:`~transformers.PreTrainedTokenizer`
+        max_seq_length: The maximum sequence length of the inputs.
+        doc_stride: The stride used when the context is too large and is split across several features.
+        max_query_length: The maximum length of the query.
+        is_training: wheter to create features for model evaluation or model training.
+
+    Returns:
+        list of :class:`~transformers.data.processors.squad.SquadFeatures`
+
+    Example::
+
+        processor = SquadV2Processor()
+        examples = processor.get_dev_examples(data_dir)
+
+        features = squad_convert_examples_to_features( 
+            examples=examples,
+            tokenizer=tokenizer,
+            max_seq_length=args.max_seq_length,
+            doc_stride=args.doc_stride,
+            max_query_length=args.max_query_length,
+            is_training=not evaluate,
+        )
+    """
 
     # Defining helper methods    
     unique_id = 1000000000
@@ -240,12 +268,14 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
 
 
 class SquadProcessor(DataProcessor):
-    """Processor for the SQuAD data set."""
+    """
+    Processor for the SQuAD data set.
+    Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and version 2.0 of SQuAD, respectively.
+    """
     train_file = None
     dev_file = None
 
-    def get_example_from_tensor_dict(self, tensor_dict, evaluate=False):
-
+    def _get_example_from_tensor_dict(self, tensor_dict, evaluate=False):
         if not evaluate:
             answer = tensor_dict['answers']['text'][0].numpy().decode('utf-8')
             answer_start = tensor_dict['answers']['answer_start'][0].numpy()
@@ -296,35 +326,44 @@ class SquadProcessor(DataProcessor):
 
         examples = []
         for tensor_dict in tqdm(dataset):
-            examples.append(self.get_example_from_tensor_dict(tensor_dict, evaluate=evaluate)) 
+            examples.append(self._get_example_from_tensor_dict(tensor_dict, evaluate=evaluate)) 
 
         return examples
 
-    def get_train_examples(self, data_dir):
-        """See base class."""
+    def get_train_examples(self, data_dir, filename=None):
+        """
+        Returns the training examples from the data directory.
+
+        Args:
+            data_dir: Directory containing the data files used for training and evaluating.
+            filename: None by default, specify this if the training file has a different name than the original one
+                which is `train-v1.1.json` and `train-v2.0.json` for squad versions 1.1 and 2.0 respectively.
+
+        """
         if self.train_file is None:
             raise ValueError("SquadProcessor should be instantiated via SquadV1Processor or SquadV2Processor")
 
-        with open(os.path.join(data_dir, self.train_file), "r", encoding='utf-8') as reader:
+        with open(os.path.join(data_dir, self.train_file if filename is None else filename), "r", encoding='utf-8') as reader:
             input_data = json.load(reader)["data"]
         return self._create_examples(input_data, "train")
 
-    def get_dev_examples(self, data_dir):
-        """See base class."""
+    def get_dev_examples(self, data_dir, filename=None):
+        """
+        Returns the evaluation example from the data directory.
+
+        Args:
+            data_dir: Directory containing the data files used for training and evaluating.
+            filename: None by default, specify this if the evaluation file has a different name than the original one
+                which is `train-v1.1.json` and `train-v2.0.json` for squad versions 1.1 and 2.0 respectively.
+        """
         if self.dev_file is None:
             raise ValueError("SquadProcessor should be instantiated via SquadV1Processor or SquadV2Processor")
         
-        with open(os.path.join(data_dir, self.dev_file), "r", encoding='utf-8') as reader:
+        with open(os.path.join(data_dir, self.dev_file if filename is not None else filename), "r", encoding='utf-8') as reader:
             input_data = json.load(reader)["data"]
         return self._create_examples(input_data, "dev")
 
-    def get_labels(self):
-        """See base class."""
-        return ["0", "1"]
-
     def _create_examples(self, input_data, set_type):
-        """Creates examples for the training and dev sets."""
-        
         is_training = set_type == "train"
         examples = []
         for entry in tqdm(input_data):
@@ -378,6 +417,16 @@ class SquadV2Processor(SquadProcessor):
 class SquadExample(object):
     """
     A single training/test example for the Squad dataset, as loaded from disk.
+
+    Args:
+        qas_id: The example's unique identifier
+        question_text: The question string
+        context_text: The context string
+        answer_text: The answer string
+        start_position_character: The character position of the start of the answer
+        title: The title of the example
+        answers: None by default, this is used during evaluation. Holds answers as well as their start positions.
+        is_impossible: False by default, set to True if the example has no possible answer.
     """
 
     def __init__(self,
@@ -427,7 +476,26 @@ class SquadExample(object):
 class SquadFeatures(object):
     """
     Single squad example features to be fed to a model.
-    Those features are model-specific.
+    Those features are model-specific and can be crafted from :class:`~transformers.data.processors.squad.SquadExample`
+    using the :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
+
+    Args:
+        input_ids: Indices of input sequence tokens in the vocabulary.
+        attention_mask: Mask to avoid performing attention on padding token indices.
+        token_type_ids: Segment token indices to indicate first and second portions of the inputs.
+        cls_index: the index of the CLS token.
+        p_mask: Mask identifying tokens that can be answers vs. tokens that cannot.
+            Mask with 1 for tokens than cannot be in the answer and 0 for token that can be in an answer
+        example_index: the index of the example
+        unique_id: The unique Feature identifier
+        paragraph_len: The length of the context
+        token_is_max_context: List of booleans identifying which tokens have their maximum context in this feature object.
+            If a token does not have their maximum context in this feature object, it means that another feature object
+            has more information related to that token and should be prioritized over this feature for that token.
+        tokens: list of tokens corresponding to the input ids
+        token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
+        start_position: start of the answer token index 
+        end_position: end of the answer token index 
     """
 
     def __init__(self,
