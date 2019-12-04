@@ -72,8 +72,7 @@ class ExamplesTests(unittest.TestCase):
         logger.addHandler(stream_handler)
 
         testargs = ["run_squad.py",
-                    "--train_file=./examples/tests_samples/SQUAD/dev-v2.0-small.json",
-                    "--predict_file=./examples/tests_samples/SQUAD/dev-v2.0-small.json",
+                    "--data_dir=./examples/tests_samples/SQUAD",
                     "--model_name=bert-base-uncased",
                     "--output_dir=./examples/tests_samples/temp_dir",
                     "--max_steps=10",

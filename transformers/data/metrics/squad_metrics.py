@@ -630,12 +630,12 @@ def compute_predictions_log_probs(
 
             for i in range(start_n_top):
                 for j in range(end_n_top):
-                    start_log_prob = result.start_top_log_probs[i]
+                    start_log_prob = result.start_logits[i]
                     start_index = result.start_top_index[i]
 
                     j_index = i * end_n_top + j
 
-                    end_log_prob = result.end_top_log_probs[j_index]
+                    end_log_prob = result.end_logits[j_index]
                     end_index = result.end_top_index[j_index]
 
                     # We could hypothetically create invalid predictions, e.g., predict
