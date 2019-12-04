@@ -25,6 +25,17 @@ class UserCommands(BaseTransformersCLICommand):
 
 
 
+class ANSI:
+    """
+    Helper for en.wikipedia.org/wiki/ANSI_escape_code
+    """
+    _bold = u"\u001b[1m"
+    _reset = u"\u001b[0m"
+    @classmethod
+    def bold(cls, s):
+        return "{}{}{}".format(cls._bold, s, cls._reset)
+
+
 class BaseUserCommand:
     def __init__(self, args):
         self.args = args
@@ -80,6 +91,28 @@ class LogoutCommand(BaseUserCommand):
 
 
 class ListObjsCommand(BaseUserCommand):
+    def tabulate(self, rows, headers):
+        # type: (List[List[Union[str, int]]], List[str]) -> str
+        """
+        Inspired by:
+        stackoverflow.com/a/8356620/593036
+        stackoverflow.com/questions/9535954/printing-lists-as-tabular-data
+        """
+        col_widths = [max(len(str(x)) for x in col) for col in zip(*rows, headers)]
+        row_format = ("{{:{}}} " * len(headers)).format(*col_widths)
+        lines = []
+        lines.append(
+            row_format.format(*headers)
+        )
+        lines.append(
+            row_format.format(*["-" * w for w in col_widths])
+        )
+        for row in rows:
+            lines.append(
+                row_format.format(*row)
+            )
+        return "\n".join(lines)
+
     def run(self):
         token = HfFolder.get_token()
         if token is None:
@@ -92,13 +125,16 @@ class ListObjsCommand(BaseUserCommand):
             exit(1)
         if len(objs) == 0:
             print("No shared file yet")
-        for obj in objs:
-            print(
-                obj.filename,
-                obj.LastModified,
-                obj.ETag,
-                obj.Size
-            )
+            exit()
+        rows = [ [
+            obj.filename,
+            obj.LastModified,
+            obj.ETag,
+            obj.Size
+        ] for obj in objs ]
+        print(
+            self.tabulate(rows, headers=["Filename", "LastModified", "ETag", "Size"])
+        )
 
 
 class UploadCommand(BaseUserCommand):
@@ -109,12 +145,19 @@ class UploadCommand(BaseUserCommand):
             exit(1)
         filepath = os.path.join(os.getcwd(), self.args.file)
         filename = self.args.filename if self.args.filename is not None else os.path.basename(filepath)
-        print("About to upload file {} to S3 under filename {}".format(filepath, filename))
+        print(
+            "About to upload file {} to S3 under filename {}".format(
+                ANSI.bold(filepath), ANSI.bold(filename)
+            )
+        )
+
         choice = input("Proceed? [Y/n] ").lower()
         if not(choice == "" or choice == "y" or choice == "yes"):
             print("Abort")
             exit()
-        print("Uploading...")
+        print(
+            ANSI.bold("Uploading... This might take a while if file is large")
+        )
         access_url = self._api.presign_and_upload(
             token=token, filename=filename, filepath=filepath
         )
