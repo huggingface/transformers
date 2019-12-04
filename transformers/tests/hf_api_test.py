@@ -15,6 +15,7 @@
 from __future__ import absolute_import, division, print_function
 
 import os
+import six
 import time
 import unittest
 
@@ -40,7 +41,7 @@ class HfApiLoginTest(HfApiCommonTest):
 
     def test_login_valid(self):
         token = self._api.login(username=USER, password=PASS)
-        self.assertIsInstance(token, str)
+        self.assertIsInstance(token, six.string_types)
 
 
 class HfApiEndpointsTest(HfApiCommonTest):
@@ -56,19 +57,22 @@ class HfApiEndpointsTest(HfApiCommonTest):
         self.assertEqual(user, USER)
 
     def test_presign(self):
-        url = self._api.presign(token=self._token, filename=FILE_KEY)
-        self.assertIsInstance(url, PresignedUrl)
+        urls = self._api.presign(token=self._token, filename=FILE_KEY)
+        self.assertIsInstance(urls, PresignedUrl)
+        self.assertEqual(urls.type, "text/plain")
 
     def test_presign_and_upload(self):
         access_url = self._api.presign_and_upload(
             token=self._token, filename=FILE_KEY, filepath=FILE_PATH
         )
-        self.assertIsInstance(access_url, str)
+        self.assertIsInstance(access_url, six.string_types)
 
     def test_list_objs(self):
         objs = self._api.list_objs(token=self._token)
-        o = objs[-1]
-        self.assertIsInstance(o, S3Obj)
+        self.assertIsInstance(objs, list)
+        if len(objs) > 0:
+            o = objs[-1]
+            self.assertIsInstance(o, S3Obj)
 
 
 
@@ -92,3 +96,7 @@ class HfFolderTest(unittest.TestCase):
             HfFolder.get_token(),
             None
         )
+
+
+if __name__ == "__main__":
+    unittest.main()
