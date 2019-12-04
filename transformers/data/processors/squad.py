@@ -300,29 +300,29 @@ class SquadProcessor(DataProcessor):
 
         return examples
 
-    def get_train_examples(self, data_dir, only_first=None):
+    def get_train_examples(self, data_dir):
         """See base class."""
         if self.train_file is None:
             raise ValueError("SquadProcessor should be instantiated via SquadV1Processor or SquadV2Processor")
 
         with open(os.path.join(data_dir, self.train_file), "r", encoding='utf-8') as reader:
             input_data = json.load(reader)["data"]
-        return self._create_examples(input_data, "train", only_first)
+        return self._create_examples(input_data, "train")
 
-    def get_dev_examples(self, data_dir, only_first=None):
+    def get_dev_examples(self, data_dir):
         """See base class."""
         if self.dev_file is None:
             raise ValueError("SquadProcessor should be instantiated via SquadV1Processor or SquadV2Processor")
         
         with open(os.path.join(data_dir, self.dev_file), "r", encoding='utf-8') as reader:
             input_data = json.load(reader)["data"]
-        return self._create_examples(input_data, "dev", only_first)
+        return self._create_examples(input_data, "dev")
 
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
 
-    def _create_examples(self, input_data, set_type, only_first=None):
+    def _create_examples(self, input_data, set_type):
         """Creates examples for the training and dev sets."""
         
         is_training = set_type == "train"
@@ -363,9 +363,6 @@ class SquadProcessor(DataProcessor):
                     )
 
                     examples.append(example)
-
-                    if only_first is not None and len(examples) > only_first:
-                        return examples
         return examples
 
 class SquadV1Processor(SquadProcessor):
