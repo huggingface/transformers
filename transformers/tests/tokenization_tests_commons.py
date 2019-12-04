@@ -344,17 +344,19 @@ class CommonTestCases:
             padding_idx = tokenizer.pad_token_id
 
             # RIGHT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
+            tokenizer.padding_side = "right"
             encoded_sequence = tokenizer.encode(sequence)
             sequence_length = len(encoded_sequence)
-            padded_sequence = tokenizer.encode(sequence, max_length=sequence_length + padding_size, padding_strategy='right')
+            padded_sequence = tokenizer.encode(sequence, max_length=sequence_length + padding_size, pad_to_max_length=True)
             padded_sequence_length = len(padded_sequence)
             assert sequence_length + padding_size == padded_sequence_length
             assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
 
             # LEFT PADDING - Check that it correctly pads when a maximum length is specified along with the padding flag set to True
+            tokenizer.padding_side = "left"
             encoded_sequence = tokenizer.encode(sequence)
             sequence_length = len(encoded_sequence)
-            padded_sequence = tokenizer.encode(sequence, max_length=sequence_length + padding_size, padding_strategy='left')
+            padded_sequence = tokenizer.encode(sequence, max_length=sequence_length + padding_size, pad_to_max_length=True)
             padded_sequence_length = len(padded_sequence)
             assert sequence_length + padding_size == padded_sequence_length
             assert [padding_idx] * padding_size + encoded_sequence == padded_sequence
@@ -362,10 +364,15 @@ class CommonTestCases:
             # RIGHT & LEFT PADDING - Check that nothing is done when a maximum length is not specified
             encoded_sequence = tokenizer.encode(sequence)
             sequence_length = len(encoded_sequence)
-            padded_sequence_right = tokenizer.encode(sequence, padding_strategy='right')
+
+            tokenizer.padding_side = "right"
+            padded_sequence_right = tokenizer.encode(sequence, pad_to_max_length=True)
             padded_sequence_right_length = len(padded_sequence_right)
-            padded_sequence_left = tokenizer.encode(sequence, padding_strategy='left')
+
+            tokenizer.padding_side = "left"
+            padded_sequence_left = tokenizer.encode(sequence, pad_to_max_length=True)
             padded_sequence_left_length = len(padded_sequence_left)
+
             assert sequence_length == padded_sequence_right_length
             assert encoded_sequence == padded_sequence_right
             assert sequence_length == padded_sequence_left_length
@@ -387,7 +394,8 @@ class CommonTestCases:
             sequence_length = len(input_ids)
 
             # Test right padding
-            padded_sequence = tokenizer.encode_plus(sequence, max_length=sequence_length + padding_size, padding_strategy='right', return_special_tokens_mask=True)
+            tokenizer.padding_side = "right"
+            padded_sequence = tokenizer.encode_plus(sequence, max_length=sequence_length + padding_size, pad_to_max_length=True, return_special_tokens_mask=True)
             padded_input_ids = padded_sequence['input_ids']
             padded_token_type_ids = padded_sequence['token_type_ids']
             padded_attention_mask = padded_sequence['attention_mask']
@@ -401,7 +409,8 @@ class CommonTestCases:
             assert special_tokens_mask + [1] * padding_size == padded_special_tokens_mask 
 
             # Test left padding
-            padded_sequence = tokenizer.encode_plus(sequence, max_length=sequence_length + padding_size, padding_strategy='left', return_special_tokens_mask=True)
+            tokenizer.padding_side = "left"
+            padded_sequence = tokenizer.encode_plus(sequence, max_length=sequence_length + padding_size, pad_to_max_length=True, return_special_tokens_mask=True)
             padded_input_ids = padded_sequence['input_ids']
             padded_token_type_ids = padded_sequence['token_type_ids']
             padded_attention_mask = padded_sequence['attention_mask']
