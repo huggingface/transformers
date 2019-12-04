@@ -703,6 +703,53 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         return outputs  # logits, (hidden_states), (attentions)
 
 
+@add_start_docstrings("""DistilBert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
+class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
+    r"""
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+    Examples::
+        import tensorflow as tf
+        from transformers import DistilBertTokenizer, TFDistilBertForTokenClassification
+        tokenizer = DistilBertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFDistilBertForTokenClassification.from_pretrained('bert-base-uncased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+    """
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFDistilBertForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.distilbert = TFDistilBertMainLayer(config, name='distilbert')
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='classifier')
+
+    def call(self, inputs, **kwargs):
+        outputs = self.distilbert(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=kwargs.get('training', False))
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # scores, (hidden_states), (attentions)
+
+
 @add_start_docstrings("""DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
                          the hidden-states output to compute `span start logits` and `span end logits`). """,
                       DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
