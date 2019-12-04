@@ -73,8 +73,7 @@ def _is_whitespace(c):
     return False
 
 def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
-                                       doc_stride, max_query_length, is_training,
-                                       sequence_a_is_doc=False):
+                                       doc_stride, max_query_length, is_training):
     """Loads a data file into a list of `InputBatch`s."""
 
     # Defining helper methods    
@@ -127,13 +126,13 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
         while len(spans) * doc_stride < len(all_doc_tokens):
             
             encoded_dict = tokenizer.encode_plus(
-                truncated_query if not sequence_a_is_doc else span_doc_tokens, 
-                span_doc_tokens if not sequence_a_is_doc else truncated_query, 
+                truncated_query if tokenizer.padding_side == "right" else span_doc_tokens, 
+                span_doc_tokens if tokenizer.padding_side == "right" else truncated_query, 
                 max_length=max_seq_length, 
                 return_overflowing_tokens=True, 
-                padding_strategy='right',
+                pad_to_max_length=True,
                 stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
-                truncation_strategy='only_second' if not sequence_a_is_doc else 'only_first'
+                truncation_strategy='only_second' if tokenizer.padding_side == "right" else 'only_first'
             )
 
             paragraph_len = min(len(all_doc_tokens) - len(spans) * doc_stride, max_seq_length - len(truncated_query) - sequence_pair_added_tokens)

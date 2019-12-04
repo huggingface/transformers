@@ -77,6 +77,8 @@ class PreTrainedTokenizer(object):
                                  "pad_token", "cls_token", "mask_token",
                                  "additional_special_tokens"]
 
+    padding_side = "right"
+
     @property
     def bos_token(self):
         """ Beginning of sentence token (string). Log an error if used while not having been set. """
@@ -223,6 +225,9 @@ class PreTrainedTokenizer(object):
 
         self.max_len = max_len if max_len is not None else int(1e12)
 
+        # Padding side is right by default and over-riden in subclsses. If specified in the kwargs, it is changed.
+        self.padding_side = kwargs.pop('padding_side', self.padding_side)
+        
         # Added tokens
         self.added_tokens_encoder = {}
         self.added_tokens_decoder = {}
@@ -702,7 +707,7 @@ class PreTrainedTokenizer(object):
                max_length=None,
                stride=0,
                truncation_strategy='longest_first',
-               padding_strategy=None,
+               pad_to_max_length=False,
                return_tensors=None,
                **kwargs):
         """
@@ -729,12 +734,12 @@ class PreTrainedTokenizer(object):
                 - 'only_first': Only truncate the first sequence
                 - 'only_second': Only truncate the second sequence
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
-            padding_strategy: if set to a strategy, the returned sequences will be padded according to the model's 
-                padding index, up to their max length. If no max length is specified, no padding is done.
-                The strategies are handled by the following strings:
+            pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
+                padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
+                The tokenizer padding sides are handled by the following strings:
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences   
-                Defaults to None: no padding.
+                Defaults to False: no padding.
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             **kwargs: passed to the `self.tokenize()` method
@@ -745,7 +750,7 @@ class PreTrainedTokenizer(object):
                                           add_special_tokens=add_special_tokens,
                                           stride=stride,
                                           truncation_strategy=truncation_strategy,
-                                          padding_strategy=padding_strategy,
+                                          pad_to_max_length=pad_to_max_length,
                                           return_tensors=return_tensors,
                                           **kwargs)
 
@@ -758,7 +763,7 @@ class PreTrainedTokenizer(object):
                     max_length=None,
                     stride=0,
                     truncation_strategy='longest_first',
-                    padding_strategy=None,
+                    pad_to_max_length=False,
                     return_tensors=None,
                     return_token_type_ids=True,
                     return_attention_mask=True,
@@ -788,12 +793,12 @@ class PreTrainedTokenizer(object):
                 - 'only_first': Only truncate the first sequence
                 - 'only_second': Only truncate the second sequence
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
-            padding_strategy: if set to a strategy, the returned sequences will be padded according to the model's 
-                padding index, up to their max length. If no max length is specified, no padding is done.
-                The strategies are handled by the following strings:
+            pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
+                padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
+                The tokenizer padding sides are handled by the following strings:
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences   
-                Defaults to None: no padding.
+                Defaults to False: no padding.
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
@@ -841,7 +846,7 @@ class PreTrainedTokenizer(object):
         return self.prepare_for_model(first_ids,
                                       pair_ids=second_ids,
                                       max_length=max_length,
-                                      padding_strategy=padding_strategy,
+                                      pad_to_max_length=pad_to_max_length,
                                       add_special_tokens=add_special_tokens,
                                       stride=stride,
                                       truncation_strategy=truncation_strategy,
@@ -853,7 +858,7 @@ class PreTrainedTokenizer(object):
 
     def prepare_for_model(self, ids, pair_ids=None, max_length=None, add_special_tokens=True, stride=0,
                           truncation_strategy='longest_first',
-                          padding_strategy=None,
+                          pad_to_max_length=False,
                           return_tensors=None,
                           return_token_type_ids=True,
                           return_attention_mask=True,
@@ -881,12 +886,12 @@ class PreTrainedTokenizer(object):
                 - 'only_first': Only truncate the first sequence
                 - 'only_second': Only truncate the second sequence
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
-            padding_strategy: if set to a strategy, the returned sequences will be padded according to the model's 
-                padding index, up to their max length. If no max length is specified, no padding is done.
-                The strategies are handled by the following strings:
+            pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
+                padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
+                The tokenizer padding sides are handled by the following strings:
                 - 'left': pads on the left of the sequences
-                - 'right': pads on the right of the sequences            
-                Defaults to None: no padding.
+                - 'right': pads on the right of the sequences   
+                Defaults to False: no padding.
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
@@ -955,10 +960,19 @@ class PreTrainedTokenizer(object):
                            "for this model ({} > {}). Running this sequence through the model will result in "
                            "indexing errors".format(len(ids), self.max_len))
                            
-        if padding_strategy is not None and max_length and len(encoded_inputs["input_ids"]) < max_length:
-            difference = max_length - len(encoded_inputs["input_ids"])
+        needs_to_be_padded = pad_to_max_length and (
+            max_length and len(encoded_inputs["input_ids"]) < max_length
+            or 
+            max_length is None and len(encoded_inputs["input_ids"]) < self.max_len and self.max_len <= 10000
+        )
 
-            if padding_strategy == 'right':
+        if pad_to_max_length and max_length is None and self.max_len > 10000:
+            logger.warning("Sequence can't be padded as the maximum  ")
+
+        if needs_to_be_padded:
+            difference = (max_length if max_length is not None else self.max_len) - len(encoded_inputs["input_ids"])
+
+            if self.padding_side == 'right':
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"]) + [0] * difference
                 if return_token_type_ids:
@@ -967,7 +981,7 @@ class PreTrainedTokenizer(object):
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
 
-            elif padding_strategy == 'left':
+            elif self.padding_side == 'left':
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] =  [0] * difference + [1] * len(encoded_inputs["input_ids"])
                 if return_token_type_ids:
@@ -977,7 +991,7 @@ class PreTrainedTokenizer(object):
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
 
             else:
-                raise ValueError("Invalid padding strategy:" + str(padding_strategy))
+                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
             
         elif return_attention_mask:
             encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
