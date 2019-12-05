@@ -19,6 +19,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import collections
 import logging
 import os
+import six
 import unicodedata
 from io import open
 
@@ -186,8 +187,13 @@ class MecabTokenizer(object):
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
+        if six.PY2:
+            mecab_output = self.mecab.parse(text.encode('utf-8')).decode('utf-8')
+        else:
+            mecab_output = self.mecab.parse(text)
+
         cursor = 0
-        for line in self.mecab.parse(text).split('\n'):
+        for line in mecab_output.split('\n'):
             if line == 'EOS':
                 break
 
