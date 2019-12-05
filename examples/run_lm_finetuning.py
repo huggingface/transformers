@@ -42,12 +42,13 @@ except:
 
 from tqdm import tqdm, trange
 
-from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
+from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   BertConfig, BertForMaskedLM, BertTokenizer,
                                   GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
                                   OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
-                                  DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
+                                  DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
+                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 
 
 logger = logging.getLogger(__name__)
@@ -58,17 +59,18 @@ MODEL_CLASSES = {
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
     'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
+    'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 }
 
 
 class TextDataset(Dataset):
-    def __init__(self, tokenizer, file_path='train', block_size=512):
+    def __init__(self, tokenizer, args, file_path='train', block_size=512):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, 'cached_lm_' + str(block_size) + '_' + filename)
+        cached_features_file = os.path.join(directory, args.model_name_or_path + '_cached_lm_' + str(block_size) + '_' + filename)
 
-        if os.path.exists(cached_features_file):
+        if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             with open(cached_features_file, 'rb') as handle:
                 self.examples = pickle.load(handle)
@@ -99,7 +101,7 @@ class TextDataset(Dataset):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
-    dataset = TextDataset(tokenizer, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size)
+    dataset = TextDataset(tokenizer, args, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size)
     return dataset
 
 
@@ -185,7 +187,7 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
@@ -215,6 +217,10 @@ def train(args, train_dataset, model, tokenizer):
 
     global_step = 0
     tr_loss, logging_loss = 0.0, 0.0
+
+    model_to_resize = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+    model_to_resize.resize_token_embeddings(len(tokenizer))
+
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
@@ -297,8 +303,12 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+    eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+    # multi-gpu evaluate
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -427,7 +437,7 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
 
-    if args.model_type in ["bert", "roberta", "distilbert"] and not args.mlm:
+    if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
         raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
                          "flag (masked language modeling).")
     if args.eval_data_file is None and args.do_eval:
@@ -471,12 +481,18 @@ def main():
         torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
 
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
+    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
+    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                do_lower_case=args.do_lower_case,
+                                                cache_dir=args.cache_dir if args.cache_dir else None)
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len_single_sentence  # Our input block size will be the max possible for the model
     args.block_size = min(args.block_size, tokenizer.max_len_single_sentence)
-    model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)
+    model = model_class.from_pretrained(args.model_name_or_path,
+                                        from_tf=bool('.ckpt' in args.model_name_or_path),
+                                        config=config,
+                                        cache_dir=args.cache_dir if args.cache_dir else None)
     model.to(args.device)
 
     if args.local_rank == 0:

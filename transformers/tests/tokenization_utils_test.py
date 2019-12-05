@@ -18,11 +18,13 @@ from __future__ import print_function
 
 import unittest
 import six
+import pytest
 
 from transformers import PreTrainedTokenizer
 from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 class TokenizerUtilsTest(unittest.TestCase):
+    @pytest.mark.slow
     def check_tokenizer_from_pretrained(self, tokenizer_class):
         s3_models = list(tokenizer_class.max_model_input_sizes.keys())
         for model_name in s3_models[:1]:

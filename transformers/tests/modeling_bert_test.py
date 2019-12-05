@@ -36,6 +36,7 @@ else:
     pytestmark = pytest.mark.skip("Require Torch")
 
 
+@pytest.mark.usefixtures("use_cuda")
 class BertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,
@@ -69,6 +70,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
                      entity_1_token_id=4,
                      entity_2_token_id=8,
                      scope=None,
+                     device='cpu',
                      ):
             self.parent = parent
             self.batch_size = batch_size
@@ -94,9 +96,10 @@ class BertModelTest(CommonTestCases.CommonModelTester):
             self.entity_1_token_id = entity_1_token_id
             self.entity_2_token_id = entity_2_token_id
             self.scope = scope
+            self.device = device
 
         def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(self.device)
 
             assert self.seq_length >= 7
             # we need to mock the behaviour of a string prepared for RBERT, by inserting entity bounding characters
@@ -107,19 +110,19 @@ class BertModelTest(CommonTestCases.CommonModelTester):
 
             input_mask = None
             if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2).to(self.device)
 
             token_type_ids = None
             if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size).to(self.device)
 
             sequence_labels = None
             token_labels = None
             choice_labels = None
             if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                choice_labels = ids_tensor([self.batch_size], self.num_choices)
+                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size).to(self.device)
+                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(self.device)
+                choice_labels = ids_tensor([self.batch_size], self.num_choices).to(self.device)
 
             config = BertConfig(
                 vocab_size_or_config_json_file=self.vocab_size,
@@ -155,6 +158,7 @@ class BertModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_bert_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = BertModel(config=config)
+            model.to(input_ids.device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -339,7 +343,10 @@ class BertModelTest(CommonTestCases.CommonModelTester):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_bert_model(self):
+    def test_bert_model(self, use_cuda=False):
+        # ^^ This could be a real fixture
+        if use_cuda:
+            self.model_tester.device = "cuda"
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_model(*config_and_inputs)
 

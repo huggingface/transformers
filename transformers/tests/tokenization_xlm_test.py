@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 import json
+import pytest
 
 from transformers.tokenization_xlm import XLMTokenizer, VOCAB_FILES_NAMES
 
@@ -66,6 +67,7 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @pytest.mark.slow
     def test_sequence_builders(self):
         tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
 

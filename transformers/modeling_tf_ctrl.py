@@ -95,7 +95,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False):
         v, k, q, mask, layer_past, attention_mask, head_mask = inputs
-        batch_size = q.shape[0]
+        batch_size = shape_list(q)[0]
 
         q = self.Wq(q)
         k = self.Wk(k)
@@ -192,6 +192,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                                  name='h_._{}'.format(i)) for i in range(config.n_layer)]
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
 
+    def get_input_embeddings(self):
+        return self.w
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -201,7 +204,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def call(self, inputs, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
+    def call(self, inputs, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             past = inputs[1] if len(inputs) > 1 else past
@@ -209,7 +212,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
             position_ids = inputs[4] if len(inputs) > 4 else position_ids
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
-            assert len(inputs) <= 6, "Too many inputs."
+            inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             past = inputs.get('past', past)
@@ -217,12 +221,20 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             token_type_ids = inputs.get('token_type_ids', token_type_ids)
             position_ids = inputs.get('position_ids', position_ids)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 6, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
-        input_shape = shape_list(input_ids)
-        input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+            input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if past is None:
             past_length = 0
@@ -230,8 +242,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         else:
             past_length = shape_list(past[0][0])[-2]
         if position_ids is None:
-            position_ids = tf.range(past_length, shape_list(input_ids)[-1] + past_length, dtype=tf.int32)[tf.newaxis, :]
-            position_ids = tf.tile(position_ids, [shape_list(input_ids)[0], 1])
+            position_ids = tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32)[tf.newaxis, :]
+            position_ids = tf.tile(position_ids, [input_shape[0], 1])
 
         # Attention mask.
         if attention_mask is not None:
@@ -270,8 +282,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             token_type_embeds = 0
         position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
 
-        inputs_embeds = self.w(input_ids, mode='embedding')
-        # x = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
+        if inputs_embeds is None:
+            inputs_embeds = self.w(input_ids, mode='embedding')
         seq_len = input_shape[-1]
         mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
 
@@ -374,6 +386,10 @@ CTRL_INPUTS_DOCSTRING = r"""    Inputs:
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare CTRL Model transformer outputting raw hidden-states without any specific head on top.",
@@ -475,6 +491,9 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         self.transformer = TFCTRLMainLayer(config, name='transformer')
 
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
+
+    def get_output_embeddings(self):
+        return self.lm_head.input_embeddings
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
