@@ -192,9 +192,9 @@ class CTRLTokenizer(PreTrainedTokenizer):
         """
         split_tokens = []
 
-        text = text.split(' ')
+        words = re.findall(r'\S+\n?', text)
 
-        for token in text:
+        for token in words:
             split_tokens.extend([t for t in self.bpe(token).split(' ')])
         return split_tokens
 
