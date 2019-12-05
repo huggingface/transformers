@@ -46,12 +46,9 @@ SMALL_CONST = 1e-15
 BIG_CONST = 1e10
 
 BAG_OF_WORDS_ARCHIVE_MAP = {
-    'kitchen': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/kitchen.txt",
     'legal': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/legal.txt",
     'military': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/military.txt",
-    'monsters': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/monsters.txt",
     'politics': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/politics.txt",
-    'positive_words': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/positive_words.txt",
     'religion': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/religion.txt",
     'science': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/science.txt",
     'space': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/space.txt",
@@ -73,14 +70,6 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "embed_size": 1024,
         "class_vocab": {"very_positive": 2, "very_negative": 3},
         "default_class": 3,
-        "pretrained_model": "gpt2-medium",
-    },
-    "toxicity": {
-        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/toxic_classifier_head.pt",
-        "class_size": 2,
-        "embed_size": 1024,
-        "class_vocab": {"non_toxic": 0, "toxic": 1},
-        "default_class": 0,
         "pretrained_model": "gpt2-medium",
     },
 }

@@ -8,7 +8,7 @@ Authors: [Sumanth Dathathri](https://dathath.github.io/), [Andrea Madotto](https
 
 PPLM allows a user to flexibly plug in one or more tiny attribute models representing the desired steering objective into a large, unconditional language model (LM). The method has the key property that it uses the LM _as is_—no training or fine-tuning is required—which enables researchers to leverage best-in-class LMs even if they do not have the extensive hardware required to train them.
 
-Paper link: 
+Paper link: https://arxiv.org/abs/1912.02164
 
 Blog link: https://eng.uber.com/pplm
 
@@ -27,7 +27,7 @@ cd examples/pplm
 ### Example command for bag-of-words control
 
 ```bash
-python run_pplm.py -B space --cond_text "The president" --length 100 --gamma 1.5 --num_iterations 3 --num_samples 1 --stepsize 0.01 --window_length 5 --kl_scale 0.01 --gm_scale 0.95
+python run_pplm.py -B military --cond_text "The potato" --length 50 --gamma 1.5 --num_iterations 3 --num_samples 10 --stepsize 0.03 --window_length 5 --kl_scale 0.01 --gm_scale 0.99 --colorama --sample
 ```
 
 ### Tuning hyperparameters for bag-of-words control
@@ -45,7 +45,7 @@ python run_pplm.py -B space --cond_text "The president" --length 100 --gamma 1.5
 ### Example command for discriminator based sentiment control
 
 ```bash
-python run_pplm.py -D sentiment --class_label 2 --cond_text "My dog died" --length 50 --gamma 1.0 --num_iterations 10 --num_samples 1 --stepsize 0.03 --kl_scale 0.01 --gm_scale 0.95 --sample
+python run_pplm.py -D sentiment --class_label 2 --cond_text "My dog died" --length 50 --gamma 1.0 --num_iterations 10 --num_samples 10 --stepsize 0.04 --kl_scale 0.01 --gm_scale 0.95 --sample
 ```
 
 ### Tuning hyperparameters for discriminator control
