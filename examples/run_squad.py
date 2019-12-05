@@ -311,7 +311,8 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
         str(args.max_seq_length)))
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features_and_dataset = torch.load(cached_features_file)
+        features, dataset = features_and_dataset["features"], features_and_dataset["dataset"]
     else:
         logger.info("Creating features from dataset file at %s", input_dir)
 
@@ -330,39 +331,23 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
             examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
 
-        features = squad_convert_examples_to_features( 
+        features, dataset = squad_convert_examples_to_features( 
             examples=examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=not evaluate,
+            return_dataset='pt'
         )
 
 
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
+            torch.save({"features": features, "dataset": dataset}, cached_features_file)
 
     if args.local_rank == 0 and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Convert to Tensors and build dataset
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-    all_cls_index = torch.tensor([f.cls_index for f in features], dtype=torch.long)
-    all_p_mask = torch.tensor([f.p_mask for f in features], dtype=torch.float)
-    if evaluate:
-        all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                all_example_index, all_cls_index, all_p_mask)
-    else:
-        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
-        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids,
-                                all_start_positions, all_end_positions,
-                                all_cls_index, all_p_mask)
 
     if output_examples:
         return dataset, examples, features

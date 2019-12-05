@@ -194,7 +194,7 @@ class PreTrainedTokenizer(object):
 
     @property
     def pad_token_type_id(self):
-        """ Id of the padding token in the vocabulary. Log an error if used while not having been set. """
+        """ Id of the padding token type in the vocabulary."""
         return self._pad_token_type_id
 
     @property
