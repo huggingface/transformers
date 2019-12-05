@@ -2,6 +2,8 @@
 
 This folder contains the original code used to train Distil* as well as examples showcasing how to use DistilBERT, DistilRoBERTa and DistilGPT2.
 
+**December 6th, 2019 - Update** We release **DistilmBERT**: 92% of `bert-base-multilingual-cased` on XNLI. The model supports 104 different languages listed [here](https://github.com/google-research/bert/blob/master/multilingual.md#list-of-languages).
+
 **November 19th, 2019 - Update** We release German **DistilBERT**: 98.8% of `bert-base-german-dbmdz-cased` on NER tasks.
 
 **October 23rd, 2019 - Update** We release **DistilRoBERTa**: 95% of `RoBERTa-base`'s performance on GLUE, twice as fast as RoBERTa while being 35% smaller.
@@ -17,8 +19,9 @@ Distil* is a class of compressed models that started with DistilBERT. DistilBERT
 
 We have applied the same method to other Transformer architectures and released the weights:
 - GPT2: on the [WikiText-103](https://blog.einstein.ai/the-wikitext-long-term-dependency-language-modeling-dataset/) benchmark, GPT2 reaches a perplexity on the test set of 15.0 compared to 18.5 for **DistilGPT2** (after fine-tuning on the train set).
-- RoBERTa: **DistilRoBERTa** reaches 95% of `RoBERTa-base` performance on GLUE while being twice faster and 35% smaller.
-- and more to come! 🤗🤗🤗
+- RoBERTa: **DistilRoBERTa** reaches 95% of `RoBERTa-base`'s performance on GLUE while being twice faster and 35% smaller.
+- German BERT: **German DistilBERT** reaches 99% of `bert-base-german-dbmdz-cased`'s performance on German NER (CoNLL-2003).
+- Multilingual BERT: **DistilmBERT** reaches 92% of Multilingual BERT's performance on XNLI while being twice faster and 25% smaller. The model supports 104 languages listed [here](https://github.com/google-research/bert/blob/master/multilingual.md#list-of-languages).
 
 For more information on DistilBERT, please refer to our [NeurIPS workshop paper](https://arxiv.org/abs/1910.01108).
 
@@ -29,7 +32,7 @@ Here are the results on the dev sets of GLUE:
 | BERT-base                 |  **77.6**                      | 48.9 | 84.3 | 88.6 | 89.3 | 89.5 | 71.3 | 91.7 | 91.2 | 43.7              |
 | DistilBERT                |  **76.8**                      | 49.1 | 81.8 | 90.2 | 90.2 | 89.2 | 62.9 | 92.7 | 90.7 | 44.4              |
 | ---                       |    ---                         |  --- |  --- |  --- |  --- |  --- |  --- |  --- |  --- |  ---              |
-| RoBERTa-base (reported)   |  **83.2**/**86.4**<sup>2</sup> | 63.6 | 87.6 | 90.2 | 92.8 | 91.9 | 78.7 | 94.8 | 91.2 | 57.7<sup>3</sup> |
+| RoBERTa-base (reported)   |  **83.2**/**86.4**<sup>2</sup> | 63.6 | 87.6 | 90.2 | 92.8 | 91.9 | 78.7 | 94.8 | 91.2 | 57.7<sup>3</sup>  |
 | DistilRoBERTa<sup>1</sup> |  **79.0**/**82.3**<sup>2</sup> | 59.4 | 83.9 | 86.6 | 90.8 | 89.4 | 67.9 | 92.5 | 88.3 | 52.1              |
 
 <sup>1</sup> We did not use the MNLI checkpoint for fine-tuning but directy perform transfer learning on the pre-trained DistilRoBERTa.
@@ -37,6 +40,14 @@ Here are the results on the dev sets of GLUE:
 <sup>2</sup> Macro-score computed without WNLI.
 
 <sup>3</sup> We compute this score ourselves for completeness.
+
+Here are the results on the *test* sets for 6 of the languages available in XNLI. The results are computed in the zero shot setting (trained on the English portion and evaluated on the target language portion):
+
+| Model                        | English | Spanish | Chinese | German | Arabic  | Urdu |
+| :---:                        | :---:   | :---:   | :---:   | :---:  | :---:   | :---:|
+| mBERT base cased (computed)  | 82.1    | 74.6    | 69.1    | 72.3   | 66.4    | 58.5 |
+| mBERT base uncased (reported)| 81.4    | 74.3    | 63.8    | 70.5   | 62.1    | 58.3 |
+| DistilmBERT                  | 78.2    | 69.1    | 64.0    | 66.3   | 59.1    | 54.7 |
 
 ## Setup
 
@@ -54,7 +65,7 @@ Transformers includes five pre-trained Distil* models, currently only provided f
 - `distilbert-base-german-cased`: DistilBERT German language model pretrained on 1/2 of the data used to pretrain Bert using distillation with the supervision of the `bert-base-german-dbmdz-cased` version of German DBMDZ Bert. For NER tasks the model reaches a F1 score of 83.49 on the CoNLL-2003 test set (for comparison, `bert-base-german-dbmdz-cased` reaches a 84.52 F1 score), and a F1 score of 85.23 on the GermEval 2014 test set (`bert-base-german-dbmdz-cased` reaches a 86.89 F1 score).
 - `distilgpt2`: DistilGPT2 English language model pretrained with the supervision of `gpt2` (the smallest version of GPT2) on [OpenWebTextCorpus](https://skylion007.github.io/OpenWebTextCorpus/), a reproduction of OpenAI's WebText dataset. The model has 6 layers, 768 dimension and 12 heads, totalizing 82M parameters (compared to 124M parameters for GPT2). On average, DistilGPT2 is two times faster than GPT2.
 - `distilroberta-base`: DistilRoBERTa English language model pretrained with the supervision of `roberta-base` solely on [OpenWebTextCorpus](https://skylion007.github.io/OpenWebTextCorpus/), a reproduction of OpenAI's WebText dataset (it is ~4 times less training data than the teacher RoBERTa). The model has 6 layers, 768 dimension and 12 heads, totalizing 82M parameters (compared to 125M parameters for RoBERTa-base). On average DistilRoBERTa is twice as fast as Roberta-base.
-- and more to come! 🤗🤗🤗
+- `distilbert-base-multilingual-cased`: DistilmBERT multilingual model pretrained with the supervision of `bert-base-multilingual-cased` on the concatenation of Wikipedia in 104 different languages. The model supports the 104 languages listed [here](https://github.com/google-research/bert/blob/master/multilingual.md#list-of-languages). The model has 6 layers, 768 dimension and 12 heads, totalizing 134M parameters (compared to 177M parameters for mBERT-base). On average DistilmBERT is twice as fast as mBERT-base.
 
 Using DistilBERT is very similar to using BERT. DistilBERT share the same tokenizer as BERT's `bert-base-uncased` even though we provide a link to this tokenizer under the `DistilBertTokenizer` name to have a consistent naming between the library models.
 
@@ -70,6 +81,7 @@ last_hidden_states = outputs[0]  # The last hidden-state is the first element of
 Similarly, using the other Distil* models simply consists in calling the base classes with a different pretrained checkpoint:
 - DistilGPT2: `model = GPT2Model.from_pretrained('distilgpt2')`
 - DistilRoBERTa: `model = RobertaModel.from_pretrained('distilroberta-base')`
+- DistilmBERT: `model = DistilBertModel.from_pretrained('distilbert-base-multilingual-cased')`
 
 
 ## How to train Distil*
