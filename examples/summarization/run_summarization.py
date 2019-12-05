@@ -31,9 +31,7 @@ Batch = namedtuple(
 
 def evaluate(args):
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
-    model = bertabs = BertAbs.from_pretrained(
-        "bertabs-finetuned-{}".format(args.finetuned_model)
-    )
+    model = bertabs = BertAbs.from_pretrained("bertabs-finetuned-cnndm")
     bertabs.to(args.device)
     bertabs.eval()
 
@@ -195,8 +193,8 @@ def main():
         "--summaries_output_dir",
         default=None,
         type=str,
-        required=True,
-        help="The folder in wich the summaries should be written.",
+        required=False,
+        help="The folder in wich the summaries should be written. Defaults to the folder where the documents are",
     )
     # EVALUATION options
     parser.add_argument(
@@ -241,6 +239,9 @@ def main():
     )
     args = parser.parse_args()
     args.device = torch.device("cpu") if args.visible_gpus == -1 else torch.device("cuda")
+
+    if not args.summaries_output_dir:
+        args.summaries_output_dir = args.documents_dir
 
     if not documents_dir_is_valid(args.documents_dir):
         raise FileNotFoundError(
