@@ -4,12 +4,14 @@ In this section a few examples are put together. All of these examples work for 
 similar API between the different models.
 
 **Important**  
-To run the latest versions of the examples, you have to install from source. Execute the following steps in a new virtual environment:
+To run the latest versions of the examples, you have to install from source and install some specific requirements for the examples.
+Execute the following steps in a new virtual environment:
 
 ```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 pip install [--editable] .
+pip install -r ./examples/requirements.txt
 ```
 
 | Section                    | Description                                                                                                                                                |
