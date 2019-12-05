@@ -66,7 +66,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file,
                  do_lower_case=True, remove_space=True, keep_accents=False,
                  bos_token="[CLS]", eos_token="[SEP]", unk_token="<unk>", sep_token="[SEP]",
-                 pad_token="<pad>", cls_token="[CLS]", mask_token="[MASK]>", **kwargs):
+                 pad_token="<pad>", cls_token="[CLS]", mask_token="[MASK]", **kwargs):
         super(AlbertTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token,
                                              unk_token=unk_token, sep_token=sep_token,
                                              pad_token=pad_token, cls_token=cls_token,
