@@ -13,6 +13,8 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo apt-get -y install libmecab-dev mecab mecab-ipadic-utf8 swig
+            - run: sudo pip install mecab-python3
             - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     build_py3_torch:
@@ -27,6 +29,8 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo apt-get -y install libmecab-dev mecab mecab-ipadic-utf8 swig
+            - run: sudo pip install mecab-python3
             - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: python -m pytest -sv ./examples/
             - run: codecov
@@ -42,6 +46,8 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
             - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo apt-get -y install libmecab-dev mecab mecab-ipadic-utf8 swig
+            - run: sudo pip install mecab-python3
             - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     build_py2_torch:
@@ -55,6 +61,8 @@ jobs:
             - run: sudo pip install torch
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo apt-get -y install libmecab-dev mecab mecab-ipadic-utf8 swig
+            - run: sudo pip install mecab-python
             - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     build_py2_tf:
@@ -68,6 +76,8 @@ jobs:
             - run: sudo pip install tensorflow
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo apt-get -y install libmecab-dev mecab mecab-ipadic-utf8 swig
+            - run: sudo pip install mecab-python
             - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
     deploy_doc:
