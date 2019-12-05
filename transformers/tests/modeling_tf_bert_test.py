@@ -18,12 +18,11 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 import sys
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_tf, slow
 
 from transformers import BertConfig, is_tf_available
 
@@ -37,10 +36,9 @@ if is_tf_available():
                                                        TFBertForTokenClassification,
                                                        TFBertForQuestionAnswering,
                                                        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFBertModel, TFBertForMaskedLM, TFBertForNextSentencePrediction,

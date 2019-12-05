@@ -3,7 +3,7 @@ import unittest
 
 from distutils.util import strtobool
 
-from transformers.file_utils import _torch_available
+from transformers.file_utils import _tf_available, _torch_available
 
 
 try:
@@ -42,4 +42,16 @@ def require_torch(test_case):
     """
     if not _torch_available:
         test_case = unittest.skip("test requires PyTorch")(test_case)
+    return test_case
+
+
+def require_tf(test_case):
+    """
+    Decorator marking a test that requires TensorFlow.
+
+    These tests are skipped when TensorFlow isn't installed.
+
+    """
+    if not _tf_available:
+        test_case = unittest.skip("test requires TensorFlow")(test_case)
     return test_case

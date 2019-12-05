@@ -18,11 +18,10 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_tf, slow
 
 from transformers import RobertaConfig, is_tf_available
 
@@ -33,10 +32,9 @@ if is_tf_available():
                                                           TFRobertaForSequenceClassification,
                                                           TFRobertaForTokenClassification,
                                                           TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFRobertaModel,TFRobertaForMaskedLM,
@@ -207,7 +205,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = [1, 11, 50265]
@@ -228,7 +226,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = TFRobertaModel.from_pretrained('roberta-base')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
@@ -244,7 +242,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_head(self):
         model = TFRobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = [1, 3]

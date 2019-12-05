@@ -19,11 +19,10 @@ from __future__ import print_function
 import unittest
 import random
 import shutil
-import pytest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_tf, slow
 
 from transformers import TransfoXLConfig, is_tf_available
 
@@ -32,10 +31,9 @@ if is_tf_available():
     from transformers.modeling_tf_transfo_xl import (TFTransfoXLModel,
                                                              TFTransfoXLLMHeadModel,
                                                              TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFTransfoXLModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFTransfoXLModel, TFTransfoXLLMHeadModel) if is_tf_available() else ()

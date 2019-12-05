@@ -18,12 +18,11 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 import logging
 
 from transformers import is_tf_available
 
-from .utils import slow
+from .utils import require_tf, slow
 
 if is_tf_available():
     from transformers import (AutoConfig, BertConfig,
@@ -35,10 +34,9 @@ if is_tf_available():
 
     from .modeling_common_test import (CommonTestCases, ids_tensor)
     from .configuration_common_test import ConfigTester
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
