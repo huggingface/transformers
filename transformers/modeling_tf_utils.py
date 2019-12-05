@@ -51,7 +51,15 @@ class TFPreTrainedModel(tf.keras.Model):
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
-    dummy_inputs = tf.constant(DUMMY_INPUTS)  # dummy inputs to build the network
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return tf.constant(DUMMY_INPUTS)
 
     def __init__(self, config, *inputs, **kwargs):
         super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
