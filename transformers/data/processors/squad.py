@@ -312,7 +312,7 @@ class SquadProcessor(DataProcessor):
         if not evaluate:
             answer = tensor_dict['answers']['text'][0].numpy().decode('utf-8')
             answer_start = tensor_dict['answers']['answer_start'][0].numpy()
-            answers = None
+            answers = []
         else:
             answers = [{
                 "answer_start": start.numpy(), 
@@ -408,7 +408,7 @@ class SquadProcessor(DataProcessor):
                     question_text = qa["question"]
                     start_position_character = None
                     answer_text = None
-                    answers = None
+                    answers = []
                     
                     if "is_impossible" in qa:
                         is_impossible = qa["is_impossible"]
@@ -469,7 +469,7 @@ class SquadExample(object):
                  answer_text,
                  start_position_character,
                  title,
-                 answers=None,
+                 answers=[],
                  is_impossible=False):
         self.qas_id = qas_id
         self.question_text = question_text

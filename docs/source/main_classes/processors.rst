@@ -55,7 +55,7 @@ Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An example using these processors is given in the
-`run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py>`__ script.
+`run_glue.py <https://github.com/huggingface/transformers/blob/master/examples/run_glue.py>`__ script.
 
 
 
@@ -132,4 +132,4 @@ Example::
 
 
 Another example using these processors is given in the
-`run_squad.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_squad.py>`__ script.
+`run_squad.py <https://github.com/huggingface/transformers/blob/master/examples/run_squad.py>`__ script.
