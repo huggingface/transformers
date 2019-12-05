@@ -910,7 +910,7 @@ class PreTrainedTokenizer(object):
             token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
             special_tokens_mask = [0] * (len(ids) + (len(pair_ids) if pair else 0))
         if return_special_tokens_mask:
-            encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+            encoded_inputs["special_tokens_mask"] = special_tokens_mask
 
         # Prepare inputs as tensors if asked
         if return_tensors == 'tf' and is_tf_available():
