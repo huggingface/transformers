@@ -119,10 +119,11 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
         tf_inputs = tf.constant(inputs_list)
         tfo = tf_model(tf_inputs, training=False)  # build the network
 
-        pt_model = pt_model_class.from_pretrained(None,
-                                                  config=config,
-                                                  state_dict=torch.load(pytorch_checkpoint_path,
-                                                                        map_location='cpu'))
+        pt_model = pt_model_class(config)
+        pt_model.load_state_dict(torch.load(pytorch_checkpoint_path, map_location='cpu'),
+                                 strict-False)
+        pt_model.eval()
+
         pt_inputs = torch.tensor(inputs_list)
         with torch.no_grad():
             pto = pt_model(pt_inputs)
