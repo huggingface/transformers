@@ -39,6 +39,8 @@ class SummarizationDataset(Dataset):
         self.documents = []
         story_filenames_list = os.listdir(path)
         for story_filename in story_filenames_list:
+            if "summary" in story_filename:
+                continue
             path_to_story = os.path.join(path, story_filename)
             if not os.path.isfile(path_to_story):
                 continue
