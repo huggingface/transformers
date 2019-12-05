@@ -1,18 +1,19 @@
 #! /usr/bin/env python3
 # coding=utf-8
-# Copyright 2018 The Uber AI Team Authors.
+
+#Copyright (c) 2019 Uber Technologies, Inc.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+#Licensed under the Apache License, Version 2.0 (the "License");
+#you may not use this file except in compliance with the License.
+#You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+#Unless required by applicable law or agreed to in writing, software
+#distributed under the License is distributed on an "AS IS" BASIS,
+#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#See the License for the specific language governing permissions and
+#limitations under the License.
 
 """
 Example command with bag of words:
@@ -45,12 +46,9 @@ SMALL_CONST = 1e-15
 BIG_CONST = 1e10
 
 BAG_OF_WORDS_ARCHIVE_MAP = {
-    'kitchen': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/kitchen.txt",
     'legal': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/legal.txt",
     'military': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/military.txt",
-    'monsters': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/monsters.txt",
     'politics': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/politics.txt",
-    'positive_words': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/positive_words.txt",
     'religion': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/religion.txt",
     'science': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/science.txt",
     'space': "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/bow/space.txt",
@@ -72,14 +70,6 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "embed_size": 1024,
         "class_vocab": {"very_positive": 2, "very_negative": 3},
         "default_class": 3,
-        "pretrained_model": "gpt2-medium",
-    },
-    "toxicity": {
-        "url": "https://s3.amazonaws.com/models.huggingface.co/bert/pplm/discriminators/toxic_classifier_head.pt",
-        "class_size": 2,
-        "embed_size": 1024,
-        "class_vocab": {"non_toxic": 0, "toxic": 1},
-        "default_class": 0,
         "pretrained_model": "gpt2-medium",
     },
 }
