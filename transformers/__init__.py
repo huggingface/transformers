@@ -98,7 +98,7 @@ if is_torch_available():
                                 RobertaForSequenceClassification, RobertaForMultipleChoice,
                                 RobertaForTokenClassification,
                                 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
-    from .modeling_distilbert import (DistilBertForMaskedLM, DistilBertModel,
+    from .modeling_distilbert import (DistilBertPreTrainedModel, DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
                                 DistilBertForTokenClassification,
                                 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
@@ -108,7 +108,7 @@ if is_torch_available():
                                 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
 
-    from .modeling_albert import (AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
+    from .modeling_albert import (AlbertPreTrainedModel, AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
                                 AlbertForQuestionAnswering,
                                 load_tf_weights_in_albert, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
