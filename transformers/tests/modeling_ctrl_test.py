@@ -27,7 +27,7 @@ if is_torch_available():
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 
 @require_torch
@@ -139,6 +139,7 @@ class CTRLModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = CTRLModel(config=config)
+            model.to(torch_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -156,6 +157,7 @@ class CTRLModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = CTRLLMHeadModel(config)
+            model.to(torch_device)
             model.eval()
 
             loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)

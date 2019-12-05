@@ -27,7 +27,7 @@ if is_torch_available():
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 
 @require_torch
@@ -135,6 +135,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2Model(config=config)
+            model.to(torch_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -152,6 +153,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2LMHeadModel(config)
+            model.to(torch_device)
             model.eval()
 
             loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -170,6 +172,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_double_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args):
             model = GPT2DoubleHeadsModel(config)
+            model.to(torch_device)
             model.eval()
 
 

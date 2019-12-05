@@ -29,7 +29,7 @@ if is_torch_available():
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 
 @require_torch
@@ -128,6 +128,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_roberta_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
                                            token_labels, choice_labels):
             model = RobertaModel(config=config)
+            model.to(torch_device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -145,6 +146,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_roberta_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
                                                    token_labels, choice_labels):
             model = RobertaForMaskedLM(config=config)
+            model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
             result = {
@@ -160,6 +162,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                                                               sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = RobertaForTokenClassification(config=config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
                                  labels=token_labels)

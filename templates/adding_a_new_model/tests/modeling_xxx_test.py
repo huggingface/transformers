@@ -23,7 +23,7 @@ from transformers import is_torch_available
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     from transformers import (XxxConfig, XxxModel, XxxForMaskedLM,
@@ -130,6 +130,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_xxx_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = XxxModel(config=config)
+            model.to(torch_device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -147,6 +148,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_xxx_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = XxxForMaskedLM(config=config)
+            model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
             result = {
@@ -161,6 +163,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_xxx_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = XxxForQuestionAnswering(config=config)
+            model.to(torch_device)
             model.eval()
             loss, start_logits, end_logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
                                                    start_positions=sequence_labels, end_positions=sequence_labels)
@@ -181,6 +184,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_xxx_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = XxxForSequenceClassification(config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
             result = {
@@ -196,6 +200,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_xxx_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = XxxForTokenClassification(config=config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
             result = {

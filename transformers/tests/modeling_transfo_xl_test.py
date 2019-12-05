@@ -29,7 +29,7 @@ if is_torch_available():
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 
 @require_torch
@@ -111,6 +111,7 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
 
         def create_transfo_xl_model(self, config, input_ids_1, input_ids_2, lm_labels):
             model = TransfoXLModel(config)
+            model.to(torch_device)
             model.eval()
 
             hidden_states_1, mems_1 = model(input_ids_1)
@@ -140,6 +141,7 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
 
         def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
             model = TransfoXLLMHeadModel(config)
+            model.to(torch_device)
             model.eval()
 
             lm_logits_1, mems_1 = model(input_ids_1)

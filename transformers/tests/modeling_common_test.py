@@ -30,7 +30,7 @@ import logging
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
@@ -79,6 +79,7 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
@@ -113,6 +114,7 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 first, second = model(inputs_dict["input_ids"])[0], model(inputs_dict["input_ids"])[0]
                 self.assertEqual(first.ne(second).sum().item(), 0)
@@ -125,6 +127,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = False
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(**inputs_dict)
                 attentions = outputs[-1]
@@ -142,6 +145,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = True
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(**inputs_dict)
                 self.assertEqual(out_len+1, len(outputs))
@@ -181,6 +185,7 @@ class CommonTestCases:
             configs_no_init.torchscript = True
             for model_class in self.all_model_classes:
                 model = model_class(config=configs_no_init)
+                model.to(torch_device)
                 model.eval()
                 inputs = inputs_dict['input_ids']  # Let's keep only input_ids
 
@@ -201,7 +206,10 @@ class CommonTestCases:
                 except ValueError:
                     self.fail("Couldn't load module.")
 
+                model.to(torch_device)
                 model.eval()
+
+                loaded_model.to(torch_device)
                 loaded_model.eval()
 
                 model_params = model.parameters()
@@ -228,6 +236,7 @@ class CommonTestCases:
             configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
             for model_class in self.all_model_classes:
                 model = model_class(config=configs_no_init)
+                model.to(torch_device)
                 model.eval()
 
                 # Prepare head_mask
@@ -282,6 +291,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = False
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
                 heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
                                 -1: [0]}
@@ -310,6 +320,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = False
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
                 heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
                                 -1: [0]}
@@ -346,6 +357,7 @@ class CommonTestCases:
                 config.pruned_heads = heads_to_prune
 
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
 
                 outputs = model(**inputs_dict)
@@ -372,6 +384,7 @@ class CommonTestCases:
                 config.pruned_heads = heads_to_prune
 
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
 
                 outputs = model(**inputs_dict)
@@ -419,6 +432,7 @@ class CommonTestCases:
                 config.output_hidden_states = True
                 config.output_attentions = False
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(**inputs_dict)
                 hidden_states = outputs[-1]
@@ -538,6 +552,7 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
 
                 wte = model.get_input_embeddings()
@@ -628,6 +643,7 @@ class CommonTestCases:
         def create_and_check_base_model(self, config, input_ids, token_type_ids, position_ids,
                                 mc_labels, lm_labels, mc_token_ids):
             model = self.base_model_class(config)
+            model.to(torch_device)
             model.eval()
 
             outputs = model(input_ids, position_ids, token_type_ids)
@@ -643,6 +659,7 @@ class CommonTestCases:
         def create_and_check_lm_head(self, config, input_ids, token_type_ids, position_ids,
                                         mc_labels, lm_labels, mc_token_ids):
             model = self.lm_head_model_class(config)
+            model.to(torch_device)
             model.eval()
             outputs = model(input_ids, position_ids, token_type_ids, lm_labels)
             loss, lm_logits = outputs[:2]
@@ -659,6 +676,7 @@ class CommonTestCases:
                                         mc_labels, lm_labels, mc_token_ids):
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(input_ids)
                 presents = outputs[-1]
@@ -671,6 +689,7 @@ class CommonTestCases:
         def create_and_check_double_heads(self, config, input_ids, token_type_ids, position_ids,
                                         mc_labels, lm_labels, mc_token_ids):
             model = self.double_head_model_class(config)
+            model.to(torch_device)
             model.eval()
             outputs = model(input_ids, mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels,
                             token_type_ids=token_type_ids, position_ids=position_ids)
@@ -770,7 +789,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
 
-    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous().to(torch_device)
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):

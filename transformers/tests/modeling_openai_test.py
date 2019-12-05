@@ -27,7 +27,7 @@ if is_torch_available():
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 
 @require_torch
@@ -123,6 +123,7 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_openai_gpt_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTModel(config=config)
+            model.to(torch_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -138,6 +139,7 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTLMHeadModel(config)
+            model.to(torch_device)
             model.eval()
 
             loss, lm_logits = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -156,6 +158,7 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTDoubleHeadsModel(config)
+            model.to(torch_device)
             model.eval()
 
             loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, lm_labels=input_ids)

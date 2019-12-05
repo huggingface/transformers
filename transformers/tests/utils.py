@@ -55,3 +55,11 @@ def require_tf(test_case):
     if not _tf_available:
         test_case = unittest.skip("test requires TensorFlow")(test_case)
     return test_case
+
+
+if _torch_available:
+    import torch
+    # Set the CUDA_VISIBLE_DEVICES environment variable to select a GPU.
+    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+else:
+    torch_device = None
