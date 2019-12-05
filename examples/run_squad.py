@@ -27,8 +27,7 @@ import glob
 import timeit
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 
 try:
@@ -47,14 +46,6 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
 
 from transformers import AdamW, get_linear_schedule_with_warmup, squad_convert_examples_to_features
-
-from utils_squad import (convert_examples_to_features as old_convert, read_squad_examples as old_read, RawResult, write_predictions,
-                         RawResultExtended, write_predictions_extended)
-
-# The follwing import is the official SQuAD evaluation script (2.0).
-# You can remove it from the dependencies if you are using this script outside of the library
-# We've added it here for automated tests (see examples/test_examples.py file)
-from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
 
 logger = logging.getLogger(__name__)
 
@@ -98,14 +89,16 @@ def train(args, train_dataset, model, tokenizer):
     optimizer_grouped_parameters = [
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
+    ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+
     if args.fp16:
         try:
             from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
@@ -133,20 +126,26 @@ def train(args, train_dataset, model, tokenizer):
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+    
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {'input_ids':       batch[0],
-                      'attention_mask':  batch[1],
-                      'start_positions': batch[3],
-                      'end_positions':   batch[4]}
+
+            inputs = {
+                'input_ids':       batch[0],
+                'attention_mask':  batch[1],
+                'start_positions': batch[3],
+                'end_positions':   batch[4]
+            }
+
             if args.model_type != 'distilbert':
                 inputs['token_type_ids'] = None if args.model_type == 'xlm' else batch[2]
+
             if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[5],
-                               'p_mask':       batch[6]})
+                inputs.update({'cls_index': batch[5], 'p_mask': batch[6]})
+
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -173,8 +172,8 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
+                # Log metrics
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    # Log metrics
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
@@ -183,8 +182,8 @@ def train(args, train_dataset, model, tokenizer):
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
 
+                # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
@@ -213,6 +212,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         os.makedirs(args.output_dir)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -225,11 +225,14 @@ def evaluate(args, model, tokenizer, prefix=""):
     logger.info("***** Running evaluation {} *****".format(prefix))
     logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
+
     all_results = []
     start_time = timeit.default_timer()
+
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
+
         with torch.no_grad():
             inputs = {
                 'input_ids':      batch[0],
@@ -238,10 +241,13 @@ def evaluate(args, model, tokenizer, prefix=""):
             
             if args.model_type != 'distilbert':
                 inputs['token_type_ids'] = None if args.model_type == 'xlm' else batch[2]  # XLM don't use segment_ids
+
             example_indices = batch[3]
+            
+            # XLNet and XLM use more arguments for their predictions
             if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[4],
-                               'p_mask':    batch[5]})
+                inputs.update({'cls_index': batch[4], 'p_mask': batch[5]})
+
             outputs = model(**inputs)
 
         for i, example_index in enumerate(example_indices):
@@ -250,11 +256,13 @@ def evaluate(args, model, tokenizer, prefix=""):
 
             output = [to_list(output[i]) for output in outputs]
 
+            # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
+            # models only use two.
             if len(output) >= 5:
                 start_logits = output[0]
                 start_top_index = output[1]
                 end_logits = output[2]
-                end_top_index = output[3],
+                end_top_index = output[3]
                 cls_logits = output[4]
 
                 result = SquadResult(
@@ -278,16 +286,17 @@ def evaluate(args, model, tokenizer, prefix=""):
     # Compute predictions
     output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
     output_nbest_file = os.path.join(args.output_dir, "nbest_predictions_{}.json".format(prefix))
+
     if args.version_2_with_negative:
         output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
     else:
         output_null_log_odds_file = None
 
+    # XLNet and XLM use a more complex post-processing procedure
     if args.model_type in ['xlnet', 'xlm']:
-        # XLNet uses a more complex post-processing procedure
         predictions = compute_predictions_log_probs(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, output_prediction_file,
-                        output_nbest_file, output_null_log_odds_file, args.predict_file,
+                        output_nbest_file, output_null_log_odds_file,
                         model.config.start_n_top, model.config.end_n_top,
                         args.version_2_with_negative, tokenizer, args.verbose_logging)
     else:
@@ -296,6 +305,7 @@ def evaluate(args, model, tokenizer, prefix=""):
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
                         args.version_2_with_negative, args.null_score_diff_threshold)
 
+    # Compute the F1 and exact scores.
     results = squad_evaluate(examples, predictions)
     return results
 
@@ -308,7 +318,10 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     cached_features_file = os.path.join(input_dir, 'cached_{}_{}_{}'.format(
         'dev' if evaluate else 'train',
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
-        str(args.max_seq_length)))
+        str(args.max_seq_length))
+    )
+
+    # Init features and dataset from cache if it exists
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
         features_and_dataset = torch.load(cached_features_file)
@@ -340,7 +353,6 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             is_training=not evaluate,
             return_dataset='pt'
         )
-
 
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -451,6 +463,11 @@ def main():
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     args = parser.parse_args()
+
+    args.predict_file = os.path.join(args.output_dir, 'predictions_{}_{}.txt'.format(
+        list(filter(None, args.model_name_or_path.split('/'))).pop(),
+        str(args.max_seq_length))
+    )
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError("Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(args.output_dir))
