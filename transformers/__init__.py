@@ -86,9 +86,10 @@ if is_torch_available():
                                 CTRLLMHeadModel,
                                 CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlnet import (XLNetPreTrainedModel, XLNetModel, XLNetLMHeadModel,
-                                XLNetForSequenceClassification, XLNetForMultipleChoice,
-                                XLNetForQuestionAnsweringSimple, XLNetForQuestionAnswering,
-                                load_tf_weights_in_xlnet, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                XLNetForSequenceClassification, XLNetForTokenClassification,
+                                XLNetForMultipleChoice, XLNetForQuestionAnsweringSimple,
+                                XLNetForQuestionAnswering, load_tf_weights_in_xlnet,
+                                XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_xlm import (XLMPreTrainedModel , XLMModel,
                             XLMWithLMHeadModel, XLMForSequenceClassification,
                             XLMForQuestionAnswering, XLMForQuestionAnsweringSimple,
@@ -144,6 +145,7 @@ if is_tf_available():
     from .modeling_tf_xlnet import (TFXLNetPreTrainedModel, TFXLNetMainLayer,
                                     TFXLNetModel, TFXLNetLMHeadModel,
                                     TFXLNetForSequenceClassification,
+                                    TFXLNetForTokenClassification,
                                     TFXLNetForQuestionAnsweringSimple,
                                     TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
 

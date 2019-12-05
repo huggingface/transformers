@@ -938,6 +938,59 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
         return outputs  # return logits, (mems), (hidden states), (attentions)
 
 
+@add_start_docstrings("""XLNet Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
+class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
+    r"""
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
+            list of ``tf.Tensor`` (one for each layer):
+            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
+            if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
+            See details in the docstring of the `mems` input above.
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import XLNetTokenizer, TFXLNetForTokenClassification
+
+        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
+        model = TFXLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+
+    """
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFXLNetForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.transformer = TFXLNetMainLayer(config, name='transformer')
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='classifier')
+
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
+        output = transformer_outputs[0]
+
+        logits = self.classifier(output)
+
+        outputs = (logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+
+        return outputs  # return logits, (mems), (hidden states), (attentions)
+
+
 # @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
 #     the hidden-states output to compute `span start logits` and `span end logits`). """,
 #     XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
