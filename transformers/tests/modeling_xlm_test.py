@@ -31,6 +31,7 @@ else:
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import slow
 
 
 class XLMModelTest(CommonTestCases.CommonModelTester):
@@ -312,7 +313,7 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_sequence_classif(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

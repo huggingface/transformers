@@ -16,11 +16,11 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import pytest
 
 from transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE)
 
 from .tokenization_tests_commons import CommonTestCases
+from .utils import slow
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     'fixtures/test_sentencepiece.model')
@@ -90,7 +90,7 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
                                       u'9', u'2', u'0', u'0', u'0', u',', SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
                                       SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u'se', u'.'])
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_builders(self):
         tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
 

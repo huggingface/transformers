@@ -30,6 +30,8 @@ import sys
 
 from transformers import is_tf_available, is_torch_available
 
+from .utils import slow
+
 if is_tf_available():
     import tensorflow as tf
     import numpy as np

@@ -23,6 +23,8 @@ import logging
 
 from transformers import is_tf_available
 
+from .utils import slow
+
 if is_tf_available():
     from transformers import (AutoConfig, BertConfig,
                                       TFAutoModel, TFBertModel,
@@ -38,7 +40,7 @@ else:
 
 
 class TFAutoModelTest(unittest.TestCase):
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         import h5py
         self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
@@ -54,7 +56,7 @@ class TFAutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertModel)
 
-    @pytest.mark.slow
+    @slow
     def test_lmhead_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -67,7 +69,7 @@ class TFAutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForMaskedLM)
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -80,7 +82,7 @@ class TFAutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForSequenceClassification)
 
-    @pytest.mark.slow
+    @slow
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

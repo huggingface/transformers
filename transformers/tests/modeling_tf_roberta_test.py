@@ -22,6 +22,7 @@ import pytest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import slow
 
 from transformers import RobertaConfig, is_tf_available
 
@@ -191,7 +192,7 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -203,7 +204,7 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
 
 class TFRobertaModelIntegrationTest(unittest.TestCase):
 
-    @pytest.mark.slow
+    @slow
     def test_inference_masked_lm(self):
         model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
         
@@ -224,7 +225,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
             numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_no_head(self):
         model = TFRobertaModel.from_pretrained('roberta-base')
         
@@ -240,7 +241,7 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
             numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_classification_head(self):
         model = TFRobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
         

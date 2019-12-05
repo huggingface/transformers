@@ -32,6 +32,7 @@ else:
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import slow
 
 class TransfoXLModelTest(CommonTestCases.CommonModelTester):
 
@@ -204,7 +205,7 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

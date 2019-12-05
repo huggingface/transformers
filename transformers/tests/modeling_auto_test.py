@@ -23,6 +23,8 @@ import logging
 
 from transformers import is_torch_available
 
+from .utils import slow
+
 if is_torch_available():
     from transformers import (AutoConfig, BertConfig,
                                     AutoModel, BertModel,
@@ -38,7 +40,7 @@ else:
 
 
 class AutoModelTest(unittest.TestCase):
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -53,7 +55,7 @@ class AutoModelTest(unittest.TestCase):
             for value in loading_info.values():
                 self.assertEqual(len(value), 0)
 
-    @pytest.mark.slow
+    @slow
     def test_lmhead_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -66,7 +68,7 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForMaskedLM)
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -79,7 +81,7 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForSequenceClassification)
 
-    @pytest.mark.slow
+    @slow
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

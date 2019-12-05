@@ -31,6 +31,8 @@ import pytest
 
 from transformers import is_torch_available
 
+from .utils import slow
+
 if is_torch_available():
     import torch
     import numpy as np
@@ -716,7 +718,7 @@ class CommonTestCases:
                 config_and_inputs = self.prepare_config_and_inputs()
                 self.create_and_check_presents(*config_and_inputs)
 
-        @pytest.mark.slow
+        @slow
         def run_slow_tests(self):
             self.create_and_check_model_from_pretrained()
 
@@ -790,7 +792,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 
 
 class ModelUtilsTest(unittest.TestCase):
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
