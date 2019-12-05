@@ -540,6 +540,9 @@ def main(_):
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args['output_dir'] + "/**/" + TF2_WEIGHTS_NAME, recursive=True), key=lambda f: int(''.join(filter(str.isdigit, f)) or -1)))
         
         logging.info("Evaluate the following checkpoints: %s", checkpoints)
+
+        if len(checkpoints) == 0:
+            checkpoints.append(args['output_dir'])
         
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if re.match(".*checkpoint-[0-9]", checkpoint) else "final"
@@ -572,10 +575,10 @@ def main(_):
     if args['do_predict']:
         tokenizer = tokenizer_class.from_pretrained(args['output_dir'], do_lower_case=args['do_lower_case'])
         model = model_class.from_pretrained(args['output_dir'])
-        eval_batch_size = args['per_gpu_eval_batch_size'] * args['n_device']
+        eval_batch_size = args['per_device_eval_batch_size'] * args['n_device']
         predict_dataset, _ = load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test")
         y_true, y_pred, pred_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test")
-        output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
+        output_test_results_file = os.path.join(args['output_dir'], "test_results.txt")
         output_test_predictions_file = os.path.join(args['output_dir'], "test_predictions.txt")
         report = metrics.classification_report(y_true, y_pred, digits=4)
 
