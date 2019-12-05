@@ -31,9 +31,9 @@ Batch = namedtuple(
 
 def evaluate(args):
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
-    model = bertabs = BertAbs.from_pretrained("bertabs-finetuned-cnndm")
-    bertabs.to(args.device)
-    bertabs.eval()
+    model = BertAbs.from_pretrained("bertabs-finetuned-cnndm")
+    model.to(args.device)
+    model.eval()
 
     symbols = {
         "BOS": tokenizer.vocab["[unused0]"],

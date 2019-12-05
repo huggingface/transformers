@@ -33,17 +33,6 @@ class BertAbsConfig(PretrainedConfig):
     r""" Class to store the configuration of the BertAbs model.
 
     Arguments:
-        temp_dir: string
-            Unused in the current situation. Kept for compatibility but will be removed.
-        finetune_bert: bool
-            Whether to fine-tune the model or not. Will be kept for reference
-            in case we want to add the possibility to fine-tune the model.
-        large: bool
-            Whether to use bert-large as a base.
-        share_emb: book
-            Whether the embeddings are shared between the encoder and decoder.
-        encoder: string
-            Not clear what this does. Leave to "bert" for pre-trained weights.
         max_pos: int
             The maximum sequence length that this model will be used with.
         enc_layer: int
@@ -77,11 +66,6 @@ class BertAbsConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size_or_config_json_file=30522,
-        temp_dir=".",
-        finetune_bert=False,
-        large=False,
-        share_emb=True,
-        encoder="bert",
         max_pos=512,
         enc_layers=6,
         enc_hidden_size=512,
@@ -104,20 +88,14 @@ class BertAbsConfig(PretrainedConfig):
             for key, value in json_config.items():
                 self.__dict__[key] = value
         elif isinstance(vocab_size_or_config_json_file, int):
-            self.temp_dir = temp_dir
-            self.finetune_bert = finetune_bert
-            self.large = large
             self.vocab_size = vocab_size_or_config_json_file
             self.max_pos = max_pos
 
-            self.encoder = encoder
             self.enc_layers = enc_layers
             self.enc_hidden_size = enc_hidden_size
             self.enc_heads = enc_heads
             self.enc_ff_size = enc_ff_size
             self.enc_dropout = enc_dropout
-
-            self.share_emb = share_emb
 
             self.dec_layers = dec_layers
             self.dec_hidden_size = dec_hidden_size
