@@ -17,7 +17,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
 import shutil
 
 from transformers import is_torch_available
@@ -25,14 +24,13 @@ from transformers import is_torch_available
 if is_torch_available():
     from transformers import (GPT2Config, GPT2Model, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2DoubleHeadsModel)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
 
+@require_torch
 class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()

@@ -18,13 +18,12 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
 if is_torch_available():
     from transformers import (XxxConfig, XxxModel, XxxForMaskedLM,
@@ -32,10 +31,9 @@ if is_torch_available():
                                         XxxForQuestionAnswering, XxxForSequenceClassification,
                                         XxxForTokenClassification, XxxForMultipleChoice)
     from transformers.modeling_xxx import XXX_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 
+@require_torch
 class XxxModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (XxxModel, XxxForMaskedLM, XxxForQuestionAnswering,

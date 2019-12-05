@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
@@ -27,14 +26,13 @@ if is_torch_available():
     from transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM,
                               RobertaForSequenceClassification, RobertaForTokenClassification)
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
 
+@require_torch
 class RobertaModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (RobertaForMaskedLM, RobertaModel) if is_torch_available() else ()
@@ -211,7 +209,7 @@ class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = RobertaForMaskedLM.from_pretrained('roberta-base')
-        
+
         input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 50265))
@@ -232,7 +230,7 @@ class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = RobertaModel.from_pretrained('roberta-base')
-        
+
         input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
@@ -248,7 +246,7 @@ class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_head(self):
         model = RobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        
+
         input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))

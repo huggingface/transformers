@@ -21,7 +21,6 @@ import unittest
 import json
 import random
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
@@ -31,13 +30,13 @@ if is_torch_available():
     from transformers import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification,
                               XLNetForTokenClassification, XLNetForQuestionAnswering)
     from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
+
+@require_torch
 class XLNetModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes=(XLNetModel, XLNetLMHeadModel, XLNetForTokenClassification,
@@ -363,7 +362,7 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
     def test_xlnet_lm_head(self):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlnet_lm_head(*config_and_inputs) 
+        self.model_tester.create_and_check_xlnet_lm_head(*config_and_inputs)
 
     def test_xlnet_sequence_classif(self):
         self.model_tester.set_seed()

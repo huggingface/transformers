@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import unittest
 import os
-import pytest
 
 from transformers import is_torch_available
 
@@ -31,10 +30,9 @@ if is_torch_available():
                               get_cosine_schedule_with_warmup,
                               get_cosine_with_hard_restarts_schedule_with_warmup,
                               get_linear_schedule_with_warmup)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .tokenization_tests_commons import TemporaryDirectory
+from .utils import require_torch
 
 
 def unwrap_schedule(scheduler, num_steps=10):
@@ -58,6 +56,7 @@ def unwrap_and_save_reload_schedule(scheduler, num_steps=10):
                 scheduler.load_state_dict(state_dict)
     return lrs
 
+@require_torch
 class OptimizationTest(unittest.TestCase):
 
     def assertListAlmostEqual(self, list1, list2, tol):
@@ -80,6 +79,7 @@ class OptimizationTest(unittest.TestCase):
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
 
 
+@require_torch
 class ScheduleInitTest(unittest.TestCase):
     m = torch.nn.Linear(50, 50) if is_torch_available() else None
     optimizer = AdamW(m.parameters(), lr=10.) if is_torch_available() else None

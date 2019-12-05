@@ -3,6 +3,8 @@ import unittest
 
 from distutils.util import strtobool
 
+from transformers.file_utils import _torch_available
+
 
 try:
     run_slow = os.environ["RUN_SLOW"]
@@ -28,4 +30,16 @@ def slow(test_case):
     """
     if not _run_slow_tests:
         test_case = unittest.skip("test is slow")(test_case)
+    return test_case
+
+
+def require_torch(test_case):
+    """
+    Decorator marking a test that requires PyTorch.
+
+    These tests are skipped when PyTorch isn't installed.
+
+    """
+    if not _torch_available:
+        test_case = unittest.skip("test requires PyTorch")(test_case)
     return test_case

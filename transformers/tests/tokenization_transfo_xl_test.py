@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import pytest
 from io import open
 
 from transformers import is_torch_available
@@ -24,11 +23,12 @@ from transformers import is_torch_available
 if is_torch_available():
     import torch
     from transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
-else:
-    pytestmark = pytest.mark.skip("Require Torch")  # TODO: untangle Transfo-XL tokenizer from torch.load and torch.save
 
 from .tokenization_tests_commons import CommonTestCases
+from .utils import require_torch
 
+
+@require_torch
 class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     tokenizer_class = TransfoXLTokenizer if is_torch_available() else None

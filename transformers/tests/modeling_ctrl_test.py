@@ -16,7 +16,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
 import shutil
 import pdb
 
@@ -25,13 +24,13 @@ from transformers import is_torch_available
 if is_torch_available():
     from transformers import (CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     CTRLLMHeadModel)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
+
+@require_torch
 class CTRLModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()

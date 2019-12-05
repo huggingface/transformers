@@ -24,7 +24,7 @@ from transformers import is_torch_available
 
 from .modeling_common_test import (CommonTestCases, ids_tensor, floats_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
 if is_torch_available():
     from transformers import (BertConfig, BertModel, BertForMaskedLM,
@@ -32,11 +32,10 @@ if is_torch_available():
                               BertForQuestionAnswering, BertForSequenceClassification,
                               BertForTokenClassification, BertForMultipleChoice)
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 
 @pytest.mark.usefixtures("use_cuda")
+@require_torch
 class BertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (BertModel, BertForMaskedLM, BertForNextSentencePrediction,

@@ -17,7 +17,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
 import shutil
 
 from transformers import is_torch_available
@@ -25,14 +24,13 @@ from transformers import is_torch_available
 if is_torch_available():
     from transformers import (OpenAIGPTConfig, OpenAIGPTModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
 
+@require_torch
 class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel) if is_torch_available() else ()

@@ -19,7 +19,6 @@ from __future__ import print_function
 import unittest
 import random
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
@@ -27,13 +26,13 @@ if is_torch_available():
     import torch
     from transformers import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
     from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import slow
+from .utils import require_torch, slow
 
+
+@require_torch
 class TransfoXLModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel) if is_torch_available() else ()

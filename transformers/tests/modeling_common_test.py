@@ -27,11 +27,10 @@ import uuid
 
 import unittest
 import logging
-import pytest
 
 from transformers import is_torch_available
 
-from .utils import slow
+from .utils import require_torch, slow
 
 if is_torch_available():
     import torch
@@ -40,8 +39,6 @@ if is_torch_available():
     from transformers import (AdaptiveEmbedding, PretrainedConfig, PreTrainedModel,
                                     BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -67,6 +64,7 @@ def _config_zero_init(config):
 
 class CommonTestCases:
 
+    @require_torch
     class CommonModelTester(unittest.TestCase):
 
         model_tester = None
@@ -791,6 +789,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.float).view(shape).contiguous()
 
 
+@require_torch
 class ModelUtilsTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
