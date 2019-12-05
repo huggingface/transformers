@@ -24,7 +24,8 @@ pip install -r ./examples/requirements.txt
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
 | [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
-| [Abstractive summarization](#abstractive-summarization) | Fine-tuning the library models for abstractive summarization tasks on the CNN/Daily Mail dataset. |
+| [Abstractive summarization](#abstractive-summarization) | Using the BertAbs
+model finetuned on the CNN/DailyMail dataset to generate summaries. |
 
 ## TensorFlow 2.0 Bert models on GLUE
 
@@ -711,4 +712,21 @@ Training with the previously defined hyper-parameters yields the following resul
 
 ```bash
 acc = 0.7093812375249501
+```
+
+### Abstractive Summarization
+
+This example provides a simple API for the [BertAbs](https://github.com/nlpyang/PreSumm) model finetuned on the CNN/DailyMail dataset. The script can be used to generate summaries from any text. 
+
+```bash
+python run_summarization.py \
+    --documents_dir 'path/to/documents' \
+    --summaries_output_dir 'path/to/summaries' \
+    --visible_gpus 0,1,2 \
+    --batch_size 4 \
+    --min_length 50 \
+    --max_length 200 \
+    --beam_size 5 \
+    --alpha 0.95 \
+    --block_trigram true
 ```
