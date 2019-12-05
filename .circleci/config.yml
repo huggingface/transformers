@@ -82,6 +82,16 @@ jobs:
             - run: sudo pip install --progress-bar off -r docs/requirements.txt
             - run: sudo pip install --progress-bar off -r requirements.txt
             - run: ./.circleci/deploy.sh
+    repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.5
+        resource_class: small
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install requests
+            - run: python ./utils/link_tester.py
 workflow_filters: &workflow_filters
     filters:
         branches:
@@ -91,6 +101,7 @@ workflows:
     version: 2
     build_and_test:
         jobs:
+            - repository_consistency
             - build_py3_torch_and_tf
             - build_py3_torch
             - build_py3_tf
