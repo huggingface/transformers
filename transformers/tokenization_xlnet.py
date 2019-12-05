@@ -141,7 +141,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
             pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
         new_pieces = []
         for piece in pieces:
-            if len(piece) > 1 and piece[-1] == ',' and piece[-2].isdigit():
+            if len(piece) > 1 and piece[-1] == str(',') and piece[-2].isdigit():
                 cur_pieces = self.sp_model.EncodeAsPieces(
                     piece[:-1].replace(SPIECE_UNDERLINE, ''))
                 if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
@@ -227,7 +227,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         An XLNet sequence pair mask has the following format:
         0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 2
         | first sequence    | second sequence     | CLS segment ID
-        
+
         if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
         sep = [self.sep_token_id]
