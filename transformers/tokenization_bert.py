@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # if model_file exists, sentence piece tokenizer is selected.
 # this can be happen when you use from_pretrain by setting dir
 VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt',
-                     'model_file': 'wiki-ja.model'}
+                     'model_file': 'spiece.model'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
