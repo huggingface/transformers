@@ -102,9 +102,11 @@ class CommonTestCases:
             with TemporaryDirectory() as tmpdirname:
 
                 filename = os.path.join(tmpdirname, u"tokenizer.bin")
-                pickle.dump(tokenizer, open(filename, "wb"))
+                with open(filename, "wb") as handle:
+                    pickle.dump(tokenizer, handle)
 
-                tokenizer_new = pickle.load(open(filename, "rb"))
+                with open(filename, "rb") as handle:
+                    tokenizer_new = pickle.load(handle)
 
             subwords_loaded = tokenizer_new.tokenize(text)
 

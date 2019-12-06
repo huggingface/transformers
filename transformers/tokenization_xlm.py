@@ -524,7 +524,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
         - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
         (ex: "__classify__") to a vocabulary
-        
+
         - `lang2id` attribute maps the languages supported by the model with their ids if provided (automatically set for pretrained vocabularies)
 
         - `id2lang` attributes does reverse mapping if provided (automatically set for pretrained vocabularies)
@@ -564,9 +564,11 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.ja_word_tokenizer = None
         self.zh_word_tokenizer = None
 
-        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
         self.decoder = {v:k for k,v in self.encoder.items()}
-        merges = open(merges_file, encoding='utf-8').read().split('\n')[:-1]
+        with open(merges_file, encoding='utf-8') as merges_handle:
+            merges = merges_handle.read().split('\n')[:-1]
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
