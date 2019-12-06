@@ -713,20 +713,3 @@ Training with the previously defined hyper-parameters yields the following resul
 ```bash
 acc = 0.7093812375249501
 ```
-
-### Abstractive Summarization
-
-This example provides a simple API for the [BertAbs](https://github.com/nlpyang/PreSumm) model finetuned on the CNN/DailyMail dataset. The script can be used to generate summaries from any text. 
-
-```bash
-python run_summarization.py \
-    --documents_dir 'path/to/documents' \
-    --summaries_output_dir 'path/to/summaries' \
-    --visible_gpus 0,1,2 \
-    --batch_size 4 \
-    --min_length 50 \
-    --max_length 200 \
-    --beam_size 5 \
-    --alpha 0.95 \
-    --block_trigram true
-```
