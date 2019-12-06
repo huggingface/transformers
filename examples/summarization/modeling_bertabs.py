@@ -847,14 +847,12 @@ class Translator(object):
        global_scores (:obj:`GlobalScorer`):
          object to rescore final translations
        copy_attn (bool): use copy attention during translation
-       cuda (bool): use cuda
        beam_trace (bool): trace beam search for debugging
        logger(logging.Logger): logger.
     """
 
     def __init__(self, args, model, vocab, symbols, global_scorer=None, logger=None):
         self.logger = logger
-        self.cuda = args.visible_gpus != "-1"
 
         self.args = args
         self.model = model
