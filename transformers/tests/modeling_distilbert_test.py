@@ -17,7 +17,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
 
 from transformers import is_torch_available
 
@@ -25,13 +24,13 @@ if is_torch_available():
     from transformers import (DistilBertConfig, DistilBertModel, DistilBertForMaskedLM,
                                     DistilBertForTokenClassification,
                                     DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_torch, slow, torch_device
 
 
+@require_torch
 class DistilBertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (DistilBertModel, DistilBertForMaskedLM, DistilBertForQuestionAnswering,
@@ -126,6 +125,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_distilbert_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = DistilBertModel(config=config)
+            model.to(torch_device)
             model.eval()
             (sequence_output,) = model(input_ids, input_mask)
             (sequence_output,) = model(input_ids)
@@ -139,6 +139,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_distilbert_for_masked_lm(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = DistilBertForMaskedLM(config=config)
+            model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, masked_lm_labels=token_labels)
             result = {
@@ -152,6 +153,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_distilbert_for_question_answering(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = DistilBertForQuestionAnswering(config=config)
+            model.to(torch_device)
             model.eval()
             loss, start_logits, end_logits = model(input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels)
             result = {
@@ -170,6 +172,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_distilbert_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = DistilBertForSequenceClassification(config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
             result = {
@@ -184,6 +187,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_distilbert_for_token_classification(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = DistilBertForTokenClassification(config=config)
+            model.to(torch_device)
             model.eval()
 
             loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -229,7 +233,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_token_classification(*config_and_inputs)
 
-    # @pytest.mark.slow
+    # @slow
     # def test_model_from_pretrained(self):
     #     cache_dir = "/tmp/transformers_test/"
     #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

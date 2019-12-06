@@ -50,8 +50,10 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
 
     logger.info("Loading weights from {}".format(openai_checkpoint_folder_path))
 
-    names = json.load(open(openai_checkpoint_folder_path + '/parameters_names.json', "r", encoding='utf-8'))
-    shapes = json.load(open(openai_checkpoint_folder_path + '/params_shapes.json', "r", encoding='utf-8'))
+    with open(openai_checkpoint_folder_path + '/parameters_names.json', "r", encoding='utf-8') as names_handle:
+        names = json.load(names_handle)
+    with open(openai_checkpoint_folder_path + '/params_shapes.json', "r", encoding='utf-8') as shapes_handle:
+        shapes = json.load(shapes_handle)
     offsets = np.cumsum([np.prod(shape) for shape in shapes])
     init_params = [np.load(openai_checkpoint_folder_path + '/params_{}.npy'.format(n)) for n in range(10)]
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]

@@ -24,14 +24,23 @@ pip install [--editable] .
 
 An extensive test suite is included to test the library behavior and several examples. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
-Tests can be run using `pytest` (install pytest if needed with `pip install pytest`).
+Tests can be run using `unittest` or `pytest` (install pytest if needed with `pip install pytest`).
 
 Run all the tests from the root of the cloned repository with the commands:
+
+```bash
+python -m unittest discover -s transformers/tests -p "*test.py" -t .
+python -m unittest discover -s examples -p "*test.py" -t examples
+```
+
+or
 
 ``` bash
 python -m pytest -sv ./transformers/tests/
 python -m pytest -sv ./examples/
 ```
+
+By default, slow tests are skipped. Set the `RUN_SLOW` environment variable to `yes` to run them.
 
 ## OpenAI GPT original tokenization workflow
 

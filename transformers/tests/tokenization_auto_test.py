@@ -18,15 +18,16 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 import logging
 
 from transformers import AutoTokenizer, BertTokenizer, AutoTokenizer, GPT2Tokenizer
 from transformers import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 
+from .utils import slow
+
 
 class AutoTokenizerTest(unittest.TestCase):
-    @pytest.mark.slow
+    @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:
