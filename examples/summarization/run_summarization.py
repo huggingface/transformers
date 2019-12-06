@@ -41,6 +41,26 @@ def evaluate(args):
         "PAD": tokenizer.vocab["[PAD]"],
     }
 
+    if args.compute_rouge:
+        reference_summaries = []
+        generated_summaries = []
+
+        import rouge
+        import nltk
+        nltk.download('punkt')
+        rouge_evaluator = rouge.Rouge(
+            metrics=['rouge-n', 'rouge-l'],
+            max_n=2,
+            limit_length=True,
+            length_limit=args.beam_size,
+            length_limit_type='words',
+            apply_avg=True,
+            apply_best=False,
+            alpha=0.5,  # Default F1_score
+            weight_factor=1.2,
+            stemming=True,
+        )
+
     # these (unused) arguments are defined to keep the compatibility
     # with the legacy code and will be deleted in a next iteration.
     args.result_path = ""
@@ -66,6 +86,16 @@ def evaluate(args):
         summaries = [format_summary(t) for t in translations]
         save_summaries(summaries, args.summaries_output_dir, batch.document_names)
 
+        if args.compute_rouge:
+            reference_summaries += batch.tgt_str
+            generated_summaries += summaries
+
+    if args.compute_rouge:
+        scores = rouge_evaluator.get_scores(generated_summaries, reference_summaries)
+        str_scores = format_rouge_scores(scores)
+        save_rouge_scores(str_scores)
+        print(str_scores)
+
 
 def format_summary(translation):
     """ Transforms the output of the `from_batch` function
@@ -84,6 +114,41 @@ def format_summary(translation):
     )
 
     return summary
+
+
+def format_rouge_scores(scores):
+    return """\n
+****** ROUGE SCORES ******
+
+** ROUGE 1
+F1        >> {:.3f}
+Precision >> {:.3f}
+Recall    >> {:.3f}
+
+** ROUGE 2
+F1        >> {:.3f}
+Precision >> {:.3f}
+Recall    >> {:.3f}
+
+** ROUGE L
+F1        >> {:.3f}
+Precision >> {:.3f}
+Recall    >> {:.3f}""".format(
+        scores['rouge-1']['f'],
+        scores['rouge-1']['p'],
+        scores['rouge-1']['r'],
+        scores['rouge-2']['f'],
+        scores['rouge-2']['p'],
+        scores['rouge-2']['r'],
+        scores['rouge-l']['f'],
+        scores['rouge-l']['p'],
+        scores['rouge-l']['r'],
+    )
+
+
+def save_rouge_scores(str_scores):
+    with open("rouge_scores.txt", "w") as output:
+        output.write(str_scores)
 
 
 def save_summaries(summaries, path, original_document_name):
@@ -142,26 +207,27 @@ def collate(data, tokenizer, block_size):
     """
     data = [x for x in data if not len(x[1]) == 0]  # remove empty_files
     names = [name for name, _, _ in data]
+    summaries = [" ".join(summary_list) for _, _, summary_list in data]
 
     encoded_text = [
         encode_for_summarization(story, summary, tokenizer) for _, story, summary in data
     ]
-    stories = torch.tensor(
+    encoded_stories = torch.tensor(
         [
             fit_to_block_size(story, block_size, tokenizer.pad_token_id)
             for story, _ in encoded_text
         ]
     )
-    encoder_token_type_ids = compute_token_type_ids(stories, tokenizer.cls_token_id)
-    encoder_mask = build_mask(stories, tokenizer.pad_token_id)
+    encoder_token_type_ids = compute_token_type_ids(encoded_stories, tokenizer.cls_token_id)
+    encoder_mask = build_mask(encoded_stories, tokenizer.pad_token_id)
 
     batch = Batch(
         document_names=names,
-        batch_size=len(stories),
-        src=stories,
+        batch_size=len(encoded_stories),
+        src=encoded_stories,
         segs=encoder_token_type_ids,
         mask_src=encoder_mask,
-        tgt_str=[""] * len(stories),
+        tgt_str=summaries,
     )
 
     return batch
@@ -195,6 +261,13 @@ def main():
         type=str,
         required=False,
         help="The folder in wich the summaries should be written. Defaults to the folder where the documents are",
+    )
+    parser.add_argument(
+        "--compute_rouge",
+        default=False,
+        type=bool,
+        required=False,
+        help="Compute the ROUGE metrics during evaluation. Only available for the CNN/DailyMail dataset.",
     )
     # EVALUATION options
     parser.add_argument(

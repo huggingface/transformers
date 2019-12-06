@@ -11,4 +11,5 @@ sentencepiece
 # For XLM
 sacremoses
 # For ROUGE
+nltk
 py-rouge
