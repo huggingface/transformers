@@ -634,7 +634,7 @@ class PreTrainedTokenizer(object):
             return result
 
         def split_on_tokens(tok_list, text):
-            if not text:
+            if not text.strip():
                 return []
             if not tok_list:
                 return self._tokenize(text, **kwargs)
