@@ -12,10 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Convert BertExtAbs's checkpoints
+""" Convert BertExtAbs's checkpoints.
 
-The file currently does not do much as we ended up copying the exact model
-structure, but I leave it here in case we ever want to refactor the model.
+The script looks like it is doing something trivial but it is not. The "weights"
+proposed by the authors are actually the entire model pickled. We need to load
+the model within the original codebase to be able to only save its `state_dict`.
 """
 
 import argparse
