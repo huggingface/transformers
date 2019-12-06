@@ -87,12 +87,13 @@ class CommonTestCases:
                 with TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
                     model = model_class.from_pretrained(tmpdirname)
+                    model.to(torch_device)
                     with torch.no_grad():
                         after_outputs = model(**inputs_dict)
 
                     # Make sure we don't have nans
-                    out_1 = after_outputs[0].numpy()
-                    out_2 = outputs[0].numpy()
+                    out_1 = after_outputs[0].cpu().numpy()
+                    out_2 = outputs[0].cpu().numpy()
                     out_1 = out_1[~np.isnan(out_1)]
                     out_2 = out_2[~np.isnan(out_2)]
                     max_diff = np.amax(np.abs(out_1 - out_2))
@@ -241,7 +242,7 @@ class CommonTestCases:
 
                 # Prepare head_mask
                 # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
-                head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads)
+                head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device)
                 head_mask[0, 0] = 0
                 head_mask[-1, :-1] = 0
                 head_mask.requires_grad_(requires_grad=True)
@@ -330,6 +331,7 @@ class CommonTestCases:
                     os.makedirs(directory)
                 model.save_pretrained(directory)
                 model = model_class.from_pretrained(directory)
+                model.to(torch_device)
 
                 outputs = model(**inputs_dict)
                 attentions = outputs[-1]
@@ -401,6 +403,7 @@ class CommonTestCases:
                     os.makedirs(directory)
                 model.save_pretrained(directory)
                 model = model_class.from_pretrained(directory)
+                model.to(torch_device)
                 shutil.rmtree(directory)
 
                 outputs = model(**inputs_dict)
@@ -789,7 +792,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
 
-    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous().to(torch_device)
+    return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
@@ -805,7 +808,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.random() * scale)
 
-    return torch.tensor(data=values, dtype=torch.float).view(shape).contiguous()
+    return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
 
 
 @require_torch

@@ -100,9 +100,9 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
             input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
 
             input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
-            perm_mask = torch.zeros(self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float)
+            perm_mask = torch.zeros(self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device)
             perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-            target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float)
+            target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device)
             target_mapping[:, 0, -1] = 1.0  # predict last token
 
             sequence_labels = None

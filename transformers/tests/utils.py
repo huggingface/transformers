@@ -58,8 +58,7 @@ def require_tf(test_case):
 
 
 if _torch_available:
-    import torch
-    # Set the CUDA_VISIBLE_DEVICES environment variable to select a GPU.
-    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Set the USE_CUDA environment variable to select a GPU.
+    torch_device = "cuda" if os.environ.get("USE_CUDA") else "cpu"
 else:
     torch_device = None
