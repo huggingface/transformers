@@ -316,7 +316,7 @@ class BertTokenizer(PreTrainedTokenizer):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
         if self.spm_tokenize:
-            vocab_file = os.path.join(vocab_path, self.vocab)
+            vocab_file = os.path.join(vocab_path, self.vocab_file)
         else:
             if os.path.isdir(vocab_path):
                 vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
