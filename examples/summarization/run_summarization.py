@@ -1,3 +1,4 @@
+#! /usr/bin/python3
 import argparse
 from collections import namedtuple
 import logging
@@ -97,6 +98,32 @@ def evaluate(args):
         print(str_scores)
 
 
+def save_summaries(summaries, path, original_document_name):
+    """ Write the summaries in fies that are prefixed by the original
+    files' name with the `_summary` appended.
+
+    Attributes:
+        original_document_names: List[string]
+            Name of the document that was summarized.
+        path: string
+            Path were the summaries will be written
+        summaries: List[string]
+            The summaries that we produced.
+    """
+    for summary, document_name in zip(summaries, original_document_name):
+        # Prepare the summary file's name
+        if "." in document_name:
+            bare_document_name = ".".join(document_name.split(".")[:-1])
+            extension = document_name.split(".")[-1]
+            name = bare_document_name + "_summary." + extension
+        else:
+            name = document_name + "_summary"
+
+        file_path = os.path.join(path, name)
+        with open(file_path, "w") as output:
+            output.write(summary)
+
+
 def format_summary(translation):
     """ Transforms the output of the `from_batch` function
     into nicely formatted summaries.
@@ -149,32 +176,6 @@ Recall    >> {:.3f}""".format(
 def save_rouge_scores(str_scores):
     with open("rouge_scores.txt", "w") as output:
         output.write(str_scores)
-
-
-def save_summaries(summaries, path, original_document_name):
-    """ Write the summaries in fies that are prefixed by the original
-    files' name with the `_summary` appended.
-
-    Attributes:
-        original_document_names: List[string]
-            Name of the document that was summarized.
-        path: string
-            Path were the summaries will be written
-        summaries: List[string]
-            The summaries that we produced.
-    """
-    for summary, document_name in zip(summaries, original_document_name):
-        # Prepare the summary file's name
-        if "." in document_name:
-            bare_document_name = ".".join(document_name.split(".")[:-1])
-            extension = document_name.split(".")[-1]
-            name = bare_document_name + "_summary." + extension
-        else:
-            name = document_name + "_summary"
-
-        file_path = os.path.join(path, name)
-        with open(file_path, "w") as output:
-            output.write(summary)
 
 
 #
@@ -323,7 +324,7 @@ def main():
         raise FileNotFoundError(
             "We could not find the directory you specified for the documents to summarize, or it was empty. Please specify a valid path."
         )
-    maybe_create_output_dir(args.summaries_output_dir)
+    os.makedirs(args.summaries_output_dir, exist_ok=True)
 
     evaluate(args)
 
@@ -337,11 +338,6 @@ def documents_dir_is_valid(path):
         return False
 
     return True
-
-
-def maybe_create_output_dir(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
 
 
 if __name__ == "__main__":
