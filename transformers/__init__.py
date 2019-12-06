@@ -25,10 +25,12 @@ from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH
 from .data import (is_sklearn_available,
                    InputExample, InputFeatures, DataProcessor,
                    glue_output_modes, glue_convert_examples_to_features,
-                   glue_processors, glue_tasks_num_labels)
+                   glue_processors, glue_tasks_num_labels, japanese_output_modes,
+                   japanese_convert_examples_to_features, japanese_processors,
+                   japanese_tasks_num_labels)
 
 if is_sklearn_available():
-    from .data import glue_compute_metrics
+    from .data import glue_compute_metrics, japanese_compute_metrics
 
 # Tokenizers
 from .tokenization_utils import (PreTrainedTokenizer)

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from scipy.stats import pearsonr, spearmanr
-    from sklearn.metrics import matthews_corrcoef, f1_score
+    from sklearn.metrics import matthews_corrcoef, f1_score, classification_report
     _has_sklearn = True
 except (AttributeError, ImportError) as e:
     logger.warning("To use data.metrics please install scikit-learn. See https://scikit-learn.org/stable/index.html")
@@ -46,7 +46,6 @@ if _has_sklearn:
             "acc_and_f1": (acc + f1) / 2,
         }
 
-
     def pearson_and_spearman(preds, labels):
         pearson_corr = pearsonr(preds, labels)[0]
         spearman_corr = spearmanr(preds, labels)[0]
@@ -56,6 +55,9 @@ if _has_sklearn:
             "corr": (pearson_corr + spearman_corr) / 2,
         }
 
+    def clf_report(preds, labels, str_labels=None):
+        print(classification_report(preds, labels, target_names=str_labels))
+        return classification_report(preds, labels, target_names=str_labels, output_dict=True)
 
     def glue_compute_metrics(task_name, preds, labels):
         assert len(preds) == len(labels)
@@ -81,3 +83,8 @@ if _has_sklearn:
             return {"acc": simple_accuracy(preds, labels)}
         else:
             raise KeyError(task_name)
+
+    def japanese_compute_metrics(task_name, preds, labels, str_labels=None):
+        assert len(preds) == len(labels)
+        if task_name == "livedoor":
+            return clf_report(preds, labels, str_labels)

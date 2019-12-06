@@ -20,13 +20,17 @@ import collections
 import logging
 import os
 import unicodedata
+import six
 from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
+# if model_file exists, sentence piece tokenizer is selected.
+# this can be happen when you use from_pretrain by setting dir
+VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt',
+                     'model_file': 'wiki-ja.model'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
@@ -46,6 +50,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
         'bert-base-german-dbmdz-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-vocab.txt",
         'bert-base-german-dbmdz-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-vocab.txt",
+        'bert-base-japanese-cased-long': '/data/language/bert/',
+        'bert-base-japanese-cased-short': '/data/language/bert/model_wiki_128/vocab.txt',
     }
 }
 
@@ -65,24 +71,30 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'bert-base-cased-finetuned-mrpc': 512,
     'bert-base-german-dbmdz-cased': 512,
     'bert-base-german-dbmdz-uncased': 512,
+    'bert-base-japanese-cased-long': 512,
+    'bert-base-japanese-cased-short': 128,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    'bert-base-uncased': {'do_lower_case': True},
-    'bert-large-uncased': {'do_lower_case': True},
-    'bert-base-cased': {'do_lower_case': False},
-    'bert-large-cased': {'do_lower_case': False},
-    'bert-base-multilingual-uncased': {'do_lower_case': True},
-    'bert-base-multilingual-cased': {'do_lower_case': False},
-    'bert-base-chinese': {'do_lower_case': False},
-    'bert-base-german-cased': {'do_lower_case': False},
-    'bert-large-uncased-whole-word-masking': {'do_lower_case': True},
-    'bert-large-cased-whole-word-masking': {'do_lower_case': False},
-    'bert-large-uncased-whole-word-masking-finetuned-squad': {'do_lower_case': True},
-    'bert-large-cased-whole-word-masking-finetuned-squad': {'do_lower_case': False},
-    'bert-base-cased-finetuned-mrpc': {'do_lower_case': False},
-    'bert-base-german-dbmdz-cased': {'do_lower_case': False},
-    'bert-base-german-dbmdz-uncased': {'do_lower_case': True},
+    'bert-base-uncased': {'do_lower_case': True, 'spm_tokenize': False},
+    'bert-large-uncased': {'do_lower_case': True, 'spm_tokenize': False},
+    'bert-base-cased': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-large-cased': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-base-multilingual-uncased': {'do_lower_case': True, 'spm_tokenize': False},
+    'bert-base-multilingual-cased': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-base-chinese': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-base-german-cased': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-large-uncased-whole-word-masking': {'do_lower_case': True, 'spm_tokenize': False},
+    'bert-large-cased-whole-word-masking': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-large-uncased-whole-word-masking-finetuned-squad': {'do_lower_case': True, 'spm_tokenize': False},
+    'bert-large-cased-whole-word-masking-finetuned-squad': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-base-cased-finetuned-mrpc': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-base-german-dbmdz-cased': {'do_lower_case': False, 'spm_tokenize': False},
+    'bert-base-german-dbmdz-uncased': {'do_lower_case': True, 'spm_tokenize': False},
+    'bert-base-japanese-cased-long': {'spm_tokenze': True, 'do_lower_case': True,
+                                      'spm_model_path': '/data/language/bert/'},
+    'bert-base-japanese-cased-short': {'spm_tokenze': True, 'do_lower_case': True,
+                                       'spm_model_path': '/data/language/bert/model_wiki_128/wiki-ja.model'},
 }
 
 
@@ -126,7 +138,7 @@ class BertTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, do_lower_case=True, do_basic_tokenize=True, never_split=None,
+    def __init__(self, vocab_file, model_file, do_lower_case=True, do_basic_tokenize=True, never_split=None,
                  unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
                  mask_token="[MASK]", tokenize_chinese_chars=True, **kwargs):
         """Constructs a BertTokenizer.
@@ -156,37 +168,89 @@ class BertTokenizer(PreTrainedTokenizer):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
                 "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
-        self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict(
-            [(ids, tok) for tok, ids in self.vocab.items()])
-        self.do_basic_tokenize = do_basic_tokenize
-        if do_basic_tokenize:
-            self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
-                                                  never_split=never_split,
-                                                  tokenize_chinese_chars=tokenize_chinese_chars)
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        if model_file is None or not(vocab_file.endswith(".model")):
+            self.spm_tokenize = False
+            self.vocab = load_vocab(vocab_file)
+            self.ids_to_tokens = collections.OrderedDict(
+                [(ids, tok) for tok, ids in self.vocab.items()])
+            self.do_basic_tokenize = do_basic_tokenize
+            
+            if do_basic_tokenize:
+                self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
+                                                      never_split=never_split,
+                                                      tokenize_chinese_chars=tokenize_chinese_chars)
+            self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        else:
+            import sentencepiece as spm
+            self.do_lower_case = do_lower_case
+            self.spm_tokenize = True
+            self.sp_model = spm.SentencePieceProcessor()
+            if model_file is not None:
+                self.vocab_file = model_file
+                load_status = self.sp_model.Load(model_file)
+            else:
+                self.vocab_file = vocab_file
+                load_status = self.sp_model.Load(vocab_file)
+
+            if load_status:
+                print("Loaded a trained SentencePiece model.")
+            else:
+                raise ValueError("You have to give a path of trained SentencePiece model.")
+            self.vocab = len(self.sp_model)
 
     @property
     def vocab_size(self):
         return len(self.vocab)
 
+    def __getstate__(self):
+        # this method is implemented for serialize
+        state = self.__dict__.copy()
+        if self.spm_tokenize:
+            state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning("You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
+                           "pip install sentencepiece")
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
+
     def _tokenize(self, text):
-        split_tokens = []
-        if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-                for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                    split_tokens.append(sub_token)
+        if self.spm_tokenize:
+            text = convert_to_unicode(text)
+            if self.do_lower_case:
+                text = text.lower()
+            split_tokens = self.sp_model.EncodeAsPieces(text)
         else:
-            split_tokens = self.wordpiece_tokenizer.tokenize(text)
+            split_tokens = []
+            if self.do_basic_tokenize:
+                for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
+                    for sub_token in self.wordpiece_tokenizer.tokenize(token):
+                        split_tokens.append(sub_token)
+            else:
+                split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
-        return self.vocab.get(token, self.vocab.get(self.unk_token))
+        if self.spm_tokenize:
+            return self.sp_model.PieceToId(token)
+        else:
+            return self.vocab.get(token, self.vocab.get(self.unk_token))
 
-    def _convert_id_to_token(self, index):
+    def _convert_id_to_token(self, index, return_unicode=True):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
-        return self.ids_to_tokens.get(index, self.unk_token)
+        if self.spm_tokenize:
+            token = self.sp_model.IdToPiece(index)
+            if six.PY2 and return_unicode and isinstance(token, str):
+                token = token.decode('utf-8')
+            return token
+        else:
+            return self.ids_to_tokens.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
@@ -251,18 +315,22 @@ class BertTokenizer(PreTrainedTokenizer):
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
-        if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
+        if self.spm_tokenize:
+            vocab_file = os.path.join(vocab_path, self.vocab)
         else:
-            vocab_file = vocab_path
-        with open(vocab_file, "w", encoding="utf-8") as writer:
-            for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning("Saving vocabulary to {}: vocabulary indices are not consecutive."
-                                   " Please check that the vocabulary is not corrupted!".format(vocab_file))
-                    index = token_index
-                writer.write(token + u'\n')
-                index += 1
+            if os.path.isdir(vocab_path):
+                vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
+        
+            else:
+                vocab_file = vocab_path
+            with open(vocab_file, "w", encoding="utf-8") as writer:
+                for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+                    if index != token_index:
+                        logger.warning("Saving vocabulary to {}: vocabulary indices are not consecutive."
+                                       " Please check that the vocabulary is not corrupted!".format(vocab_file))
+                        index = token_index
+                    writer.write(token + u'\n')
+                    index += 1
         return (vocab_file,)
 
 
@@ -500,3 +568,23 @@ def _is_punctuation(char):
     if cat.startswith("P"):
         return True
     return False
+
+
+def convert_to_unicode(text):
+    """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
+    if six.PY3:
+        if isinstance(text, str):
+            return text
+        elif isinstance(text, bytes):
+            return text.decode("utf-8", "ignore")
+        else:
+            raise ValueError("Unsupported string type: %s" % (type(text)))
+    elif six.PY2:
+        if isinstance(text, str):
+            return text.decode("utf-8", "ignore")
+        elif isinstance(text, unicode):
+            return text
+        else:
+            raise ValueError("Unsupported string type: %s" % (type(text)))
+    else:
+        raise ValueError("Not running on Python2 or Python 3?")
