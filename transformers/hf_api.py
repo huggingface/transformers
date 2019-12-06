@@ -130,7 +130,7 @@ class HfApi:
         # Even though we presign with the correct content-type,
         # the client still has to specify it when uploading the file.
         with open(filepath, "rb") as f:
-            pf = ProgressFileReader(f)
+            pf = TqdmProgressFileReader(f)
 
             r = requests.put(urls.write, data=f, headers={
                 "content-type": urls.type,
@@ -152,7 +152,11 @@ class HfApi:
 
 
 
-class ProgressFileReader:
+class TqdmProgressFileReader:
+    """
+    Wrap an io.BufferedReader `f` (such as the output of `open(…, "rb")`)
+    and override `f.read()` so as to display a tqdm progress bar.
+    """
     def __init__(
         self,
         f   # type: io.BufferedReader
