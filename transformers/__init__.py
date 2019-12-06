@@ -164,6 +164,7 @@ if is_tf_available():
     from .modeling_tf_distilbert import (TFDistilBertPreTrainedModel, TFDistilBertMainLayer,
                                          TFDistilBertModel, TFDistilBertForMaskedLM,
                                          TFDistilBertForSequenceClassification,
+                                         TFDistilBertForTokenClassification,
                                          TFDistilBertForQuestionAnswering,
                                          TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
@@ -174,6 +175,8 @@ if is_tf_available():
     from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
                                      TFAlbertForSequenceClassification,
                                     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    # Optimization
+    from .optimization_tf import (WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator)
 
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,
