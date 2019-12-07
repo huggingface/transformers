@@ -3,18 +3,19 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
 
 from transformers import is_tf_available
+
+from .utils import require_tf
 
 if is_tf_available():
     import tensorflow as tf
     from tensorflow.python.eager import context
     from tensorflow.python.framework import ops
     from transformers import (create_optimizer, GradientAccumulator)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
+
+@require_tf
 class OptimizationFTest(unittest.TestCase):
     def assertListAlmostEqual(self, list1, list2, tol):
         self.assertEqual(len(list1), len(list2))
