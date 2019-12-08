@@ -1180,7 +1180,7 @@ class PreTrainedTokenizer(object):
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))
                     current_sub_text = []
-                sub_texts.append(" " + token)
+                sub_texts.append(" " + token + " ")
             else:
                 current_sub_text.append(token)
         if current_sub_text:
