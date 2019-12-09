@@ -134,7 +134,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         """ Converts a token (str/unicode) in an id using the vocab. """
         if token.startswith(u"<extra_id_"):
             l = re.match(r'<extra_id_(\d+)>', token)
-            num = int(l[1])
+            num = int(l.group(1))
             return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 

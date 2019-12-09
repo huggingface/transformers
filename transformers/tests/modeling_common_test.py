@@ -138,8 +138,8 @@ class CommonTestCases:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
-                    self.model_tester.seq_length,
-                    self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                    self.model_tester.encoder_seq_length if hasattr(self.model_tester, 'encoder_seq_length') else self.model_tester.seq_length,
+                    self.model_tester.encoder_seq_length if hasattr(self.model_tester, 'encoder_seq_length') else self.model_tester.seq_length])
                 out_len = len(outputs)
 
                 if self.is_encoder_decoder:
@@ -151,8 +151,8 @@ class CommonTestCases:
                     self.assertListEqual(
                         list(decoder_attentions[0].shape[-3:]),
                         [self.model_tester.num_attention_heads,
-                         self.model_tester.seq_length,
-                         self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                         self.model_tester.decoder_seq_length if hasattr(self.model_tester, 'decoder_seq_length') else self.model_tester.seq_length,
+                         self.model_tester.decoder_seq_length if hasattr(self.model_tester, 'decoder_seq_length') else self.model_tester.seq_length])
 
                 # Check attention is always last and order is fine
                 config.output_attentions = True
@@ -169,8 +169,8 @@ class CommonTestCases:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
-                    self.model_tester.seq_length,
-                    self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                    self.model_tester.encoder_seq_length if hasattr(self.model_tester, 'encoder_seq_length') else self.model_tester.seq_length,
+                    self.model_tester.encoder_seq_length if hasattr(self.model_tester, 'encoder_seq_length') else self.model_tester.seq_length])
 
         def test_torchscript(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -440,7 +440,8 @@ class CommonTestCases:
                 self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size])
+                    [self.model_tester.encoder_seq_length if hasattr(self.model_tester, 'encoder_seq_length') else self.model_tester.seq_length,
+                     self.model_tester.hidden_size])
 
         def test_resize_tokens_embeddings(self):
             original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
