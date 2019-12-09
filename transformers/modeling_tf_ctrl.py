@@ -95,7 +95,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False):
         v, k, q, mask, layer_past, attention_mask, head_mask = inputs
-        batch_size = q.shape[0]
+        batch_size = shape_list(q)[0]
 
         q = self.Wq(q)
         k = self.Wk(k)
@@ -400,7 +400,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **past**:
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -462,7 +462,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **past**:
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)

@@ -18,11 +18,11 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 import sys
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_tf, slow
 
 from transformers import GPT2Config, is_tf_available
 
@@ -31,10 +31,9 @@ if is_tf_available():
     from transformers.modeling_tf_gpt2 import (TFGPT2Model, TFGPT2LMHeadModel,
                                                        TFGPT2DoubleHeadsModel,
                                                        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel,
@@ -219,7 +218,7 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

@@ -63,7 +63,8 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     scaled_attention_logits = matmul_qk / np.sqrt(dk)
 
     if mask is not None:
-        scaled_attention_logits += (mask * -1e4)
+        nd, ns = scaled_attention_logits.size(-2), scaled_attention_logits.size(-1)
+        scaled_attention_logits += (mask[ns-nd:ns, :ns] * -1e4)
 
     if attention_mask is not None:
         # Apply the attention mask
@@ -251,7 +252,7 @@ class CTRLModel(CTRLPreTrainedModel):
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
             should not be passed as input ids as they have already been computed.
@@ -373,7 +374,7 @@ class CTRLModel(CTRLPreTrainedModel):
             inputs_embeds = self.w(input_ids)
         # inputs_embeds = embedded.unsqueeze(0) if len(input_ids.shape)<2 else embedded
         seq_len = input_shape[-1]
-        mask = torch.triu(torch.ones(seq_len, seq_len), 1).to(inputs_embeds.device)
+        mask = torch.triu(torch.ones(seq_len + past_length, seq_len + past_length), 1).to(inputs_embeds.device)
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
@@ -437,7 +438,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
             should not be passed as input ids as they have already been computed.

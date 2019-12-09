@@ -25,18 +25,17 @@ import unittest
 import uuid
 import tempfile
 
-import pytest
 import sys
 
 from transformers import is_tf_available, is_torch_available
+
+from .utils import require_tf, slow
 
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
     from transformers import TFPreTrainedModel
     # from transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -62,6 +61,7 @@ def _config_zero_init(config):
 
 class TFCommonTestCases:
 
+    @require_tf
     class TFCommonModelTester(unittest.TestCase):
 
         model_tester = None
@@ -164,7 +164,7 @@ class TFCommonTestCases:
             for model_class in self.all_model_classes:
                 # Prepare our model
                 model = model_class(config)
-                
+
                 # Let's load it from the disk to be sure we can use pretrained weights
                 with TemporaryDirectory() as tmpdirname:
                     outputs = model(inputs_dict)  # build the model
@@ -233,80 +233,6 @@ class TFCommonTestCases:
                     self.model_tester.seq_length,
                     self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
 
-        def test_headmasking(self):
-            pass
-            # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # config.output_attentions = True
-            # config.output_hidden_states = True
-            # configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-            # for model_class in self.all_model_classes:
-            #     model = model_class(config=configs_no_init)
-            #     model.eval()
-
-            #     # Prepare head_mask
-            #     # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior) 
-            #     head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads)
-            #     head_mask[0, 0] = 0
-            #     head_mask[-1, :-1] = 0
-            #     head_mask.requires_grad_(requires_grad=True)
-            #     inputs = inputs_dict.copy()
-            #     inputs['head_mask'] = head_mask
-
-            #     outputs = model(**inputs)
-
-            #     # Test that we can get a gradient back for importance score computation
-            #     output = sum(t.sum() for t in outputs[0])
-            #     output = output.sum()
-            #     output.backward()
-            #     multihead_outputs = head_mask.grad
-
-            #     attentions = outputs[-1]
-            #     hidden_states = outputs[-2]
-
-            #     # Remove Nan
-
-            #     self.assertIsNotNone(multihead_outputs)
-            #     self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
-            #     self.assertAlmostEqual(
-            #         attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
-            #     self.assertNotEqual(
-            #         attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
-            #     self.assertNotEqual(
-            #         attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-            #     self.assertAlmostEqual(
-            #         attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
-            #     self.assertNotEqual(
-            #         attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
-
-
-        def test_head_pruning(self):
-            pass
-            # if not self.test_pruning:
-            #     return
-
-            # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # for model_class in self.all_model_classes:
-            #     config.output_attentions = True
-            #     config.output_hidden_states = False
-            #     model = model_class(config=config)
-            #     model.eval()
-            #     heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
-            #                     -1: [0]}
-            #     model.prune_heads(heads_to_prune)
-            #     outputs = model(**inputs_dict)
-
-            #     attentions = outputs[-1]
-
-            #     self.assertEqual(
-            #         attentions[0].shape[-3], 1)
-            #     self.assertEqual(
-            #         attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            #     self.assertEqual(
-            #         attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-
         def test_hidden_states_output(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -323,43 +249,6 @@ class TFCommonTestCases:
                     list(hidden_states[0].shape[-2:]),
                     [self.model_tester.seq_length, self.model_tester.hidden_size])
 
-
-        def test_resize_tokens_embeddings(self):
-            pass
-            # original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            # if not self.test_resize_embeddings:
-            #     return
-
-            # for model_class in self.all_model_classes:
-            #     config = copy.deepcopy(original_config)
-            #     model = model_class(config)
-
-            #     model_vocab_size = config.vocab_size
-            #     # Retrieve the embeddings and clone theme
-            #     model_embed = model.resize_token_embeddings(model_vocab_size)
-            #     cloned_embeddings = model_embed.weight.clone()
-
-            #     # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            #     model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            #     self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            #     # Check that it actually resizes the embeddings matrix
-            #     self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
-
-            #     # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            #     model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            #     self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
-            #     # Check that it actually resizes the embeddings matrix
-            #     self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
-
-            #     # Check that adding and removing tokens has not modified the first part of the embedding matrix.
-            #     models_equal = True
-            #     for p1, p2 in zip(cloned_embeddings, model_embed.weight):
-            #         if p1.data.ne(p2.data).sum() > 0:
-            #             models_equal = False
-
-            #     self.assertTrue(models_equal)
-
-
         def test_model_common_attributes(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -368,40 +257,6 @@ class TFCommonTestCases:
                 assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
                 x = model.get_output_embeddings()
                 assert x is None or isinstance(x, tf.keras.layers.Layer)
-
-
-        def test_tie_model_weights(self):
-            pass
-            # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            # def check_same_values(layer_1, layer_2):
-            #     equal = True
-            #     for p1, p2 in zip(layer_1.weight, layer_2.weight):
-            #         if p1.data.ne(p2.data).sum() > 0:
-            #             equal = False
-            #     return equal
-
-            # for model_class in self.all_model_classes:
-            #     if not hasattr(model_class, 'tie_weights'):
-            #         continue
-
-            #     config.torchscript = True
-            #     model_not_tied = model_class(config)
-            #     params_not_tied = list(model_not_tied.parameters())
-
-            #     config_tied = copy.deepcopy(config)
-            #     config_tied.torchscript = False
-            #     model_tied = model_class(config_tied)
-            #     params_tied = list(model_tied.parameters())
-
-            #     # Check that the embedding layer and decoding layer are the same in size and in value
-            #     self.assertGreater(len(params_not_tied), len(params_tied))
-
-            #     # Check that after resize they remain tied.
-            #     model_tied.resize_token_embeddings(config.vocab_size + 10)
-            #     params_tied_2 = list(model_tied.parameters())
-            #     self.assertGreater(len(params_not_tied), len(params_tied))
-            #     self.assertEqual(len(params_tied_2), len(params_tied))
 
         def test_determinism(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -426,9 +281,17 @@ class TFCommonTestCases:
                     try:
                         x = wte([input_ids], mode="embedding")
                     except:
-                        x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
+                        try:
+                            x = wte([input_ids, None, None, None], mode="embedding")
+                        except:
+                            if hasattr(self.model_tester, "embedding_size"):
+                                x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
+                            else:
+                                x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
                 # ^^ In our TF models, the input_embeddings can take slightly different forms,
-                # so we try two of them and fall back to just synthetically creating a dummy tensor of ones.
+                # so we try a few of them.
+                # We used to fall back to just synthetically creating a dummy tensor of ones:
+                #
                 inputs_dict["inputs_embeds"] = x
                 outputs = model(inputs_dict)
 
@@ -451,30 +314,6 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
                          dtype=dtype if dtype is not None else tf.int32)
 
     return output
-
-
-class TFModelUtilsTest(unittest.TestCase):
-    @pytest.mark.skipif('tensorflow' not in sys.modules, reason="requires TensorFlow")
-    def test_model_from_pretrained(self):
-        pass
-        # logging.basicConfig(level=logging.INFO)
-        # for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        #     config = BertConfig.from_pretrained(model_name)
-        #     self.assertIsNotNone(config)
-        #     self.assertIsInstance(config, PretrainedConfig)
-
-        #     model = BertModel.from_pretrained(model_name)
-        #     model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
-        #     self.assertIsNotNone(model)
-        #     self.assertIsInstance(model, PreTrainedModel)
-        #     for value in loading_info.values():
-        #         self.assertEqual(len(value), 0)
-
-        #     config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
-        #     model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
-        #     self.assertEqual(model.config.output_attentions, True)
-        #     self.assertEqual(model.config.output_hidden_states, True)
-        #     self.assertEqual(model.config, config)
 
 
 if __name__ == "__main__":
