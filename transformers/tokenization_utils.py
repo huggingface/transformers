@@ -1180,12 +1180,12 @@ class PreTrainedTokenizer(object):
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))
                     current_sub_text = []
-                sub_texts.append(" " + token + " ")
+                sub_texts.append(token)
             else:
                 current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-        text = ''.join(sub_texts)
+        text = ' '.join(sub_texts)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
