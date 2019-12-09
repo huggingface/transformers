@@ -154,9 +154,6 @@ class QuestionAnsweringPipeline(Pipeline):
             return_attention_masks=True, return_input_lengths=False
         )
 
-        # TODO : Harmonize model arguments across all model
-        inputs['attention_mask'] = inputs.pop('encoder_attention_mask')
-
         if is_tf_available():
             # TODO trace model
             start, end = self.model(inputs)
