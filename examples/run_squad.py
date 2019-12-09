@@ -557,6 +557,8 @@ def main():
         for checkpoint in checkpoints:
             # Reload the model
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
+            if checkpoint == args.output_dir : # handle prediction file path output BUG
+                global_step = ""
             model = model_class.from_pretrained(checkpoint, force_download=True)
             model.to(args.device)
 
