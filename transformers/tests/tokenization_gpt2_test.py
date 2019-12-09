@@ -67,6 +67,20 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    def test_encode_decode_with_spaces(self):
+        tokenizer = self.get_tokenizer()
+
+        new_toks = ['[ABC]', '[DEF]', 'GHI IHG']
+        tokenizer.add_tokens(new_toks)
+        input = "lower newer [ABC] [DEF] newer lower [ABC] GHI IHG newer lower[DEF]"
+        encoded = tokenizer.encode(input)
+        decoded = tokenizer.decode(encoded)
+        self.assertEqual(
+            decoded.lower(),
+            input.lower()
+        )
+
+
 
 if __name__ == '__main__':
     unittest.main()
