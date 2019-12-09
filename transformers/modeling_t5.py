@@ -338,7 +338,7 @@ class T5Attention(nn.Module):
                 raise ValueError("No position_bias provided and no weights to compute position_bias")
             position_bias = self.compute_bias(qlen, klen)
             if mask is not None:
-                position_bias += mask                                         # (bs, n_heads, qlen, klen)
+                position_bias = position_bias + mask                          # (bs, n_heads, qlen, klen)
 
         scores += position_bias
         weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
