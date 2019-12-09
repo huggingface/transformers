@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for OpenAI GPT."""
+"""Tokenization classes for XLM."""
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -524,7 +524,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
         - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
         (ex: "__classify__") to a vocabulary
-        
+
         - `lang2id` attribute maps the languages supported by the model with their ids if provided (automatically set for pretrained vocabularies)
 
         - `id2lang` attributes does reverse mapping if provided (automatically set for pretrained vocabularies)
@@ -564,9 +564,11 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.ja_word_tokenizer = None
         self.zh_word_tokenizer = None
 
-        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
         self.decoder = {v:k for k,v in self.encoder.items()}
-        merges = open(merges_file, encoding='utf-8').read().split('\n')[:-1]
+        with open(merges_file, encoding='utf-8') as merges_handle:
+            merges = merges_handle.read().split('\n')[:-1]
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
@@ -758,9 +760,9 @@ class XLMTokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
+        A XLM sequence has the following format:
             single sequence: <s> X </s>
-            pair of sequences: <s> A </s></s> B </s>
+            pair of sequences: <s> A </s> B </s>
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]

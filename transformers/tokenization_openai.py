@@ -101,9 +101,11 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             self.nlp = BasicTokenizer(do_lower_case=True)
             self.fix_text = None
 
-        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
         self.decoder = {v:k for k,v in self.encoder.items()}
-        merges = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
+        with open(merges_file, encoding='utf-8') as merges_handle:
+            merges = merges_handle.read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}

@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import random
+import json
 
 import numpy as np
 import torch
@@ -47,7 +48,11 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetTokenizer,
                                   DistilBertConfig,
                                   DistilBertForSequenceClassification,
-                                  DistilBertTokenizer)
+                                  DistilBertTokenizer,
+                                  AlbertConfig,
+                                  AlbertForSequenceClassification, 
+                                  AlbertTokenizer,
+                                )
 
 from transformers import AdamW, get_linear_schedule_with_warmup
 
@@ -66,7 +71,8 @@ MODEL_CLASSES = {
     'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
+    'albert': (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer)
 }
 
 
@@ -99,6 +105,7 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
     if args.fp16:
@@ -170,14 +177,22 @@ def train(args, train_dataset, model, tokenizer):
                 global_step += 1
 
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    # Log metrics
+                    logs = {}
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
-                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
+                            eval_key = 'eval_{}'.format(key)
+                            logs[eval_key] = value
+
+                    loss_scalar = (tr_loss - logging_loss) / args.logging_steps
+                    learning_rate_scalar = scheduler.get_lr()[0]
+                    logs['learning_rate'] = learning_rate_scalar
+                    logs['loss'] = loss_scalar
                     logging_loss = tr_loss
+
+                    for key, value in logs.items():
+                        tb_writer.add_scalar(key, value, global_step)
+                    print(json.dumps({**logs, **{'step': global_step}}))
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
@@ -216,7 +231,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 
         args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        eval_sampler = SequentialSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         # multi-gpu eval
@@ -317,7 +332,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
     elif output_mode == "regression":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
-
+ 
     dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
 
@@ -361,7 +376,7 @@ def main():
     parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
-                        help="Number of updates steps to accumulate before performing a backward/update pass.")
+                        help="Number of updates steps to accumulate before performing a backward/update pass.")     
     parser.add_argument("--learning_rate", default=5e-5, type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--weight_decay", default=0.0, type=float,

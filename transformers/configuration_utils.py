@@ -94,6 +94,9 @@ class PretrainedConfig(object):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -120,6 +123,7 @@ class PretrainedConfig(object):
         """
         cache_dir = kwargs.pop('cache_dir', None)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
         return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
 
@@ -131,7 +135,8 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         # redirect to the cache, if necessary
         try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download,
+                                               proxies=proxies, resume_download=resume_download)
         except EnvironmentError:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
                 msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(

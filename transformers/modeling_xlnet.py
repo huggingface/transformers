@@ -583,6 +583,7 @@ class XLNetModel(XLNetPreTrainedModel):
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            When ``target_mapping is not None``, the attentions outputs are a list of 2-tuple of ``torch.FloatTensor``.
 
     Examples::
 
@@ -878,7 +879,11 @@ class XLNetModel(XLNetPreTrainedModel):
                 hidden_states = tuple(hs.permute(1, 0, 2).contiguous() for hs in hidden_states)
             outputs = outputs + (hidden_states,)
         if self.output_attentions:
-            attentions = tuple(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
+            if target_mapping is not None:
+                # when target_mapping is provided, there are 2-tuple of attentions
+                attentions = tuple(tuple(att_stream.permute(2, 3, 0, 1).contiguous() for att_stream in t) for t in attentions)
+            else:
+                attentions = tuple(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
             outputs = outputs + (attentions,)
 
         return outputs  # outputs, (new_mems), (hidden_states), (attentions)
@@ -913,6 +918,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            When ``target_mapping is not None``, the attentions outputs are a list of 2-tuple of ``torch.FloatTensor``.
 
     Examples::
 
@@ -995,6 +1001,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            When ``target_mapping is not None``, the attentions outputs are a list of 2-tuple of ``torch.FloatTensor``.
 
     Examples::
 
@@ -1046,6 +1053,106 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
         return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
+@add_start_docstrings("""XLNet Model with a token classification head on top (a linear layer on top of
+                      the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+                      XLNET_START_DOCSTRING,
+                      XLNET_INPUTS_DOCSTRING)
+class XLNetForTokenClassification(XLNetPreTrainedModel):
+    r"""
+    Inputs:
+        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, num_choices, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            The second dimension of the input (`num_choices`) indicates the number of choices to scores.
+        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification loss.
+        **scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
+            list of ``torch.FloatTensor`` (one for each layer):
+            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
+            if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
+            See details in the docstring of the `mems` input above.
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
+        model = XLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        scores = outputs[0]
+
+    """
+    def __init__(self, config):
+        super(XLNetForTokenClassification, self).__init__(config)
+        self.num_labels = config.num_labels
+
+        self.transformer = XLNetModel(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
+                token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
+
+        outputs = self.transformer(input_ids,
+                            attention_mask=attention_mask,
+                            mems=mems,
+                            perm_mask=perm_mask,
+                            target_mapping=target_mapping,
+                            token_type_ids=token_type_ids,
+                            input_mask=input_mask,
+                            head_mask=head_mask,
+                            inputs_embeds=inputs_embeds)
+
+        sequence_output = outputs[0]
+
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
+
+
 @add_start_docstrings("""XLNet Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RACE/SWAG tasks. """,
     XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
@@ -1095,6 +1202,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            When ``target_mapping is not None``, the attentions outputs are a list of 2-tuple of ``torch.FloatTensor``.
 
     Examples::
 
@@ -1180,6 +1288,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            When ``target_mapping is not None``, the attentions outputs are a list of 2-tuple of ``torch.FloatTensor``.
 
     Examples::
 
@@ -1294,6 +1403,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            When ``target_mapping is not None``, the attentions outputs are a list of 2-tuple of ``torch.FloatTensor``.
 
     Examples::
 

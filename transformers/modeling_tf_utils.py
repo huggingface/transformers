@@ -51,7 +51,15 @@ class TFPreTrainedModel(tf.keras.Model):
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
-    dummy_inputs = tf.constant(DUMMY_INPUTS)  # dummy inputs to build the network
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return tf.constant(DUMMY_INPUTS)
 
     def __init__(self, config, *inputs, **kwargs):
         super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
@@ -191,6 +199,9 @@ class TFPreTrainedModel(tf.keras.Model):
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
 
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
@@ -216,6 +227,7 @@ class TFPreTrainedModel(tf.keras.Model):
         cache_dir = kwargs.pop('cache_dir', None)
         from_pt = kwargs.pop('from_pt', False)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
 
         # Load config
@@ -224,6 +236,7 @@ class TFPreTrainedModel(tf.keras.Model):
                 pretrained_model_name_or_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
+                resume_download=resume_download,
                 **kwargs
             )
         else:
@@ -251,7 +264,8 @@ class TFPreTrainedModel(tf.keras.Model):
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
+                                                    resume_download=resume_download, proxies=proxies)
             except EnvironmentError as e:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                     logger.error(
@@ -454,7 +468,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         elif self.summary_type == 'first':
             output = hidden_states[:, 0]
         elif self.summary_type == 'mean':
-            output = tf.mean(hidden_states, axis=1)
+            output = tf.reduce_mean(hidden_states, axis=1)
         elif self.summary_type == 'cls_index':
             hidden_shape = shape_list(hidden_states)  # e.g. [batch, num choices, seq length, hidden dims]
             if cls_index is None:

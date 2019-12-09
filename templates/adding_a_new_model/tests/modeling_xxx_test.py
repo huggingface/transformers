@@ -18,12 +18,12 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     from transformers import (XxxConfig, XxxModel, XxxForMaskedLM,
@@ -31,10 +31,9 @@ if is_torch_available():
                                         XxxForQuestionAnswering, XxxForSequenceClassification,
                                         XxxForTokenClassification, XxxForMultipleChoice)
     from transformers.modeling_xxx import XXX_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 
+@require_torch
 class XxxModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (XxxModel, XxxForMaskedLM, XxxForQuestionAnswering,
@@ -131,6 +130,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_xxx_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = XxxModel(config=config)
+            model.to(torch_device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -148,6 +148,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_xxx_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = XxxForMaskedLM(config=config)
+            model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
             result = {
@@ -162,6 +163,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_xxx_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             model = XxxForQuestionAnswering(config=config)
+            model.to(torch_device)
             model.eval()
             loss, start_logits, end_logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
                                                    start_positions=sequence_labels, end_positions=sequence_labels)
@@ -182,6 +184,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_xxx_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = XxxForSequenceClassification(config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
             result = {
@@ -197,6 +200,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_xxx_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = XxxForTokenClassification(config=config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
             result = {
@@ -243,7 +247,7 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xxx_for_token_classification(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(XXX_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

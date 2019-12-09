@@ -21,7 +21,6 @@ import psutil
 import time
 from tqdm import trange, tqdm
 import numpy as np
-import psutil
 
 import torch
 import torch.nn as nn
