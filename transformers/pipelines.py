@@ -149,13 +149,10 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Map to tuple (question, context)
         texts = [(text['question'], text['context']) for text in texts]
-
         inputs = self.tokenizer.batch_encode_plus(
-            texts, add_special_tokens=True, return_tensors='tf' if is_tf_available() else 'pt'
+            texts, add_special_tokens=False, return_tensors='tf' if is_tf_available() else 'pt',
+            return_attention_masks=True, return_input_lengths=False
         )
-
-        # Remove special_tokens_mask to avoid KeyError
-        special_tokens_mask, input_len = inputs.pop('special_tokens_mask'), inputs.pop('input_len')
 
         # TODO : Harmonize model arguments across all model
         inputs['attention_mask'] = inputs.pop('encoder_attention_mask')
