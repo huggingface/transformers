@@ -121,7 +121,12 @@ class CommonTestCases:
                 model.to(torch_device)
                 model.eval()
                 first, second = model(**inputs_dict)[0], model(**inputs_dict)[0]
-                self.assertEqual(first.ne(second).sum().item(), 0)
+                out_1 = first.cpu().numpy()
+                out_2 = second.cpu().numpy()
+                out_1 = out_1[~np.isnan(out_1)]
+                out_2 = out_2[~np.isnan(out_2)]
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
 
         def test_attention_outputs(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
