@@ -31,7 +31,7 @@ from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassi
 from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering
 from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification
 from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification
-from .modeling_camembert import CamembertModel, CamembertForQuestionAnswering, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
+from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
 from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, AlbertForQuestionAnswering
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
@@ -294,10 +294,6 @@ class AutoModelWithLMHead(object):
             return XLMWithLMHeadModel(config)
         elif isinstance(config, CTRLConfig):
             return CTRLLMHeadModel(config)
-        elif isinstance(config, AlbertConfig):
-            return AlbertLMHeadModel(config)
-        elif isinstance(config, CamembertConfig):
-            return CamembertLMHeadModel(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
@@ -454,7 +450,7 @@ class AutoModelForSequenceClassification(object):
         """
         if isinstance(config, AlbertConfig):
             return AlbertForSequenceClassification(config)
-        elif isintance(config, CamembertConfig):
+        elif isinstance(config, CamembertConfig):
             return CamembertForSequenceClassification(config)
         elif isinstance(config, DistilBertConfig):
             return DistilBertForSequenceClassification(config)
@@ -606,10 +602,8 @@ class AutoModelForQuestionAnswering(object):
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
-        if isintance(config, AlbertConfig):
+        if isinstance(config, AlbertConfig):
             return AlbertForQuestionAnswering(config)
-        elif isintance(config, CamembertConfig):
-            return CamembertForQuestionAnswering(config)
         elif isinstance(config, DistilBertConfig):
             return DistilBertForQuestionAnswering(config)
         elif isinstance(config, BertConfig):
