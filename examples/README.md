@@ -24,8 +24,6 @@ pip install -r ./examples/requirements.txt
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
 | [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
-| [Abstractive summarization](#abstractive-summarization) | Using the BertAbs
-model finetuned on the CNN/DailyMail dataset to generate summaries. |
 
 ## TensorFlow 2.0 Bert models on GLUE
 
@@ -644,34 +642,6 @@ On the test dataset the following results could be achieved:
 
 micro avg     0.8722    0.8774    0.8748     13869
 macro avg     0.8712    0.8774    0.8740     13869
-```
-
-## Abstractive summarization
-
-Based on the script
-[`run_summarization_finetuning.py`](https://github.com/huggingface/transformers/blob/master/examples/run_summarization_finetuning.py).
-
-Before running this script you should download **both** CNN and Daily Mail
-datasets from [Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/)  (the
-links next to "Stories") in the same folder. Then uncompress the archives by running:
-
-```bash
-tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
-```
-
-note that the finetuning script **will not work** if you do not download both
-datasets. We will refer as `$DATA_PATH` the path to where you uncompressed both
-archive.
-
-```bash
-export DATA_PATH=/path/to/dataset/
-
-python run_summarization_finetuning.py \
-    --output_dir=output \
-    --model_type=bert2bert \
-    --model_name_or_path=bert2bert \
-    --do_train \
-    --data_path=$DATA_PATH \
 ```
 
 ## XNLI
