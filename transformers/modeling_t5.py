@@ -42,6 +42,10 @@ logger = logging.getLogger(__name__)
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
     't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-pytorch_model.bin",
+    't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-pytorch_model.bin",
+    't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-pytorch_model.bin",
+    't5-3B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3B-pytorch_model.bin",
+    't5-11B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11B-pytorch_model.bin",
 }
 
 ####################################################
