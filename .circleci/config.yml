@@ -3,7 +3,7 @@ jobs:
     build_py3_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.7
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -47,7 +47,7 @@ jobs:
     deploy_doc:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.7
         steps:
             - add_ssh_keys:
                   fingerprints:
