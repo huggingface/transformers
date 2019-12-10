@@ -613,6 +613,12 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_config.is_decoder = True
         self.decoder = TFT5MainLayer(decoder_config, name='decoder')
 
+    def get_input_embeddings(self):
+        return self.shared
+
+    def get_output_embeddings(self):
+        return self.shared
+
     def call(self, decoder_input_ids, **kwargs):
         # We allow two types of multi-inputs:
         # - traditional keyword arguments in the call method
@@ -634,16 +640,24 @@ class TFT5Model(TFT5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
         if encoder_hidden_states is None:
-            encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-            hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+            # Convert encoder inputs in embeddings if needed
+            hidden_states = kwargs_encoder.pop("inputs_embeds", None)
+            if hidden_states is None:
+                encoder_inputs_ids = kwargs_encoder.pop("input_ids")
+                hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+
             encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
             encoder_hidden_states = encoder_outputs[0]
         else:
             encoder_outputs = ()
 
         # Decode
-        decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-        hidden_states = self.shared(decoder_inputs_ids)  # Convert inputs in embeddings
+        # Convert decoder inputs in embeddings if needed
+        hidden_states = kwargs_decoder.pop("inputs_embeds", None)
+        if hidden_states is None:
+            decoder_inputs_ids = kwargs_decoder.pop("input_ids")
+            hidden_states = self.shared(decoder_inputs_ids)
+
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
         kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
         decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
@@ -692,6 +706,12 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
         decoder_config.is_decoder = True
         self.decoder = TFT5MainLayer(decoder_config, name='decoder')
 
+    def get_input_embeddings(self):
+        return self.shared
+
+    def get_output_embeddings(self):
+        return self.shared
+
     def call(self, decoder_input_ids, **kwargs):
         # We allow two types of multi-inputs:
         # - traditional keyword arguments in the call method
@@ -713,16 +733,24 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
         if encoder_hidden_states is None:
-            encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-            hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+            # Convert encoder inputs in embeddings if needed
+            hidden_states = kwargs_encoder.pop("inputs_embeds", None)
+            if hidden_states is None:
+                encoder_inputs_ids = kwargs_encoder.pop("input_ids")
+                hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+
             encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
             encoder_hidden_states = encoder_outputs[0]
         else:
             encoder_outputs = ()
 
         # Decode
-        decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-        hidden_states = self.shared(decoder_inputs_ids)  # Convert inputs in embeddings
+        # Convert decoder inputs in embeddings if needed
+        hidden_states = kwargs_decoder.pop("inputs_embeds", None)
+        if hidden_states is None:
+            decoder_inputs_ids = kwargs_decoder.pop("input_ids")
+            hidden_states = self.shared(decoder_inputs_ids)
+
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
         kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
         decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)

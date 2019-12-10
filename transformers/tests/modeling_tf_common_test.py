@@ -130,12 +130,12 @@ class TFCommonTestCases:
                                       for name, key in inputs_dict.items())
                 with torch.no_grad():
                     pto = pt_model(**pt_inputs_dict)
-                tfo = tf_model(inputs_dict)
-                tfo = tfo[0].numpy()
-                pto = pto[0].numpy()
-                tfo[np.isnan(tfo)] = 0
-                pto[np.isnan(pto)] = 0
-                max_diff = np.amax(np.abs(tfo - pto))
+                tfo = tf_model(inputs_dict, training=False)
+                tf_hidden_states = tfo[0].numpy()
+                pt_hidden_states = pto[0].numpy()
+                tf_hidden_states[np.isnan(tf_hidden_states)] = 0
+                pt_hidden_states[np.isnan(pt_hidden_states)] = 0
+                max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
                 self.assertLessEqual(max_diff, 2e-2)
 
                 # Check we can load pt model in tf and vice-versa with checkpoint => model functions
@@ -296,33 +296,46 @@ class TFCommonTestCases:
                 first, second = model(inputs_dict, training=False)[0], model(inputs_dict, training=False)[0]
                 self.assertTrue(tf.math.equal(first, second).numpy().all())
 
+        def _get_embeds(self, wte, input_ids):
+            # ^^ In our TF models, the input_embeddings can take slightly different forms,
+            # so we try a few of them.
+            # We used to fall back to just synthetically creating a dummy tensor of ones:
+            try:
+                x = wte(input_ids, mode="embedding")
+            except:
+                try:
+                    x = wte([input_ids], mode="embedding")
+                except:
+                    try:
+                        x = wte([input_ids, None, None, None], mode="embedding")
+                    except:
+                        if hasattr(self.model_tester, "embedding_size"):
+                            x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
+                        else:
+                            x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
+            return x
+
         def test_inputs_embeds(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            input_ids = inputs_dict["input_ids"]
-            del inputs_dict["input_ids"]
+            if not self.is_encoder_decoder:
+                input_ids = inputs_dict["input_ids"]
+                del inputs_dict["input_ids"]
+            else:
+                encoder_input_ids = inputs_dict["encoder_input_ids"]
+                decoder_input_ids = inputs_dict["decoder_input_ids"]
+                del inputs_dict["encoder_input_ids"]
+                del inputs_dict["decoder_input_ids"]
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
 
                 wte = model.get_input_embeddings()
-                try:
-                    x = wte(input_ids, mode="embedding")
-                except:
-                    try:
-                        x = wte([input_ids], mode="embedding")
-                    except:
-                        try:
-                            x = wte([input_ids, None, None, None], mode="embedding")
-                        except:
-                            if hasattr(self.model_tester, "embedding_size"):
-                                x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
-                            else:
-                                x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
-                # ^^ In our TF models, the input_embeddings can take slightly different forms,
-                # so we try a few of them.
-                # We used to fall back to just synthetically creating a dummy tensor of ones:
-                #
-                inputs_dict["inputs_embeds"] = x
+                if not self.is_encoder_decoder:
+                    inputs_dict["inputs_embeds"] = self._get_embeds(wte, input_ids)
+                else:
+                    inputs_dict["encoder_inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
+                    inputs_dict["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
+
                 outputs = model(inputs_dict)
 
 

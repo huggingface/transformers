@@ -18,20 +18,19 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
-from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .modeling_common_test import (CommonTestCases, ids_tensor, floats_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     from transformers import (T5Config, T5Model, T5WithLMHeadModel)
     from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 
+@require_torch
 class T5ModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (T5Model, T5WithLMHeadModel) if is_torch_available() else ()
@@ -174,7 +173,7 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_with_lm_head(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(T5_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

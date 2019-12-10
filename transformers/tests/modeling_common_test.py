@@ -568,8 +568,14 @@ class CommonTestCases:
 
         def test_inputs_embeds(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            input_ids = inputs_dict["input_ids"]
-            del inputs_dict["input_ids"]
+            if not self.is_encoder_decoder:
+                input_ids = inputs_dict["input_ids"]
+                del inputs_dict["input_ids"]
+            else:
+                encoder_input_ids = inputs_dict["encoder_input_ids"]
+                decoder_input_ids = inputs_dict["decoder_input_ids"]
+                del inputs_dict["encoder_input_ids"]
+                del inputs_dict["decoder_input_ids"]
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
@@ -577,9 +583,13 @@ class CommonTestCases:
                 model.eval()
 
                 wte = model.get_input_embeddings()
-                inputs_dict["inputs_embeds"] = wte(input_ids)
-                outputs = model(**inputs_dict)
+                if not self.is_encoder_decoder:
+                    inputs_dict["inputs_embeds"] = wte(input_ids)
+                else:
+                    inputs_dict["encoder_inputs_embeds"] = wte(encoder_input_ids)
+                    inputs_dict["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
+                outputs = model(**inputs_dict)
 
     class GPTModelTester(CommonModelTester):
 
