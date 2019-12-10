@@ -98,14 +98,11 @@ class TextClassificationPipeline(Pipeline):
 class QuestionAnsweringPipeline(Pipeline):
     """
     Question Answering pipeling involving Tokenization and Inference.
-    TODO:
-     - top-k answers
-     - return start/end chars
-     - return score
     """
 
-    def __init__(self, model, tokenizer: Optional[PreTrainedTokenizer]):
-        super().__init__(model, tokenizer)
+    @classmethod
+    def from_config(cls, model, tokenizer: PreTrainedTokenizer, **kwargs):
+        pass
 
     @staticmethod
     def create_sample(question: Union[str, List[str]], context: Union[str, List[str]]) -> Union[SquadExample, List[SquadExample]]:
@@ -115,6 +112,55 @@ class QuestionAnsweringPipeline(Pipeline):
             return [SquadExample(None, q, c, None, None, None) for q, c in zip(question, context)]
         else:
             return SquadExample(None, question, context, None, None, None)
+
+    @staticmethod
+    def handle_args(*inputs, **kwargs) -> List[SquadExample]:
+        # Position args, handling is sensibly the same as X and data, so forwarding to avoid duplicating
+        if inputs is not None and len(inputs) > 1:
+            kwargs['X'] = inputs
+
+        # Generic compatibility with sklearn and Keras
+        # Batched data
+        if 'X' in kwargs or 'data' in kwargs:
+            data = kwargs['X'] if 'X' in kwargs else kwargs['data']
+
+            if not isinstance(data, list):
+                data = [data]
+
+            for i, item in enumerate(data):
+                if isinstance(item, dict):
+                    if any(k not in item for k in ['question', 'context']):
+                        raise KeyError('You need to provide a dictionary with keys {question:..., context:...}')
+                    data[i] = QuestionAnsweringPipeline.create_sample(**item)
+
+                elif isinstance(item, SquadExample):
+                    continue
+                else:
+                    raise ValueError(
+                        '{} argument needs to be of type (list[SquadExample | dict], SquadExample, dict)'
+                        .format('X' if 'X' in kwargs else 'data')
+                    )
+            inputs = data
+
+        # Tabular input
+        elif 'question' in kwargs and 'context' in kwargs:
+            if isinstance(kwargs['question'], str):
+                kwargs['question'] = [kwargs['question']]
+
+            if isinstance(kwargs['context'], str):
+                kwargs['context'] = [kwargs['context']]
+
+            inputs = [QuestionAnsweringPipeline.create_sample(q, c) for q, c in zip(kwargs['question'], kwargs['context'])]
+        else:
+            raise ValueError('Unknown arguments {}'.format(kwargs))
+
+        if not isinstance(inputs, list):
+            inputs = [inputs]
+
+        return inputs
+
+    def __init__(self, model, tokenizer: Optional[PreTrainedTokenizer]):
+        super().__init__(model, tokenizer)
 
     def inputs_for_model(self, features: Union[SquadExample, List[SquadExample]]) -> Dict:
         args = ['input_ids', 'attention_mask']
@@ -131,10 +177,6 @@ class QuestionAnsweringPipeline(Pipeline):
         else:
             return {k: [feature.__dict__[k] for feature in features] for k in args}
 
-    @classmethod
-    def from_config(cls, model, tokenizer: PreTrainedTokenizer, **kwargs):
-        pass
-
     def __call__(self, *texts, **kwargs):
         # Set defaults values
         kwargs.setdefault('topk', 1)
@@ -149,29 +191,10 @@ class QuestionAnsweringPipeline(Pipeline):
         if kwargs['max_answer_len'] < 1:
             raise ValueError('max_answer_len parameter should be >= 1 (got {})'.format(kwargs['max_answer_len']))
 
-        # Position args
-        if texts is not None and len(texts) > 1:
-            (texts, ) = texts
-
-        # Generic compatibility with sklearn and Keras
-        elif 'X' in kwargs and not texts:
-            texts = kwargs.pop('X')
-
-        # Batched data
-        elif 'data' in kwargs:
-            texts = kwargs.pop('data')
-
-        # Tabular input
-        elif 'question' in kwargs and 'context' in kwargs:
-            texts = QuestionAnsweringPipeline.create_sample(kwargs['question'], kwargs['context'])
-        else:
-            raise ValueError('Unknown arguments {}'.format(kwargs))
-
-        if not isinstance(texts, list):
-            texts = [texts]
+        examples = QuestionAnsweringPipeline.handle_args(texts, **kwargs)
 
         # Convert inputs to features
-        features = squad_convert_examples_to_features(texts, self.tokenizer, kwargs['max_seq_len'], kwargs['doc_stride'], kwargs['max_question_len'], False)
+        features = squad_convert_examples_to_features(examples, self.tokenizer, kwargs['max_seq_len'], kwargs['doc_stride'], kwargs['max_question_len'], False)
         fw_args = self.inputs_for_model(features)
 
         if is_tf_available():
@@ -188,7 +211,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 start, end = start.cpu().numpy(), end.cpu().numpy()
 
         answers = []
-        for (example, feature, start_, end_) in zip(texts, features, start, end):
+        for (example, feature, start_, end_) in zip(examples, features, start, end):
             # Normalize logits and spans to retrieve the answer
             start_ = np.exp(start_) / np.sum(np.exp(start_))
             end_ = np.exp(end_) / np.sum(np.exp(end_))

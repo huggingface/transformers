@@ -40,7 +40,38 @@ class QuestionAnsweringPipelineTest(unittest.TestCase):
 
         # Batch case with topk = 2
         a = nlp(question=['What is the name of the company I\'m working for ?', 'Where is the company based ?'],
-                context=['I\'m working for Huggingface.', 'The company is based in New York and Paris'], topk=2)
+                context=['Where is the company based ?', 'The company is based in New York and Paris'], topk=2)
+        self.check_answer_structure(a, 2, 2)
+
+        # check for data keyword
+        a = nlp(data=nlp.create_sample(question='What is the name of the company I\'m working for ?', context='I\'m working for Huggingface.'))
+        self.check_answer_structure(a, 1, 1)
+
+        a = nlp(data=nlp.create_sample(question='What is the name of the company I\'m working for ?', context='I\'m working for Huggingface.'), topk=2)
+        self.check_answer_structure(a, 1, 2)
+
+        a = nlp(data=[
+            nlp.create_sample(question='What is the name of the company I\'m working for ?', context='I\'m working for Huggingface.'),
+            nlp.create_sample(question='I\'m working for Huggingface.', context='The company is based in New York and Paris'),
+        ])
+        self.check_answer_structure(a, 2, 1)
+
+        a = nlp(data=[
+            {'question': 'What is the name of the company I\'m working for ?', 'context': 'I\'m working for Huggingface.'},
+            {'question': 'Where is the company based ?', 'context': 'The company is based in New York and Paris'},
+        ])
+        self.check_answer_structure(a, 2, 1)
+
+        # X keywords
+        a = nlp(X=nlp.create_sample(
+            question='Where is the company based ?', context='The company is based in New York and Paris'
+        ))
+        self.check_answer_structure(a, 1, 1)
+
+        a = nlp(X=[
+            {'question': 'What is the name of the company I\'m working for ?', 'context': 'I\'m working for Huggingface.'},
+            {'question': 'Where is the company based ?', 'context': 'The company is based in New York and Paris'},
+        ], topk=2)
         self.check_answer_structure(a, 2, 2)
 
     @patch('transformers.pipelines.is_torch_available', return_value=False)
