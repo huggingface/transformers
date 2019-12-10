@@ -20,7 +20,8 @@ from typing import Union, Optional, Tuple, List, Dict
 
 import numpy as np
 
-from transformers import is_tf_available, is_torch_available, logger, AutoTokenizer, PreTrainedTokenizer
+from transformers import is_tf_available, is_torch_available, logger, AutoTokenizer, PreTrainedTokenizer, \
+    SquadExample, squad_convert_examples_to_features
 
 if is_tf_available():
     from transformers import TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering
@@ -107,13 +108,28 @@ class QuestionAnsweringPipeline(Pipeline):
         super().__init__(model, tokenizer)
 
     @staticmethod
-    def create_sample(question: Union[str, List[str]], context: Union[str, List[str]]) -> Union[dict, List[Dict]]:
+    def create_sample(question: Union[str, List[str]], context: Union[str, List[str]]) -> Union[SquadExample, List[SquadExample]]:
         is_list = isinstance(question, list)
 
         if is_list:
-            return [{'question': q, 'context': c} for q, c in zip(question, context)]
+            return [SquadExample(None, q, c, None, None, None) for q, c in zip(question, context)]
         else:
-            return {'question': question, 'context': context}
+            return SquadExample(None, question, context, None, None, None)
+
+    def inputs_for_model(self, features: Union[SquadExample, List[SquadExample]]) -> Dict:
+        args = ['input_ids', 'attention_mask']
+        model_type = type(self.model).__name__.lower()
+
+        if 'distilbert' not in model_type and 'xlm' not in model_type:
+            args += ['token_type_ids']
+
+        if 'xlnet' in model_type or 'xlm' in model_type:
+            args += ['cls_index', 'p_mask']
+
+        if isinstance(features, SquadExample):
+            return {k: features.__dict__[k] for k in args}
+        else:
+            return {k: [feature.__dict__[k] for feature in features] for k in args}
 
     @classmethod
     def from_config(cls, model, tokenizer: PreTrainedTokenizer, **kwargs):
@@ -121,8 +137,11 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def __call__(self, *texts, **kwargs):
         # Set defaults values
-        kwargs.setdefault('max_answer_len', 15)
         kwargs.setdefault('topk', 1)
+        kwargs.setdefault('doc_stride', 128)
+        kwargs.setdefault('max_answer_len', 15)
+        kwargs.setdefault('max_seq_len', 384)
+        kwargs.setdefault('max_question_len', 64)
 
         if kwargs['topk'] < 1:
             raise ValueError('topk parameter should be >= 1 (got {})'.format(kwargs['topk']))
@@ -130,56 +149,63 @@ class QuestionAnsweringPipeline(Pipeline):
         if kwargs['max_answer_len'] < 1:
             raise ValueError('max_answer_len parameter should be >= 1 (got {})'.format(kwargs['max_answer_len']))
 
-        # Tabular input
-        if 'question' in kwargs and 'context' in kwargs:
-            texts = QuestionAnsweringPipeline.create_sample(kwargs['question'], kwargs['context'])
-        elif 'data' in kwargs:
-            texts = kwargs['data']
+        # Position args
+        if texts is not None and len(texts) > 1:
+            (texts, ) = texts
+
         # Generic compatibility with sklearn and Keras
         elif 'X' in kwargs and not texts:
             texts = kwargs.pop('X')
-        else:
-            (texts, ) = texts
 
-        if not isinstance(texts, (dict, list)):
-            raise Exception('QuestionAnsweringPipeline requires predict argument to be a tuple (context, question) or a List of dict.')
+        # Batched data
+        elif 'data' in kwargs:
+            texts = kwargs.pop('data')
+
+        # Tabular input
+        elif 'question' in kwargs and 'context' in kwargs:
+            texts = QuestionAnsweringPipeline.create_sample(kwargs['question'], kwargs['context'])
+        else:
+            raise ValueError('Unknown arguments {}'.format(kwargs))
 
         if not isinstance(texts, list):
             texts = [texts]
 
-        # Map to tuple (question, context)
-        texts = [(text['question'], text['context']) for text in texts]
-        inputs = self.tokenizer.batch_encode_plus(
-            texts, add_special_tokens=False, return_tensors='tf' if is_tf_available() else 'pt',
-            return_attention_masks=True, return_input_lengths=False
-        )
-
-        token_type_ids = inputs.pop('token_type_ids')
+        # Convert inputs to features
+        features = squad_convert_examples_to_features(texts, self.tokenizer, kwargs['max_seq_len'], kwargs['doc_stride'], kwargs['max_question_len'], False)
+        fw_args = self.inputs_for_model(features)
 
         if is_tf_available():
-            # TODO trace model
-            start, end = self.model(inputs)
+            import tensorflow as tf
+            fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
+            start, end = self.model(fw_args)
             start, end = start.numpy(), end.numpy()
         else:
             import torch
             with torch.no_grad():
                 # Retrieve the score for the context tokens only (removing question tokens)
-                start, end = self.model(**inputs)
+                fw_args = {k: torch.tensor(v) for (k, v) in fw_args.items()}
+                start, end = self.model(**fw_args)
                 start, end = start.cpu().numpy(), end.cpu().numpy()
 
         answers = []
-        for i in range(len(texts)):
-            context_idx = token_type_ids[i] == 1
-            start_, end_ = start[i, context_idx], end[i, context_idx]
+        for i, (example, feature, start_, end_) in enumerate(zip(texts, features, start, end)):
+            start_, end_ = start_ * np.abs(np.array(feature.p_mask) - 1), end_ * np.abs(np.array(feature.p_mask) - 1)
 
             # Normalize logits and spans to retrieve the answer
             start_ = np.exp(start_) / np.sum(np.exp(start_))
             end_ = np.exp(end_) / np.sum(np.exp(end_))
             starts, ends, scores = self.decode(start_, end_, kwargs['topk'], kwargs['max_answer_len'])
 
+            char_to_word = np.array(example.char_to_word_offset)
+
             # Convert the answer (tokens) back to the original text
             answers += [[
-                {**{'score': score}, **self.span_to_answer(texts[i][1], s, e)}
+                {
+                    'score': score,
+                    'start': np.where(char_to_word == feature.token_to_orig_map[s])[0][0],
+                    'end': np.where(char_to_word == feature.token_to_orig_map[e])[0][-1],
+                    'answer': ' '.join(example.doc_tokens[feature.token_to_orig_map[s]: feature.token_to_orig_map[e] + 1])
+                }
                 for s, e, score in zip(starts, ends, scores)
             ]]
 
