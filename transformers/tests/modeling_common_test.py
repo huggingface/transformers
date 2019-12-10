@@ -27,19 +27,18 @@ import uuid
 
 import unittest
 import logging
-import pytest
 
 from transformers import is_torch_available
+
+from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
     import numpy as np
 
-    from transformers import (PretrainedConfig, PreTrainedModel,
+    from transformers import (AdaptiveEmbedding, PretrainedConfig, PreTrainedModel,
                                     BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2Config, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -65,6 +64,7 @@ def _config_zero_init(config):
 
 class CommonTestCases:
 
+    @require_torch
     class CommonModelTester(unittest.TestCase):
 
         model_tester = None
@@ -80,6 +80,7 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
@@ -89,18 +90,17 @@ class CommonTestCases:
                 with TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
                     model = model_class.from_pretrained(tmpdirname)
+                    model.to(torch_device)
+                    with torch.no_grad():
+                        after_outputs = model(**inputs_dict)
 
-                with torch.no_grad():
-                    after_outputs = model(**inputs_dict)
-
-                # # Make sure we don't have nans
-                out_1 = after_outputs[0].numpy()
-                out_1[np.isnan(out_1)] = 0
-
-                out_1 = out_1 - out_2
-                amax = np.amax(out_1)
-                amin = np.amin(out_1)
-                self.assertLessEqual(max(amax, -amin), 1e-5)
+                    # Make sure we don't have nans
+                    out_1 = after_outputs[0].cpu().numpy()
+                    out_2 = outputs[0].cpu().numpy()
+                    out_1 = out_1[~np.isnan(out_1)]
+                    out_2 = out_2[~np.isnan(out_2)]
+                    max_diff = np.amax(np.abs(out_1 - out_2))
+                    self.assertLessEqual(max_diff, 1e-5)
 
         def test_initialization(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -118,6 +118,7 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 first, second = model(**inputs_dict)[0], model(**inputs_dict)[0]
                 self.assertEqual(first.ne(second).sum().item(), 0)
@@ -134,6 +135,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = False
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(**inputs_dict)
                 attentions = outputs[-1]
@@ -164,6 +166,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = True
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(**inputs_dict)
                 self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
@@ -203,6 +206,7 @@ class CommonTestCases:
             configs_no_init.torchscript = True
             for model_class in self.all_model_classes:
                 model = model_class(config=configs_no_init)
+                model.to(torch_device)
                 model.eval()
                 inputs = inputs_dict['input_ids']  # Let's keep only input_ids
 
@@ -223,7 +227,10 @@ class CommonTestCases:
                 except ValueError:
                     self.fail("Couldn't load module.")
 
+                model.to(torch_device)
                 model.eval()
+
+                loaded_model.to(torch_device)
                 loaded_model.eval()
 
                 model_params = model.parameters()
@@ -249,11 +256,12 @@ class CommonTestCases:
             configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
             for model_class in self.all_model_classes:
                 model = model_class(config=configs_no_init)
+                model.to(torch_device)
                 model.eval()
 
                 # Prepare head_mask
                 # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
-                head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads)
+                head_mask = torch.ones(self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device)
                 head_mask[0, 0] = 0
                 head_mask[-1, :-1] = 0
                 head_mask.requires_grad_(requires_grad=True)
@@ -302,6 +310,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = False
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
                 heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
                                 -1: [0]}
@@ -330,6 +339,7 @@ class CommonTestCases:
                 config.output_attentions = True
                 config.output_hidden_states = False
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
                 heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
                                 -1: [0]}
@@ -339,6 +349,7 @@ class CommonTestCases:
                     os.makedirs(directory)
                 model.save_pretrained(directory)
                 model = model_class.from_pretrained(directory)
+                model.to(torch_device)
 
                 outputs = model(**inputs_dict)
                 attentions = outputs[-1]
@@ -366,6 +377,7 @@ class CommonTestCases:
                 config.pruned_heads = heads_to_prune
 
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
 
                 outputs = model(**inputs_dict)
@@ -392,6 +404,7 @@ class CommonTestCases:
                 config.pruned_heads = heads_to_prune
 
                 model = model_class(config=config)
+                model.to(torch_device)
                 model.eval()
 
                 outputs = model(**inputs_dict)
@@ -408,6 +421,7 @@ class CommonTestCases:
                     os.makedirs(directory)
                 model.save_pretrained(directory)
                 model = model_class.from_pretrained(directory)
+                model.to(torch_device)
                 shutil.rmtree(directory)
 
                 outputs = model(**inputs_dict)
@@ -438,6 +452,7 @@ class CommonTestCases:
                 config.output_hidden_states = True
                 config.output_attentions = False
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(**inputs_dict)
                 hidden_states = outputs[-1]
@@ -488,9 +503,15 @@ class CommonTestCases:
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
-                model.get_input_embeddings()
+                self.assertIsInstance(
+                    model.get_input_embeddings(),
+                    (torch.nn.Embedding, AdaptiveEmbedding)
+                )
                 model.set_input_embeddings(torch.nn.Embedding(10, 10))
-                model.get_output_embeddings()
+                x = model.get_output_embeddings()
+                self.assertTrue(
+                    x is None or isinstance(x, torch.nn.Linear)
+                )
 
         def test_tie_model_weights(self):
             if not self.test_torchscript:
@@ -544,6 +565,20 @@ class CommonTestCases:
                 # # Check that the embedding layer and decoding layer are the same in size and in value
                 # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
                 # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+        def test_inputs_embeds(self):
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            input_ids = inputs_dict["input_ids"]
+            del inputs_dict["input_ids"]
+
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                wte = model.get_input_embeddings()
+                inputs_dict["inputs_embeds"] = wte(input_ids)
+                outputs = model(**inputs_dict)
 
 
     class GPTModelTester(CommonModelTester):
@@ -629,6 +664,7 @@ class CommonTestCases:
         def create_and_check_base_model(self, config, input_ids, token_type_ids, position_ids,
                                 mc_labels, lm_labels, mc_token_ids):
             model = self.base_model_class(config)
+            model.to(torch_device)
             model.eval()
 
             outputs = model(input_ids, position_ids, token_type_ids)
@@ -644,6 +680,7 @@ class CommonTestCases:
         def create_and_check_lm_head(self, config, input_ids, token_type_ids, position_ids,
                                         mc_labels, lm_labels, mc_token_ids):
             model = self.lm_head_model_class(config)
+            model.to(torch_device)
             model.eval()
             outputs = model(input_ids, position_ids, token_type_ids, lm_labels)
             loss, lm_logits = outputs[:2]
@@ -660,6 +697,7 @@ class CommonTestCases:
                                         mc_labels, lm_labels, mc_token_ids):
             for model_class in self.all_model_classes:
                 model = model_class(config)
+                model.to(torch_device)
                 model.eval()
                 outputs = model(input_ids)
                 presents = outputs[-1]
@@ -672,6 +710,7 @@ class CommonTestCases:
         def create_and_check_double_heads(self, config, input_ids, token_type_ids, position_ids,
                                         mc_labels, lm_labels, mc_token_ids):
             model = self.double_head_model_class(config)
+            model.to(torch_device)
             model.eval()
             outputs = model(input_ids, mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels,
                             token_type_ids=token_type_ids, position_ids=position_ids)
@@ -717,7 +756,7 @@ class CommonTestCases:
                 config_and_inputs = self.prepare_config_and_inputs()
                 self.create_and_check_presents(*config_and_inputs)
 
-        @pytest.mark.slow
+        @slow
         def run_slow_tests(self):
             self.create_and_check_model_from_pretrained()
 
@@ -771,7 +810,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
 
-    return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
+    return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
@@ -787,11 +826,12 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.random() * scale)
 
-    return torch.tensor(data=values, dtype=torch.float).view(shape).contiguous()
+    return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
 
 
+@require_torch
 class ModelUtilsTest(unittest.TestCase):
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

@@ -18,19 +18,21 @@ from __future__ import print_function
 
 import unittest
 import os
-import pytest
 
 from transformers import is_torch_available
 
 if is_torch_available():
     import torch
 
-    from transformers import (AdamW, ConstantLRSchedule, WarmupConstantSchedule,
-                                    WarmupCosineSchedule, WarmupCosineWithHardRestartsSchedule, WarmupLinearSchedule)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
+    from transformers import (AdamW,
+                              get_constant_schedule,
+                              get_constant_schedule_with_warmup,
+                              get_cosine_schedule_with_warmup,
+                              get_cosine_with_hard_restarts_schedule_with_warmup,
+                              get_linear_schedule_with_warmup)
 
 from .tokenization_tests_commons import TemporaryDirectory
+from .utils import require_torch
 
 
 def unwrap_schedule(scheduler, num_steps=10):
@@ -54,6 +56,7 @@ def unwrap_and_save_reload_schedule(scheduler, num_steps=10):
                 scheduler.load_state_dict(state_dict)
     return lrs
 
+@require_torch
 class OptimizationTest(unittest.TestCase):
 
     def assertListAlmostEqual(self, list1, list2, tol):
@@ -76,6 +79,7 @@ class OptimizationTest(unittest.TestCase):
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
 
 
+@require_torch
 class ScheduleInitTest(unittest.TestCase):
     m = torch.nn.Linear(50, 50) if is_torch_available() else None
     optimizer = AdamW(m.parameters(), lr=10.) if is_torch_available() else None
@@ -87,59 +91,60 @@ class ScheduleInitTest(unittest.TestCase):
             self.assertAlmostEqual(a, b, delta=tol)
 
     def test_constant_scheduler(self):
-        scheduler = ConstantLRSchedule(self.optimizer)
+        scheduler = get_constant_schedule(self.optimizer)
         lrs = unwrap_schedule(scheduler, self.num_steps)
         expected_learning_rates = [10.] * self.num_steps
         self.assertEqual(len(lrs[0]), 1)
         self.assertListEqual([l[0] for l in lrs], expected_learning_rates)
 
-        scheduler = ConstantLRSchedule(self.optimizer)
+        scheduler = get_constant_schedule(self.optimizer)
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
         self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
 
     def test_warmup_constant_scheduler(self):
-        scheduler = WarmupConstantSchedule(self.optimizer, warmup_steps=4)
+        scheduler = get_constant_schedule_with_warmup(self.optimizer, num_warmup_steps=4)
         lrs = unwrap_schedule(scheduler, self.num_steps)
         expected_learning_rates = [2.5, 5.0, 7.5, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
         self.assertEqual(len(lrs[0]), 1)
         self.assertListEqual([l[0] for l in lrs], expected_learning_rates)
 
-        scheduler = WarmupConstantSchedule(self.optimizer, warmup_steps=4)
+        scheduler = get_constant_schedule_with_warmup(self.optimizer, num_warmup_steps=4)
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
         self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
 
     def test_warmup_linear_scheduler(self):
-        scheduler = WarmupLinearSchedule(self.optimizer, warmup_steps=2, t_total=10)
+        scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=2, num_training_steps=10)
         lrs = unwrap_schedule(scheduler, self.num_steps)
         expected_learning_rates = [5.0, 10.0, 8.75, 7.5, 6.25, 5.0, 3.75, 2.5, 1.25, 0.0]
         self.assertEqual(len(lrs[0]), 1)
         self.assertListEqual([l[0] for l in lrs], expected_learning_rates)
 
-        scheduler = WarmupLinearSchedule(self.optimizer, warmup_steps=2, t_total=10)
+        scheduler = get_linear_schedule_with_warmup(self.optimizer, num_warmup_steps=2, num_training_steps=10)
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
         self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
 
     def test_warmup_cosine_scheduler(self):
-        scheduler = WarmupCosineSchedule(self.optimizer, warmup_steps=2, t_total=10)
+        scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=2, num_training_steps=10)
         lrs = unwrap_schedule(scheduler, self.num_steps)
         expected_learning_rates = [5.0, 10.0, 9.61, 8.53, 6.91, 5.0, 3.08, 1.46, 0.38, 0.0]
         self.assertEqual(len(lrs[0]), 1)
         self.assertListAlmostEqual([l[0] for l in lrs], expected_learning_rates, tol=1e-2)
 
-        scheduler = WarmupCosineSchedule(self.optimizer, warmup_steps=2, t_total=10)
+        scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=2, num_training_steps=10)
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
         self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
 
     def test_warmup_cosine_hard_restart_scheduler(self):
-        scheduler = WarmupCosineWithHardRestartsSchedule(self.optimizer, warmup_steps=2, cycles=2, t_total=10)
+        scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(self.optimizer, num_warmup_steps=2, num_cycles=2, num_training_steps=10)
         lrs = unwrap_schedule(scheduler, self.num_steps)
         expected_learning_rates = [5.0, 10.0, 8.53, 5.0, 1.46, 10.0, 8.53, 5.0, 1.46, 0.0]
         self.assertEqual(len(lrs[0]), 1)
         self.assertListAlmostEqual([l[0] for l in lrs], expected_learning_rates, tol=1e-2)
 
-        scheduler = WarmupCosineWithHardRestartsSchedule(self.optimizer, warmup_steps=2, cycles=2, t_total=10)
+        scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(self.optimizer, num_warmup_steps=2, num_cycles=2, num_training_steps=10)
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
         self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,7 +106,7 @@ Follow these steps to start contributing:
    ```bash
    $ git clone git@github.com:<your Github handle>/transformers.git
    $ cd transformers
-   $ git remote add upstream git@github.com:huggingface/transformers.git
+   $ git remote add upstream https://github.com/huggingface/transformers.git
    ```
 
 3. Create a new branch to hold your development changes:

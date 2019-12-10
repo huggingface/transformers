@@ -34,7 +34,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xxx import XxxConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
 # - tf.keras.layers.Layer for the layers and
-# - TFPreTrainedModel for the models (it-self a sub-class of tf.keras.Model)
+# - TFPreTrainedModel for the models (itself a sub-class of tf.keras.Model)
 ####################################################
 
 ####################################################
@@ -123,9 +123,9 @@ class TFXxxMainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         if attention_mask is None:
-            attention_mask = tf.fill(tf.shape(input_ids), 1)
+            attention_mask = tf.fill(shape_list(input_ids), 1)
         if token_type_ids is None:
-            token_type_ids = tf.fill(tf.shape(input_ids), 0)
+            token_type_ids = tf.fill(shape_list(input_ids), 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -257,6 +257,10 @@ XXX_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare Xxx Model transformer outputing raw hidden-states without any specific head on top.",

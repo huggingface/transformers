@@ -47,6 +47,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
         'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-vocab.json",
         'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-vocab.json",
+        'roberta-base-openai-detector': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-vocab.json",
+        'roberta-large-openai-detector': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
     },
     'merges_file':
     {
@@ -54,6 +56,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt",
         'roberta-large-mnli': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-merges.txt",
         'distilroberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-merges.txt",
+        'roberta-base-openai-detector': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-merges.txt",
+        'roberta-large-openai-detector': "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt",
     },
 }
 
@@ -62,6 +66,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'roberta-large': 512,
     'roberta-large-mnli': 512,
     'distilroberta-base': 512,
+    'roberta-base-openai-detector': 512,
+    'roberta-large-openai-detector': 512,
 }
 
 
@@ -114,7 +120,7 @@ class RobertaTokenizer(GPT2Tokenizer):
                 special tokens for the model
 
         Returns:
-            A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             if token_ids_1 is not None:
