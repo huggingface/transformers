@@ -226,7 +226,7 @@ class PreTrainedTokenizer(object):
 
         self.max_len = max_len if max_len is not None else int(1e12)
 
-        # Padding side is right by default and over-riden in subclsses. If specified in the kwargs, it is changed.
+        # Padding side is right by default and over-riden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop('padding_side', self.padding_side)
         
         # Added tokens
@@ -1003,7 +1003,7 @@ class PreTrainedTokenizer(object):
         )
 
         if pad_to_max_length and max_length is None and self.max_len > 10000:
-            logger.warning("Sequence can't be padded as the maximum  ")
+            logger.warning("Sequence can't be padded as no maximum length is specified and the model maximum length is too high.")
 
         if needs_to_be_padded:
             difference = (max_length if max_length is not None else self.max_len) - len(encoded_inputs["input_ids"])
