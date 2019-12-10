@@ -294,7 +294,12 @@ class TFCommonTestCases:
             for model_class in self.all_model_classes:
                 model = model_class(config)
                 first, second = model(inputs_dict, training=False)[0], model(inputs_dict, training=False)[0]
-                self.assertTrue(tf.math.equal(first, second).numpy().all())
+                out_1 = first.numpy()
+                out_2 = second.numpy()
+                out_1 = out_1[~np.isnan(out_1)]
+                out_2 = out_2[~np.isnan(out_2)]
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
 
         def _get_embeds(self, wte, input_ids):
             # ^^ In our TF models, the input_embeddings can take slightly different forms,
