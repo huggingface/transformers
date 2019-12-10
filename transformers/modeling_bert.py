@@ -48,10 +48,10 @@ BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
     'bert-base-german-dbmdz-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-pytorch_model.bin",
     'bert-base-german-dbmdz-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-pytorch_model.bin",
-    'bert-base-japanese': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-pytorch_model.bin",
-    'bert-base-japanese-whole-word-masking': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-whole-word-masking-pytorch_model.bin",
-    'bert-base-japanese-char': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-char-pytorch_model.bin",
-    'bert-base-japanese-char-whole-word-masking': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-char-whole-word-masking-pytorch_model.bin"
+    'bert-base-japanese': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-pytorch_model.bin",
+    'bert-base-japanese-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-pytorch_model.bin",
+    'bert-base-japanese-char': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-pytorch_model.bin",
+    'bert-base-japanese-char-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-pytorch_model.bin"
 }
 
 
