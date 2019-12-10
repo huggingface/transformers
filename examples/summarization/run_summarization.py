@@ -272,7 +272,7 @@ def main():
     )
     # EVALUATION options
     parser.add_argument(
-        "--to_cpu",
+        "--no_cuda",
         default=False,
         type=bool,
         help="Whether to force the execution on CPU.",
@@ -314,7 +314,7 @@ def main():
     args = parser.parse_args()
 
     # Select device (distibuted not available)
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.to_cpu else "cpu")
+    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
 
     # Check the existence of directories
     if not args.summaries_output_dir:
