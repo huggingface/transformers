@@ -18,21 +18,21 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 import sys
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_tf, slow
 
 from transformers import T5Config, is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers.modeling_tf_t5 import (TFT5Model, TFT5WithLMHeadModel,TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
+    from transformers.modeling_tf_t5 import (TFT5Model, TFT5WithLMHeadModel,
+                                             TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 
+@require_tf
 class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
 
     is_encoder_decoder = True
@@ -160,7 +160,7 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_with_lm_head(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in ['t5-small']:

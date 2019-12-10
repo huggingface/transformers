@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import pytest
 
 from transformers.tokenization_t5 import (T5Tokenizer)
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
