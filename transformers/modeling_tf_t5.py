@@ -25,13 +25,17 @@ import itertools
 import tensorflow as tf
 
 from .configuration_t5 import T5Config
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, get_initializer, DUMMY_INPUTS
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
     't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-tf_model.h5",
+    't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-tf_model.h5",
+    't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-tf_model.h5",
+    't5-3B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3B-tf_model.h5",
+    't5-11B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11B-tf_model.h5",
 }
 
 ####################################################

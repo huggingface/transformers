@@ -121,7 +121,7 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
 
     if compare_with_pt_model:
         inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-        tf_inputs = tf.constant(inputs_list)
+        tf_inputs = tf_model.dummy_inputs
         tfo = tf_model(tf_inputs, training=False)  # build the network
 
         pt_model = pt_model_class.from_pretrained(None,

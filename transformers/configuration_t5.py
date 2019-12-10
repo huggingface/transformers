@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-config.json",
+    't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-config.json",
+    't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-config.json",
+    't5-3B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3B-config.json",
+    't5-11B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11B-config.json",
 }
 
 
