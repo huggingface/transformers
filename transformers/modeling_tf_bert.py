@@ -48,10 +48,10 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-tf_model.h5",
-    'bert-base-japanese': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-tf_model.h5",
-    'bert-base-japanese-whole-word-masking': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-whole-word-masking-tf_model.h5",
-    'bert-base-japanese-char': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-char-tf_model.h5",
-    'bert-base-japanese-char-whole-word-masking': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-char-whole-word-masking-tf_model.h5"
+    'bert-base-japanese': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-tf_model.h5",
+    'bert-base-japanese-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-tf_model.h5",
+    'bert-base-japanese-char': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-tf_model.h5",
+    'bert-base-japanese-char-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-tf_model.h5"
 }
 
 
