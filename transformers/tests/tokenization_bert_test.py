@@ -109,7 +109,7 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         decoded = tokenizer.decode(encoded)
         self.assertEqual(
             decoded.lower(),
-            (f"[CLS] {input} [SEP]").lower()
+            ("[CLS] " + input + " [SEP]").lower()
         )
 
     def test_is_whitespace(self):
