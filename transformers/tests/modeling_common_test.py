@@ -277,8 +277,7 @@ class CommonTestCases:
                 inputs = inputs_dict.copy()
                 inputs['head_mask'] = head_mask
 
-                with torch.no_grad():
-                    outputs = model(**inputs)
+                outputs = model(**inputs)
 
                 # Test that we can get a gradient back for importance score computation
                 output = sum(t.sum() for t in outputs[0])
