@@ -21,7 +21,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 import requests
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -245,7 +245,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0):
         return
     content_length = response.headers.get('Content-Length')
     total = resume_size + int(content_length) if content_length is not None else None
-    progress = tqdm(unit="B", total=total, initial=resume_size)
+    progress = tqdm(unit="B", unit_scale=True, total=total, initial=resume_size, desc="Downloading")
     for chunk in response.iter_content(chunk_size=1024):
         if chunk: # filter out keep-alive new chunks
             progress.update(len(chunk))
