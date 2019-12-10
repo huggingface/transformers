@@ -42,10 +42,10 @@ BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-config.json",
     'bert-base-german-dbmdz-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-config.json",
     'bert-base-german-dbmdz-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-config.json",
-    'bert-base-japanese': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-config.json",
-    'bert-base-japanese-whole-word-masking': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-whole-word-masking-config.json",
-    'bert-base-japanese-char': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-char-config.json",
-    'bert-base-japanese-char-whole-word-masking': "https://www.nlp.ecei.tohoku.ac.jp/~m-suzuki/bert-japanese/bert-base-japanese-char-whole-word-masking-config.json"
+    'bert-base-japanese': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-config.json",
+    'bert-base-japanese-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-config.json",
+    'bert-base-japanese-char': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-config.json",
+    'bert-base-japanese-char-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-config.json"
 }
 
 
