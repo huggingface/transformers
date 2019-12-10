@@ -42,12 +42,13 @@ except:
 
 from tqdm import tqdm, trange
 
-from transformers import (WEIGHTS_NAME, AdamW, WarmupLinearSchedule,
+from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   BertConfig, BertForMaskedLM, BertTokenizer,
                                   GPT2Config, GPT2LMHeadModel, GPT2Tokenizer,
                                   OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer,
                                   RobertaConfig, RobertaForMaskedLM, RobertaTokenizer,
-                                  DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
+                                  DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
+                                  CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 
 
 logger = logging.getLogger(__name__)
@@ -58,17 +59,18 @@ MODEL_CLASSES = {
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
     'bert': (BertConfig, BertForMaskedLM, BertTokenizer),
     'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
+    'camembert': (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 }
 
 
 class TextDataset(Dataset):
-    def __init__(self, tokenizer, file_path='train', block_size=512):
+    def __init__(self, tokenizer, args, file_path='train', block_size=512):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, 'cached_lm_' + str(block_size) + '_' + filename)
+        cached_features_file = os.path.join(directory, args.model_name_or_path + '_cached_lm_' + str(block_size) + '_' + filename)
 
-        if os.path.exists(cached_features_file):
+        if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             with open(cached_features_file, 'rb') as handle:
                 self.examples = pickle.load(handle)
@@ -99,7 +101,7 @@ class TextDataset(Dataset):
 
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
-    dataset = TextDataset(tokenizer, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size)
+    dataset = TextDataset(tokenizer, args, file_path=args.eval_data_file if evaluate else args.train_data_file, block_size=args.block_size)
     return dataset
 
 
@@ -185,7 +187,14 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+
+    # Check if saved optimizer or scheduler states exist
+    if os.path.isfile(os.path.join(args.model_name_or_path, 'optimizer.pt')) and os.path.isfile(os.path.join(args.model_name_or_path, 'scheduler.pt')):
+        # Load in optimizer and scheduler states
+        optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, 'optimizer.pt')))
+        scheduler.load_state_dict(torch.load(os.path.join(args.model_name_or_path, 'scheduler.pt')))
+
     if args.fp16:
         try:
             from apex import amp
@@ -214,13 +223,37 @@ def train(args, train_dataset, model, tokenizer):
     logger.info("  Total optimization steps = %d", t_total)
 
     global_step = 0
+    epochs_trained = 0
+    steps_trained_in_current_epoch = 0
+    # Check if continuing training from a checkpoint
+    if os.path.exists(args.model_name_or_path):
+        # set global_step to gobal_step of last saved checkpoint from model path
+        global_step = int(args.model_name_or_path.split('-')[-1].split('/')[0])
+        epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
+        steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
+
+        logger.info("  Continuing training from checkpoint, will skip to saved global_step")
+        logger.info("  Continuing training from epoch %d", epochs_trained)
+        logger.info("  Continuing training from global step %d", global_step)
+        logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+
     tr_loss, logging_loss = 0.0, 0.0
+
+    model_to_resize = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+    model_to_resize.resize_token_embeddings(len(tokenizer))
+
     model.zero_grad()
-    train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
+    train_iterator = trange(epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproducibility (even between python 2 and 3)
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
+            
+            # Skip past any already trained steps if resuming training
+            if steps_trained_in_current_epoch > 0:
+                steps_trained_in_current_epoch -= 1
+                continue
+
             inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
@@ -268,10 +301,16 @@ def train(args, train_dataset, model, tokenizer):
                         os.makedirs(output_dir)
                     model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
                     model_to_save.save_pretrained(output_dir)
+                    tokenizer.save_pretrained(output_dir)
+
                     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                     logger.info("Saving model checkpoint to %s", output_dir)
 
                     _rotate_checkpoints(args, checkpoint_prefix)
+
+                    torch.save(optimizer.state_dict(), os.path.join(output_dir, 'optimizer.pt'))
+                    torch.save(scheduler.state_dict(), os.path.join(output_dir, 'scheduler.pt'))
+                    logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -297,8 +336,12 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+    eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+    # multi-gpu evaluate
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -427,7 +470,7 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="For distant debugging.")
     args = parser.parse_args()
 
-    if args.model_type in ["bert", "roberta", "distilbert"] and not args.mlm:
+    if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
         raise ValueError("BERT and RoBERTa do not have LM heads but masked LM heads. They must be run using the --mlm "
                          "flag (masked language modeling).")
     if args.eval_data_file is None and args.do_eval:

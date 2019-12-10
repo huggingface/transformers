@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from transformers import is_torch_available
 
@@ -27,13 +26,13 @@ if is_torch_available():
     from transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM,
                               RobertaForSequenceClassification, RobertaForTokenClassification)
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_torch, slow, torch_device
 
 
+@require_torch
 class RobertaModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (RobertaForMaskedLM, RobertaModel) if is_torch_available() else ()
@@ -129,6 +128,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_roberta_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
                                            token_labels, choice_labels):
             model = RobertaModel(config=config)
+            model.to(torch_device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -146,6 +146,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         def create_and_check_roberta_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels,
                                                    token_labels, choice_labels):
             model = RobertaForMaskedLM(config=config)
+            model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels)
             result = {
@@ -161,6 +162,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                                                               sequence_labels, token_labels, choice_labels):
             config.num_labels = self.num_labels
             model = RobertaForTokenClassification(config=config)
+            model.to(torch_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
                                  labels=token_labels)
@@ -195,7 +197,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -207,10 +209,10 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
 
 class RobertaModelIntegrationTest(unittest.TestCase):
 
-    @pytest.mark.slow
+    @slow
     def test_inference_masked_lm(self):
         model = RobertaForMaskedLM.from_pretrained('roberta-base')
-        
+
         input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 50265))
@@ -228,10 +230,10 @@ class RobertaModelIntegrationTest(unittest.TestCase):
             torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_no_head(self):
         model = RobertaModel.from_pretrained('roberta-base')
-        
+
         input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
@@ -244,10 +246,10 @@ class RobertaModelIntegrationTest(unittest.TestCase):
             torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_classification_head(self):
         model = RobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        
+
         input_ids = torch.tensor([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))

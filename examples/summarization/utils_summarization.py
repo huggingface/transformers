@@ -10,8 +10,13 @@ from torch.utils.data import Dataset
 # ------------
 
 
-class CNNDailyMailDataset(Dataset):
+class SummarizationDataset(Dataset):
     """ Abstracts the dataset used to train seq2seq models.
+
+    The class will process the documents that are located in the specified
+    folder. The preprocessing will work on any document that is reasonably
+    formatted. On the CNN/DailyMail dataset it will extract both the story
+    and the summary.
 
     CNN/Daily News:
 
@@ -25,33 +30,33 @@ class CNNDailyMailDataset(Dataset):
     [2] https://github.com/abisee/cnn-dailymail/
     """
 
-    def __init__(self, tokenizer, prefix="train", data_dir=""):
-        assert os.path.isdir(data_dir)
-        self.tokenizer = tokenizer
+    def __init__(self, path="", prefix="train"):
+        """ We initialize the class by listing all the documents to summarize.
+        Files are not read in memory due to the size of some datasets (like CNN/DailyMail).
+        """
+        assert os.path.isdir(path)
 
-        # We initialize the class by listing all the files that contain
-        # stories and summaries. Files are not read in memory given
-        # the size of the corpus.
-        self.stories_path = []
-        datasets = ("cnn", "dailymail")
-        for dataset in datasets:
-            path_to_stories = os.path.join(data_dir, dataset, "stories")
-            story_filenames_list = os.listdir(path_to_stories)
-            for story_filename in story_filenames_list:
-                path_to_story = os.path.join(path_to_stories, story_filename)
-                if not os.path.isfile(path_to_story):
-                    continue
-                self.stories_path.append(path_to_story)
+        self.documents = []
+        story_filenames_list = os.listdir(path)
+        for story_filename in story_filenames_list:
+            if "summary" in story_filename:
+                continue
+            path_to_story = os.path.join(path, story_filename)
+            if not os.path.isfile(path_to_story):
+                continue
+            self.documents.append(path_to_story)
 
     def __len__(self):
-        return len(self.stories_path)
+        """ Returns the number of documents. """
+        return len(self.documents)
 
     def __getitem__(self, idx):
-        story_path = self.stories_path[idx]
-        with open(story_path, encoding="utf-8") as source:
+        document_path = self.documents[idx]
+        document_name = document_path.split("/")[-1]
+        with open(document_path, encoding="utf-8") as source:
             raw_story = source.read()
             story_lines, summary_lines = process_story(raw_story)
-        return story_lines, summary_lines
+        return document_name, story_lines, summary_lines
 
 
 def process_story(raw_story):
@@ -81,7 +86,7 @@ def process_story(raw_story):
             story_lines.append(element)
         except IndexError:
             # if "@highlight" is absent from the file we pop
-            # all elements until there is None.
+            # all elements until there is None, raising an exception.
             return story_lines, []
 
     # gather summary lines
@@ -104,31 +109,22 @@ def _add_missing_period(line):
 # --------------------------
 
 
-def fit_to_block_size(sequence, block_size, pad_token):
+def fit_to_block_size(sequence, block_size, pad_token_id):
     """ Adapt the source and target sequences' lengths to the block size.
-    If the sequence is shorter than the block size we pad it with -1 ids
-    which correspond to padding tokens.
+    If the sequence is shorter we append padding token to the right of the sequence.
     """
     if len(sequence) > block_size:
         return sequence[:block_size]
     else:
-        sequence.extend([pad_token] * (block_size - len(sequence)))
+        sequence.extend([pad_token_id] * (block_size - len(sequence)))
         return sequence
 
 
-def build_lm_labels(sequence, pad_token):
-    """ Padding token, encoded as 0, are represented by the value -1 so they
-    are not taken into account in the loss computation. """
-    padded = sequence.clone()
-    padded[padded == pad_token] = -1
-    return padded
-
-
-def build_mask(sequence, pad_token):
+def build_mask(sequence, pad_token_id):
     """ Builds the mask. The attention mechanism will only attend to positions
     with value 1. """
     mask = torch.ones_like(sequence)
-    idx_pad_tokens = sequence == pad_token
+    idx_pad_tokens = sequence == pad_token_id
     mask[idx_pad_tokens] = 0
     return mask
 
@@ -138,18 +134,11 @@ def encode_for_summarization(story_lines, summary_lines, tokenizer):
     as specified in [1] by using `[SEP] [CLS]` tokens to separate
     sentences.
     """
-    story_lines_token_ids = [
-        tokenizer.add_special_tokens_single_sequence(tokenizer.encode(line))
-        for line in story_lines
-    ]
-    summary_lines_token_ids = [
-        tokenizer.add_special_tokens_single_sequence(tokenizer.encode(line))
-        for line in summary_lines
-    ]
-
+    story_lines_token_ids = [tokenizer.encode(line) for line in story_lines]
     story_token_ids = [
         token for sentence in story_lines_token_ids for token in sentence
     ]
+    summary_lines_token_ids = [tokenizer.encode(line) for line in summary_lines]
     summary_token_ids = [
         token for sentence in summary_lines_token_ids for token in sentence
     ]
@@ -174,7 +163,7 @@ def compute_token_type_ids(batch, separator_token_id):
     """
     batch_embeddings = []
     for sequence in batch:
-        sentence_num = 0
+        sentence_num = -1
         embeddings = []
         for s in sequence:
             if s == separator_token_id:

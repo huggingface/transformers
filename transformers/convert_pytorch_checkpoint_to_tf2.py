@@ -34,6 +34,7 @@ from transformers import (load_pytorch_checkpoint_in_tf2_model,
                                   RobertaConfig, TFRobertaForMaskedLM, TFRobertaForSequenceClassification, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                   DistilBertConfig, TFDistilBertForMaskedLM, TFDistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                   CTRLConfig, TFCTRLLMHeadModel, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                                  AlbertConfig, TFAlbertForMaskedLM, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                   T5Config, TFT5WithLMHeadModel, T5_PRETRAINED_CONFIG_ARCHIVE_MAP)
 
 if is_torch_available():
@@ -48,6 +49,7 @@ if is_torch_available():
                                       RobertaForMaskedLM, RobertaForSequenceClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
                                       DistilBertForMaskedLM, DistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                       CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
+                                      AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                       T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
     (BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -59,6 +61,7 @@ else:
     RobertaForMaskedLM, RobertaForSequenceClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     DistilBertForMaskedLM, DistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
+    AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP) = (
         None, None, None, None,
         None, None,
@@ -68,6 +71,7 @@ else:
         None, None,
         None, None, None,
         None, None, None,
+        None, None,
         None, None,
         None, None)
 
@@ -90,6 +94,7 @@ MODEL_CLASSES = {
     'distilbert': (DistilBertConfig, TFDistilBertForMaskedLM, DistilBertForMaskedLM, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP),
     'distilbert-base-uncased-distilled-squad': (DistilBertConfig, TFDistilBertForQuestionAnswering, DistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP),
     'ctrl': (CTRLConfig, TFCTRLLMHeadModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP),
+    'albert': (AlbertConfig, TFAlbertForMaskedLM, AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP),
     't5': (T5Config, TFT5WithLMHeadModel, T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP),
 }
 
