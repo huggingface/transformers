@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import pytest
 from io import open
 
 from transformers.tokenization_bert import WordpieceTokenizer
@@ -25,8 +24,10 @@ from transformers.tokenization_bert_japanese import (BertJapaneseTokenizer,
                                                      VOCAB_FILES_NAMES)
 
 from .tokenization_tests_commons import CommonTestCases
+from .utils import slow, custom_tokenizers
 
 
+@custom_tokenizers
 class BertJapaneseTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
     tokenizer_class = BertJapaneseTokenizer
@@ -104,7 +105,7 @@ class BertJapaneseTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(tokenizer.tokenize(u"こんばんは こんばんにちは こんにちは"),
                              [u"こん", u"##ばんは", u"[UNK]", u"こんにちは"])
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-japanese")
 
@@ -172,7 +173,7 @@ class BertJapaneseCharacterTokenizationTest(CommonTestCases.CommonTokenizerTeste
         self.assertListEqual(tokenizer.tokenize(u"こんにちほ"),
                              [u"こ", u"ん", u"に", u"ち", u"[UNK]"])
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-japanese-char")
 
@@ -188,5 +189,3 @@ class BertJapaneseCharacterTokenizationTest(CommonTestCases.CommonTokenizerTeste
 
 
 
-if __name__ == '__main__':
-    unittest.main()
