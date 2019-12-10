@@ -72,7 +72,7 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         new_toks = ['[ABC]', '[DEF]', 'GHI IHG']
         tokenizer.add_tokens(new_toks)
-        input = "lower newer [ABC] [DEF] newer lower [ABC] GHI IHG newer lower[DEF]"
+        input = "lower newer [ABC] [DEF] newer lower [ABC] GHI IHG newer lower [DEF]"
         encoded = tokenizer.encode(input)
         decoded = tokenizer.decode(encoded)
         self.assertEqual(

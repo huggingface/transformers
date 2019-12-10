@@ -112,8 +112,6 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
             (f"[CLS] {input} [SEP]").lower()
         )
 
-
-
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(u" "))
         self.assertTrue(_is_whitespace(u"\t"))
