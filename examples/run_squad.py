@@ -299,7 +299,6 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     # XLNet and XLM use a more complex post-processing procedure
     if args.model_type in ['xlnet', 'xlm']:
-
         start_n_top = model.config.start_n_top if hasattr(model, "config") else model.module.config.start_n_top
         end_n_top = model.config.end_n_top if hasattr(model, "config") else model.module.config.end_n_top
 
