@@ -16,6 +16,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import datetime
 import logging
 import os
 import json
@@ -26,6 +27,8 @@ import re
 from io import open
 
 from .file_utils import cached_path, is_tf_available, is_torch_available
+from .timing import timeit
+from tqdm import tqdm
 
 if is_tf_available():
     import tensorflow as tf
@@ -631,6 +634,9 @@ class PreTrainedTokenizer(object):
             return_tokens_mapped_to_origin: (optional) Set to True to return the index of each token in the initial whitespace tokenization. (default False).
             **kwargs: passed to the child `self.tokenize()` method
         """
+        print("PretrainedTokenizer.tokenize() called...")
+
+        @timeit
         def lowercase_text(t):
             # convert non-special tokens to lowercase
             escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
@@ -670,7 +676,7 @@ class PreTrainedTokenizer(object):
 
             tokenized_text = []
             text_list = [text]
-            for tok in tok_list:
+            for tok in tqdm(tok_list, desc="Pretrained tokenization..."):
                 tokenized_text = []
                 for sub_text in text_list:
                     if sub_text not in self.added_tokens_encoder \

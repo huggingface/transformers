@@ -23,6 +23,8 @@ import unicodedata
 from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
+from .timing import timeit
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -170,13 +172,16 @@ class BertTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.vocab)
 
+    @timeit
     def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
+            basic_tokens = self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens)
+            for token in tqdm(basic_tokens, desc="Tokenizing basic tokens further..."):
                 for sub_token in self.wordpiece_tokenizer.tokenize(token):
                     split_tokens.append(sub_token)
         else:
+            print("Doing wordpiece tokenization without basic...")
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
 
@@ -289,6 +294,7 @@ class BasicTokenizer(object):
         self.never_split = never_split
         self.tokenize_chinese_chars = tokenize_chinese_chars
 
+    @timeit
     def tokenize(self, text, never_split=None):
         """ Basic Tokenization of a piece of text.
             Split on "white spaces" only, for sub-word tokenization, see WordPieceTokenizer.
@@ -311,7 +317,7 @@ class BasicTokenizer(object):
             text = self._tokenize_chinese_chars(text)
         orig_tokens = whitespace_tokenize(text)
         split_tokens = []
-        for token in orig_tokens:
+        for token in tqdm(orig_tokens, desc="Tokenizing whitespace tokens further..."):
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
                 token = self._run_strip_accents(token)
@@ -353,6 +359,7 @@ class BasicTokenizer(object):
 
         return ["".join(x) for x in output]
 
+    @timeit
     def _tokenize_chinese_chars(self, text):
         """Adds whitespace around any CJK character."""
         output = []
@@ -427,6 +434,7 @@ class WordpieceTokenizer(object):
         Returns:
           A list of wordpiece tokens.
         """
+        # print("WordpieceTokenizer.tokenize() called...")
 
         output_tokens = []
         for token in whitespace_tokenize(text):
