@@ -30,8 +30,8 @@ from .modeling_tf_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel
 from .modeling_tf_xlnet import TFXLNetModel, TFXLNetLMHeadModel, TFXLNetForSequenceClassification, \
     TFXLNetForQuestionAnsweringSimple, TFXLNetForTokenClassification
 from .modeling_tf_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple
-from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification
-from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification
+from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification, TFRobertaForTokenClassification
+from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification, TFDistilBertForTokenClassification
 from .modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel
 
 from .file_utils import add_start_docstrings
@@ -687,6 +687,8 @@ class TFAutoModelForTokenClassification:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `bert` configuration class: BertModel (Bert model)
                     - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
+                    - isInstance of `distilbert` configuration class: DistilBertModel (DistilBert model)
+                    - isInstance of `roberta` configuration class: RobteraModel (Roberta model)
 
         Examples::
 
@@ -697,6 +699,10 @@ class TFAutoModelForTokenClassification:
             return TFBertForTokenClassification(config)
         elif isinstance(config, XLNetConfig):
             return TFXLNetForTokenClassification(config)
+        elif isinstance(config, DistilBertConfig):
+            return TFDistilBertForTokenClassification(config)
+        elif isinstance(config, RobertaConfig):
+            return TFRobertaForTokenClassification(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
@@ -711,6 +717,8 @@ class TFAutoModelForTokenClassification:
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `bert`: BertForTokenClassification (Bert model)
             - contains `xlnet`: XLNetForTokenClassification (XLNet model)
+            - contains `distilbert`: DistilBertForTokenClassification (DistilBert model)
+            - contains `roberta`: RobertaForTokenClassification (Roberta model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -772,6 +780,10 @@ class TFAutoModelForTokenClassification:
             return TFBertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'xlnet' in pretrained_model_name_or_path:
             return TFXLNetForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
+            return TFDistilBertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'roberta' in pretrained_model_name_or_path:
+            return TFRobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet'".format(pretrained_model_name_or_path))
+                         "'bert', 'xlnet', 'distilbert', 'roberta'".format(pretrained_model_name_or_path))
