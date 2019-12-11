@@ -26,7 +26,7 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, DUMMY_INPUTS, DUMMY_MASK
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         super(TFT5LayerNorm, self).build(input_shape)
 
     def call(self, x):
-        variance = tf.math.reduce_min(tf.math.square(x), axis=-1, keepdims=True)
+        variance = tf.math.reduce_mean(tf.math.square(x), axis=-1, keepdims=True)
         x = x * tf.math.rsqrt(variance + self.variance_epsilon)
         return self.weight * x
 
@@ -231,19 +231,19 @@ class TFT5Attention(tf.keras.layers.Layer):
             cache[self.layer_id] = (k, v)
 
         # q = q / math.sqrt(dim_per_head)                                     # No scaling in T5
-        scores = tf.matmul(q, k, transpose_b=True)                            # (bs, n_heads, qlen, klen)
+        # scores = tf.matmul(q, k, transpose_b=True)                            # (bs, n_heads, qlen, klen)
+        scores = tf.einsum('bnqd,bnkd->bnqk', q, k)                        # (bs, n_heads, qlen, klen)
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 raise ValueError("No position_bias provided and no weights to compute position_bias")
             position_bias = self.compute_bias(qlen, klen)
+            if mask is not None:
+                position_bias = position_bias + mask
+                # mask = (mask == 0).expand_as(scores)                              # (bs, n_heads, qlen, klen)
+                # scores.masked_fill_(mask, -float('inf'))                          # (bs, n_heads, qlen, klen)
+
         scores += position_bias
-
-        if mask is not None:
-            scores += mask
-            # mask = (mask == 0).expand_as(scores)                              # (bs, n_heads, qlen, klen)
-            # scores.masked_fill_(mask, -float('inf'))                          # (bs, n_heads, qlen, klen)
-
         weights = tf.nn.softmax(scores, axis=-1)                              # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)                    # (bs, n_heads, qlen, klen)
 
@@ -350,11 +350,11 @@ class TFT5Block(tf.keras.layers.Layer):
                                                     head_mask=head_mask,
                                                     training=training)
             hidden_states = cross_attention_outputs[0]
-            outputs = cross_attention_outputs[1:] + outputs
+            outputs = outputs + cross_attention_outputs[1:]
             hidden_states = self.layer[2](hidden_states, training=training)
 
         outputs = (hidden_states,) + outputs  # add attentions if we output them
-        return outputs
+        return outputs # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
 ####################################################
@@ -418,7 +418,13 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+
+        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposistion
+        # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
+        # extended_attention_mask = tf.math.equal(extended_attention_mask,
+        #                                         tf.transpose(extended_attention_mask, perm=(-1, -2)))
+
+        extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
 
         if self.is_decoder:
             # If a 2D ou 3D attention mask is provided for the cross-attention
@@ -430,7 +436,12 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if num_dims_encoder_attention_mask == 2:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
 
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposistion
+            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
+            # encoder_extended_attention_mask = tf.math.equal(encoder_extended_attention_mask,
+            #                                         tf.transpose(encoder_extended_attention_mask, perm=(-1, -2)))
+
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             encoder_extended_attention_mask = None
 
@@ -463,6 +474,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                                          training=training)
             hidden_states = layer_outputs[0]
             if i == 0:
+                # We share the position biases between the layers - the first layer store them
+                # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[2 if self.output_attentions else 1]
                 if self.is_decoder:
                     encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 2]
@@ -502,8 +515,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-        input_mask = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        input_ids = tf.constant(DUMMY_INPUTS)
+        input_mask = tf.constant(DUMMY_MASK)
         dummy_inputs = {'decoder_input_ids': input_ids,
                         'encoder_input_ids': input_ids,
                         'decoder_attention_mask': input_mask}
