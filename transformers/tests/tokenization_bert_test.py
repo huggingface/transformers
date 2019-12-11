@@ -99,19 +99,6 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
-    def test_encode_decode_with_spaces(self):
-        tokenizer = self.get_tokenizer()
-
-        new_toks = ['[ABC]', '[DEF]', 'GHI IHG']
-        tokenizer.add_tokens(new_toks)
-        input = "unwanted running [ABC] [DEF] running unwanted [ABC] GHI IHG unwanted [DEF]"
-        encoded = tokenizer.encode(input)
-        decoded = tokenizer.decode(encoded)
-        self.assertEqual(
-            decoded.lower(),
-            ("[CLS] " + input + " [SEP]").lower()
-        )
-
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(u" "))
         self.assertTrue(_is_whitespace(u"\t"))
