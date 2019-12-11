@@ -265,8 +265,10 @@ class TFPreTrainedModel(tf.keras.Model):
                         pretrained_model_name_or_path))
             elif os.path.isfile(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
+            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
+                archive_file = pretrained_model_name_or_path + ".index"
             else:
-                raise EnvironmentError("Error file {} not found".format(pretrained_model_name_or_path))
+                archive_file = pretrained_model_name_or_path
 
             # redirect to the cache, if necessary
             try:
