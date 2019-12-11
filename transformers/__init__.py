@@ -69,7 +69,7 @@ from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFI
 if is_torch_available():
     from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
     from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
-                                AutoModelWithLMHead)
+                                AutoModelWithLMHead, AutoModelForTokenClassification)
 
     from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
                                 BertForMaskedLM, BertForNextSentencePrediction,
@@ -124,7 +124,7 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
-                                   TFAutoModelWithLMHead)
+                                   TFAutoModelWithLMHead, TFAutoModelForTokenClassification)
 
     from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertMainLayer, TFBertEmbeddings,
                                    TFBertModel, TFBertForPreTraining,
