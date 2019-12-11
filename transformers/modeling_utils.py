@@ -319,7 +319,7 @@ class PreTrainedModel(nn.Module):
 
         """
         if pretrained_model_name_or_path is not None and (
-                "albert" in pretrained_model_name_or_path and "v2" in pretrained_model_name_or_path):
+                "albert" in str(pretrained_model_name_or_path) and "v2" in str(pretrained_model_name_or_path)):
             logger.warning("There is currently an upstream reproducibility issue with ALBERT v2 models. Please see " +
                            "https://github.com/google-research/google-research/issues/119 for more information.")
 

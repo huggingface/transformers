@@ -562,6 +562,16 @@ class CommonTestCases:
                 inputs_dict["inputs_embeds"] = wte(input_ids)
                 outputs = model(**inputs_dict)
 
+        def test_from_pretrained_with_posix_path(self):
+            """Check that loading a pretrained model from a non-existing PosixPath raises an OSError as expected"""
+            from pathlib import Path
+            path = Path("/toto") / "tata"
+            for model_class in self.all_model_classes:
+                with self.assertRaises(OSError):
+                    model_class.from_pretrained(path)
+
+
+
 
     class GPTModelTester(CommonModelTester):
 
