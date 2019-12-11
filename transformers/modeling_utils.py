@@ -31,10 +31,9 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
+from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME, DUMMY_INPUTS
 
 logger = logging.getLogger(__name__)
-
 
 try:
     from torch.nn import Identity
@@ -70,6 +69,15 @@ class PreTrainedModel(nn.Module):
     pretrained_model_archive_map = {}
     load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to do a forward pass in the network.
+
+        Returns:
+            torch.Tensor with dummy inputs
+        """
+        return {'input_ids': torch.tensor(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(PreTrainedModel, self).__init__()

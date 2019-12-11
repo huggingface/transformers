@@ -32,7 +32,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .modeling_utils import PreTrainedModel
 from .configuration_t5 import T5Config
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, DUMMY_INPUTS, DUMMY_MASK
 
 logger = logging.getLogger(__name__)
 
@@ -451,6 +451,15 @@ class T5PreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
 
+    @property
+    def dummy_inputs(self):
+        input_ids = torch.tensor(DUMMY_INPUTS)
+        input_mask = torch.tensor(DUMMY_MASK)
+        dummy_inputs = {'decoder_input_ids': input_ids,
+                        'encoder_input_ids': input_ids,
+                        'decoder_attention_mask': input_mask}
+        return dummy_inputs
+
     def _init_weights(self, module):
         """ Initialize the weights """
         factor = self.config.initializer_factor  # Used for testing weights initialization
@@ -534,9 +543,10 @@ class T5Stack(T5PreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
-        # T5 has a mask that can compare sequence ids, we simulate this here with this transposistion
+        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
         # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
-        extended_attention_mask = (extended_attention_mask == extended_attention_mask.transpose(-1, -2))
+        # extended_attention_mask = (extended_attention_mask == extended_attention_mask.transpose(-1, -2))
+
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
 
@@ -547,6 +557,10 @@ class T5Stack(T5PreTrainedModel):
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
             if encoder_attention_mask.dim() == 2:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+
+            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
+            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
+            # encoder_extended_attention_mask = (encoder_extended_attention_mask == encoder_extended_attention_mask.transpose(-1, -2))
 
             encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
@@ -590,6 +604,7 @@ class T5Stack(T5PreTrainedModel):
             hidden_states = layer_outputs[0]
             if i == 0:
                 # We share the position biases between the layers - the first layer store them
+                # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[2 if self.output_attentions else 1]
                 if self.is_decoder:
                     encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 2]
