@@ -25,7 +25,7 @@ import itertools
 import re
 from io import open
 
-from .file_utils import cached_path, is_tf_available, is_torch_available
+from .file_utils import cached_path, is_remote_url, hf_bucket_url, is_tf_available, is_torch_available
 
 if is_tf_available():
     import tensorflow as tf
@@ -327,12 +327,12 @@ class PreTrainedTokenizer(object):
                 if os.path.isdir(pretrained_model_name_or_path):
                     # If a directory is provided we look for the standard filenames
                     full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                else:
+                elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                     # If a path to a file is provided we use it (will only work for non-BPE tokenizer using a single vocabulary file)
                     full_file_name = pretrained_model_name_or_path
-                if not os.path.exists(full_file_name):
-                    logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                    full_file_name = None
+                else:
+                    full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
+                
                 vocab_files[file_id] = full_file_name
 
             # Look for the additional tokens files
