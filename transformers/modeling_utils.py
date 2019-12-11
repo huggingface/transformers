@@ -31,7 +31,8 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME,
+                         cached_path, hf_bucket_url, is_remote_url)
 
 logger = logging.getLogger(__name__)
 
@@ -363,14 +364,15 @@ class PreTrainedModel(nn.Module):
                     raise EnvironmentError("Error no file named {} found in directory {} or `from_tf` set to False".format(
                         [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
                         pretrained_model_name_or_path))
-            elif os.path.isfile(pretrained_model_name_or_path):
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
                 assert from_tf, "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
                     pretrained_model_name_or_path + ".index")
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
-                archive_file = pretrained_model_name_or_path
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
+                # todo do we want to support TF checkpoints here?
 
             # redirect to the cache, if necessary
             try:
