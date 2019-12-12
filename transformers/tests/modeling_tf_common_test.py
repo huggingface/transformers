@@ -25,18 +25,17 @@ import unittest
 import uuid
 import tempfile
 
-import pytest
 import sys
 
 from transformers import is_tf_available, is_torch_available
+
+from .utils import require_tf, slow
 
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
     from transformers import TFPreTrainedModel
     # from transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -62,6 +61,7 @@ def _config_zero_init(config):
 
 class TFCommonTestCases:
 
+    @require_tf
     class TFCommonModelTester(unittest.TestCase):
 
         model_tester = None
@@ -164,7 +164,7 @@ class TFCommonTestCases:
             for model_class in self.all_model_classes:
                 # Prepare our model
                 model = model_class(config)
-                
+
                 # Let's load it from the disk to be sure we can use pretrained weights
                 with TemporaryDirectory() as tmpdirname:
                     outputs = model(inputs_dict)  # build the model

@@ -72,7 +72,6 @@ setup(
         'transformers-cli'
     ],
     # python_requires='>=3.5.0',
-    tests_require=['pytest'],
     classifiers=[
           'Intended Audience :: Science/Research',
           'License :: OSI Approved :: Apache Software License',

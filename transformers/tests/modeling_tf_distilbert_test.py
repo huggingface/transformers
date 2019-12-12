@@ -17,10 +17,10 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_tf, slow
 
 from transformers import DistilBertConfig, is_tf_available
 
@@ -30,10 +30,9 @@ if is_tf_available():
                                                              TFDistilBertForMaskedLM,
                                                              TFDistilBertForQuestionAnswering,
                                                              TFDistilBertForSequenceClassification)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFDistilBertModel, TFDistilBertForMaskedLM, TFDistilBertForQuestionAnswering,
@@ -210,7 +209,7 @@ class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_sequence_classification(*config_and_inputs)
 
-    # @pytest.mark.slow
+    # @slow
     # def test_model_from_pretrained(self):
     #     cache_dir = "/tmp/transformers_test/"
     #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

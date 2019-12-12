@@ -16,13 +16,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import unittest
-import pytest
 from io import open
 
 from transformers.tokenization_distilbert import (DistilBertTokenizer)
 
 from .tokenization_tests_commons import CommonTestCases
 from .tokenization_bert_test import BertTokenizationTest
+from .utils import slow
 
 class DistilBertTokenizationTest(BertTokenizationTest):
 
@@ -31,7 +31,7 @@ class DistilBertTokenizationTest(BertTokenizationTest):
     def get_tokenizer(self, **kwargs):
         return DistilBertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_builders(self):
         tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 

@@ -16,10 +16,11 @@ from __future__ import absolute_import, division, print_function
 
 import os
 from os.path import expanduser
-import six
 
 import requests
+import six
 from requests.exceptions import HTTPError
+from tqdm import tqdm
 
 ENDPOINT = "https://huggingface.co"
 
@@ -129,10 +130,13 @@ class HfApi:
         # Even though we presign with the correct content-type,
         # the client still has to specify it when uploading the file.
         with open(filepath, "rb") as f:
+            pf = TqdmProgressFileReader(f)
+
             r = requests.put(urls.write, data=f, headers={
                 "content-type": urls.type,
             })
             r.raise_for_status()
+            pf.close()
         return urls.access
 
     def list_objs(self, token):
@@ -147,6 +151,34 @@ class HfApi:
         return [S3Obj(**x) for x in d]
 
 
+
+class TqdmProgressFileReader:
+    """
+    Wrap an io.BufferedReader `f` (such as the output of `open(…, "rb")`)
+    and override `f.read()` so as to display a tqdm progress bar.
+
+    see github.com/huggingface/transformers/pull/2078#discussion_r354739608
+    for implementation details.
+    """
+    def __init__(
+        self,
+        f   # type: io.BufferedReader
+    ):
+        self.f = f
+        self.total_size = os.fstat(f.fileno()).st_size # type: int
+        self.pbar = tqdm(total=self.total_size, leave=False)
+        if six.PY3:
+            # does not work unless PY3
+            # no big deal as the CLI does not currently support PY2 anyways.
+            self.read = f.read
+            f.read = self._read
+
+    def _read(self, n=-1):
+        self.pbar.update(n)
+        return self.read(n)
+
+    def close(self):
+        self.pbar.close()
 
 
 
