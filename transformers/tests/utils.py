@@ -9,14 +9,6 @@ from transformers.file_utils import _tf_available, _torch_available
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 
 
-try:
-    run_slow = os.environ["RUN_SLOW"]
-except KeyError:
-    # RUN_SLOW isn't set, default to skipping slow tests.
-    _run_slow_tests = False
-else:
-    # RUN_SLOW is set, convert it to True or False.
-
 def parse_flag_from_env(key, default=False):
     try:
         value = os.environ[key]
