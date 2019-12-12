@@ -86,6 +86,7 @@ class AutoTokenizer(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
 
@@ -108,8 +109,14 @@ class AutoTokenizer(object):
 
         Examples::
 
-            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')    # Download vocabulary from S3 and cache.
-            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
+            # Download vocabulary from S3 and cache.
+            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+
+            # Download vocabulary from S3 (user-uploaded) and cache.
+            tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+
+            # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
+            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
         if 'distilbert' in pretrained_model_name_or_path:
