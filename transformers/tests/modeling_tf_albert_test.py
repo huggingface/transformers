@@ -18,11 +18,11 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 import sys
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_tf, slow
 
 from transformers import AlbertConfig, is_tf_available
 
@@ -31,10 +31,9 @@ if is_tf_available():
     from transformers.modeling_tf_albert import (TFAlbertModel, TFAlbertForMaskedLM,
                                                  TFAlbertForSequenceClassification,
                                                  TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFAlbertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (
@@ -216,7 +215,7 @@ class TFAlbertModelTest(TFCommonTestCases.TFCommonModelTester):
         self.model_tester.create_and_check_albert_for_sequence_classification(
             *config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         # for model_name in list(TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

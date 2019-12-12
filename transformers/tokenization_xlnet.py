@@ -60,6 +60,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    padding_side = "left"
 
     def __init__(self, vocab_file,
                  do_lower_case=False, remove_space=True, keep_accents=False,
@@ -74,6 +75,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+        self._pad_token_type_id = 3
 
         try:
             import sentencepiece as spm
@@ -141,7 +143,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
             pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
         new_pieces = []
         for piece in pieces:
-            if len(piece) > 1 and piece[-1] == ',' and piece[-2].isdigit():
+            if len(piece) > 1 and piece[-1] == str(',') and piece[-2].isdigit():
                 cur_pieces = self.sp_model.EncodeAsPieces(
                     piece[:-1].replace(SPIECE_UNDERLINE, ''))
                 if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
@@ -227,7 +229,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         An XLNet sequence pair mask has the following format:
         0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 2
         | first sequence    | second sequence     | CLS segment ID
-        
+
         if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
         sep = [self.sep_token_id]

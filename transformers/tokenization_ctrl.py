@@ -133,9 +133,11 @@ class CTRLTokenizer(PreTrainedTokenizer):
         self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
         self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
 
-        self.encoder = json.load(open(vocab_file, encoding="utf-8"))
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
         self.decoder = {v:k for k,v in self.encoder.items()}
-        merges = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
+        with open(merges_file, encoding='utf-8') as merges_handle:
+            merges = merges_handle.read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
