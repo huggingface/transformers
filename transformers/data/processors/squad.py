@@ -373,6 +373,9 @@ class SquadProcessor(DataProcessor):
                 which is `train-v1.1.json` and `train-v2.0.json` for squad versions 1.1 and 2.0 respectively.
 
         """
+        if data_dir is None:
+            data_dir = ""
+
         if self.train_file is None:
             raise ValueError("SquadProcessor should be instantiated via SquadV1Processor or SquadV2Processor")
 
@@ -389,6 +392,9 @@ class SquadProcessor(DataProcessor):
             filename: None by default, specify this if the evaluation file has a different name than the original one
                 which is `train-v1.1.json` and `train-v2.0.json` for squad versions 1.1 and 2.0 respectively.
         """
+        if data_dir is None:
+            data_dir = ""
+
         if self.dev_file is None:
             raise ValueError("SquadProcessor should be instantiated via SquadV1Processor or SquadV2Processor")
         
