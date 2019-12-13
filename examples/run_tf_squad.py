@@ -21,43 +21,37 @@ import logging
 
 from transformers import (
     BertTokenizer,
-    TFBertForSequenceClassification,
+    TFBertForQuestionAnswering,
     BertConfig,
     XLNetTokenizer,
-    TFXLNetForSequenceClassification,
+    TFXLNetForQuestionAnsweringSimple,
     XLNetConfig,
     XLMTokenizer,
-    TFXLMForSequenceClassification,
+    TFXLMForQuestionAnsweringSimple,
     XLMConfig,
-    RobertaTokenizer,
-    TFRobertaForSequenceClassification,
-    RobertaConfig,
     DistilBertTokenizer,
-    TFDistilBertForSequenceClassification,
+    TFDistilBertForQuestionAnswering,
     DistilBertConfig,
 )
 import argparse
 
-from transformers import glue_output_modes as output_modes
-from transformers import glue_processors as processors
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
+from transformers import squad_convert_examples_to_features, SquadV1Processor, SquadV2Processor
 
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
     (
         tuple(conf.pretrained_config_archive_map.keys())
-        for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig, DistilBertConfig)
+        for conf in (BertConfig, XLNetConfig, XLMConfig, DistilBertConfig)
     ),
     (),
 )
 
 MODEL_CLASSES = {
-    "bert": (BertConfig, TFBertForSequenceClassification, BertTokenizer),
-    "xlnet": (XLNetConfig, TFXLNetForSequenceClassification, XLNetTokenizer),
-    "xlm": (XLMConfig, TFXLMForSequenceClassification, XLMTokenizer),
-    "roberta": (RobertaConfig, TFRobertaForSequenceClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, TFDistilBertForSequenceClassification, DistilBertTokenizer),
+    "bert": (BertConfig, TFBertForQuestionAnswering, BertTokenizer),
+    "xlnet": (XLNetConfig, TFXLNetForQuestionAnsweringSimple, XLNetTokenizer),
+    "xlm": (XLMConfig, TFXLMForQuestionAnsweringSimple, XLMTokenizer),
+    "distilbert": (DistilBertConfig, TFDistilBertForQuestionAnswering, DistilBertTokenizer),
 }
 
 
@@ -69,8 +63,92 @@ def evaluate():
     ""
 
 
-def load_and_cache_examples():
-    ""
+def load_and_cache_examples(args, data, tokenizer, evaluate=False):
+    features_output_dir = os.path.join(args.output_dir, "features")
+    cached_features_file = os.path.join(
+        features_output_dir,
+        "cached_{}_{}_{}.tfrecord".format(
+            "dev" if evaluate else "train",
+            list(filter(None, args.model_name_or_path.split("/"))).pop(),
+            str(args.max_seq_length),
+        ),
+    )
+
+    if not os.path.exists(cached_features_file) or args.overwrite_cache:
+        if args.version_2_with_negative:
+            processor = SquadV2Processor()
+        else:
+            processor = SquadV1Processor()
+
+        if args.data_dir:
+            directory = args.directory
+            examples = processor.get_dev_examples(directory) if evaluate else processor.get_train_examples(directory)
+        else:
+            try:
+                import tensorflow_datasets as tfds
+            except ImportError:
+                raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
+
+            if args.version_2_with_negative:
+                logger.warn("tensorflow_datasets does not handle version 2 of SQuAD.")
+
+            examples = processor.get_examples_from_dataset(tfds.load("squad"), evaluate=evaluate)
+
+        logger.info("Converting examples to features")
+        dataset = squad_convert_examples_to_features(examples, tokenizer, args.max_seq_length)
+
+        if not os.path.exists(features_output_dir):
+            os.makedirs(features_output_dir)
+
+        with tf.compat.v1.python_io.TFRecordWriter(cached_features_file) as tfwriter:
+            for feature in dataset:
+                example, result = feature
+                feature_key_value_pair = {
+                    "input_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=example["input_ids"])),
+                    "attention_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=example["attention_mask"])),
+                    "token_type_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=example["token_type_ids"])),
+                    "start_position": tf.train.Feature(int64_list=tf.train.Int64List(value=result["start_position"])),
+                    "end_position": tf.train.Feature(int64_list=tf.train.Int64List(value=result["end_position"])),
+                    "cls_index": tf.train.Feature(int64_list=tf.train.Int64List(value=result["cls_index"])),
+                    "p_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=result["p_mask"])),
+                }
+                features = tf.train.Features(feature=feature_key_value_pair)
+                example = tf.train.Example(features=features)
+
+                tfwriter.write(example.SerializeToString())
+
+        logger.info("Features saved to cache")
+
+    features = {
+        "input_ids": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
+        "attention_mask": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
+        "token_type_ids": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
+        "start_position": tf.io.FixedLenFeature([], tf.int64),
+        "end_position": tf.io.FixedLenFeature([], tf.int64),
+        "cls_index": tf.io.FixedLenFeature([], tf.int64),
+        "p_mask": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
+    }
+
+    def select_data_from_record(record):
+        record = tf.io.parse_single_example(record, features)
+        x = {
+            "input_ids": record["input_ids"],
+            "attention_mask": record["attention_mask"],
+            "token_type_ids": record["token_type_ids"],
+        }
+        y = {
+            "start_position": record["start_position"],
+            "end_position": record["end_position"],
+            "cls_index": record["cls_index"],
+            "p_mask": record["p_mask"],
+        }
+        return (x, y)
+
+    dataset = tf.data.TFRecordDataset(cached_features_file)
+    dataset = dataset.map(select_data_from_record)
+
+    logger.info("Created dataset %s from TFRecord" % "dev" if evaluate else "train")
+    return dataset
 
 
 def main():
@@ -96,6 +174,14 @@ def main():
         type=str,
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
+    )
+    parser.add_argument(
+        "--data_dir",
+        default=None,
+        type=str,
+        required=False,
+        help="The input data directory containing the .json files. If no data dir is specified, uses tensorflow_datasets to load the data."
+        + ", ".join(MODEL_CLASSES.keys()),
     )
     parser.add_argument(
         "--overwrite_output_dir", action="store_true", help="Overwrite the content of the output directory"
@@ -165,7 +251,7 @@ def main():
 
     if os.path.exists(args.output_dir) and args.do_train:
         if not args.overwrite_output_dir and bool(
-                [file for file in os.listdir(args.output_dir) if "features" not in file]
+            [file for file in os.listdir(args.output_dir) if "features" not in file]
         ):
             raise ValueError(
                 "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
@@ -175,6 +261,3 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-
-
-
