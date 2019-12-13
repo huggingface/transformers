@@ -28,7 +28,6 @@ import tarfile
 import tempfile
 import shutil
 import numpy as np
-from scipy.stats import truncnorm
 
 import torch
 from torch import nn
@@ -79,14 +78,12 @@ class BertSelfAttention(nn.Module):
     def forward(self, hidden_states, attention_mask, history_states=None):
         if history_states is None:
             mixed_query_layer = self.query(hidden_states)
-            # possible issue: https://github.com/NVIDIA/apex/issues/131
-            mixed_key_layer = F.linear(hidden_states, self.key.weight)
+            mixed_key_layer = self.key(hidden_states)
             mixed_value_layer = self.value(hidden_states)
         else:
             x_states = torch.cat((history_states, hidden_states), dim=1)
             mixed_query_layer = self.query(hidden_states)
-            # possible issue: https://github.com/NVIDIA/apex/issues/131
-            mixed_key_layer = F.linear(x_states, self.key.weight)
+            mixed_key_layer = self.key(x_states)
             mixed_value_layer = self.value(x_states)
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
