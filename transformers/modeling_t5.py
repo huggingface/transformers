@@ -30,7 +30,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .modeling_utils import PreTrainedModel, Bridges, prune_linear_layer
 from .configuration_t5 import T5Config
 from .file_utils import add_start_docstrings, DUMMY_INPUTS, DUMMY_MASK
 
@@ -497,6 +497,9 @@ class T5Stack(T5PreTrainedModel):
 
         self.block = nn.ModuleList([T5Block(config, has_relative_attention_bias=bool(i == 0))
                                     for i in range(config.num_layers)])
+
+        self.bridges = Bridges.get_layer2layer_bridges(config)
+
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 

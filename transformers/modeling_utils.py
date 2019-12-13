@@ -490,6 +490,92 @@ class PreTrainedModel(nn.Module):
         return model
 
 
+class AdapterConfig(object):
+    def __init__(hidden_act="gelu", adapter_size=64, adapter_initializer_range=0.0002)
+        self.hidden_act = hidden_act
+        self.adapter_size = adapter_size
+        self.adapter_initializer_range = adapter_initializer_range
+
+
+class Adapter(nn.Module):
+    def __init__(self, hidden_size, adapter_config):
+        super(Adapter, self).__init__()
+        self.hidden_size = hidden_size
+        self.adapter_config = adapter_config
+
+        self.down_project = nn.Linear(
+            self.hidden_size,
+            self.adapter_config.adapter_size,
+        )
+        self.activation = modeling_bert.ACT2FN[self.adapter_config.hidden_act] \
+            if isinstance(self.adapter_config.hidden_act, str) else self.adapter_config.hidden_act
+        self.up_project = nn.Linear(self.adapter_config.adapter_size, self.hidden_size)
+        self.init_weights()
+
+    def forward(self, hidden_states):
+        down_projected = self.down_project(hidden_states)
+        activated = self.activation(down_projected)
+        up_projected = self.up_project(activated)
+        return hidden_states + up_projected
+
+    def init_weights(self):
+        # Slightly different from the TF version which uses truncated_normal for initialization
+        # cf https://github.com/pytorch/pytorch/pull/5617
+        self.down_project.weight.data.normal_(mean=0.0, std=self.adapter_config.adapter_initializer_range)
+        self.down_project.bias.data.zero_()
+        self.up_project.weight.data.normal_(mean=0.0, std=self.adapter_config.adapter_initializer_range)
+        self.up_project.bias.data.zero_()
+
+
+class SwitchDevice(nn.Module):
+    r"""A placeholder identity operator that is argument-insensitive.
+    """
+    def __init__(self, to_device):
+        super(SwitchGPU, self).__init__()
+        self.to_device = to_device
+
+    def forward(self, input):
+        return input.to(to_device)
+
+
+def spread_model():
+    raise NotImplementedError  # TODO
+
+def get_layer2layer_bridges(cls, config):
+    num_layers = config.num_hidden_layers
+    if not hasattr(config, 'layer2layer_bridges') or not config.layer2layer_bridges \
+            or config.layer2layer_bridges not in ['adapters', 'model_parallelism']:
+        return nn.ModuleList([Identity() for i in range(num_layers)])
+
+    if config.layer2layer_bridges == 'adapters':
+        hidden_size = config.hidden_size
+        if hasattr(config, 'layer2layer_bridges_config'):
+            adapter_config = AdapterConfig(**config.layer2layer_bridges_config)
+        else:
+            adapter_config = AdapterConfig()
+        return nn.ModuleList([Adapter(hidden_size, adapter_config) for i in range(num_layers)])
+    elif config.layer2layer_bridges == 'model_parallelism':
+        if hasattr(config, layer2layer_bridges_config)
+            devices = config.layer2layer_bridges_config['devices']
+        else:
+            devices = list(range(torch.cuda.device_count())) if if torch.cuda.is_available() else []
+        if not devices:
+            return nn.ModuleList([Identity() for i in range(num_layers)])
+        layer_groups = num_layers // len(devices)
+        modules = []
+        current_device_num = 0
+        for i in range(num_layers-1):
+            if (i + 1) % layer_groups == 0:
+                current_device_num += 1
+                if current_device_num > len(device):
+                    current_device_num = 0
+                modules.append(SwitchDevice(device[current_device_num]))
+            else:
+                modules.append(Identity())
+        modules.append(SwitchDevice(device[0]))  # Back to first device at the end
+        return nn.ModuleList(modules)
+
+
 class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         """ Conv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
