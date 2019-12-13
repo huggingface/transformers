@@ -43,7 +43,8 @@ from .modeling_bert import ACT2FN, load_tf_weights_in_bert, BertPooler, BertInte
 logger = logging.getLogger(__name__)
 
 UNILM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'unilm-large-cased': "http://40.85.212.169:8000//pytorch_model.bin"
+    'unilm-base-cased': "http://40.85.212.169:8002/unilm-base-cased-pytorch_model.bin", 
+    'unilm-large-cased': "http://40.85.212.169:8002/unilm-large-cased-pytorch_model.bin"
 }
 
 BertLayerNorm = torch.nn.LayerNorm
@@ -199,7 +200,7 @@ class UnilmPreTrainedModel(PreTrainedModel):
 
 
 class UnilmModel(UnilmPreTrainedModel):
-    """BERT model ("Bidirectional Embedding Representations from a Transformer").
+    """UniLM model ("Bidirectional Embedding Representations from a Transformer").
 
     Params:
         config: a UnilmConfig class instance with the configuration to build a new model
