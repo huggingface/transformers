@@ -275,7 +275,7 @@ def main():
     ]
     optimizer = AdamW(optimizer_grouped_parameters,
                       lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps=int(args.warmup_proportion*t_total), t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(args.warmup_proportion*t_total), num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
