@@ -34,8 +34,8 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
     't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-tf_model.h5",
     't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-tf_model.h5",
     't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-tf_model.h5",
-    't5-3B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3B-tf_model.h5",
-    't5-11B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11B-tf_model.h5",
+    't5-3b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-tf_model.h5",
+    't5-11b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-tf_model.h5",
 }
 
 ####################################################
