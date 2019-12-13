@@ -370,11 +370,12 @@ def pipeline(task: str, model, config: Optional[PretrainedConfig] = None, tokeni
     Utility factory method to build pipeline.
     """
     # Try to infer tokenizer from model name (if provided as str)
-    if tokenizer is None and isinstance(model, str):
-        tokenizer = model
-    else:
-        # Impossible to guest what is the right tokenizer here
-        raise Exception('Tokenizer cannot be None if provided model is a PreTrainedModel instance')
+    if not isinstance(tokenizer, PreTrainedTokenizer):
+        if not isinstance(model, str):
+            # Impossible to guest what is the right tokenizer here
+            raise Exception('Tokenizer cannot be None if provided model is a PreTrainedModel instance')
+        else:
+            tokenizer = model
 
     tokenizer = tokenizer if isinstance(tokenizer, PreTrainedTokenizer) else AutoTokenizer.from_pretrained(tokenizer)
 
