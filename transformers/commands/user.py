@@ -19,8 +19,8 @@ class UserCommands(BaseTransformersCLICommand):
         list_parser.set_defaults(func=lambda args: ListObjsCommand(args))
         # upload
         upload_parser = parser.add_parser('upload')
-        upload_parser.add_argument('file', type=str, help='Local filepath of the file to upload.')
-        upload_parser.add_argument('--filename', type=str, default=None, help='Optional: override object filename on S3.')
+        upload_parser.add_argument('path', type=str, help='Local path of the folder or individual file to upload.')
+        upload_parser.add_argument('--filename', type=str, default=None, help='Optional: override individual object filename on S3.')
         upload_parser.set_defaults(func=lambda args: UploadCommand(args))
 
 
@@ -138,28 +138,57 @@ class ListObjsCommand(BaseUserCommand):
 
 
 class UploadCommand(BaseUserCommand):
+    def walk_dir(self, rel_path):
+        """
+        Recursively list all files in a folder.
+        """
+        entries: List[os.DirEntry] = list(os.scandir(rel_path))
+        files = [
+            (
+                os.path.join(os.getcwd(), f.path),  # filepath
+                f.path  # filename
+            )
+            for f in entries if f.is_file()
+        ]
+        for f in entries:
+            if f.is_dir():
+                files += self.walk_dir(f.path)
+        return files
+
     def run(self):
         token = HfFolder.get_token()
         if token is None:
             print("Not logged in")
             exit(1)
-        filepath = os.path.join(os.getcwd(), self.args.file)
-        filename = self.args.filename if self.args.filename is not None else os.path.basename(filepath)
-        print(
-            "About to upload file {} to S3 under filename {}".format(
-                ANSI.bold(filepath), ANSI.bold(filename)
+        local_path = os.path.abspath(self.args.path)
+        if os.path.isdir(local_path):
+            if self.args.filename is not None:
+                raise ValueError("Cannot specify a filename override when uploading a folder.")
+            rel_path = os.path.basename(local_path)
+            files = self.walk_dir(rel_path)
+        elif os.path.isfile(local_path):
+            filename = self.args.filename if self.args.filename is not None else os.path.basename(local_path)
+            files = [(local_path, filename)]
+        else:
+            raise ValueError("Not a valid file or directory: {}".format(local_path))
+
+        for filepath, filename in files:
+            print(
+                "About to upload file {} to S3 under filename {}".format(
+                    ANSI.bold(filepath), ANSI.bold(filename)
+                )
             )
-        )
 
         choice = input("Proceed? [Y/n] ").lower()
         if not(choice == "" or choice == "y" or choice == "yes"):
             print("Abort")
             exit()
         print(
-            ANSI.bold("Uploading... This might take a while if file is large")
+            ANSI.bold("Uploading... This might take a while if files are large")
         )
-        access_url = self._api.presign_and_upload(
-            token=token, filename=filename, filepath=filepath
-        )
-        print("Your file now lives at:")
-        print(access_url)
+        for filepath, filename in files:
+            access_url = self._api.presign_and_upload(
+                token=token, filename=filename, filepath=filepath
+            )
+            print("Your file now lives at:")
+            print(access_url)
