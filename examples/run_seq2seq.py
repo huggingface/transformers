@@ -20,7 +20,7 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 
 from transformers import (UnilmTokenizer, WhitespaceTokenizer,
-                          UnilmForSeq2Seq, AdamW, WarmupLinearSchedule, UnilmConfig)
+                          UnilmForSeq2Seq, AdamW, get_linear_schedule_with_warmup, UnilmConfig)
 
 import utils_seq2seq
 
@@ -275,8 +275,7 @@ def main():
     ]
     optimizer = AdamW(optimizer_grouped_parameters,
                       lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(
-        optimizer, warmup_steps=int(args.warmup_proportion*t_total), t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps=int(args.warmup_proportion*t_total), t_total=t_total)
     if args.fp16:
         try:
             from apex import amp
