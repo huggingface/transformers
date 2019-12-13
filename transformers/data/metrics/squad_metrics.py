@@ -377,7 +377,8 @@ def compute_predictions_logits(
     output_null_log_odds_file,
     verbose_logging,
     version_2_with_negative,
-    null_score_diff_threshold
+    null_score_diff_threshold,
+    tokenizer,
 ):
     """Write final predictions to the json file and log-odds of null if needed."""
     logger.info("Writing predictions to: %s" % (output_prediction_file))
@@ -474,11 +475,14 @@ def compute_predictions_logits(
                 orig_doc_start = feature.token_to_orig_map[pred.start_index]
                 orig_doc_end = feature.token_to_orig_map[pred.end_index]
                 orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
-                tok_text = " ".join(tok_tokens)
 
-                # De-tokenize WordPieces that have been split off.
-                tok_text = tok_text.replace(" ##", "")
-                tok_text = tok_text.replace("##", "")
+                tok_text = tokenizer.convert_tokens_to_string(tok_tokens)
+
+                # tok_text = " ".join(tok_tokens)
+                #
+                # # De-tokenize WordPieces that have been split off.
+                # tok_text = tok_text.replace(" ##", "")
+                # tok_text = tok_text.replace("##", "")
 
                 # Clean whitespace
                 tok_text = tok_text.strip()

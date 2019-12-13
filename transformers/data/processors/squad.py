@@ -140,7 +140,6 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
 
-
         if is_training and not example.is_impossible:
             tok_start_position = orig_to_tok_index[example.start_position]
             if example.end_position < len(example.doc_tokens) - 1:
@@ -155,7 +154,8 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
         spans = []
         
         truncated_query = tokenizer.encode(example.question_text, add_special_tokens=False, max_length=max_query_length)
-        sequence_added_tokens = tokenizer.max_len - tokenizer.max_len_single_sentence 
+        sequence_added_tokens = tokenizer.max_len - tokenizer.max_len_single_sentence + 1 \
+            if 'roberta' in str(type(tokenizer)) else tokenizer.max_len - tokenizer.max_len_single_sentence
         sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair 
 
         span_doc_tokens = all_doc_tokens
