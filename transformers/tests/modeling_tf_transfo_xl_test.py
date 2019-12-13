@@ -92,7 +92,7 @@ class TFTransfoXLModelTest(TFCommonTestCases.TFCommonModelTester):
                 lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = TransfoXLConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 cutoffs=self.cutoffs,
