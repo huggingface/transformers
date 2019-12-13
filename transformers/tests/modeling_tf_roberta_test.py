@@ -18,10 +18,10 @@ from __future__ import print_function
 
 import unittest
 import shutil
-import pytest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import require_tf, slow
 
 from transformers import RobertaConfig, is_tf_available
 
@@ -30,11 +30,11 @@ if is_tf_available():
     import numpy
     from transformers.modeling_tf_roberta import (TFRobertaModel, TFRobertaForMaskedLM,
                                                           TFRobertaForSequenceClassification,
+                                                          TFRobertaForTokenClassification,
                                                           TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFRobertaModel,TFRobertaForMaskedLM,
@@ -154,6 +154,20 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
                 list(result["prediction_scores"].shape),
                 [self.batch_size, self.seq_length, self.vocab_size])
 
+        def create_and_check_roberta_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+            config.num_labels = self.num_labels
+            model = TFRobertaForTokenClassification(config=config)
+            inputs = {'input_ids': input_ids,
+                      'attention_mask': input_mask,
+                      'token_type_ids': token_type_ids}
+            logits, = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
+                [self.batch_size, self.seq_length, self.num_labels])
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, token_type_ids, input_mask,
@@ -176,7 +190,7 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
         cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -188,10 +202,10 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
 
 class TFRobertaModelIntegrationTest(unittest.TestCase):
 
-    @pytest.mark.slow
+    @slow
     def test_inference_masked_lm(self):
         model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = [1, 11, 50265]
@@ -209,10 +223,10 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
             numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_no_head(self):
         model = TFRobertaModel.from_pretrained('roberta-base')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
@@ -225,10 +239,10 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
             numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_classification_head(self):
         model = TFRobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = [1, 3]

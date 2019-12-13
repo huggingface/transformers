@@ -20,6 +20,7 @@ import unittest
 from transformers.tokenization_xlnet import (XLNetTokenizer, SPIECE_UNDERLINE)
 
 from .tokenization_tests_commons import CommonTestCases
+from .utils import slow
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     'fixtures/test_sentencepiece.model')
@@ -89,11 +90,12 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
                                       u'9', u'2', u'0', u'0', u'0', u',', SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
                                       SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u'se', u'.'])
 
+    @slow
     def test_sequence_builders(self):
         tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
 
-        text = tokenizer.encode("sequence builders")
-        text_2 = tokenizer.encode("multi-sequence build")
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)

@@ -24,7 +24,8 @@ import os
 import tensorflow as tf
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME,
+                         cached_path, hf_bucket_url, is_remote_url)
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class TFPreTrainedModel(tf.keras.Model):
     r""" Base class for all TF models.
 
         :class:`~transformers.TFPreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
-        as well as a few methods commons to all models to (i) resize the input embeddings and (ii) prune heads in the self-attention heads.
+        as well as a few methods common to all models to (i) resize the input embeddings and (ii) prune heads in the self-attention heads.
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
@@ -51,7 +52,15 @@ class TFPreTrainedModel(tf.keras.Model):
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
-    dummy_inputs = tf.constant(DUMMY_INPUTS)  # dummy inputs to build the network
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return tf.constant(DUMMY_INPUTS)
 
     def __init__(self, config, *inputs, **kwargs):
         super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
@@ -64,6 +73,21 @@ class TFPreTrainedModel(tf.keras.Model):
                 ))
         # Save config in model
         self.config = config
+
+    def get_input_embeddings(self):
+        """ Get model's input embeddings
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            return base_model.get_input_embeddings()
+        else:
+            raise NotImplementedError
+
+    def get_output_embeddings(self):
+        """ Get model's output embeddings
+            Return None if the model doesn't have output embeddings
+        """
+        return None  # Overwrite for models with output embeddings
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
         """ Build a resized Embedding Variable from a provided token Embedding Module.
@@ -153,6 +177,7 @@ class TFPreTrainedModel(tf.keras.Model):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch state_dict save file` (e.g. `./pt_model/pytorch_model.bin`). In this case, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in a TensorFlow model using the provided conversion scripts and loading the TensorFlow model afterwards.
 
@@ -175,6 +200,9 @@ class TFPreTrainedModel(tf.keras.Model):
 
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
@@ -201,6 +229,7 @@ class TFPreTrainedModel(tf.keras.Model):
         cache_dir = kwargs.pop('cache_dir', None)
         from_pt = kwargs.pop('from_pt', False)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
 
         # Load config
@@ -209,6 +238,7 @@ class TFPreTrainedModel(tf.keras.Model):
                 pretrained_model_name_or_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
+                resume_download=resume_download,
                 **kwargs
             )
         else:
@@ -229,14 +259,19 @@ class TFPreTrainedModel(tf.keras.Model):
                     raise EnvironmentError("Error no file named {} found in directory {} or `from_pt` set to False".format(
                         [WEIGHTS_NAME, TF2_WEIGHTS_NAME],
                         pretrained_model_name_or_path))
-            elif os.path.isfile(pretrained_model_name_or_path):
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
+            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
+                archive_file = pretrained_model_name_or_path + ".index"
             else:
-                raise EnvironmentError("Error file {} not found".format(pretrained_model_name_or_path))
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=TF2_WEIGHTS_NAME)
+                if from_pt:
+                    raise EnvironmentError("Loading a TF model from a PyTorch checkpoint is not supported when using a model identifier name.")
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
+                                                    resume_download=resume_download, proxies=proxies)
             except EnvironmentError as e:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                     logger.error(
@@ -439,7 +474,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         elif self.summary_type == 'first':
             output = hidden_states[:, 0]
         elif self.summary_type == 'mean':
-            output = tf.mean(hidden_states, axis=1)
+            output = tf.reduce_mean(hidden_states, axis=1)
         elif self.summary_type == 'cls_index':
             hidden_shape = shape_list(hidden_states)  # e.g. [batch, num choices, seq length, hidden dims]
             if cls_index is None:
@@ -477,10 +512,10 @@ def shape_list(x):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 def get_initializer(initializer_range=0.02):
-  """Creates a `tf.initializers.truncated_normal` with the given range.
-  Args:
-    initializer_range: float, initializer range for stddev.
-  Returns:
-    TruncatedNormal initializer with stddev = `initializer_range`.
-  """
-  return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
+    """Creates a `tf.initializers.truncated_normal` with the given range.
+    Args:
+        initializer_range: float, initializer range for stddev.
+    Returns:
+        TruncatedNormal initializer with stddev = `initializer_range`.
+    """
+    return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)

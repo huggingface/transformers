@@ -25,6 +25,7 @@ from transformers.tokenization_bert import (BasicTokenizer,
                                                     _is_whitespace, VOCAB_FILES_NAMES)
 
 from .tokenization_tests_commons import CommonTestCases
+from .utils import slow
 
 class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
@@ -125,11 +126,12 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertFalse(_is_punctuation(u"A"))
         self.assertFalse(_is_punctuation(u" "))
 
+    @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-uncased")
 
-        text = tokenizer.encode("sequence builders")
-        text_2 = tokenizer.encode("multi-sequence build")
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
