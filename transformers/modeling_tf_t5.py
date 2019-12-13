@@ -108,17 +108,16 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         self.output_attentions = config.output_attentions
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
-        self.dim = config.d_model
+        self.d_model = config.d_model
         self.d_kv = config.d_kv
         self.n_heads = config.num_heads
-        assert self.dim % self.n_heads == 0
-        assert self.dim // self.n_heads == self.d_kv
+        self.inner_dim = self.n_heads * self.d_kv
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = tf.keras.layers.Dense(self.dim, use_bias=False, name='q')
-        self.k = tf.keras.layers.Dense(self.dim, use_bias=False, name='k')
-        self.v = tf.keras.layers.Dense(self.dim, use_bias=False, name='v')
-        self.o = tf.keras.layers.Dense(self.dim, use_bias=False, name='o')
+        self.q = tf.keras.layers.Dense(self.inner_dim, use_bias=False, name='q')
+        self.k = tf.keras.layers.Dense(self.inner_dim, use_bias=False, name='k')
+        self.v = tf.keras.layers.Dense(self.inner_dim, use_bias=False, name='v')
+        self.o = tf.keras.layers.Dense(self.d_model, use_bias=False, name='o')
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
         if self.has_relative_attention_bias:
@@ -199,17 +198,14 @@ class TFT5Attention(tf.keras.layers.Layer):
             klen = qlen if cache is None else cache['slen'] + qlen
         else:
             klen = shape_list(kv)[1]
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
-        n_heads = self.n_heads
-        dim_per_head = self.dim // n_heads
 
         def shape(x):
             """  projection """
-            return tf.transpose(tf.reshape(x, (bs, -1, self.n_heads, dim_per_head)), perm=(0, 2, 1, 3))
+            return tf.transpose(tf.reshape(x, (bs, -1, self.n_heads, self.d_kv)), perm=(0, 2, 1, 3))
 
         def unshape(x):
             """  compute context """
-            return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.n_heads * dim_per_head))
+            return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.inner_dim))
 
         q = shape(self.q(input))                                          # (bs, n_heads, qlen, dim_per_head)
         if kv is None:
