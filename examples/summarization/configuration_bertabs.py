@@ -65,7 +65,7 @@ class BertAbsConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size_or_config_json_file=30522,
+        vocab_size=30522,
         max_pos=512,
         enc_layers=6,
         enc_hidden_size=512,
@@ -81,14 +81,14 @@ class BertAbsConfig(PretrainedConfig):
     ):
         super(BertAbsConfig, self).__init__(**kwargs)
 
-        if self._input_is_path_to_json(vocab_size_or_config_json_file):
-            path_to_json = vocab_size_or_config_json_file
+        if self._input_is_path_to_json(vocab_size):
+            path_to_json = vocab_size
             with open(path_to_json, "r", encoding="utf-8") as reader:
                 json_config = json.loads(reader.read())
             for key, value in json_config.items():
                 self.__dict__[key] = value
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.vocab_size = vocab_size_or_config_json_file
+        elif isinstance(vocab_size, int):
+            self.vocab_size = vocab_size
             self.max_pos = max_pos
 
             self.enc_layers = enc_layers
