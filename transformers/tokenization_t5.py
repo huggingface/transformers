@@ -44,8 +44,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
         't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
         't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        't5-3B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        't5-11B': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        't5-3b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        't5-11b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
     }
 }
 
@@ -56,8 +56,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     't5-small': 512,
     't5-base': 512,
     't5-large': 512,
-    't5-3B': 512,
-    't5-11B': 512,
+    't5-3b': 512,
+    't5-11b': 512,
 }
 
 class T5Tokenizer(PreTrainedTokenizer):
