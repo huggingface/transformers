@@ -33,21 +33,12 @@ from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_tf_utils import TFPreTrainedModel, TFConv1D, TFSequenceSummary, shape_list, get_initializer
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .file_utils import add_start_docstrings
-from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-tf_model.h5",
 }
-
-def load_transfo_xl_pt_weights_in_tf2(tf_model, pytorch_checkpoint_path):
-    # build the network
-    inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-    tf_inputs = tf.constant(inputs_list)
-    tfo = tf_model(tf_inputs, training=False)
-    return load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=tf_inputs)
-
 
 class TFPositionalEmbedding(tf.keras.layers.Layer):
     def __init__(self, demb, **kwargs):
@@ -346,7 +337,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                 emb_i = tf.einsum('id,de->ie', emb_i, self.emb_projs[i])
 
                 mask_idx = tf.cast(tf.where(mask_i), dtype=tf.int64)
-                emb_flat += tf.scatter_nd(mask_idx, emb_i, tf.cast(tf.shape(emb_flat), dtype=tf.int64))
+                emb_flat += tf.scatter_nd(mask_idx, emb_i, tf.cast(shape_list(emb_flat), dtype=tf.int64))
 
             embed_shape = shape_list(inp) + [self.d_proj]
             embed = tf.reshape(emb_flat, embed_shape)
@@ -422,6 +413,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                                             name='r_r_bias')
         super(TFTransfoXLMainLayer, self).build(input_shape)
 
+    def get_input_embeddings(self):
+        return self.word_emb
+
     def _resize_token_embeddings(self, new_num_tokens):
         return self.word_emb
 
@@ -436,11 +430,11 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def _prune_heads(self, heads):
         raise NotImplementedError
 
-    def init_mems(self, data):
+    def init_mems(self, bsz):
         if self.mem_len > 0:
             mems = []
             for i in range(self.n_layer):
-                empty = tf.zeros([self.mem_len, shape_list(data)[1], self.d_model])
+                empty = tf.zeros([self.mem_len, bsz, self.d_model])
                 mems.append(empty)
 
             return mems
@@ -470,28 +464,37 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         return new_mems
 
-    def call(self, inputs, mems=None, head_mask=None, training=False):
+    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mems = inputs[1] if len(inputs) > 1 else mems
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
-            assert len(inputs) <= 3, "Too many inputs."
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            assert len(inputs) <= 4, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             mems = inputs.get('mems', mems)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 3, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 4, "Too many inputs."
         else:
             input_ids = inputs
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
-        input_ids = tf.transpose(input_ids, perm=(1, 0))
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_ids = tf.transpose(input_ids, perm=(1, 0))
+            qlen, bsz = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            inputs_embeds = tf.transpose(inputs_embeds, perm=(1, 0, 2))
+            qlen, bsz = shape_list(inputs_embeds)[:2]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if mems is None:
-            mems = self.init_mems(input_ids)
-
-        qlen, bsz = shape_list(input_ids)
+            mems = self.init_mems(bsz)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -503,7 +506,10 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         else:
             head_mask = [None] * self.n_layer
 
-        word_emb = self.word_emb(input_ids)
+        if inputs_embeds is not None:
+            word_emb = inputs_embeds
+        else:
+            word_emb = self.word_emb(input_ids)
 
         mlen = shape_list(mems[0])[0] if mems is not None else 0
         klen = mlen + qlen
@@ -577,7 +583,6 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     """
     config_class = TransfoXLConfig
     pretrained_model_archive_map = TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-    load_pt_weights = load_transfo_xl_pt_weights_in_tf2
     base_model_prefix = "transformer"
 
 
@@ -636,6 +641,10 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare Bert Model transformer outputing raw hidden-states without any specific head on top.",
@@ -726,28 +735,33 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
 
-    def init_mems(self, data):
-        return self.transformer.init_mems(data)
+    def init_mems(self, bsz):
+        return self.transformer.init_mems(bsz)
 
-    def call(self, inputs, mems=None, head_mask=None, labels=None, training=False):
+    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, labels=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mems = inputs[1] if len(inputs) > 1 else mems
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
-            labels = inputs[3] if len(inputs) > 3 else labels
-            assert len(inputs) <= 4, "Too many inputs."
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            labels = inputs[4] if len(inputs) > 4 else labels
+            assert len(inputs) <= 5, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             mems = inputs.get('mems', mems)
             head_mask = inputs.get('head_mask', head_mask)
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
             labels = inputs.get('labels', labels)
-            assert len(inputs) <= 4, "Too many inputs."
+            assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs
 
-        bsz, tgt_len = shape_list(input_ids)[:2]
+        if input_ids is not None:
+            bsz, tgt_len = shape_list(input_ids)[:2]
+        else:
+            bsz, tgt_len = shape_list(inputs_embeds)[:2]
 
-        transformer_outputs = self.transformer([input_ids, mems, head_mask], training=training)
+        transformer_outputs = self.transformer([input_ids, mems, head_mask, inputs_embeds], training=training)
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]

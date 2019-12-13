@@ -19,6 +19,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import logging
 
 from .tokenization_bert import BertTokenizer
+from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_ctrl import CTRLTokenizer
@@ -28,6 +29,8 @@ from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_unilm import UnilmTokenizer
+from .tokenization_camembert import CamembertTokenizer
+from .tokenization_albert import AlbertTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +47,17 @@ class AutoTokenizer(object):
         The tokenizer class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
+            - contains `albert`: AlbertTokenizer (ALBERT model)
+            - contains `camembert`: CamembertTokenizer (CamemBERT model)
             - contains `roberta`: RobertaTokenizer (RoBERTa model)
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
             - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
             - contains `unilm`: UnilmTokenizer (Unilm model)
+            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -69,20 +74,24 @@ class AutoTokenizer(object):
         The tokenizer class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
-            - contains `roberta`: RobertaTokenizer (XLM model)
+            - contains `albert`: AlbertTokenizer (ALBERT model)
+            - contains `camembert`: CamembertTokenizer (CamemBERT model)
+            - contains `roberta`: RobertaTokenizer (RoBERTa model)
+            - contains `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
             - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
             - contains `unilm`: UnilmTokenizer (UniLM model)
+            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
 
         Params:
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
 
@@ -91,6 +100,9 @@ class AutoTokenizer(object):
 
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the vocabulary files and override the cached versions if they exists.
+
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
@@ -102,14 +114,26 @@ class AutoTokenizer(object):
 
         Examples::
 
-            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')    # Download vocabulary from S3 and cache.
-            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
+            # Download vocabulary from S3 and cache.
+            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+
+            # Download vocabulary from S3 (user-uploaded) and cache.
+            tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+
+            # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
+            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return DistilBertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'albert' in pretrained_model_name_or_path:
+            return AlbertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'camembert' in pretrained_model_name_or_path:
+            return CamembertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'bert-base-japanese' in pretrained_model_name_or_path:
+            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:
@@ -128,4 +152,4 @@ class AutoTokenizer(object):
             return UnilmTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl', 'unilm'".format(pretrained_model_name_or_path))
+                         "'xlm', 'roberta', 'ctrl', 'distilbert,' 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))

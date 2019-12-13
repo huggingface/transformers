@@ -21,6 +21,7 @@ import json
 from transformers.tokenization_xlm import XLMTokenizer, VOCAB_FILES_NAMES
 
 from .tokenization_tests_commons import CommonTestCases
+from .utils import slow
 
 class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
@@ -66,11 +67,12 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @slow
     def test_sequence_builders(self):
         tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
 
-        text = tokenizer.encode("sequence builders")
-        text_2 = tokenizer.encode("multi-sequence build")
+        text = tokenizer.encode("sequence builders", add_special_tokens=False)
+        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)

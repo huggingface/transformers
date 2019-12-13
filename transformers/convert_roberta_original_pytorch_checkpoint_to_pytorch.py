@@ -23,15 +23,15 @@ import torch
 
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
-from transformers import (BertConfig, BertEncoder,
-                                                BertIntermediate, BertLayer,
-                                                BertModel, BertOutput,
-                                                BertSelfAttention,
-                                                BertSelfOutput)
-from transformers import (RobertaEmbeddings,
-                                                   RobertaForMaskedLM,
-                                                   RobertaForSequenceClassification,
-                                                   RobertaModel)
+from transformers.modeling_bert import (BertConfig, BertEncoder,
+                                        BertIntermediate, BertLayer,
+                                        BertModel, BertOutput,
+                                        BertSelfAttention,
+                                        BertSelfOutput)
+from transformers.modeling_roberta import (RobertaEmbeddings,
+                                           RobertaForMaskedLM,
+                                           RobertaForSequenceClassification,
+                                           RobertaModel)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

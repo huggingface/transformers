@@ -19,10 +19,8 @@ import os
 import math
 import psutil
 import time
-from tensorboardX import SummaryWriter
 from tqdm import trange, tqdm
 import numpy as np
-import psutil
 
 import torch
 import torch.nn as nn
@@ -31,7 +29,12 @@ from torch.optim import AdamW
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import RandomSampler, BatchSampler, DataLoader
 
-from transformers import WarmupLinearSchedule
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
+from transformers import get_linear_schedule_with_warmup
 
 from utils import logger
 from lm_seqs_dataset import LmSeqsDataset
@@ -133,9 +136,9 @@ class Distiller:
                                betas=(0.9, 0.98))
 
         warmup_steps = math.ceil(num_train_optimization_steps * params.warmup_prop)
-        self.scheduler = WarmupLinearSchedule(self.optimizer,
-                                                warmup_steps=warmup_steps,
-                                                t_total=num_train_optimization_steps)
+        self.scheduler = get_linear_schedule_with_warmup(self.optimizer,
+                                                num_warmup_steps=warmup_steps,
+                                                num_training_steps=num_train_optimization_steps)
 
         if self.fp16:
             try:

@@ -25,8 +25,6 @@ import numpy
 
 logger = logging.getLogger(__name__)
 
-DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-
 def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=''):
     """ Convert a TF 2.0 model variable name in a pytorch model weight name.
 
@@ -105,7 +103,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         raise e
 
     if tf_inputs is None:
-        tf_inputs = tf.constant(DUMMY_INPUTS)
+        tf_inputs = tf_model.dummy_inputs
 
     if tf_inputs is not None:
         tfo = tf_model(tf_inputs, training=False)  # Make sure model is built
@@ -120,6 +118,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_key = key.replace('gamma', 'weight')
         if 'beta' in key:
             new_key = key.replace('beta', 'bias')
+        # DialoGPT format
+        if key == 'lm_head.decoder.weight':
+            new_key = 'lm_head.weight'
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -200,7 +201,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     tf_model = tf_model_class(pt_model.config)
 
     if tf_inputs is None:
-        tf_inputs = tf.constant(DUMMY_INPUTS)
+        tf_inputs = tf_model.dummy_inputs
 
     if tf_inputs is not None:
         tfo = tf_model(tf_inputs, training=False)  # Make sure model is built
