@@ -116,7 +116,7 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
     unique_id = 1000000000
 
     features = []
-    for (example_index, example) in enumerate(tqdm(examples)):
+    for (example_index, example) in enumerate(tqdm(examples, desc="Converting examples to features")):
         if is_training and not example.is_impossible:
             # Get start and end position
             start_position = example.start_position
