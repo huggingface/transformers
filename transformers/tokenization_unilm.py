@@ -32,11 +32,13 @@ PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
         'unilm-large-cased': "https://raw.githubusercontent.com/microsoft/unilm/master/storage/unilm-large-cased-vocab.txt"
+        'unilm-base-cased': "https://raw.githubusercontent.com/microsoft/unilm/master/storage/unilm-large-cased-vocab.txt"
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'unilm-large-cased': 512
+    'unilm-large-cased': 512, 
+    'unilm-base-cased': 512
 }
 
 
