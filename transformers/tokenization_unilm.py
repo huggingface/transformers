@@ -31,7 +31,7 @@ VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
-        'unilm-large-cased': "https://raw.githubusercontent.com/microsoft/unilm/master/storage/unilm-large-cased-vocab.txt"
+        'unilm-large-cased': "https://raw.githubusercontent.com/microsoft/unilm/master/storage/unilm-large-cased-vocab.txt", 
         'unilm-base-cased': "https://raw.githubusercontent.com/microsoft/unilm/master/storage/unilm-large-cased-vocab.txt"
     }
 }
