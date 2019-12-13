@@ -28,7 +28,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,10 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-tf_model.h5",
+    'bert-base-japanese': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-tf_model.h5",
+    'bert-base-japanese-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-tf_model.h5",
+    'bert-base-japanese-char': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-tf_model.h5",
+    'bert-base-japanese-char-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-tf_model.h5"
 }
 
 
@@ -129,7 +133,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 linear tensor, float32 with shape [batch_size, length, vocab_size].
         Raises:
             ValueError: if mode is not valid.
-        
+
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
@@ -142,19 +146,25 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
     def _embedding(self, inputs, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids = inputs
+        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
 
-        seq_length = tf.shape(input_ids)[1]
+        if input_ids is not None:
+            input_shape = shape_list(input_ids)
+        else:
+            input_shape = shape_list(inputs_embeds)[:-1]
+
+        seq_length = input_shape[1]
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
         if token_type_ids is None:
-            token_type_ids = tf.fill(tf.shape(input_ids), 0)
+            token_type_ids = tf.fill(input_shape, 0)
 
-        words_embeddings = tf.gather(self.word_embeddings, input_ids)
+        if inputs_embeds is None:
+            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = words_embeddings + position_embeddings + token_type_embeddings
+        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
@@ -166,8 +176,8 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             Returns:
                 float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = tf.shape(inputs)[0]
-        length = tf.shape(inputs)[1]
+        batch_size = shape_list(inputs)[0]
+        length = shape_list(inputs)[1]
 
         x = tf.reshape(inputs, [-1, self.hidden_size])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
@@ -208,7 +218,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
-        batch_size = tf.shape(hidden_states)[0]
+        batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -219,7 +229,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(tf.shape(key_layer)[-1], tf.float32) # scale attention_scores
+        dk = tf.cast(shape_list(key_layer)[-1], tf.float32) # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -240,7 +250,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         context_layer = tf.matmul(attention_probs, value_layer)
 
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(context_layer, 
+        context_layer = tf.reshape(context_layer,
                                   (batch_size, -1, self.all_head_size))  # (batch_size, seq_len_q, all_head_size)
 
         outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
@@ -460,6 +470,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.encoder = TFBertEncoder(config, name='encoder')
         self.pooler = TFBertPooler(config, name='pooler')
 
+    def get_input_embeddings(self):
+        return self.embeddings
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -470,28 +483,39 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            assert len(inputs) <= 5, "Too many inputs."
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             attention_mask = inputs.get('attention_mask', attention_mask)
             token_type_ids = inputs.get('token_type_ids', token_type_ids)
             position_ids = inputs.get('position_ids', position_ids)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 5, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if attention_mask is None:
-            attention_mask = tf.fill(tf.shape(input_ids), 1)
+            attention_mask = tf.fill(input_shape, 1)
         if token_type_ids is None:
-            token_type_ids = tf.fill(tf.shape(input_ids), 0)
+            token_type_ids = tf.fill(input_shape, 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -520,7 +544,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        embedding_output = self.embeddings([input_ids, position_ids, token_type_ids], training=training)
+        embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
         encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
 
         sequence_output = encoder_outputs[0]
@@ -571,7 +595,7 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
             `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
-        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -585,13 +609,13 @@ BERT_INPUTS_DOCSTRING = r"""
             (a) For sequence pairs:
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-                
+
                 ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
 
             (b) For single sequences:
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
-                
+
                 ``token_type_ids:   0   0   0   0  0     0   0``
 
             Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -616,6 +640,10 @@ BERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
 """
 
 @add_start_docstrings("The bare Bert Model transformer outputing raw hidden-states without any specific head on top.",
@@ -698,6 +726,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         self.nsp = TFBertNSPHead(config, name='nsp___cls')
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name='mlm___cls')
 
+    def get_output_embeddings(self):
+        return self.bert.embeddings
+
     def call(self, inputs, **kwargs):
         outputs = self.bert(inputs, **kwargs)
 
@@ -742,6 +773,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 
         self.bert = TFBertMainLayer(config, name='bert')
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name='mlm___cls')
+
+    def get_output_embeddings(self):
+        return self.bert.embeddings
 
     def call(self, inputs, **kwargs):
         outputs = self.bert(inputs, **kwargs)
@@ -888,33 +922,39 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
                                                 kernel_initializer=get_initializer(config.initializer_range),
                                                 name='classifier')
 
-    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False):
+    def call(self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            assert len(inputs) <= 5, "Too many inputs."
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get('input_ids')
             attention_mask = inputs.get('attention_mask', attention_mask)
             token_type_ids = inputs.get('token_type_ids', token_type_ids)
             position_ids = inputs.get('position_ids', position_ids)
             head_mask = inputs.get('head_mask', head_mask)
-            assert len(inputs) <= 5, "Too many inputs."
+            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
-        num_choices = tf.shape(input_ids)[1]
-        seq_length = tf.shape(input_ids)[2]
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
+        else:
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
 
-        flat_input_ids = tf.reshape(input_ids, (-1, seq_length))
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
 
-        flat_inputs = [flat_input_ids, flat_attention_mask, flat_token_type_ids, flat_position_ids, head_mask]
+        flat_inputs = [flat_input_ids, flat_attention_mask, flat_token_type_ids, flat_position_ids, head_mask, inputs_embeds]
 
         outputs = self.bert(flat_inputs, training=training)
 

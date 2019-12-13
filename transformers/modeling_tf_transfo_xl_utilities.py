@@ -105,7 +105,7 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
 
     @staticmethod
     def _gather_logprob(logprob, target):
-        lp_size = tf.shape(logprob)
+        lp_size = shape_list(logprob)
         r = tf.range(lp_size[0])
         idx = tf.stack([r, target], 1)
         return tf.gather_nd(logprob, idx)
@@ -159,7 +159,7 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
                         cur_logprob = self._gather_logprob(cur_tail_logprob, cur_target)
                         cur_logprob += cur_head_logprob[:, self.cutoff_ends[1] + i - 1]
                 if target is not None:
-                    loss += tf.scatter_nd(mask_idx, -cur_logprob, tf.cast(tf.shape(loss), dtype=tf.int64))
+                    loss += tf.scatter_nd(mask_idx, -cur_logprob, tf.cast(shape_list(loss), dtype=tf.int64))
             out = tf.concat(out, axis=-1)
 
         if target is not None:
