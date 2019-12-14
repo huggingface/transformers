@@ -360,7 +360,8 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             doc_stride=args.doc_stride,
             max_query_length=args.max_query_length,
             is_training=not evaluate,
-            return_dataset='pt'
+            return_dataset='pt',
+            threads=args.threads,
         )
 
         if args.local_rank in [-1, 0]:
@@ -478,6 +479,8 @@ def main():
                              "See details at https://nvidia.github.io/apex/amp.html")
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+
+    parser.add_argument('--threads', type=int, default=1, help='multiple threads for converting example to features')
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
