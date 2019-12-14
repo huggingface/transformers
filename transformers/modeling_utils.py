@@ -31,11 +31,10 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME,
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
                          cached_path, hf_bucket_url, is_remote_url)
 
 logger = logging.getLogger(__name__)
-
 
 try:
     from torch.nn import Identity
@@ -71,6 +70,15 @@ class PreTrainedModel(nn.Module):
     pretrained_model_archive_map = {}
     load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to do a forward pass in the network.
+
+        Returns:
+            torch.Tensor with dummy inputs
+        """
+        return {'input_ids': torch.tensor(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(PreTrainedModel, self).__init__()
@@ -161,8 +169,7 @@ class PreTrainedModel(nn.Module):
         base_model.vocab_size = new_num_tokens
 
         # Tie weights again if needed
-        if hasattr(self, 'tie_weights'):
-            self.tie_weights()
+        self.tie_weights()
 
         return model_embeds
 
@@ -478,8 +485,7 @@ class PreTrainedModel(nn.Module):
                 raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                 model.__class__.__name__, "\n\t".join(error_msgs)))
 
-        if hasattr(model, 'tie_weights'):
-            model.tie_weights()  # make sure word embedding weights are still tied
+        model.tie_weights()  # make sure word embedding weights are still tied if needed
 
         # Set model in evaluation mode to desactivate DropOut modules by default
         model.eval()

@@ -460,7 +460,7 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
             langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
         else:
             langs_list = None
-        return [inputs_list, attns_list, langs_list]
+        return {'input_ids': inputs_list, 'attention_mask': attns_list, 'langs': langs_list}
 
 
 XLM_START_DOCSTRING = r"""    The XLM model was proposed in

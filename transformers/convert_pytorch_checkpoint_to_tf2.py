@@ -34,7 +34,8 @@ from transformers import (load_pytorch_checkpoint_in_tf2_model,
                                   RobertaConfig, TFRobertaForMaskedLM, TFRobertaForSequenceClassification, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                   DistilBertConfig, TFDistilBertForMaskedLM, TFDistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
                                   CTRLConfig, TFCTRLLMHeadModel, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-                                  AlbertConfig, TFAlbertForMaskedLM, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP)
+                                  AlbertConfig, TFAlbertForMaskedLM, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+                                  T5Config, TFT5WithLMHeadModel, T5_PRETRAINED_CONFIG_ARCHIVE_MAP)
 
 if is_torch_available():
     import torch
@@ -48,7 +49,8 @@ if is_torch_available():
                                       RobertaForMaskedLM, RobertaForSequenceClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
                                       DistilBertForMaskedLM, DistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
                                       CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                      AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                      AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+                                      T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP)
 else:
     (BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification, BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -59,7 +61,8 @@ else:
     RobertaForMaskedLM, RobertaForSequenceClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     DistilBertForMaskedLM, DistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-    AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP) = (
+    AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP) = (
         None, None, None, None,
         None, None,
         None, None,
@@ -68,6 +71,7 @@ else:
         None, None,
         None, None, None,
         None, None, None,
+        None, None,
         None, None,
         None, None)
 
@@ -90,7 +94,8 @@ MODEL_CLASSES = {
     'distilbert': (DistilBertConfig, TFDistilBertForMaskedLM, DistilBertForMaskedLM, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP),
     'distilbert-base-uncased-distilled-squad': (DistilBertConfig, TFDistilBertForQuestionAnswering, DistilBertForQuestionAnswering, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP),
     'ctrl': (CTRLConfig, TFCTRLLMHeadModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP),
-    'albert': (AlbertConfig, TFAlbertForMaskedLM, AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP)
+    'albert': (AlbertConfig, TFAlbertForMaskedLM, AlbertForMaskedLM, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP),
+    't5': (T5Config, TFT5WithLMHeadModel, T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5_PRETRAINED_CONFIG_ARCHIVE_MAP),
 }
 
 def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False, use_cached_models=True):
@@ -115,24 +120,21 @@ def convert_pt_checkpoint_to_tf(model_type, pytorch_checkpoint_path, config_file
     tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
     if compare_with_pt_model:
-        inputs_list = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
-        tf_inputs = tf.constant(inputs_list)
-        tfo = tf_model(tf_inputs, training=False)  # build the network
+        tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
 
         state_dict = torch.load(pytorch_checkpoint_path, map_location='cpu')
         pt_model = pt_model_class.from_pretrained(pretrained_model_name_or_path=None,
                                                   config=config,
                                                   state_dict=state_dict)
 
-        pt_inputs = torch.tensor(inputs_list)
         with torch.no_grad():
-            pto = pt_model(pt_inputs)
+            pto = pt_model(**pt_model.dummy_inputs)
 
-        np_pt = pto[0].detach().numpy()
+        np_pt = pto[0].numpy()
         np_tf = tfo[0].numpy()
         diff = np.amax(np.abs(np_pt - np_tf))
         print("Max absolute difference between models outputs {}".format(diff))
-        assert diff <= 2e-2, "Error, model absolute difference is >2e-2"
+        assert diff <= 2e-2, "Error, model absolute difference is >2e-2: {}".format(diff)
 
     # Save pytorch-model
     print("Save TensorFlow model to {}".format(tf_dump_path))
