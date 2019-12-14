@@ -30,6 +30,7 @@ from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_albert import AlbertTokenizer
+from .tokenization_t5 import T5Tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class AutoTokenizer(object):
 
         The tokenizer class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Tokenizer (T5 model)
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
@@ -69,6 +71,7 @@ class AutoTokenizer(object):
 
         The tokenizer class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Tokenizer (T5 model)
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
@@ -119,7 +122,9 @@ class AutoTokenizer(object):
             tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return T5Tokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'albert' in pretrained_model_name_or_path:
             return AlbertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

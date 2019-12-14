@@ -637,9 +637,11 @@ class PreTrainedTokenizer(object):
             text: The sequence to be encoded.
             **kwargs: passed to the child `self.tokenize()` method
         """
+        all_special_tokens = self.all_special_tokens
+
         def lowercase_text(t):
             # convert non-special tokens to lowercase
-            escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
+            escaped_special_toks = [re.escape(s_tok) for s_tok in all_special_tokens]
             pattern = r'(^' + r'|'.join(escaped_special_toks) + r')|' + \
                       r'(.+?)'
             return re.sub(
@@ -680,17 +682,17 @@ class PreTrainedTokenizer(object):
                 tokenized_text = []
                 for sub_text in text_list:
                     if sub_text not in self.added_tokens_encoder \
-                            and sub_text not in self.all_special_tokens:
+                            and sub_text not in all_special_tokens:
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
                 text_list = tokenized_text
 
             return list(itertools.chain.from_iterable((self._tokenize(token, **kwargs) if token not \
-                    in self.added_tokens_encoder and token not in self.all_special_tokens \
+                    in self.added_tokens_encoder and token not in all_special_tokens \
                     else [token] for token in tokenized_text)))
 
-        added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
+        added_tokens = list(self.added_tokens_encoder.keys()) + all_special_tokens
         tokenized_text = split_on_tokens(added_tokens, text)
         return tokenized_text
 
@@ -1178,12 +1180,12 @@ class PreTrainedTokenizer(object):
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))
                     current_sub_text = []
-                sub_texts.append(" " + token)
+                sub_texts.append(token)
             else:
                 current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-        text = ''.join(sub_texts)
+        text = ' '.join(sub_texts)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)

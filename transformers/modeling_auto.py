@@ -29,6 +29,7 @@ from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequen
 from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification
 from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
 from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, AlbertForQuestionAnswering
+from .modeling_t5 import T5Model, T5WithLMHeadModel
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
@@ -49,6 +50,7 @@ class AutoModel(object):
 
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Model (T5 model)
             - contains `distilbert`: DistilBertModel (DistilBERT model)
             - contains `albert`: AlbertModel (ALBERT model)
             - contains `camembert`: CamembertModel (CamemBERT model)
@@ -74,6 +76,7 @@ class AutoModel(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Model (T5 model)
             - contains `distilbert`: DistilBertModel (DistilBERT model)
             - contains `albert`: AlbertModel (ALBERT model)
             - contains `camembert`: CamembertModel (CamemBERT model)
@@ -146,7 +149,9 @@ class AutoModel(object):
             model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return T5Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'albert' in pretrained_model_name_or_path:
             return AlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
@@ -185,6 +190,7 @@ class AutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5ModelWithLMHead (T5 model)
             - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
             - contains `albert`: AlbertForMaskedLM (ALBERT model)
             - contains `camembert`: CamembertForMaskedLM (CamemBERT model)
@@ -213,6 +219,7 @@ class AutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5ModelWithLMHead (T5 model)
             - contains `distilbert`: DistilBertForMaskedLM (DistilBERT model)
             - contains `albert`: AlbertForMaskedLM (ALBERT model)
             - contains `camembert`: CamembertForMaskedLM (CamemBERT model)
@@ -284,7 +291,9 @@ class AutoModelWithLMHead(object):
             model = AutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return T5WithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'albert' in pretrained_model_name_or_path:
             return AlbertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

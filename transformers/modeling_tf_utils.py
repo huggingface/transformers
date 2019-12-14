@@ -24,13 +24,11 @@ import os
 import tensorflow as tf
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME,
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
                          cached_path, hf_bucket_url, is_remote_url)
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
-
-DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 
 class TFPreTrainedModel(tf.keras.Model):
     r""" Base class for all TF models.
@@ -60,7 +58,7 @@ class TFPreTrainedModel(tf.keras.Model):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return tf.constant(DUMMY_INPUTS)
+        return {'input_ids': tf.constant(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
