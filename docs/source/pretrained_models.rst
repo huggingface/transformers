@@ -217,6 +217,21 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | | ALBERT xxlarge model with no dropout, additional training data and longer training                                                  |
 |                   |                                                            | (see `details <https://github.com/google-research/ALBERT>`__)                                                                         |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| T5                | ``t5-small``                                               | | ~60M parameters with 6-layers, 512-hidden-state, 2048 feed-forward hidden-state, 8-heads,                                           |
+|                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``t5-base``                                                | | ~220M parameters with 12-layers, 768-hidden-state, 3072 feed-forward hidden-state, 12-heads,                                        |
+|                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``t5-large``                                               | | ~770M parameters with 24-layers, 1024-hidden-state, 4096 feed-forward hidden-state, 16-heads,                                       |
+|                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``t5-3B``                                                  | | ~2.8B parameters with 24-layers, 1024-hidden-state, 16384 feed-forward hidden-state, 32-heads,                                      |
+|                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``t5-11B``                                                 | | ~11B parameters with 24-layers, 1024-hidden-state, 65536 feed-forward hidden-state, 128-heads,                                      |
+|                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
 .. <https://huggingface.co/transformers/examples.html>`__
