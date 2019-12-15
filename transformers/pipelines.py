@@ -14,6 +14,8 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import csv
+import json
 import os
 from abc import ABC, abstractmethod
 from itertools import groupby
@@ -25,11 +27,13 @@ from transformers import AutoTokenizer, PreTrainedTokenizer, PretrainedConfig, \
     SquadExample, squad_convert_examples_to_features, is_tf_available, is_torch_available, logger
 
 if is_tf_available():
-    from transformers import TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering, TFAutoModelForTokenClassification
+    from transformers import TFAutoModel, TFAutoModelForSequenceClassification, \
+        TFAutoModelForQuestionAnswering, TFAutoModelForTokenClassification
 
 if is_torch_available():
     import torch
-    from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoModelForTokenClassification
+    from transformers import AutoModel, AutoModelForSequenceClassification, \
+        AutoModelForQuestionAnswering, AutoModelForTokenClassification
 
 
 class Pipeline(ABC):
@@ -56,6 +60,84 @@ class Pipeline(ABC):
     @abstractmethod
     def __call__(self, *texts, **kwargs):
         raise NotImplementedError()
+
+
+class PipelineDataFormat:
+    SUPPORTED_FORMATS = ['json', 'csv']
+
+    def __init__(self, output: str, path: str, column: str):
+        self.output = output
+        self.path = path
+        self.column = column.split(',')
+        self.is_multi_columns = len(self.column) > 1
+
+        if self.is_multi_columns:
+            self.column = [tuple(c.split('=')) if '=' in c else (c, c) for c in self.column]
+
+        from os.path import abspath, exists
+        if exists(abspath(self.output)):
+            raise OSError('{} already exists on disk'.format(self.output))
+
+        if not exists(abspath(self.path)):
+            raise OSError('{} doesnt exist on disk'.format(self.path))
+
+    @abstractmethod
+    def __iter__(self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def save(self, data: dict):
+        raise NotImplementedError()
+
+    @staticmethod
+    def from_str(name: str, output: str, path: str, column: str):
+        if name == 'json':
+            return JsonPipelineDataFormat(output, path, column)
+        elif name == 'csv':
+            return CsvPipelineDataFormat(output, path, column)
+        else:
+            raise KeyError('Unknown reader {} (Available reader are json/csv)'.format(name))
+
+
+class CsvPipelineDataFormat(PipelineDataFormat):
+    def __init__(self, output: str, path: str, column: str):
+        super().__init__(output, path, column)
+
+    def __iter__(self):
+        with open(self.path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if self.is_multi_columns:
+                    yield {k: row[c] for k, c in self.column}
+                else:
+                    yield row[self.column]
+
+    def save(self, data: List[dict]):
+        with open(self.output, 'w') as f:
+            if len(data) > 0:
+                writer = csv.DictWriter(f, list(data[0].keys()))
+                writer.writeheader()
+                writer.writerows(data)
+
+
+class JsonPipelineDataFormat(PipelineDataFormat):
+
+    def __init__(self, output: str, path: str, column: str):
+        super().__init__(output, path, column)
+
+        with open(path, 'r') as f:
+            self._entries = json.load(f)
+
+    def __iter__(self):
+        for entry in self._entries:
+            if self.is_multi_columns:
+                yield {k: entry[c] for k, c in self.column}
+            else:
+                yield entry[self.column]
+
+    def save(self, data: dict):
+        with open(self.output, 'w') as f:
+            json.dump(data, f)
 
 
 class FeatureExtractionPipeline(Pipeline):
@@ -127,7 +209,7 @@ class NerPipeline(Pipeline):
                 label_idx = score.argmax()
 
                 answer += [{
-                    'word': words[idx - 1], 'score': score[label_idx], 'entity': self.model.config.id2label[label_idx]
+                    'word': words[idx - 1], 'score': score[label_idx].item(), 'entity': self.model.config.id2label[label_idx]
                 }]
 
                 # Update token start
@@ -270,16 +352,18 @@ class QuestionAnsweringPipeline(Pipeline):
             char_to_word = np.array(example.char_to_word_offset)
 
             # Convert the answer (tokens) back to the original text
-            answers += [[
+            answers += [
                 {
-                    'score': score,
-                    'start': np.where(char_to_word == feature.token_to_orig_map[s])[0][0],
-                    'end': np.where(char_to_word == feature.token_to_orig_map[e])[0][-1],
+                    'score': score.item(),
+                    'start': np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                    'end': np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
                     'answer': ' '.join(example.doc_tokens[feature.token_to_orig_map[s]: feature.token_to_orig_map[e] + 1])
                 }
                 for s, e, score in zip(starts, ends, scores)
-            ]]
+            ]
 
+        if len(answers) == 1:
+            return answers[0]
         return answers
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
@@ -363,7 +447,7 @@ def pipeline(task: str, model, config: Optional[PretrainedConfig] = None, tokeni
     Utility factory method to build pipeline.
     """
     # Try to infer tokenizer from model name (if provided as str)
-    if not isinstance(tokenizer, PreTrainedTokenizer):
+    if tokenizer is None:
         if not isinstance(model, str):
             # Impossible to guest what is the right tokenizer here
             raise Exception('Tokenizer cannot be None if provided model is a PreTrainedModel instance')
