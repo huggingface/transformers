@@ -27,7 +27,7 @@ import re
 import unicodedata
 from io import open
 
-try:
+try: # just import html if python 2 support is not needed
     import html
 except ImportError:
     html = None
@@ -45,7 +45,7 @@ SPECIAL_TOKENS_MAP_FILE = 'special_tokens_map.json'
 ADDED_TOKENS_FILE = 'added_tokens.json'
 TOKENIZER_CONFIG_FILE = 'tokenizer_config.json'
 
-try:
+try: # just use chr if python 2 support is not needed
     unichr
 except NameError:
     unichr = chr
@@ -839,10 +839,11 @@ class PreTrainedTokenizer(object):
                     if len(comparison_tokens) > len(target_tokens):
                         # Handle special cases
                         matching_text = text[offset : offset + search_length]
+                        detokenized = self._detokenize_for_offsets(token)
                         if is_lower_casing:
                             matching_text = matching_text.lower()
-                        detokenized = self._detokenize_for_offsets(token).lower()
-                        # TODO: Remove accents for matching_text and detokenized? Will improve accuracy for XLM
+                            detokenized = detokenized.lower()
+                        # TODO: Remove accents with tokenization_xlm.lowercase_and_remove_accent? Will improve accuracy for XLM
                         index = matching_text.find(detokenized)
                         if (index != -1):
                             # Words that have a wordpiece tokenization that 
@@ -914,7 +915,7 @@ class PreTrainedTokenizer(object):
             i += 1
 
         assert not match_error, "Unknown failure reason"
-        # Relaxed for XLM: # assert len(tokens) == len(offsets), "Number of tokens doesn't match the number of offsets"
+        # Relaxed for XLM, instead: # assert len(tokens) == len(offsets), "Number of tokens doesn't match the number of offsets"
         while len(tokens) != len(offsets):
             offsets.append(len(text) - 1) # bad, but better than having nothing
 
@@ -953,6 +954,7 @@ class PreTrainedTokenizer(object):
                                 probably due to a bad character in the input or out-of-order tokenization. 
                                 Token #%d, %s""" % (i, original_token_text))
 
+            # Not expected to happen
             assert splits <= 2, """Error: 
                             A token is consuming text of multiple other tokens as well, 
                             probably due to a bad character in the input or out-of-order tokenization. 
