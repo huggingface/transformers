@@ -156,7 +156,7 @@ def main(test_file):
                         tokenizer_check.check_same_tokens(tokenizer, passage_info['passage'])
                     except Exception as e:
                         logger.error(str(e))
-                        print(f"passage_id={passage_id}")
+                        print("passage_id=%s" % passage_id)
                         raise e
                     line_count += 1
                     for qa_pair in passage_info["qa_pairs"]:
@@ -164,7 +164,7 @@ def main(test_file):
                             tokenizer_check.check_same_tokens(tokenizer, qa_pair['question'])
                         except Exception as e:
                             logger.error(str(e))
-                            print(f"query_id={qa_pair['query_id']}")
+                            print("query_id=%s" % qa_pair['query_id'])
                             raise e
                         line_count += 1
             tokenizer_check.show_stats()

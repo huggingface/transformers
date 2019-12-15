@@ -241,7 +241,7 @@ class PreTrainedTokenizer(object):
         self.init_inputs = ()
         self.init_kwargs = {}
 
-        # Tokenization cache for tokenization_with_offsets
+        # Tokenization cache for tokenize_with_offsets
         self._tokenization_cache = {}
 
         for key, value in kwargs.items():
@@ -925,15 +925,15 @@ class PreTrainedTokenizer(object):
             if splits == 2:
                 # In XLM, "\"." is tokenized to [".", "\""] and similarly "\",", so it's not possible to create contiguous offsets.
                 # Also in XLM, "30\xa0000" is tokenized to ['3', '0.', '000</w>'] which is problematic.
-                logger.warning(f"""Possible error: 
+                logger.warning("""Possible error: 
                                 A token is consuming text of another token as well, 
                                 probably due to a bad character in the input or out-of-order tokenization. 
-                                Token #{i}, {original_token_text}""")
+                                Token #%d, %s""" % i, original_token_text)
 
-            assert splits <= 2, f"""Error: 
+            assert splits <= 2, """Error: 
                             A token is consuming text of multiple other tokens as well, 
                             probably due to a bad character in the input or out-of-order tokenization. 
-                            Token #{i}, {original_token_text}"""
+                            Token #%d, %s""" % i, original_token_text)
 
         return tokens, offsets
 
