@@ -49,7 +49,7 @@ try:
     unichr
 except NameError:
     unichr = chr
-CONTROL_CHARS = u''.join(chr(c) for c in range(sys.maxunicode+1) if unicodedata.category(chr(c))[0] == 'C')
+CONTROL_CHARS = u''.join(unichr(c) for c in range(sys.maxunicode+1) if unicodedata.category(unichr(c))[0] == 'C')
 
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
