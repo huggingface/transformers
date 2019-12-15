@@ -193,11 +193,6 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = ' '.join(tokens).replace(' ##', '').strip()
         return out_string
 
-    def _detokenize_for_offsets(self, tok):
-        if tok.startswith('##'):
-            return tok[2:]
-        return tok.strip()
-
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks

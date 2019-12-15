@@ -54,6 +54,7 @@ class XxxTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertEqual(len(tokens_wo), len(offsets))
         self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+        self.assertListEqual(offsets, [0, 2, 6, 8, 9, 13])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
 

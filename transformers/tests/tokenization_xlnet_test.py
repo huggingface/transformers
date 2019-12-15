@@ -59,11 +59,16 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382])
 
-        tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
+        text = u"I was born in 92000, and this is falsé."
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), len(offsets))
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, [SPIECE_UNDERLINE + u'I', SPIECE_UNDERLINE + u'was', SPIECE_UNDERLINE + u'b',
                                     u'or', u'n', SPIECE_UNDERLINE + u'in', SPIECE_UNDERLINE + u'',
                                     u'9', u'2', u'0', u'0', u'0', u',', SPIECE_UNDERLINE + u'and', SPIECE_UNDERLINE + u'this',
                                     SPIECE_UNDERLINE + u'is', SPIECE_UNDERLINE + u'f', u'al', u's', u'é', u'.'])
+        self.assertListEqual(offsets, [0, 2, 6, 7, 9, 11, 14, 14, 15, 16, 17, 18, 19, 21, 25, 30, 33, 34, 36, 37, 38])
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
             ids, [8, 21, 84, 55, 24, 19, 7, 0,

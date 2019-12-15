@@ -20,6 +20,7 @@ from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_distilbert import DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 logging.basicConfig(format='%(filename)s:%(lineno)d - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -49,7 +50,7 @@ class TokenizationCheck:
         def samey(tok, txt):
             return normalize(tok) == normalize(txt) or tok == '[UNK]' or tok == u'�'
 
-        tok_strs = [tokenizer._detokenize_for_offsets(t) for t in tokens]
+        tok_strs = [tokenizer.convert_tokens_to_string([t]) for t in tokens]
         text_strs = [text[offsets[i]:offsets[i+1]] for i in range(len(tokens) - 1)] + [text[offsets[len(tokens) - 1]:]]
         if all([samey(tok, txt) for tok, txt in zip(tok_strs, text_strs)]):
             self.diffs_passed += 1
@@ -138,6 +139,7 @@ def main(test_file):
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
         XLM_PRETRAINED_MODEL_ARCHIVE_MAP, # Problem in the tokenization, specifics are in tokenize_with_offsets
+        T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     still_need_work = [
     ]
