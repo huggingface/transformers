@@ -78,6 +78,7 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
     logger.info("Loading PyTorch weights from {}".format(pt_path))
 
     pt_state_dict = torch.load(pt_path, map_location='cpu')
+    logger.info("PyTorch checkpoint contains {:,} parameters".format(sum(t.numel() for t in pt_state_dict.values())))
 
     return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys)
 
@@ -134,7 +135,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         start_prefix_to_remove = tf_model.base_model_prefix + '.'
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
-
+    tf_loaded_numel = 0
     weight_value_tuples = []
     all_pytorch_weights = set(list(pt_state_dict.keys()))
     for symbolic_weight in symbolic_weights:
@@ -159,7 +160,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             e.args += (symbolic_weight.shape, array.shape)
             raise e
 
-        logger.info("Initialize TF weight {}".format(symbolic_weight.name))
+        tf_loaded_numel += array.size
+        # logger.warning("Initialize TF weight {}".format(symbolic_weight.name))
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
@@ -168,6 +170,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if tf_inputs is not None:
         tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+
+    logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
 
     logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
 
@@ -272,7 +276,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             e.args += (pt_weight.shape, array.shape)
             raise e
 
-        logger.info("Initialize PyTorch weight {}".format(pt_weight_name))
+        # logger.warning("Initialize PyTorch weight {}".format(pt_weight_name))
 
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)

@@ -232,6 +232,15 @@ class CommonTestCases:
             self.assertNotEqual(len(tokens_2), 0)
             self.assertIsInstance(text_2, (str, unicode))
 
+        def test_encode_decode_with_spaces(self):
+            tokenizer = self.get_tokenizer()
+
+            new_toks = ['[ABC]', '[DEF]', 'GHI IHG']
+            tokenizer.add_tokens(new_toks)
+            input = "[ABC] [DEF] [ABC] GHI IHG [DEF]"
+            encoded = tokenizer.encode(input, add_special_tokens=False)
+            decoded = tokenizer.decode(encoded)
+            self.assertEqual(decoded, input)
 
         def test_pretrained_model_lists(self):
             weights_list = list(self.tokenizer_class.max_model_input_sizes.keys())

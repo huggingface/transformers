@@ -29,6 +29,7 @@ from .configuration_distilbert import DistilBertConfig
 from .configuration_ctrl import CTRLConfig
 from .configuration_camembert import CamembertConfig
 from .configuration_albert import AlbertConfig
+from .configuration_t5 import T5Config
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ class AutoConfig(object):
 
         The configuration class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Config (T5 model)
             - contains `distilbert`: DistilBertConfig (DistilBERT model)
             - contains `albert`: AlbertConfig (ALBERT model)
             - contains `camembert`: CamembertConfig (CamemBERT model)
@@ -83,6 +85,7 @@ class AutoConfig(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model configuration to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model configuration that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a configuration file saved using the :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - a path or url to a saved configuration JSON `file`, e.g.: ``./my_model_directory/configuration.json``.
 
@@ -123,7 +126,9 @@ class AutoConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return T5Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'albert' in pretrained_model_name_or_path:
             return AlbertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)

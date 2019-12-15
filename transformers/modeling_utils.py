@@ -31,10 +31,10 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
+                         cached_path, hf_bucket_url, is_remote_url)
 
 logger = logging.getLogger(__name__)
-
 
 try:
     from torch.nn import Identity
@@ -70,6 +70,15 @@ class PreTrainedModel(nn.Module):
     pretrained_model_archive_map = {}
     load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to do a forward pass in the network.
+
+        Returns:
+            torch.Tensor with dummy inputs
+        """
+        return {'input_ids': torch.tensor(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(PreTrainedModel, self).__init__()
@@ -160,8 +169,7 @@ class PreTrainedModel(nn.Module):
         base_model.vocab_size = new_num_tokens
 
         # Tie weights again if needed
-        if hasattr(self, 'tie_weights'):
-            self.tie_weights()
+        self.tie_weights()
 
         return model_embeds
 
@@ -265,6 +273,7 @@ class PreTrainedModel(nn.Module):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
                 - None if you are both providing the configuration and state dictionary (resp. with keyword arguments ``config`` and ``state_dict``)
@@ -363,11 +372,16 @@ class PreTrainedModel(nn.Module):
                     raise EnvironmentError("Error no file named {} found in directory {} or `from_tf` set to False".format(
                         [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
                         pretrained_model_name_or_path))
-            elif os.path.isfile(pretrained_model_name_or_path):
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
-            else:
-                assert from_tf, "Error finding file {}, no file or TF 1.X checkpoint found".format(pretrained_model_name_or_path)
+            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
+                assert from_tf, "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
+                    pretrained_model_name_or_path + ".index")
                 archive_file = pretrained_model_name_or_path + ".index"
+            else:
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
+                if from_tf:
+                    raise EnvironmentError("Loading a PyTorch model from a TF checkpoint is not supported when using a model identifier name.")
 
             # redirect to the cache, if necessary
             try:
@@ -471,8 +485,7 @@ class PreTrainedModel(nn.Module):
                 raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                 model.__class__.__name__, "\n\t".join(error_msgs)))
 
-        if hasattr(model, 'tie_weights'):
-            model.tie_weights()  # make sure word embedding weights are still tied
+        model.tie_weights()  # make sure word embedding weights are still tied if needed
 
         # Set model in evaluation mode to desactivate DropOut modules by default
         model.eval()

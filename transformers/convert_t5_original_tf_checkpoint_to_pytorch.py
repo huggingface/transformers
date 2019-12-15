@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2018 The T5 authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert XXX checkpoint."""
+"""Convert T5 checkpoint."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -21,19 +21,19 @@ from __future__ import print_function
 import argparse
 import torch
 
-from transformers import XxxConfig, XxxForPreTraining, load_tf_weights_in_xxx
+from transformers import T5Config, T5Model, load_tf_weights_in_t5
 
 import logging
 logging.basicConfig(level=logging.INFO)
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = XxxConfig.from_json_file(config_file)
+    config = T5Config.from_json_file(config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = XxxForPreTraining(config)
+    model = T5Model(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_xxx(model, config, tf_checkpoint_path)
+    load_tf_weights_in_t5(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))
@@ -52,7 +52,7 @@ if __name__ == "__main__":
                         default = None,
                         type = str,
                         required = True,
-                        help = "The config json file corresponding to the pre-trained model. \n"
+                        help = "The config json file corresponding to the pre-trained T5 model. \n"
                             "This specifies the model architecture.")
     parser.add_argument("--pytorch_dump_path",
                         default = None,

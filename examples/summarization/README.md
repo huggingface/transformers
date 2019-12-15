@@ -29,7 +29,7 @@ And move all the stories to the same folder. We will refer as `$DATA_PATH` the p
 python run_summarization.py \
     --documents_dir $DATA_PATH \
     --summaries_output_dir $SUMMARIES_PATH \ # optional
-    --to_cpu false \
+    --no_cuda false \
     --batch_size 4 \
     --min_length 50 \
     --max_length 200 \
@@ -39,7 +39,7 @@ python run_summarization.py \
     --compute_rouge true
 ```
 
-The scripts executes on GPU if one is available and if `to_cpu` is not set to `true`. Inference on multiple GPUs is not suported yet. The ROUGE scores will be displayed in the console at the end of evaluation and written in a `rouge_scores.txt` file. The script takes 30 hours to compute with a single Tesla V100 GPU and a batch size of 10 (300,000 texts to summarize).
+The scripts executes on GPU if one is available and if `no_cuda` is not set to `true`. Inference on multiple GPUs is not suported yet. The ROUGE scores will be displayed in the console at the end of evaluation and written in a `rouge_scores.txt` file. The script takes 30 hours to compute with a single Tesla V100 GPU and a batch size of 10 (300,000 texts to summarize).
 
 ## Summarize any text
 
@@ -49,7 +49,7 @@ Put the documents that you would like to summarize in a folder (the path to whic
 python run_summarization.py \
     --documents_dir $DATA_PATH \
     --summaries_output_dir $SUMMARIES_PATH \ # optional
-    --to_cpu false \
+    --no_cuda false \
     --batch_size 4 \
     --min_length 50 \
     --max_length 200 \
