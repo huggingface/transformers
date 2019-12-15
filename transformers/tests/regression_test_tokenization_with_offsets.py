@@ -50,7 +50,7 @@ class TokenizationCheck:
         def samey(tok, txt):
             return normalize(tok) == normalize(txt) or tok == '[UNK]' or tok == u'�'
 
-        tok_strs = [tokenizer.convert_tokens_to_string([t]) for t in tokens]
+        tok_strs = [tokenizer._detokenize_for_offsets(t) for t in tokens]
         text_strs = [text[offsets[i]:offsets[i+1]] for i in range(len(tokens) - 1)] + [text[offsets[len(tokens) - 1]:]]
         if all([samey(tok, txt) for tok, txt in zip(tok_strs, text_strs)]):
             self.diffs_passed += 1

@@ -161,6 +161,9 @@ class T5Tokenizer(PreTrainedTokenizer):
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 
+    def _detokenize_for_offsets(self, tok):
+        return self.sp_model.decode_pieces([tok])
+
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
             to a directory.

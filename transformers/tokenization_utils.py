@@ -721,6 +721,16 @@ class PreTrainedTokenizer(object):
         """
         raise NotImplementedError
 
+    def _detokenize_for_offsets(self, tok):
+        """
+        Remove any tokenization artifacts for sub-word tokens.
+        Used by tokenize_with_offsets to match tokens back in the original text.
+         (like ## prefix for BERT)
+        :param tok: the token from the tokenizer
+        :return: the token as it would have looked (best approximation) in the original text
+        """
+        return tok.strip()
+
     def tokenize_with_offsets(self, text, **kwargs):
         """ Converts a string in a sequence of tokens (string), using the tokenizer
             and also keeps track of the token offsets relative to the original text.
@@ -829,7 +839,7 @@ class PreTrainedTokenizer(object):
                     if len(comparison_tokens) > len(target_tokens):
                         # Handle special cases
                         matching_text = text[offset : offset + search_length]
-                        detokenized = self.convert_tokens_to_string([token])
+                        detokenized = self._detokenize_for_offsets(token)
                         if is_lower_casing:
                             matching_text = matching_text.lower()
                             detokenized = detokenized.lower()
