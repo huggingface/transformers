@@ -928,12 +928,12 @@ class PreTrainedTokenizer(object):
                 logger.warning("""Possible error: 
                                 A token is consuming text of another token as well, 
                                 probably due to a bad character in the input or out-of-order tokenization. 
-                                Token #%d, %s""" % i, original_token_text)
+                                Token #%d, %s""" % (i, original_token_text))
 
             assert splits <= 2, """Error: 
                             A token is consuming text of multiple other tokens as well, 
                             probably due to a bad character in the input or out-of-order tokenization. 
-                            Token #%d, %s""" % i, original_token_text)
+                            Token #%d, %s""" % (i, original_token_text)
 
         return tokens, offsets
 
