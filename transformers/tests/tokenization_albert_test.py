@@ -47,14 +47,24 @@ class AlbertTokenizationTest(CommonTestCases.CommonTokenizerTester):
     def test_full_tokenizer(self):
         tokenizer = AlbertTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
-        tokens = tokenizer.tokenize(u'This is a test')
+        text = u'This is a test'
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), len(offsets))
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, [u'▁this', u'▁is', u'▁a', u'▁test'])
+        self.assertListEqual(offsets, [0, 5, 8, 10])
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [48, 25, 21, 1289])
 
-        tokens = tokenizer.tokenize(u"I was born in 92000, and this is falsé.")
+        text = u"I was born in 92000, and this is falsé."
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), len(offsets))
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, [u'▁i', u'▁was', u'▁born', u'▁in', u'▁9', u'2000', u',', u'▁and', u'▁this', u'▁is', u'▁fal', u's', u'é', u'.'])
+        self.assertListEqual(offsets, [0, 2, 6, 11, 14, 15, 19, 21, 25, 30, 33, 36, 37, 38])
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [31, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
 

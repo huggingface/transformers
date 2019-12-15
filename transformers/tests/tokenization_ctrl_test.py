@@ -56,7 +56,11 @@ class CTRLTokenizationTest(CommonTestCases.CommonTokenizerTester):
         text = "adapt react readapt apt"
         bpe_tokens = 'adapt re@@ a@@ c@@ t re@@ adapt apt'.split()
         tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), len(offsets))
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, bpe_tokens)
+        self.assertListEqual(offsets, [0, 6, 8, 9, 10, 12, 14, 20])
 
         input_tokens = tokens + [tokenizer.unk_token]
 

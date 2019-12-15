@@ -59,8 +59,13 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
         tokenizer = GPT2Tokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
+        kwargs = {'add_prefix_space': True}
+        tokens = tokenizer.tokenize(text, **kwargs)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text, **kwargs)
+        self.assertEqual(len(tokens_wo), len(offsets))
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, bpe_tokens)
+        self.assertListEqual(offsets, [0, 3, 6, 6, 7, 8, 9])
 
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
