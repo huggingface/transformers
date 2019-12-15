@@ -25,8 +25,12 @@ import copy
 import itertools
 import re
 import unicodedata
-import html
 from io import open
+
+try:
+    import html
+except ImportError:
+    html = None
 
 from .file_utils import cached_path, is_remote_url, hf_bucket_url, is_tf_available, is_torch_available
 
@@ -40,6 +44,11 @@ logger = logging.getLogger(__name__)
 SPECIAL_TOKENS_MAP_FILE = 'special_tokens_map.json'
 ADDED_TOKENS_FILE = 'added_tokens.json'
 TOKENIZER_CONFIG_FILE = 'tokenizer_config.json'
+
+try:
+    unichr
+except NameError:
+    unichr = chr
 CONTROL_CHARS = u''.join(chr(c) for c in range(sys.maxunicode+1) if unicodedata.category(chr(c))[0] == 'C')
 
 class PreTrainedTokenizer(object):
@@ -832,8 +841,8 @@ class PreTrainedTokenizer(object):
                         matching_text = text[offset : offset + search_length]
                         if is_lower_casing:
                             matching_text = matching_text.lower()
-                        # TODO: Remove accents? Will improve accuracy for XLM
                         detokenized = self._detokenize_for_offsets(token).lower()
+                        # TODO: Remove accents for matching_text and detokenized? Will improve accuracy for XLM
                         index = matching_text.find(detokenized)
                         if (index != -1):
                             # Words that have a wordpiece tokenization that 
@@ -909,6 +918,7 @@ class PreTrainedTokenizer(object):
         while len(tokens) != len(offsets):
             offsets.append(len(text) - 1) # bad, but better than having nothing
 
+        # TODO: Move to a test?
         # Construct the original text that corresponds (up to spaces) to each token
         original_token_texts = []
         for i, offset in enumerate(offsets):
@@ -918,16 +928,20 @@ class PreTrainedTokenizer(object):
             else:
                 original_token_text = text[offset:]
             original_token_texts.append(original_token_text) 
-
+        # We assume whitespaces are a tokenization boundary, 
+        # so we use this assumption to verify the alignment was valid
+        # (considering special cases)
         for i, original_token_text in enumerate(original_token_texts):
             splits = len(original_token_text.strip().split())
             if splits >= 2:
-                # Ignore cases in which the tokenizer ignores control characters
+                # Don't warn about cases in which the tokenizer ignores control characters.
+                # Example: "a \ufeff test" might be tokenized as ["a", "test"] but matched to ["a \ufeff", "test"]
                 original_token_text = remove_control_chars(original_token_text)
                 splits = len(original_token_text.strip().split())
-            if splits >= 2:
-                # Ignore cases in which the tokenizer unescapes html entities 
-                # and ignores control characters
+            if splits >= 2 and html is not None:
+                # Don't warn about cases in which the tokenizer unescapes html entities (OpenAIGPTTokenizer)
+                # and ignores control characters. 
+                # Example: "98&#160; yards" might be tokenized as ["98", "yards"] but matched to ["98", "&#160; yards"]
                 original_token_text = unescape_html_and_remove_control_chars(original_token_text)
                 splits = len(original_token_text.strip().split())
 
