@@ -21,44 +21,14 @@ import copy
 import json
 import logging
 import os
-import re
 from io import open
 
-from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 from .file_utils import CONFIG_NAME, MODEL_CARD_NAME, cached_path, is_remote_url, hf_bucket_url
 
 
 logger = logging.getLogger(__name__)
-
-
-ALL_MODELS_MAP = dict((key, value)
-    for pretrained_map in [
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ]
-    for key, value, in pretrained_map.items())
 
 
 class ModelCard(object):
@@ -159,9 +129,10 @@ class ModelCard(object):
         proxies = kwargs.pop('proxies', None)
         return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
 
-        if pretrained_model_name_or_path in ALL_MODELS_MAP:
-            model_card_file = ALL_MODELS_MAP[pretrained_model_name_or_path]
-            model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)  # For simplicity we use the same pretrained url than config but with a different suffix
+        if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+            # For simplicity we use the same pretrained url than the configuration files but with a different suffix (model_card.json)
+            model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
+            model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
         elif os.path.isdir(pretrained_model_name_or_path):
             model_card_file = os.path.join(pretrained_model_name_or_path, MODEL_CARD_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -183,7 +154,7 @@ class ModelCard(object):
             model_card = cls.from_json_file(resolved_model_card_file)
 
         except EnvironmentError:
-            if pretrained_model_name_or_path in ALL_MODELS_MAP:
+            if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
                 logger.warning("Couldn't reach server at '{}' to download model card file.".format(
                         model_card_file))
             else:
@@ -191,7 +162,7 @@ class ModelCard(object):
                       "We assumed '{}' was a path or url to a model card file named {} or " \
                       "a directory containing such a file but couldn't find any such file at this path or url.".format(
                         pretrained_model_name_or_path,
-                        ', '.join(ALL_MODELS_MAP.keys()),
+                        ', '.join(ALL_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
                         model_card_file, MODEL_CARD_NAME))
 
             logger.warning("Creating an empty model card.")

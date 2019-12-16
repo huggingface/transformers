@@ -55,7 +55,7 @@ from .tokenization_t5 import T5Tokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
-from .configuration_auto import AutoConfig
+from .configuration_auto import AutoConfig, ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_transfo_xl import TransfoXLConfig, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -73,7 +73,7 @@ from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 if is_torch_available():
     from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
     from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
-                                AutoModelWithLMHead)
+                                AutoModelWithLMHead, ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
                                 BertForMaskedLM, BertForNextSentencePrediction,
@@ -131,7 +131,7 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
-                                   TFAutoModelWithLMHead)
+                                   TFAutoModelWithLMHead, TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertMainLayer, TFBertEmbeddings,
                                    TFBertModel, TFBertForPreTraining,
