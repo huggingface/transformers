@@ -1,4 +1,4 @@
-__version__ = "2.1.1"
+__version__ = "2.2.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -42,6 +42,7 @@ from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_albert import AlbertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 
 # Configurations
@@ -57,6 +58,7 @@ from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlm import XLMConfig, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # Modeling
@@ -103,6 +105,10 @@ if is_torch_available():
                                 CamembertForTokenClassification,
                                 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
+
+    from .modeling_albert import (AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
+                                AlbertForQuestionAnswering,
+                                load_tf_weights_in_albert, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     # Optimization
     from .optimization import (AdamW, get_constant_schedule, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup,
@@ -161,6 +167,10 @@ if is_tf_available():
     from .modeling_tf_ctrl import (TFCTRLPreTrainedModel, TFCTRLModel,
                                     TFCTRLLMHeadModel,
                                     TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
+                                     TFAlbertForSequenceClassification,
+                                    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
 
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name,
