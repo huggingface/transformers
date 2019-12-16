@@ -760,6 +760,8 @@ class PreTrainedTokenizer(object):
 
         """
         def get_max_space_length(text):
+            original_text = text
+            text = unescape_html_and_remove_control_chars(text)
             max_space_length = 0
             count = False
             for i, c in enumerate(text):
@@ -771,7 +773,8 @@ class PreTrainedTokenizer(object):
                     if count:
                         count = False
                         max_space_length = max(max_space_length, i - start_index)
-            return max_space_length
+            # with a safety margin
+            return max_space_length + (len(original_text) - len(text))
 
         def is_prefix(lst, other_lst):
             """
