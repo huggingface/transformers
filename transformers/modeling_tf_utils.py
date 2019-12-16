@@ -297,7 +297,7 @@ class TFPreTrainedModel(tf.keras.Model):
 
         if from_pt:
             # Load from a PyTorch checkpoint
-            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file)
+            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
         ret = model(model.dummy_inputs, training=False)  # build the network with dummy inputs
 
