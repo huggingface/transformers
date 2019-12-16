@@ -66,7 +66,7 @@ class T5Config(PretrainedConfig):
     pretrained_config_archive_map = T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file=32128,
+                 vocab_size=32128,
                  n_positions=512,
                  d_model=512,
                  d_kv=64,
@@ -79,7 +79,7 @@ class T5Config(PretrainedConfig):
                  initializer_factor=1.0,
                  **kwargs):
         super(T5Config, self).__init__(**kwargs)
-        self.vocab_size = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, int) else -1
+        self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.d_model = d_model
         self.d_kv = d_kv
@@ -90,17 +90,6 @@ class T5Config(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-
-        if isinstance(vocab_size_or_config_json_file, six.string_types):
-            with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif not isinstance(vocab_size_or_config_json_file, int):
-            raise ValueError(
-                "First argument must be either a vocabulary size (int)"
-                "or the path to a pretrained model config file (str)"
-            )
 
     @property
     def max_position_embeddings(self):
