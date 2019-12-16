@@ -33,6 +33,9 @@ from .data import (is_sklearn_available,
 if is_sklearn_available():
     from .data import glue_compute_metrics, xnli_compute_metrics
 
+# Model Cards
+from .model_card import ModelCard
+
 # Tokenizers
 from .tokenization_utils import (PreTrainedTokenizer)
 from .tokenization_auto import AutoTokenizer
