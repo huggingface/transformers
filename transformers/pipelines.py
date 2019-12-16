@@ -55,7 +55,12 @@ class DefaultArgumentHandler(ArgumentHandler):
             return kwargs['X']
         elif 'data' in kwargs:
             return kwargs['data']
-        elif len(args) > 0:
+        elif len(args) == 1:
+            if isinstance(args[0], list):
+                return args[0]
+            else:
+                return [args[0]]
+        elif len(args) > 1:
             return list(args)
         raise ValueError('Unable to infer the format of the provided data (X=, data=, ...)')
 
@@ -240,7 +245,7 @@ class NerPipeline(Pipeline):
 
     def __call__(self, *texts, **kwargs):
         inputs, answers = self._args_parser(*texts, **kwargs), []
-        for sentence in texts:
+        for sentence in inputs:
 
             # Ugly token to word idx mapping (for now)
             token_to_word, words = [], sentence.split(' ')
