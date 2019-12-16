@@ -15,10 +15,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import sys
 import json
-import tempfile
-import shutil
 import unittest
 
 from transformers.model_card import ModelCard
@@ -50,10 +47,6 @@ class ModelCardTester(unittest.TestCase):
                                 'ROUGE-1': 76,
                             },
                             }
-        self.tmpdirname = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
 
     def test_model_card_common_properties(self):
         model_card = ModelCard.from_dict(self.inputs_dict)
@@ -80,6 +73,15 @@ class ModelCardTester(unittest.TestCase):
             filename = os.path.join(tmpdirname, u"model_card.json")
             model_card_first.to_json_file(filename)
             model_card_second = ModelCard.from_json_file(filename)
+
+        self.assertEqual(model_card_second.to_dict(), model_card_first.to_dict())
+
+    def test_model_card_from_and_save_pretrained(self):
+        model_card_first = ModelCard.from_dict(self.inputs_dict)
+
+        with TemporaryDirectory() as tmpdirname:
+            model_card_first.save_pretrained(tmpdirname)
+            model_card_second = ModelCard.from_pretrained(tmpdirname)
 
         self.assertEqual(model_card_second.to_dict(), model_card_first.to_dict())
 
