@@ -50,8 +50,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
         'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
         'bert-base-german-dbmdz-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-vocab.txt",
         'bert-base-german-dbmdz-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-vocab.txt",
-        'bert-base-japanese-cased-long': '/data/language/bert/',
-        'bert-base-japanese-cased-short': '/data/language/bert/model_wiki_128/vocab.txt',
     }
 }
 
@@ -71,30 +69,24 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'bert-base-cased-finetuned-mrpc': 512,
     'bert-base-german-dbmdz-cased': 512,
     'bert-base-german-dbmdz-uncased': 512,
-    'bert-base-japanese-cased-long': 512,
-    'bert-base-japanese-cased-short': 128,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    'bert-base-uncased': {'do_lower_case': True, 'spm_tokenize': False},
-    'bert-large-uncased': {'do_lower_case': True, 'spm_tokenize': False},
-    'bert-base-cased': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-large-cased': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-base-multilingual-uncased': {'do_lower_case': True, 'spm_tokenize': False},
-    'bert-base-multilingual-cased': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-base-chinese': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-base-german-cased': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-large-uncased-whole-word-masking': {'do_lower_case': True, 'spm_tokenize': False},
-    'bert-large-cased-whole-word-masking': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-large-uncased-whole-word-masking-finetuned-squad': {'do_lower_case': True, 'spm_tokenize': False},
-    'bert-large-cased-whole-word-masking-finetuned-squad': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-base-cased-finetuned-mrpc': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-base-german-dbmdz-cased': {'do_lower_case': False, 'spm_tokenize': False},
-    'bert-base-german-dbmdz-uncased': {'do_lower_case': True, 'spm_tokenize': False},
-    'bert-base-japanese-cased-long': {'spm_tokenze': True, 'do_lower_case': True,
-                                      'spm_model_path': '/data/language/bert/'},
-    'bert-base-japanese-cased-short': {'spm_tokenze': True, 'do_lower_case': True,
-                                       'spm_model_path': '/data/language/bert/model_wiki_128/wiki-ja.model'},
+    'bert-base-uncased': {'do_lower_case': True},
+    'bert-large-uncased': {'do_lower_case': True},
+    'bert-base-cased': {'do_lower_case': False},
+    'bert-large-cased': {'do_lower_case': False},
+    'bert-base-multilingual-uncased': {'do_lower_case': True},
+    'bert-base-multilingual-cased': {'do_lower_case': False},
+    'bert-base-chinese': {'do_lower_case': False},
+    'bert-base-german-cased': {'do_lower_case': False},
+    'bert-large-uncased-whole-word-masking': {'do_lower_case': True},
+    'bert-large-cased-whole-word-masking': {'do_lower_case': False},
+    'bert-large-uncased-whole-word-masking-finetuned-squad': {'do_lower_case': True},
+    'bert-large-cased-whole-word-masking-finetuned-squad': {'do_lower_case': False},
+    'bert-base-cased-finetuned-mrpc': {'do_lower_case': False},
+    'bert-base-german-dbmdz-cased': {'do_lower_case': False},
+    'bert-base-german-dbmdz-uncased': {'do_lower_case': True},
 }
 
 
@@ -138,7 +130,7 @@ class BertTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, model_file, do_lower_case=True, do_basic_tokenize=True, never_split=None,
+    def __init__(self, vocab_file, model_file=None, do_lower_case=True, do_basic_tokenize=True, never_split=None,
                  unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
                  mask_token="[MASK]", tokenize_chinese_chars=True, **kwargs):
         """Constructs a BertTokenizer.
@@ -174,7 +166,7 @@ class BertTokenizer(PreTrainedTokenizer):
             self.ids_to_tokens = collections.OrderedDict(
                 [(ids, tok) for tok, ids in self.vocab.items()])
             self.do_basic_tokenize = do_basic_tokenize
-            
+
             if do_basic_tokenize:
                 self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
                                                       never_split=never_split,
