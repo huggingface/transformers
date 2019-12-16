@@ -25,12 +25,8 @@ import copy
 import itertools
 import re
 import unicodedata
+import html
 from io import open
-
-try: # just import html if python 2 support is not needed
-    import html
-except ImportError:
-    html = None
 
 from .file_utils import cached_path, is_remote_url, hf_bucket_url, is_tf_available, is_torch_available
 
@@ -45,11 +41,7 @@ SPECIAL_TOKENS_MAP_FILE = 'special_tokens_map.json'
 ADDED_TOKENS_FILE = 'added_tokens.json'
 TOKENIZER_CONFIG_FILE = 'tokenizer_config.json'
 
-try: # just use chr if python 2 support is not needed
-    unichr
-except NameError:
-    unichr = chr
-CONTROL_CHARS = u''.join(unichr(c) for c in range(sys.maxunicode+1) if unicodedata.category(unichr(c))[0] == 'C')
+CONTROL_CHARS = u''.join(chr(c) for c in range(sys.maxunicode+1) if unicodedata.category(chr(c))[0] == 'C')
 
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
@@ -760,6 +752,8 @@ class PreTrainedTokenizer(object):
 
         """
         def get_max_space_length(text):
+            original_text = text
+            text = unescape_html_and_remove_control_chars(text)
             max_space_length = 0
             count = False
             for i, c in enumerate(text):
@@ -771,7 +765,8 @@ class PreTrainedTokenizer(object):
                     if count:
                         count = False
                         max_space_length = max(max_space_length, i - start_index)
-            return max_space_length
+            # with a safety margin
+            return max_space_length + (len(original_text) - len(text))
 
         def is_prefix(lst, other_lst):
             """
@@ -939,7 +934,7 @@ class PreTrainedTokenizer(object):
                 # Example: "a \ufeff test" might be tokenized as ["a", "test"] but matched to ["a \ufeff", "test"]
                 original_token_text = remove_control_chars(original_token_text)
                 splits = len(original_token_text.strip().split())
-            if splits >= 2 and html is not None:
+            if splits >= 2:
                 # Don't warn about cases in which the tokenizer unescapes html entities (OpenAIGPTTokenizer)
                 # and ignores control characters. 
                 # Example: "98&#160; yards" might be tokenized as ["98", "yards"] but matched to ["98", "&#160; yards"]
