@@ -7,12 +7,10 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 # Load pre-trained model tokenizer (vocabulary)
-# tokenizer = BertTokenizer.from_pretrained('bert-base-japanese-cased-short')
 tokenizer = BertTokenizer.from_pretrained('/data/language/bert/model_wiki_128/wiki-ja.model')
 
 # Tokenize input
 text = "[CLS]ジムヘンソンさんはどのような方ですか。[SEP]ジムヘンソンさんは人形役者です。[SEP]"
-# text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
 tokenized_text = tokenizer.tokenize(text)
 print(tokenized_text)
 
