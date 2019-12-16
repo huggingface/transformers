@@ -16,7 +16,7 @@ def try_infer_format_from_ext(path: str):
 
 
 def run_command_factory(args):
-    nlp = pipeline(task=args.task, model=args.model, tokenizer=args.tokenizer)
+    nlp = pipeline(task=args.task, model=args.model, tokenizer=args.tokenizer, device=args.device)
     format = try_infer_format_from_ext(args.input) if args.format == 'infer' else args.format
     reader = PipelineDataFormat.from_str(format, args.output, args.input, args.column)
     return RunCommand(nlp, reader)
@@ -31,6 +31,7 @@ class RunCommand(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         run_parser = parser.add_parser('run', help="Run a pipeline through the CLI")
+        run_parser.add_argument('--device', type=int, default=-1, help='Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU')
         run_parser.add_argument('--task', choices=SUPPORTED_TASKS.keys(), help='Task to run')
         run_parser.add_argument('--model', type=str, required=True, help='Name or path to the model to instantiate.')
         run_parser.add_argument('--tokenizer', type=str, help='Name of the tokenizer to use. (default: same as the model name)')
