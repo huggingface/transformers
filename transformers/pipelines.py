@@ -293,8 +293,11 @@ class QuestionAnsweringPipeline(Pipeline):
 
         def __call__(self, *args, **kwargs):
             # Position args, handling is sensibly the same as X and data, so forwarding to avoid duplicating
-            if args is not None and len(args) > 1:
-                kwargs['X'] = args
+            if args is not None and len(args) > 0:
+                if len(args) == 1:
+                    kwargs['X'] = args[0]
+                else:
+                    kwargs['X'] = list(args)
 
             # Generic compatibility with sklearn and Keras
             # Batched data
