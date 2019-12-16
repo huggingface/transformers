@@ -18,6 +18,7 @@ import csv
 import json
 import os
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from itertools import groupby
 from typing import Union, Optional, Tuple, List, Dict
 
@@ -152,10 +153,17 @@ class JsonPipelineDataFormat(PipelineDataFormat):
 
 
 class Pipeline(_ScikitCompat):
-    def __init__(self, model, tokenizer: PreTrainedTokenizer = None, args_parser: ArgumentHandler = None, **kwargs):
+    def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
+                 args_parser: ArgumentHandler = None, device: int = -1, **kwargs):
+
         self.model = model
         self.tokenizer = tokenizer
+        self.device = device
         self._args_parser = args_parser or DefaultArgumentHandler()
+
+        # Special handling
+        if self.device >= 0 and not is_tf_available():
+            self.model = self.model.to('cuda:{}'.format(self.device))
 
     def save_pretrained(self, save_directory):
         if not os.path.isdir(save_directory):
@@ -176,11 +184,25 @@ class Pipeline(_ScikitCompat):
         inputs = self._args_parser(*texts, **kwargs)
 
         # Encode for forward
-        inputs = self.tokenizer.batch_encode_plus(
-            inputs, add_special_tokens=True, return_tensors='tf' if is_tf_available() else 'pt'
-        )
+        with self.device_placement():
+            inputs = self.tokenizer.batch_encode_plus(
+                inputs, add_special_tokens=True, return_tensors='tf' if is_tf_available() else 'pt'
+            )
 
-        return self._forward(inputs)
+            return self._forward(inputs)
+
+    @contextmanager
+    def device_placement(self):
+        if is_tf_available():
+            import tensorflow as tf
+            with tf.device('/CPU:0' if self.device == -1 else '/device:GPU:{}'.format(self.device)):
+                yield
+        else:
+            import torch
+            if self.device >= 0:
+                torch.cuda.set_device(self.device)
+
+            yield
 
     def _forward(self, inputs):
         if is_tf_available():
@@ -225,14 +247,17 @@ class NerPipeline(Pipeline):
             for i, w in enumerate(words):
                 tokens = self.tokenizer.tokenize(w)
                 token_to_word += [i] * len(tokens)
-            tokens = self.tokenizer.encode_plus(sentence, return_attention_mask=False, return_tensors='tf' if is_tf_available() else 'pt')
 
-            # Forward
-            if is_torch_available():
-                with torch.no_grad():
-                    entities = self.model(**tokens)[0][0].cpu().numpy()
-            else:
-                entities = self.model(tokens)[0][0].numpy()
+            # Manage correct placement of the tensors
+            with self.device_placement():
+                tokens = self.tokenizer.encode_plus(sentence, return_attention_mask=False, return_tensors='tf' if is_tf_available() else 'pt')
+
+                # Forward
+                if is_torch_available():
+                    with torch.no_grad():
+                        entities = self.model(**tokens)[0][0].cpu().numpy()
+                else:
+                    entities = self.model(tokens)[0][0].numpy()
 
             # Normalize scores
             answer, token_start = [], 1
@@ -352,18 +377,20 @@ class QuestionAnsweringPipeline(Pipeline):
         features = squad_convert_examples_to_features(examples, self.tokenizer, kwargs['max_seq_len'], kwargs['doc_stride'], kwargs['max_question_len'], False)
         fw_args = self.inputs_for_model(features)
 
-        if is_tf_available():
-            import tensorflow as tf
-            fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-            start, end = self.model(fw_args)
-            start, end = start.numpy(), end.numpy()
-        else:
-            import torch
-            with torch.no_grad():
-                # Retrieve the score for the context tokens only (removing question tokens)
-                fw_args = {k: torch.tensor(v) for (k, v) in fw_args.items()}
-                start, end = self.model(**fw_args)
-                start, end = start.cpu().numpy(), end.cpu().numpy()
+        # Manage tensor allocation on correct device
+        with self.device_placement():
+            if is_tf_available():
+                import tensorflow as tf
+                fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
+                start, end = self.model(fw_args)
+                start, end = start.numpy(), end.numpy()
+            else:
+                import torch
+                with torch.no_grad():
+                    # Retrieve the score for the context tokens only (removing question tokens)
+                    fw_args = {k: torch.tensor(v) for (k, v) in fw_args.items()}
+                    start, end = self.model(**fw_args)
+                    start, end = start.cpu().numpy(), end.cpu().numpy()
 
         answers = []
         for (example, feature, start_, end_) in zip(examples, features, start, end):
@@ -374,7 +401,7 @@ class QuestionAnsweringPipeline(Pipeline):
             # Mask padding and question
             start_, end_ = start_ * np.abs(np.array(feature.p_mask) - 1), end_ * np.abs(np.array(feature.p_mask) - 1)
 
-            # TODO : What happend if not possible
+            # TODO : What happens if not possible
             # Mask CLS
             start_[0] = end_[0] = 0
 
