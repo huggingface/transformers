@@ -25,7 +25,7 @@ from .configuration_roberta import RobertaConfig
 logger = logging.getLogger(__name__)
 
 XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'xlm-roberta-base': "https://schweter.eu/cloud/transformers/xlm-roberta-large-config.json",
+    'xlm-roberta-large': "https://schweter.eu/cloud/transformers/xlm-roberta-large-config.json",
 }
 
 
