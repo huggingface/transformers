@@ -15,21 +15,21 @@ transformers-cli upload ./path/to/pretrained_model/
 # ^^ Upload folder containing weights/tokenizer/config
 # saved via `.save_pretrained()`
 
-transformers-cli upload ./config.json [--filename foobar.json]
+transformers-cli upload ./config.json [--filename folder/foobar.json]
 
 # ^^ Upload a single file
-# (you can optionally override its filename)
+# (you can optionally override its filename, which can be nested inside a folder)
 ```
 
-Your model will then be accessible through its identifier:
+Your model will then be accessible through its identifier, a concatenation of your username and the folder name above:
 ```python
-"username/model_name"
+"username/pretrained_model"
 ```
 
 Anyone can load it from code:
 ```python
-tokenizer = AutoTokenizer.from_pretrained("username/model_name")
-model = AutoModel.from_pretrained("username/model_name")
+tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")
+model = AutoModel.from_pretrained("username/pretrained_model")
 ```
 
 Finally, list all your files on S3:
