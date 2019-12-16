@@ -132,7 +132,7 @@ class ModelCard(object):
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             # For simplicity we use the same pretrained url than the configuration files but with a different suffix (model_card.json)
             model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-            model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
+            model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
         elif os.path.isdir(pretrained_model_name_or_path):
             model_card_file = os.path.join(pretrained_model_name_or_path, MODEL_CARD_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -143,13 +143,11 @@ class ModelCard(object):
         try:
             resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, force_download=force_download,
                                                proxies=proxies, resume_download=resume_download)
-
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:
                 logger.info("loading model card file {} from cache at {}".format(
                     model_card_file, resolved_model_card_file))
-
             # Load model card
             model_card = cls.from_json_file(resolved_model_card_file)
 
@@ -164,9 +162,15 @@ class ModelCard(object):
                         pretrained_model_name_or_path,
                         ', '.join(ALL_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
                         model_card_file, MODEL_CARD_NAME))
-
             logger.warning("Creating an empty model card.")
+            # We fall back on creating an empty model card
+            model_card = cls()
 
+        except json.JSONDecodeError:
+            logger.warning("Couldn't reach server at '{}' to download model card file or "
+                           "model card file is not a valid JSON file. "
+                           "Please check network or file content here: {}.".format(model_card_file, resolved_model_card_file))
+            logger.warning("Creating an empty model card.")
             # We fall back on creating an empty model card
             model_card = cls()
 

@@ -151,10 +151,14 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         else:
             config_file = hf_bucket_url(pretrained_model_name_or_path, postfix=CONFIG_NAME)
-        # redirect to the cache, if necessary
+
         try:
+            # Load from URL or cache if already cached
             resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download,
                                                proxies=proxies, resume_download=resume_download)
+            # Load config
+            config = cls.from_json_file(resolved_config_file)
+
         except EnvironmentError:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
                 msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
@@ -168,14 +172,17 @@ class PretrainedConfig(object):
                         config_file, CONFIG_NAME)
             raise EnvironmentError(msg)
 
+        except json.JSONDecodeError:
+            msg = "Couldn't reach server at '{}' to download configuration file or " \
+                  "configuration file is not a valid JSON file. " \
+                  "Please check network or file content here: {}.".format(config_file, resolved_config_file)
+            raise EnvironmentError(msg)
+
         if resolved_config_file == config_file:
             logger.info("loading configuration file {}".format(config_file))
         else:
             logger.info("loading configuration file {} from cache at {}".format(
                 config_file, resolved_config_file))
-
-        # Load config
-        config = cls.from_json_file(resolved_config_file)
 
         if hasattr(config, 'pruned_heads'):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
