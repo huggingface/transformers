@@ -42,6 +42,7 @@ ADDED_TOKENS_FILE = 'added_tokens.json'
 TOKENIZER_CONFIG_FILE = 'tokenizer_config.json'
 
 CONTROL_CHARS = u''.join(chr(c) for c in range(sys.maxunicode+1) if unicodedata.category(chr(c))[0] == 'C')
+WHITESPACES = re.findall(r'\s', u''.join(chr(c) for c in range(sys.maxunicode+1)), re.UNICODE)
 
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
@@ -753,11 +754,11 @@ class PreTrainedTokenizer(object):
         """
         def get_max_space_length(text):
             original_text = text
-            text = unescape_html_and_remove_control_chars(text)
+            text = html.unescape(text)
             max_space_length = 0
             count = False
             for i, c in enumerate(text):
-                if c == " ":
+                if c in WHITESPACES:
                     if not count:
                         count = True
                         start_index = i
@@ -799,7 +800,7 @@ class PreTrainedTokenizer(object):
         # Get maximum search length
         max_word_length = max([len(word) for word in text.split()])
         max_space_length = get_max_space_length(text)
-        max_search_length = max_word_length + max_space_length
+        max_search_length = min(max_word_length + max_space_length, len(text))
 
         # Initialize token iteration variables
         boundary_token_index = 0
@@ -811,17 +812,21 @@ class PreTrainedTokenizer(object):
             token = tokens[i]
             match_error = False
 
-            if retry > 0:
-                # The tokenization from the boundary doesn't match the text, retrying with a previous boundary
-                boundary_token_index = prev_boundary_token_indexes[-retry]
-            else:
-                # Try boundary of the current token
-                boundary_token_index = i
-
             # Initialize search variables
             offset = offsets[i]
             search_length = 1
             comparison_tokens = []
+            if retry > 0:
+                # The tokenization from the boundary doesn't match the text, retrying with a previous boundary
+                boundary_token_index = prev_boundary_token_indexes[-retry]
+            elif retry == 0:
+                # Try boundary of the current token
+                boundary_token_index = i
+            else:
+                # instead of failing, tokenize the whole text to get a certain match
+                boundary_token_index = 0
+                search_length = len(text)
+
             while True:
                 prev_comparison_tokens = comparison_tokens # for debugging
                 comparison_tokens = get_comparison_tokens(self.tokenize, text, 
@@ -868,12 +873,14 @@ class PreTrainedTokenizer(object):
                     retry = 0
                     break
 
-                if search_length == max_search_length:
+                if search_length >= max_search_length:
                     # The tokenization from the boundary doesn't match the text, retry with a previous boundary,
                     # keep retrying until all the previous successful boundaries are used
                     match_error = True
                     if retry < len(prev_boundary_token_indexes):
                         retry += 1
+                    elif search_length != len(text):
+                        retry = -1
                     else:
                         retry = 0
                     break
@@ -882,7 +889,7 @@ class PreTrainedTokenizer(object):
                 search_length += 1
 
             if match_error:
-                if retry > 0:
+                if retry != 0:
                     continue
                 # Failed to match offsets to the tokens
                 break
@@ -891,7 +898,7 @@ class PreTrainedTokenizer(object):
             # Required due to special characters such as in "Moskva: Russkiĭ fond sodeĭstviii︠a︡ obrazovanii︠u︡ i nauke"
             if comparison_tokens == target_tokens:
                 while True:
-                    if len(text) == offset + search_length:
+                    if len(text) <= offset + search_length:
                         break
 
                     comparison_tokens = get_comparison_tokens(self.tokenize, text, 
@@ -902,7 +909,7 @@ class PreTrainedTokenizer(object):
                     else:
                         break
 
-            if len(text) != offset + search_length:
+            if len(text) > offset + search_length:
                 # Add the next token offset only if the end of the text wasn't reached
                 offsets.append(offset + search_length)
             else:
