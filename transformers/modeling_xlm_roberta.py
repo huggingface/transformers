@@ -111,17 +111,17 @@ class XLMRobertaModel(RobertaModel):
             Last layer hidden-state of the first token of the sequence (classification token)
             further processed by a Linear layer and a Tanh activation function. The Linear
             layer weights are trained from the next sentence prediction (classification)
-            eo match pre-training, XLM-RoBERTa input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            eo match pre-training, XLM-RoBERTa input sequence should be formatted with <s> and </s> tokens as follows:
 
             (a) For sequence pairs:
 
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] [SEP] no it is not . [SEP]``
+                ``tokens:         <s> is this jack ##son ##ville ? </s> </s> no it is not . </s>``
 
                 ``token_type_ids:   0   0  0    0    0     0       0   0   0     1  1  1  1   1   1``
 
             (b) For single sequences:
 
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
+                ``tokens:         <s> the dog is hairy . </s>``
 
                 ``token_type_ids:   0   0   0   0  0     0   0``
 
