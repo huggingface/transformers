@@ -323,18 +323,15 @@ class BasicTokenizer(object):
 
     @staticmethod
     @functools.lru_cache(maxsize=1024)
-    def _strip_mark_non_spacing_char(char):
+    def is_mark_non_spacing_char(char):
         cat = unicodedata.category(char)
-        if cat == "Mn":
-            return ''
-        else:
-            return char
+        return cat == "Mn"
 
     @staticmethod
     def _run_strip_accents(text):
         """Strips accents from a piece of text."""
         text = unicodedata.normalize("NFD", text)
-        output = [BasicTokenizer._strip_mark_non_spacing_char(char) for char in text]
+        output = [char for char in text if not BasicTokenizer.is_mark_non_spacing_char(char)]
         return "".join(output)
 
     @staticmethod
