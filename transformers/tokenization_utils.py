@@ -639,8 +639,8 @@ class PreTrainedTokenizer(object):
         """
         all_special_tokens = self.all_special_tokens
 
-        def uppercase_matched_escaped(matchgroup):
-            return matchgroup[0].upper()
+        def uppercase_matched_escaped(matchgroups):
+            return matchgroups.group(0)
 
         def lowercase_text(t):
             # convert non-special tokens to lowercase
