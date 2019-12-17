@@ -72,7 +72,7 @@ WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = 'tf_model.h5'
 TF_WEIGHTS_NAME = 'model.ckpt'
 CONFIG_NAME = "config.json"
-
+MODEL_CARD_NAME = "model_card.json"
 
 DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
