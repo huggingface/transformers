@@ -136,7 +136,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
                 if self.is_multi_columns:
                     yield {k: row[c] for k, c in self.column}
                 else:
-                    yield row[self.column]
+                    yield row[self.column[0]]
 
     def save(self, data: List[dict]):
         with open(self.output, 'w') as f:
