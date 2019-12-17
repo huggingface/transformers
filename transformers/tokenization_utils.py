@@ -357,12 +357,12 @@ class PreTrainedTokenizer(object):
             if pretrained_model_name_or_path in s3_models:
                 msg = "Couldn't reach server at '{}' to download vocabulary files."
             else:
-                msg = "Model name '{}' was not found in tokenizers model name list ({}). " \
-                    "We assumed '{}' was a path or url to a directory containing vocabulary files " \
-                    "named {}, but couldn't find such vocabulary files at this path or url.".format(
+                msg = ("Model name '{}' was not found in tokenizers model name list ({}). "
+                       "We assumed '{}' was a path or url to a directory containing vocabulary files "
+                       "named {}, but couldn't find such vocabulary files at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
                         pretrained_model_name_or_path,
-                        list(cls.vocab_files_names.values()))
+                        list(cls.vocab_files_names.values())))
 
             raise EnvironmentError(msg)
 
@@ -512,9 +512,9 @@ class PreTrainedTokenizer(object):
         to_add_tokens = []
         for token in new_tokens:
             assert isinstance(token, six.string_types)
-            if token != self.unk_token and \
-                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token) and \
-                    token not in to_add_tokens:
+            if (token != self.unk_token and
+                    self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token) and
+                    token not in to_add_tokens):
                 to_add_tokens.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
@@ -634,15 +634,15 @@ class PreTrainedTokenizer(object):
             for tok in tok_list:
                 tokenized_text = []
                 for sub_text in text_list:
-                    if sub_text not in self.added_tokens_encoder \
-                            and sub_text not in self.all_special_tokens:
+                    if (sub_text not in self.added_tokens_encoder
+                            and sub_text not in self.all_special_tokens):
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
                 text_list = tokenized_text
 
-            return sum((self._tokenize(token, **kwargs) if token not \
-                    in self.added_tokens_encoder and token not in self.all_special_tokens \
+            return sum((self._tokenize(token, **kwargs) if token not
+                    in self.added_tokens_encoder and token not in self.all_special_tokens
                     else [token] for token in tokenized_text), [])
 
         added_tokens = list(self.added_tokens_encoder.keys()) + self.all_special_tokens
