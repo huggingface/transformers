@@ -190,7 +190,7 @@ class TextDataset(Dataset):
             + filename,
         )
 
-        line_buffer_size = 500_000
+        line_buffer_size = 500000
 
         part = partial(tokenize_line, tokenizer)
 
