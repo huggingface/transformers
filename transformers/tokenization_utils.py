@@ -639,15 +639,20 @@ class PreTrainedTokenizer(object):
         """
         all_special_tokens = self.all_special_tokens
 
+        def uppercase_matched_escaped(matchgroup):
+            return matchgroup[0].upper()
+
         def lowercase_text(t):
             # convert non-special tokens to lowercase
+            lower_text = t.lower()
             escaped_special_toks = [re.escape(s_tok) for s_tok in all_special_tokens]
-            pattern = r'(^' + r'|'.join(escaped_special_toks) + r')|' + \
-                      r'(.+?)'
+            pattern = r'(^' + r'|'.join(escaped_special_toks) + r')'
             return re.sub(
                 pattern,
-                lambda m: m.groups()[0] or m.groups()[1].lower(),
-                t)
+                uppercase_matched_escaped,
+                t,
+                flags=re.IGNORECASE
+            )
 
         if self.init_kwargs.get('do_lower_case', False):
             text = lowercase_text(text)
