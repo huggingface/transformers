@@ -301,7 +301,7 @@ class BasicTokenizer(object):
                 List of token not to split.
         """
         never_split = self.never_split + (never_split if never_split is not None else [])
-        text = self._clean_text(text)
+        text = BasicTokenizer._clean_text(text)
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
         # matter since the English models were not trained on any Chinese data
@@ -309,30 +309,36 @@ class BasicTokenizer(object):
         # characters in the vocabulary because Wikipedia does have some Chinese
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
-            text = self._tokenize_chinese_chars(text)
+            text = BasicTokenizer._tokenize_chinese_chars(text)
         orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
-                token = self._run_strip_accents(token)
-            split_tokens.extend(self._run_split_on_punc(token))
+                token = BasicTokenizer._run_strip_accents(token)
+            split_tokens.extend(BasicTokenizer._run_split_on_punc(token))
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
 
-    def _run_strip_accents(self, text):
+    @staticmethod
+    @functools.lru_cache(maxsize=1024)
+    def _strip_mark_non_spacing_char(char):
+        cat = unicodedata.category(char)
+        if cat == "Mn":
+            return ''
+        else:
+            return char
+
+    @staticmethod
+    def _run_strip_accents(text):
         """Strips accents from a piece of text."""
         text = unicodedata.normalize("NFD", text)
-        output = []
-        for char in text:
-            cat = unicodedata.category(char)
-            if cat == "Mn":
-                continue
-            output.append(char)
+        output = [BasicTokenizer._strip_mark_non_spacing_char(char) for char in text]
         return "".join(output)
 
-    def _run_split_on_punc(self, text, never_split=None):
+    @staticmethod
+    def _run_split_on_punc(text, never_split=None):
         """Splits punctuation on a piece of text."""
         if never_split is not None and text in never_split:
             return [text]
@@ -354,20 +360,24 @@ class BasicTokenizer(object):
 
         return ["".join(x) for x in output]
 
-    def _tokenize_chinese_chars(self, text):
+    @staticmethod
+    @functools.lru_cache(maxsize=1024)
+    def _add_whitespace_around_chinese_chars(char):
+        cp = ord(char)
+        if BasicTokenizer._is_chinese_char(cp):
+            return " " + char + " "
+        else:
+            return char
+
+    @staticmethod
+    def _tokenize_chinese_chars(text):
         """Adds whitespace around any CJK character."""
-        output = []
-        for char in text:
-            cp = ord(char)
-            if self._is_chinese_char(cp):
-                output.append(" ")
-                output.append(char)
-                output.append(" ")
-            else:
-                output.append(char)
+        output = [BasicTokenizer._add_whitespace_around_chinese_chars(char) for char in text]
         return "".join(output)
 
-    def _is_chinese_char(self, cp):
+    @staticmethod
+    @functools.lru_cache(maxsize=1024)
+    def _is_chinese_char(cp):
         """Checks whether CP is the codepoint of a CJK character."""
         # This defines a "chinese character" as anything in the CJK Unicode block:
         #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
@@ -400,9 +410,10 @@ class BasicTokenizer(object):
         else:
             return char
 
-    def _clean_text(self, text):
+    @staticmethod
+    def _clean_text(text):
         """Performs invalid character removal and whitespace cleanup on text."""
-        output = [self._clean_text_helper(char) for char in text]
+        output = [BasicTokenizer._clean_text_helper(char) for char in text]
         return "".join(output)
 
 
@@ -466,6 +477,7 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
+@functools.lru_cache(maxsize=1024)
 def _is_whitespace(char):
     """Checks whether `chars` is a whitespace character."""
     # \t, \n, and \r are technically contorl characters but we treat them
@@ -478,6 +490,7 @@ def _is_whitespace(char):
     return False
 
 
+@functools.lru_cache(maxsize=1024)
 def _is_control(char):
     """Checks whether `chars` is a control character."""
     # These are technically control characters but we count them as whitespace
@@ -490,6 +503,7 @@ def _is_control(char):
     return False
 
 
+@functools.lru_cache(maxsize=1024)
 def _is_punctuation(char):
     """Checks whether `chars` is a punctuation character."""
     cp = ord(char)
