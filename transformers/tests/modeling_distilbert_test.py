@@ -105,7 +105,7 @@ class DistilBertModelTest(CommonTestCases.CommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = DistilBertConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 dim=self.hidden_size,
                 n_layers=self.num_hidden_layers,
                 n_heads=self.num_attention_heads,

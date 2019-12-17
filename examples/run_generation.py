@@ -247,7 +247,11 @@ def main():
         out = out[:, len(context_tokens):].tolist()
         for o in out:
             text = tokenizer.decode(o, clean_up_tokenization_spaces=True)
-            text = text[: text.find(args.stop_token) if args.stop_token else None]
+            if args.stop_token:
+                index =  text.find(args.stop_token)
+                if index == -1:
+                    index = None
+                text = text[:index]
 
             print(text)
 

@@ -366,7 +366,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.use_bfloat16 = config.use_bfloat16
         self.initializer_range = config.initializer_range
 
-        self.word_embedding = TFSharedEmbeddings(config.n_token, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
+        self.word_embedding = TFSharedEmbeddings(config.vocab_size, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
         self.layer = [TFXLNetLayer(config, name='layer_._{}'.format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
