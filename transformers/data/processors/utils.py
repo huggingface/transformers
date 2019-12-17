@@ -201,7 +201,6 @@ class TextDataset(Dataset):
                 return
         else:
             logger.info("Creating features from dataset file at %s", directory)
-            start = datetime.now()
 
             with Pool() as p:
                 line_count = get_line_count(filename)
@@ -232,9 +231,6 @@ class TextDataset(Dataset):
             logger.info("Saving features into cached file %s", cached_features_file)
             with open(cached_features_file, "wb") as handle:
                 pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            end = datetime.now()
-            print(f"Examples building took: {end - start}")
-            print("Done.")
             return
 
     def __len__(self):
