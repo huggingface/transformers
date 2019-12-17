@@ -50,8 +50,8 @@ from .modeling_bert import ACT2FN, load_tf_weights_in_bert, BertPooler, BertInte
 logger = logging.getLogger(__name__)
 
 UNILM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'unilm-base-cased': "http://40.85.212.169:8002/unilm-base-cased-pytorch_model.bin", 
-    'unilm-large-cased': "http://40.85.212.169:8002/unilm-large-cased-pytorch_model.bin"
+    'unilm-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/unilm/unilm-base-cased-pytorch_model.bin", 
+    'unilm-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/unilm/unilm-large-cased-pytorch_model.bin"
 }
 
 BertLayerNorm = torch.nn.LayerNorm
