@@ -481,7 +481,7 @@ def replace_unicode_punct(text):
     return text
 
 
-@functools.lru_cache(max_size=1024)
+@functools.lru_cache(maxsize=1024)
 def _is_printing_char(char):
     cat = unicodedata.category(char)
     if cat.startswith('C'):
