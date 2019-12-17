@@ -585,13 +585,16 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     Examples::
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = RobertaForMultipleChoice.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss, start_scores, end_scores = outputs[:2]
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
+        model = RobertaForQuestionAnswering.from_pretrained('roberta-large')
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_ids = tokenizer.encode(question, text)
+        start_scores, end_scores = model(torch.tensor([input_ids]))
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        print(' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1]))
+        # a nice puppet
+        # Note: 'roberta-large' model can not produce the right answer above. Waiting for 'roberta-large-finetuned-squad'
+        to be uploaded.
     """
     config_class = RobertaConfig
     pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
