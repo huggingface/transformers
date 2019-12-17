@@ -4,6 +4,8 @@ import logging
 import os
 import json
 import numpy as np
+import functools
+
 
 from ...tokenization_bert import BasicTokenizer, whitespace_tokenize
 from .utils import DataProcessor, InputExample, InputFeatures
@@ -74,6 +76,7 @@ def _new_check_is_max_context(doc_spans, cur_span_index, position):
     return cur_span_index == best_span_index
 
 
+@functools.lru_cache(maxsize=1024)
 def _is_whitespace(c):
     if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
         return True

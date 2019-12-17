@@ -23,6 +23,7 @@ import re
 import sys
 import unicodedata
 from io import open
+import functools
 
 import sacremoses as sm
 
@@ -433,12 +434,7 @@ def lowercase_and_remove_accent(text):
     text = ' '.join(text)
     text = text.lower()
     text = unicodedata.normalize("NFD", text)
-    output = []
-    for char in text:
-        cat = unicodedata.category(char)
-        if cat == "Mn":
-            continue
-        output.append(char)
+    output = [char for char in text if not BasicTokenizer.is_mark_non_spacing_char(char)]
     return "".join(output).lower().split(' ')
 
 
@@ -485,16 +481,19 @@ def replace_unicode_punct(text):
     return text
 
 
+@functools.lru_cache(max_size=1024)
+def _is_printing_char(char):
+    cat = unicodedata.category(char)
+    if cat.startswith('C'):
+        return False
+    else:
+        return True
+
 def remove_non_printing_char(text):
     '''
     Port of https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/remove-non-printing-char.perl
     '''
-    output = []
-    for char in text:
-        cat = unicodedata.category(char)
-        if cat.startswith('C'):
-            continue
-        output.append(char)
+    output = [char for char in text if _is_printing_char(char)]
     return "".join(output)
 
 
