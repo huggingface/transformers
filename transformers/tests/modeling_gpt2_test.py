@@ -110,7 +110,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = GPT2Config(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 n_embd=self.hidden_size,
                 n_layer=self.num_hidden_layers,
                 n_head=self.num_attention_heads,

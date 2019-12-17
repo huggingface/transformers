@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 # Files and general utilities
 from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
                          cached_path, add_start_docstrings, add_end_docstrings,
-                         WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME,
+                         WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME, MODEL_CARD_NAME,
                          is_tf_available, is_torch_available)
 
 from .data import (is_sklearn_available,
@@ -32,6 +32,9 @@ from .data import (is_sklearn_available,
 
 if is_sklearn_available():
     from .data import glue_compute_metrics, xnli_compute_metrics
+
+# Model Cards
+from .model_card import ModelCard
 
 # Tokenizers
 from .tokenization_utils import (PreTrainedTokenizer)
@@ -52,7 +55,7 @@ from .tokenization_t5 import T5Tokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
-from .configuration_auto import AutoConfig
+from .configuration_auto import AutoConfig, ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_transfo_xl import TransfoXLConfig, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -70,7 +73,7 @@ from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 if is_torch_available():
     from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
     from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
-                                AutoModelWithLMHead)
+                                AutoModelWithLMHead, ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
                                 BertForMaskedLM, BertForNextSentencePrediction,
@@ -128,7 +131,7 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
-                                   TFAutoModelWithLMHead)
+                                   TFAutoModelWithLMHead, TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertMainLayer, TFBertEmbeddings,
                                    TFBertModel, TFBertForPreTraining,

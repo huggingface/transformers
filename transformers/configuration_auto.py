@@ -18,20 +18,38 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-from .configuration_bert import BertConfig
-from .configuration_openai import OpenAIGPTConfig
-from .configuration_gpt2 import GPT2Config
-from .configuration_transfo_xl import TransfoXLConfig
-from .configuration_xlnet import XLNetConfig
-from .configuration_xlm import XLMConfig
-from .configuration_roberta import RobertaConfig
-from .configuration_distilbert import DistilBertConfig
-from .configuration_ctrl import CTRLConfig
-from .configuration_camembert import CamembertConfig
-from .configuration_albert import AlbertConfig
-from .configuration_t5 import T5Config
+from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_transfo_xl import TransfoXLConfig, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_gpt2 import GPT2Config, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_xlnet import XLNetConfig, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_xlm import XLMConfig, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 logger = logging.getLogger(__name__)
+
+
+ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict((key, value)
+    for pretrained_map in [
+        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ]
+    for key, value, in pretrained_map.items())
 
 
 class AutoConfig(object):
