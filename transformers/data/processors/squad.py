@@ -225,7 +225,7 @@ def squad_convert_example_to_features(example, max_seq_length,
             span['token_type_ids'],
             cls_index,
             p_mask.tolist(),
-            example_index=0,
+            example_index=0, # Can not set unique_id and example_index here. They will be set after multiple processing.
             unique_id=0,
             paragraph_len=span['paragraph_len'],
             token_is_max_context=span["token_is_max_context"],
