@@ -484,10 +484,8 @@ def replace_unicode_punct(text):
 @functools.lru_cache(maxsize=1024)
 def _is_printing_char(char):
     cat = unicodedata.category(char)
-    if cat.startswith('C'):
-        return False
-    else:
-        return True
+    return not cat.startswith('C')
+
 
 def remove_non_printing_char(text):
     '''
