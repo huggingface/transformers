@@ -59,7 +59,7 @@ setup(
                       'boto3',
                       'requests',
                       'tqdm',
-                      'regex',
+                      'regex != 2019.12.17',
                       'sentencepiece',
                       'sacremoses'],
     entry_points={
