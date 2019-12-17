@@ -592,14 +592,14 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.n_token = config.n_token
+        self.n_token = config.vocab_size
 
         self.d_embed = config.d_embed
         self.d_model = config.d_model
         self.n_head = config.n_head
         self.d_head = config.d_head
 
-        self.word_emb = AdaptiveEmbedding(config.n_token, config.d_embed, config.d_model, config.cutoffs,
+        self.word_emb = AdaptiveEmbedding(config.vocab_size, config.d_embed, config.d_model, config.cutoffs,
                                           div_val=config.div_val)
 
         self.drop = nn.Dropout(config.dropout)
@@ -836,11 +836,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self.sample_softmax = config.sample_softmax
         # use sampled softmax
         if config.sample_softmax > 0:
-            self.out_layer = nn.Linear(config.d_model, config.n_token)
-            self.sampler = LogUniformSampler(config.n_token, config.sample_softmax)
+            self.out_layer = nn.Linear(config.d_model, config.vocab_size)
+            self.sampler = LogUniformSampler(config.vocab_size, config.sample_softmax)
         # use adaptive softmax (including standard softmax)
         else:
-            self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model,
+            self.crit = ProjectedAdaptiveLogSoftmax(config.vocab_size, config.d_embed, config.d_model,
                                                     config.cutoffs, div_val=config.div_val)
         self.init_weights()
 

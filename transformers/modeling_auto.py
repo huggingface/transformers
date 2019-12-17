@@ -18,24 +18,42 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-from .modeling_bert import BertModel, BertForMaskedLM, BertForSequenceClassification, BertForQuestionAnswering
-from .modeling_openai import OpenAIGPTModel, OpenAIGPTLMHeadModel
-from .modeling_gpt2 import GPT2Model, GPT2LMHeadModel
-from .modeling_ctrl import CTRLModel, CTRLLMHeadModel
-from .modeling_transfo_xl import TransfoXLModel, TransfoXLLMHeadModel
-from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering
-from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering
-from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification
-from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification
-from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice
-from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, AlbertForQuestionAnswering
-from .modeling_t5 import T5Model, T5WithLMHeadModel
+from .modeling_bert import BertModel, BertForMaskedLM, BertForSequenceClassification, BertForQuestionAnswering, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_openai import OpenAIGPTModel, OpenAIGPTLMHeadModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_gpt2 import GPT2Model, GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_ctrl import CTRLModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_transfo_xl import TransfoXLModel, TransfoXLLMHeadModel, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering, XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, DistilBertForSequenceClassification, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, CamembertForMultipleChoice, CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, AlbertForQuestionAnswering, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_t5 import T5Model, T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
+
+
+ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict((key, value)
+    for pretrained_map in [
+        BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ]
+    for key, value, in pretrained_map.items())
 
 
 class AutoModel(object):

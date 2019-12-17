@@ -676,7 +676,7 @@ class CommonTestCases:
                 mc_token_ids = ids_tensor([self.batch_size, self.n_choices], self.seq_length)
 
             config = self.config_class(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 n_positions=self.n_positions,
                 n_embd=self.hidden_size,
                 n_layer=self.num_hidden_layers,

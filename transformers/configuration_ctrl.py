@@ -31,7 +31,7 @@ class CTRLConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `CTRLModel`.
 
     Args:
-        vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `CTRLModel` or a configuration json file.
+        vocab_size: Vocabulary size of `inputs_ids` in `CTRLModel` or a configuration json file.
         n_positions: Number of positional embeddings.
         n_ctx: Size of the causal mask (usually same as n_positions).
         dff: Size of the inner dimension of the FFN.
@@ -52,7 +52,7 @@ class CTRLConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size_or_config_json_file=246534,
+        vocab_size=246534,
         n_positions=256,
         n_ctx=256,
         n_embd=1280,
@@ -64,8 +64,6 @@ class CTRLConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-6,
         initializer_range=0.02,
-
-        num_labels=1,
         summary_type='cls_index',
         summary_use_proj=True,
         summary_activation=None,
@@ -76,7 +74,7 @@ class CTRLConfig(PretrainedConfig):
         """Constructs CTRLConfig.
 
         Args:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `CTRLModel` or a configuration json file.
+            vocab_size: Vocabulary size of `inputs_ids` in `CTRLModel` or a configuration json file.
             n_positions: Number of positional embeddings.
             n_ctx: Size of the causal mask (usually same as n_positions).
             dff: Size of the inner dimension of the FFN.
@@ -94,8 +92,7 @@ class CTRLConfig(PretrainedConfig):
                 initializing all weight matrices.
         """
         super(CTRLConfig, self).__init__(**kwargs)
-
-        self.vocab_size = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, int) else -1
+        self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
@@ -108,23 +105,11 @@ class CTRLConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
 
-        self.num_labels = num_labels
         self.summary_type = summary_type
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif not isinstance(vocab_size_or_config_json_file, int):
-            raise ValueError(
-                "First argument must be either a vocabulary size (int)"
-                "or the path to a pretrained model config file (str)"
-            )
 
     @property
     def max_position_embeddings(self):

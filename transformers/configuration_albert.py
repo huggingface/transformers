@@ -37,7 +37,7 @@ class AlbertConfig(PretrainedConfig):
     pretrained_config_archive_map = ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file=30000,
+                 vocab_size=30000,
                  embedding_size=128,
                  hidden_size=4096,
                  num_hidden_layers=12,
@@ -83,7 +83,7 @@ class AlbertConfig(PretrainedConfig):
         """
         super(AlbertConfig, self).__init__(**kwargs)
 
-        self.vocab_size = vocab_size_or_config_json_file
+        self.vocab_size = vocab_size
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

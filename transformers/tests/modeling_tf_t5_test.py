@@ -87,7 +87,7 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = T5Config(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 n_positions=self.n_positions,
                 d_model=self.hidden_size,
                 d_ff=self.d_ff,
