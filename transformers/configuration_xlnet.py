@@ -35,7 +35,7 @@ class XLNetConfig(PretrainedConfig):
     """Configuration class to store the configuration of a ``XLNetModel``.
 
     Args:
-        vocab_size_or_config_json_file: Vocabulary size of ``inputs_ids`` in ``XLNetModel``.
+        vocab_size: Vocabulary size of ``inputs_ids`` in ``XLNetModel``.
         d_model: Size of the encoder layers and the pooler layer.
         n_layer: Number of hidden layers in the Transformer encoder.
         n_head: Number of attention heads for each attention layer in
@@ -72,28 +72,22 @@ class XLNetConfig(PretrainedConfig):
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file=32000,
+                 vocab_size=32000,
                  d_model=1024,
                  n_layer=24,
                  n_head=16,
                  d_inner=4096,
-                 max_position_embeddings=512,
                  ff_activation="gelu",
                  untie_r=True,
                  attn_type="bi",
-
                  initializer_range=0.02,
                  layer_norm_eps=1e-12,
-
                  dropout=0.1,
                  mem_len=None,
                  reuse_len=None,
                  bi_data=False,
                  clamp_len=-1,
                  same_length=False,
-
-                 finetuning_task=None,
-                 num_labels=2,
                  summary_type='last',
                  summary_use_proj=True,
                  summary_activation='tanh',
@@ -104,58 +98,45 @@ class XLNetConfig(PretrainedConfig):
         """Constructs XLNetConfig.
         """
         super(XLNetConfig, self).__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.n_layer = n_layer
+        self.n_head = n_head
+        assert d_model % n_head == 0
+        self.d_head = d_model // n_head
+        self.ff_activation = ff_activation
+        self.d_inner = d_inner
+        self.untie_r = untie_r
+        self.attn_type = attn_type
 
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                setattr(config, key, value)
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.n_token = vocab_size_or_config_json_file
-            self.d_model = d_model
-            self.n_layer = n_layer
-            self.n_head = n_head
-            assert d_model % n_head == 0
-            self.d_head = d_model // n_head
-            self.ff_activation = ff_activation
-            self.d_inner = d_inner
-            self.untie_r = untie_r
-            self.attn_type = attn_type
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
 
-            self.initializer_range = initializer_range
-            self.layer_norm_eps = layer_norm_eps
+        self.dropout = dropout
+        self.mem_len = mem_len
+        self.reuse_len = reuse_len
+        self.bi_data = bi_data
+        self.clamp_len = clamp_len
+        self.same_length = same_length
 
-            self.dropout = dropout
-            self.mem_len = mem_len
-            self.reuse_len = reuse_len
-            self.bi_data = bi_data
-            self.clamp_len = clamp_len
-            self.same_length = same_length
-
-            self.finetuning_task = finetuning_task
-            self.num_labels = num_labels
-            self.summary_type = summary_type
-            self.summary_use_proj = summary_use_proj
-            self.summary_activation = summary_activation
-            self.summary_last_dropout = summary_last_dropout
-            self.start_n_top = start_n_top
-            self.end_n_top = end_n_top
-        else:
-            raise ValueError("First argument must be either a vocabulary size (int)"
-                             " or the path to a pretrained model config file (str)")
+        self.summary_type = summary_type
+        self.summary_use_proj = summary_use_proj
+        self.summary_activation = summary_activation
+        self.summary_last_dropout = summary_last_dropout
+        self.start_n_top = start_n_top
+        self.end_n_top = end_n_top
 
     @property
     def max_position_embeddings(self):
         return -1
 
     @property
-    def vocab_size(self):
-        return self.n_token
+    def n_token(self):  # Backward compatibility
+        return self.vocab_size
 
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self.n_token = value
+    @n_token.setter
+    def n_token(self, value):  # Backward compatibility
+        self.vocab_size = value
 
     @property
     def hidden_size(self):

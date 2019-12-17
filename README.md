@@ -56,6 +56,7 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: TF 2.0 and PyTorch ](#Quick-tour-TF-20-training-and-PyTorch-interoperability) | Train a TF 2.0 model in 10 lines of code, load it in PyTorch |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
+| [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
 | [Documentation][(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
@@ -444,6 +445,46 @@ python ./examples/run_generation.py \
     --model_name_or_path=ctrl \
     --temperature=0 \
     --repetition_penalty=1.2 \
+```
+
+## Quick tour of model sharing
+
+New in `v2.2.2`: you can now upload and share your fine-tuned models with the community, using the <abbr title="Command-line interface">CLI</abbr> that's built-in to the library.
+
+**First, create an account on [https://huggingface.co/join](https://huggingface.co/join)**. Then:
+
+```shell
+transformers-cli login
+# log in using the same credentials as on huggingface.co
+```
+Upload your model:
+```shell
+transformers-cli upload ./path/to/pretrained_model/
+
+# ^^ Upload folder containing weights/tokenizer/config
+# saved via `.save_pretrained()`
+
+transformers-cli upload ./config.json [--filename folder/foobar.json]
+
+# ^^ Upload a single file
+# (you can optionally override its filename, which can be nested inside a folder)
+```
+
+Your model will then be accessible through its identifier, a concatenation of your username and the folder name above:
+```python
+"username/model_name"
+```
+
+Anyone can load it from code:
+```python
+tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")
+model = AutoModel.from_pretrained("username/pretrained_model")
+```
+
+Finally, list all your files on S3:
+```shell
+transformers-cli ls
+# List all your S3 objects.
 ```
 
 ## Migrating from pytorch-transformers to transformers

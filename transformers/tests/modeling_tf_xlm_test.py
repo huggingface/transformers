@@ -125,7 +125,7 @@ class TFXLMModelTest(TFCommonTestCases.TFCommonModelTester):
                 is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
             config = XLMConfig(
-                 vocab_size_or_config_json_file=self.vocab_size,
+                 vocab_size=self.vocab_size,
                  n_special=self.n_special,
                  emb_dim=self.hidden_size,
                  n_layers=self.num_hidden_layers,
