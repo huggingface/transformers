@@ -20,6 +20,7 @@ import collections
 import logging
 import os
 import unicodedata
+import functools
 from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
@@ -388,17 +389,20 @@ class BasicTokenizer(object):
 
         return False
 
+    @staticmethod
+    @functools.lru_cache(maxsize=1024)
+    def _clean_text_helper(char):
+        cp = ord(char)
+        if cp == 0 or cp == 0xfffd or _is_control(char):
+            return ""
+        if _is_whitespace(char):
+            return " "
+        else:
+            return char
+
     def _clean_text(self, text):
         """Performs invalid character removal and whitespace cleanup on text."""
-        output = []
-        for char in text:
-            cp = ord(char)
-            if cp == 0 or cp == 0xfffd or _is_control(char):
-                continue
-            if _is_whitespace(char):
-                output.append(" ")
-            else:
-                output.append(char)
+        output = [self._clean_text_helper(char) for char in text]
         return "".join(output)
 
 
