@@ -20,9 +20,16 @@ import copy
 import json
 import os
 import logging
+import math
+import subprocess
+import itertools
+from functools import partial
+from datetime import datetime
+from multiprocessing import Pool
 
 import pickle
 import torch
+from tqdm import tqdm
 from torch.utils.data import Dataset
 
 logger = logging.getLogger()
@@ -135,40 +142,104 @@ class DataProcessor(object):
             return lines
 
 
+def tokenize_line(tokenizer, line):
+    tokens = tokenizer.tokenize(line)
+    tokenized_text = tokenizer.convert_tokens_to_ids(tokens)
+    return tokenized_text
+
+
+def get_line_count(filename):
+    try:
+        out = subprocess.Popen(
+            ["rg", "-cve" "^\s*$", filename],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        ).communicate()[0]
+        return int(out)
+    except Exception:
+        print("\n\n" +
+              "COULDN'T FETCH LINE COUNT OF DATASET FILE, INSTALL RIPGREP TO DO SO EFFICIENTLY.\n" +
+              "Install instructions: https://github.com/BurntSushi/ripgrep#installation" +
+              "\n\n")
+        return None
+
+
+def line_buffer_generator(file_path, buffer_size):
+    with open(file_path, encoding="utf-8") as f:
+        buffer = []
+        for line in f:
+            if line == "\n":
+                continue
+            buffer.append(line)
+            if len(buffer) >= buffer_size:
+                yield buffer
+                buffer = []
+        yield buffer
+
+
 class TextDataset(Dataset):
     def __init__(self, tokenizer, model_name_or_path, file_path='train', block_size=512, overwrite_cache=False):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
-        cached_features_file = os.path.join(directory, model_name_or_path + '_cached_lm_' + str(block_size) + '_' + filename)
+        cached_features_file = os.path.join(
+            directory,
+            model_name_or_path
+            + "_cached_lm_parallel_"
+            + str(block_size)
+            + "_"
+            + filename,
+        )
+
+        line_buffer_size = 500_000
+
+        part = partial(tokenize_line, tokenizer)
 
         if os.path.exists(cached_features_file) and not overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
-            with open(cached_features_file, 'rb') as handle:
+            with open(cached_features_file, "rb") as handle:
                 self.examples = pickle.load(handle)
+                return
         else:
             logger.info("Creating features from dataset file at %s", directory)
+            start = datetime.now()
 
-            self.examples = []
-            logger.info("Reading dataset file %s", file_path)
-            with open(file_path, encoding="utf-8") as f:
-                text = f.read()
+            with Pool() as p:
+                line_count = get_line_count(filename)
+                total_line_chunks = math.ceil(line_count / line_buffer_size) if line_count else None
+                tokenized_chunks = tqdm(
+                    (
+                        p.map(part, line_chunk, chunksize=(line_buffer_size // 10))
+                        for line_chunk in line_buffer_generator(
+                            file_path, line_buffer_size
+                        )
+                    ),
+                    total=total_line_chunks,
+                )
+                tokenized_lines = list(
+                    itertools.chain.from_iterable(tokenized_chunks)
+                )  # flatten chunks
+                tokenized_text = list(
+                    itertools.chain.from_iterable(tokenized_lines)
+                )  # flatten lines
 
-            logger.info("Tokenizing text...")
-            tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
-
-            logger.info("Chunking examples...")
-            for i in range(0, len(tokenized_text)-block_size+1, block_size): # Truncate in block of block_size
-                self.examples.append(tokenizer.build_inputs_with_special_tokens(tokenized_text[i:i+block_size]))
-            # Note that we are loosing the last truncated example here for the sake of simplicity (no padding)
-            # If your dataset is small, first you should loook for a bigger one :-) and second you
-            # can change this behavior by adding (model specific) padding.
-
+                #  chunk tokens into block_size wide examples (truncate the last item if it doesn't fill the block_size)
+                self.examples = [
+                    tokenizer.build_inputs_with_special_tokens(
+                        tokenized_text[i : i + block_size]
+                    )
+                    for i in range(0, len(tokenized_text) - block_size + 1, block_size)
+                ]
             logger.info("Saving features into cached file %s", cached_features_file)
-            with open(cached_features_file, 'wb') as handle:
+            with open(cached_features_file, "wb") as handle:
                 pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            end = datetime.now()
+            print(f"Examples building took: {end - start}")
+            print("Done.")
+            return
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, item):
         return torch.tensor(self.examples[item])
+
