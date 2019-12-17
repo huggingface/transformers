@@ -34,8 +34,8 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 UNILM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'unilm-large-cased': "https://raw.githubusercontent.com/microsoft/unilm/master/storage/unilm-large-cased-config.json", 
-    'unilm-base-cased': "http://40.85.212.169:8002/unilm-base-cased-config.json"
+    'unilm-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/unilm/unilm-large-cased-config.json", 
+    'unilm-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/unilm/unilm-base-cased-config.json"
 }
 
 
