@@ -47,7 +47,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
     roberta = FairseqRobertaModel.from_pretrained(roberta_checkpoint_path, bpe = 'sentencepiece')
     roberta.eval()  # disable dropout
     config = BertConfig(
-        vocab_size_or_config_json_file=250002,
+        vocab_size=250002,
         hidden_size=roberta.args.encoder_embed_dim,
         num_hidden_layers=roberta.args.encoder_layers,
         num_attention_heads=roberta.args.encoder_attention_heads,
