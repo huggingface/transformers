@@ -62,13 +62,18 @@ class PretrainedConfig(object):
         self.is_decoder = kwargs.pop('is_decoder', False)
 
         # Parameters for sequence generation
-        self.generate_length = kwargs.pop('generate_length', 10)
+        self.generate_max_length = kwargs.pop('generate_max_length', 20)
         self.generate_do_sample = kwargs.pop('generate_do_sample', False)
         self.generate_num_beams = kwargs.pop('generate_num_beams', 1)
         self.generate_temperature = kwargs.pop('generate_temperature', 1.0)
         self.generate_top_k = kwargs.pop('generate_top_k', 50)
-        self.generate_top_p = kwargs.pop('generate_top_p', 0.0)
+        self.generate_top_p = kwargs.pop('generate_top_p', 1.0)
         self.generate_repetition_penalty = kwargs.pop('generate_repetition_penalty', 1.0)
+        self.generate_bos_token_id = kwargs.pop('generate_bos_token_id', 0)
+        self.generate_pad_token_id = kwargs.pop('generate_pad_token_id', 0)
+        self.generate_eos_token_ids = kwargs.pop('generate_eos_token_ids', 0)
+        self.generate_batch_size = kwargs.pop('generate_batch_size', 1)
+        self.generate_length_penalty = kwargs.pop('generate_length_penalty', 1.)
 
     def save_pretrained(self, save_directory):
         """ Save a configuration object to the directory `save_directory`, so that it
