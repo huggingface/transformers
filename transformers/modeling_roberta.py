@@ -591,10 +591,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
         input_ids = tokenizer.encode(question, text)
         start_scores, end_scores = model(torch.tensor([input_ids]))
         all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-        print(' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1]))
-        a nice puppet
-        Note: 'roberta-large' model can not produce the right answer above. Waiting for 'roberta-large-finetuned-squad'
-        to be uploaded.
+        answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
     """
     config_class = RobertaConfig
     pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
