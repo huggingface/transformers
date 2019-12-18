@@ -240,6 +240,12 @@ Here is the full list of the currently provided pretrained models together with 
 |                   | ``t5-11B``                                                 | | ~11B parameters with 24-layers, 1024-hidden-state, 65536 feed-forward hidden-state, 128-heads,                                      |
 |                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| XLM-RoBERTa       | ``xlm-roberta-base``                                       | | ~125M parameters with 12-layers, 768-hidden-state, 3072 feed-forward hidden-state, 8-heads,                                         |
+|                   |                                                            | | Trained on on 2.5 TB of newly created clean CommonCrawl data in 100 languages                                                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-roberta-large``                                      | | ~355M parameters with 24-layers, 1027-hidden-state, 4096 feed-forward hidden-state, 16-heads,                                       |
+|                   |                                                            | | Trained on 2.5 TB of newly created clean CommonCrawl data in 100 languages                                                          |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
 .. <https://huggingface.co/transformers/examples.html>`__
