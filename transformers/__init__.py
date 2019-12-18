@@ -191,8 +191,8 @@ from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name
                                         load_tf2_model_in_pytorch_model)
 
 # Pipelines
-# from .pipeline_ import TextClassificationPipeline
-from .pipelines import Pipeline, pipeline, TextClassificationPipeline
+from .pipelines import pipeline, PipelineDataFormat, CsvPipelineDataFormat, JsonPipelineDataFormat, PipedPipelineDataFormat, \
+    Pipeline, FeatureExtractionPipeline, QuestionAnsweringPipeline, NerPipeline, TextClassificationPipeline
 
 if not is_tf_available() and not is_torch_available():
     logger.warning("Neither PyTorch nor TensorFlow >= 2.0 have been found."
