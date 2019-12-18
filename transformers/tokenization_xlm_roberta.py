@@ -30,11 +30,13 @@ VOCAB_FILES_NAMES = {'vocab_file': 'sentencepiece.bpe.model'}
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
     {
+    'xlm-roberta-base': "https://schweter.eu/cloud/transformers/xlm-roberta-base-sentencepiece.bpe.model",
     'xlm-roberta-large': "https://schweter.eu/cloud/transformers/xlm-roberta-large-sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    'xlm-roberta-base': None,
     'xlm-roberta-large': None,
 }
 
