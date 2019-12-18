@@ -650,7 +650,7 @@ class PreTrainedTokenizer(object):
             return re.sub(
                 pattern,
                 uppercase_matched_escaped,
-                t,
+                lower_text,
                 flags=re.IGNORECASE
             )
 
