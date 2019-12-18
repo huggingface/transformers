@@ -30,6 +30,7 @@ from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CO
 from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_xlm_roberta import XLMRobertaConfig, XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict((key, value)
         ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ]
     for key, value, in pretrained_map.items())
 
@@ -66,6 +68,7 @@ class AutoConfig(object):
             - contains `distilbert`: DistilBertConfig (DistilBERT model)
             - contains `albert`: AlbertConfig (ALBERT model)
             - contains `camembert`: CamembertConfig (CamemBERT model)
+            - contains `xlm-roberta`: XLMRobertaConfig (XLM-RoBERTa model)
             - contains `roberta`: RobertaConfig (RoBERTa model)
             - contains `bert`: BertConfig (Bert model)
             - contains `openai-gpt`: OpenAIGPTConfig (OpenAI GPT model)
@@ -91,6 +94,7 @@ class AutoConfig(object):
             - contains `distilbert`: DistilBertConfig (DistilBERT model)
             - contains `albert`: AlbertConfig (ALBERT model)
             - contains `camembert`: CamembertConfig (CamemBERT model)
+            - contains `xlm-roberta`: XLMRobertaConfig (XLM-RoBERTa model)
             - contains `roberta`: RobertaConfig (RoBERTa model)
             - contains `bert`: BertConfig (Bert model)
             - contains `openai-gpt`: OpenAIGPTConfig (OpenAI GPT model)
@@ -152,6 +156,8 @@ class AutoConfig(object):
             return AlbertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'camembert' in pretrained_model_name_or_path:
             return CamembertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif 'xlm-roberta' in pretrained_model_name_or_path:
+            return XLMRobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -170,4 +176,4 @@ class AutoConfig(object):
             return CTRLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'distilbert', 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
+                         "'xlm-roberta', 'xlm', 'roberta', 'distilbert', 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
