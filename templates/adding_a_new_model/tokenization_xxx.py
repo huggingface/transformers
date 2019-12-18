@@ -85,7 +85,7 @@ class XxxTokenizer(PreTrainedTokenizer):
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
-        do_lower_case: Whether to lower case the input. Only has an effect when do_wordpiece_only=False
+        do_lower_case: Whether to lower case the input. Only has an effect when do_basic_tokenize=True
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
