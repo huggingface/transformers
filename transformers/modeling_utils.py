@@ -494,7 +494,7 @@ class PreTrainedModel(nn.Module):
     def generate(self, input_ids=None, max_length=None, do_sample=None, num_beams=None,
                  temperature=None, top_k=None, top_p=None, repetition_penalty=None,
                  bos_token_id=None, pad_token_id=None, eos_token_ids=None, batch_size=None,
-                 length_penalty=None, **kwargs):
+                 length_penalty=None, num_return_sequences=None, **kwargs):
         """ Sequence generator for models with a LM head.
 
         The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
@@ -526,18 +526,19 @@ class PreTrainedModel(nn.Module):
         if self.get_output_embeddings() is None:
             raise AttributeError("You tried do generated sequences with a model that does not have a LM Head.")
 
-        max_length = max_length if max_length is not None else self.config.generate_max_length
-        do_sample = do_sample if do_sample is not None else self.config.generate_do_sample
-        num_beams = num_beams if num_beams is not None else self.config.generate_num_beams
-        temperature = temperature if temperature is not None else self.config.generate_temperature
-        top_k = top_k if top_k is not None else self.config.generate_top_k
-        top_p = top_p if top_p is not None else self.config.generate_top_p
-        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.generate_repetition_penalty
-        bos_token_id = bos_token_id if bos_token_id is not None else self.config.generate_bos_token_id
-        pad_token_id = pad_token_id if pad_token_id is not None else self.config.generate_pad_token_id
-        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.generate_eos_token_ids
-        batch_size = batch_size if batch_size is not None else self.config.generate_batch_size
-        length_penalty = length_penalty if length_penalty is not None else self.config.generate_length_penalty
+        max_length = max_length if max_length is not None else self.config.max_length
+        do_sample = do_sample if do_sample is not None else self.config.do_sample
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        temperature = temperature if temperature is not None else self.config.temperature
+        top_k = top_k if top_k is not None else self.config.top_k
+        top_p = top_p if top_p is not None else self.config.top_p
+        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
+        batch_size = batch_size if batch_size is not None else self.config.batch_size
+        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+        num_return_sequences = num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
 
         if input_ids is not None:
             batch_size = input_ids.shape[0]  # overriden by the input batch_size
@@ -547,8 +548,8 @@ class PreTrainedModel(nn.Module):
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
-        assert temperature > 0, "`temperature` should be positive."
-        assert isinstance(top_k, int) and top_k > 0, "`top_k` should be a strictely positive integer."
+        assert temperature > 0, "`temperature` should be strictely positive."
+        assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
         assert isinstance(bos_token_id, int) and bos_token_id >= 0, "`bos_token_id` should be a positive integer."
@@ -557,30 +558,41 @@ class PreTrainedModel(nn.Module):
                    "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
         assert isinstance(batch_size, int) and batch_size > 0, "`batch_size` should be a strictely positive integer."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
+        assert isinstance(num_return_sequences, int) and num_return_sequences > 0, "`num_return_sequences` should be a strictely positive integer."
 
         if input_ids is None:
             input_ids = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device)
         else:
-            assert input_ids.dims() == 2, "Input prompt should be of shape (batch_size, sequence length)."
+            assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
         # current position and vocab size
         cur_len = input_ids.shape[1]
         vocab_size = self.config.vocab_size
 
         if num_beams > 1:
-            return self._generate_beam_search(input_ids, cur_len, max_length, do_sample, length_penalty,
-                                              num_beams, pad_token_id, eos_token_ids, vocab_size, batch_size)
-
+            return self._generate_beam_search(input_ids, cur_len, max_length, do_sample,
+                                              temperature, top_k, top_p, repetition_penalty,
+                                              pad_token_id, eos_token_ids, batch_size,
+                                              num_return_sequences,
+                                              length_penalty, num_beams, vocab_size)
         return self._generate_no_beam_search(input_ids, cur_len, max_length, do_sample,
                                              temperature, top_k, top_p, repetition_penalty,
-                                             pad_token_id, eos_token_ids, batch_size)
+                                             pad_token_id, eos_token_ids, batch_size,
+                                             num_return_sequences)
 
     def _generate_no_beam_search(self, input_ids, cur_len, max_length, do_sample,
                                  temperature, top_k, top_p, repetition_penalty,
-                                 pad_token_id, eos_token_ids, batch_size):
-        """ Generate a sentence without beam search (num_beams == 1). """
+                                 pad_token_id, eos_token_ids, batch_size,
+                                 num_return_sequences):
+        """ Generate `num_return_sequences` sequences per batch example without beam search (num_beams == 1).
+            All returned sequence are generated independantly.
+        """
+        # Expand input to num return sequences
+        input_ids = input_ids.unsqueeze(1).expand(batch_size, num_return_sequences, cur_len)
+        input_ids = input_ids.contiguous().view(batch_size*num_return_sequences, cur_len)   # (batch_size*num_return_sequences, cur_len)
+
         # current position / max lengths / length of generated sentences / unfinished sentences
-        unfinished_sents = input_ids.new(batch_size).fill_(1)
+        unfinished_sents = input_ids.new(batch_size*num_return_sequences).fill_(1)
 
         # cache compute states
         pasts = None
@@ -592,9 +604,9 @@ class PreTrainedModel(nn.Module):
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
-                for i in range(batch_size):
-                    for _ in set(input_ids[i].tolist()):
-                        next_token_logits[i, _] /= repetition_penalty
+                for i in range(batch_size*num_return_sequences):
+                    for previous_tokens in set(input_ids[i].tolist()):
+                        next_token_logits[i, previous_tokens] /= repetition_penalty
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
@@ -603,16 +615,16 @@ class PreTrainedModel(nn.Module):
                 # Top-p/top-k filtering
                 next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 # Sample
-                next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), num_samples=1)
+                next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), num_samples=1).squeeze(1)
             else:
                 # Greedy decoding
-                next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
+                next_token = torch.argmax(next_token_logits, dim=-1)
 
             # update generations and finished sentences
             tokens_to_add = next_token * unfinished_sents + pad_token_id * (1 - unfinished_sents)
-            input_ids = torch.cat([input_ids, tokens_to_add], dim=-1)
+            input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
             for eos_token_id in eos_token_ids:
-                unfinished_sents.mul_(tokens_to_add.squeeze(-1).ne(eos_token_id).long())
+                unfinished_sents.mul_(tokens_to_add.ne(eos_token_id).long())
             cur_len = cur_len + 1
 
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
@@ -621,13 +633,24 @@ class PreTrainedModel(nn.Module):
 
         # add eos_token_ids to unfinished sentences
         if cur_len == max_length:
-            input_ids[:, -1].masked_fill_(unfinished_sents.byte(), eos_token_ids[0])
+            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
+
+        if num_return_sequences != 1:
+            input_ids = input_ids.view(batch_size, num_return_sequences, -1)
 
         return input_ids
 
-    def _generate_beam_search(self, input_ids, cur_len, max_length, do_sample, length_penalty,
-                              num_beams, pad_token_id, eos_token_ids, vocab_size, batch_size):
-        """ Generate a sentence with beam search. """
+    def _generate_beam_search(self, input_ids, cur_len, max_length, do_sample,
+                              temperature, top_k, top_p, repetition_penalty,
+                              pad_token_id, eos_token_ids, batch_size,
+                              num_return_sequences,
+                              length_penalty, num_beams, vocab_size):
+        """ Generate `num_return_sequences` sequences per batch example with beam search.
+            We return the top-`num_return_sequences` beams.
+            `num_return_sequences` should be bigger than `num_beams` (we default to the min of both)
+        """
+        num_return_sequences = min(num_return_sequences, num_beams)
+
         # Expand input to num beams
         input_ids = input_ids.unsqueeze(1).expand(batch_size, num_beams, cur_len)
         input_ids = input_ids.contiguous().view(batch_size * num_beams, cur_len)   # (batch_size * num_beams, cur_len)
@@ -638,7 +661,7 @@ class PreTrainedModel(nn.Module):
         # scores for each sentence in the beam
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view(-1)
+        beam_scores = beam_scores.view(-1)                                      # shape (batch_size * num_beams,)
 
         # cache compute states
         pasts = None  # self.prepare_pasts()
@@ -648,18 +671,40 @@ class PreTrainedModel(nn.Module):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts)
-            scores = self(**model_inputs)[0]                        # (batch_size * num_beams, cur_len, vocab_size)
-            scores = scores[:, -1, :]                               # (batch_size * num_beams, vocab_size)
-            scores = F.log_softmax(scores, dim=-1)                  # (batch_size * num_beams, vocab_size)
-            assert scores.size() == (batch_size * num_beams, vocab_size)
+            scores = self(**model_inputs)[0]                                    # (batch_size * num_beams, cur_len, vocab_size)
+            scores = scores[:, -1, :]                                           # (batch_size * num_beams, vocab_size)
 
-            # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
-            _scores = scores + beam_scores[:, None].expand_as(scores)   # (batch_size * num_beams, vocab_size)
+            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+            if repetition_penalty != 1.0:
+                for i in range(batch_size * num_beams):
+                    for previous_tokens in set(input_ids[i].tolist()):
+                        scores[i, previous_tokens] /= repetition_penalty
 
-            # re-organize to group the beam together (we are keeping top hypothesis accross beams)
-            _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
+            if do_sample:
+                # Temperature (higher temperature => more likely to sample low probability tokens)
+                if temperature != 1.0:
+                    scores = scores / temperature
+                # Top-p/top-k filtering
+                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p)            # (batch_size * num_beams, vocab_size)
+                # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
+                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)    # (batch_size * num_beams, 2)
+                # Compute next scores
+                _scores = F.log_softmax(scores, dim=-1)                                     # (batch_size * num_beams, vocab_size)
+                _scores = torch.gather(_scores, -1, next_words)                             # (batch_size * num_beams, 2)
+                next_scores = _scores + beam_scores[:, None].expand_as(_scores)             # (batch_size * num_beams, 2)
+                # Match shape of greedy beam search
+                next_words = next_words.view(batch_size, 2 * num_beams)                     # (batch_size, 2 * num_beams)
+                next_scores = next_scores.view(batch_size, 2 * num_beams)                   # (batch_size, 2 * num_beams)
+            else:
+                # do greedy beam search
+                scores = F.log_softmax(scores, dim=-1)                          # (batch_size * num_beams, vocab_size)
+                assert scores.size() == (batch_size * num_beams, vocab_size)
+                # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
+                _scores = scores + beam_scores[:, None].expand_as(scores)       # (batch_size * num_beams, vocab_size)
+                # re-organize to group the beam together (we are keeping top hypothesis accross beams)
+                _scores = _scores.view(batch_size, num_beams * vocab_size)      # (batch_size, num_beams * vocab_size)
+                next_scores, next_words = torch.topk(_scores, 2*num_beams, dim=1, largest=True, sorted=True)
 
-            next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
             # next batch beam content
@@ -733,32 +778,36 @@ class PreTrainedModel(nn.Module):
         #     print("")
 
         # select the best hypotheses
-        tgt_len = input_ids.new(batch_size)
-        best = []
+        tgt_len = input_ids.new(batch_size, num_return_sequences)
+        bests = []
 
         for i, hypotheses in enumerate(generated_hyps):
-            best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
-            tgt_len[i] = len(best_hyp) + 1  # +1 for the <EOS> symbol
-            best.append(best_hyp)
+            best_hyps = [hyp[1] for hyp in sorted(hypotheses.hyp, key=lambda hyp: hyp[0])[-num_return_sequences:]]
+            for j, hyp in enumerate(best_hyps):
+                tgt_len[i, j] = len(hyp) + 1  # +1 for the <EOS> symbol
+            bests.append(best_hyps)
 
         # generate target batch
-        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
-        for i, hypo in enumerate(best):
-            decoded[i, :tgt_len[i] - 1] = hypo
-            decoded[i, tgt_len[i] - 1] = eos_token_ids[0]
+        decoded = input_ids.new(batch_size, num_return_sequences, tgt_len.max().item()).fill_(pad_token_id)
+        for i, hyps in enumerate(bests):
+            for j, hypo in enumerate(hyps):
+                decoded[i, j, :tgt_len[i, j] - 1] = hypo
+                decoded[i, j, tgt_len[i, j] - 1] = eos_token_ids[0]
 
+        if num_return_sequences == 1:
+            decoded = decoded.squeeze(1)
         # # sanity check
         # assert (decoded == eos_token_ids[0]).sum() == 2 * batch_size
 
         return decoded
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
+def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf')):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size x vocabulary size)
-            top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-            top_p > 0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+            if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+            if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
         From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
@@ -768,7 +817,7 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
         indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
         logits[indices_to_remove] = filter_value
 
-    if top_p > 0.0:
+    if top_p < 1.0:
         sorted_logits, sorted_indices = torch.sort(logits, descending=True)
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
