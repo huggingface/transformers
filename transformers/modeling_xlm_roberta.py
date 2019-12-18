@@ -27,6 +27,7 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    'xlm-roberta-base': "https://schweter.eu/cloud/transformers/xlm-roberta-base-pytorch_model.bin",
     'xlm-roberta-large': "https://schweter.eu/cloud/transformers/xlm-roberta-large-pytorch_model.bin",
 }
 
