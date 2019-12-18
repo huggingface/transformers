@@ -23,11 +23,10 @@ import re
 import sys
 import unicodedata
 from io import open
-import functools
 
 import sacremoses as sm
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, py3_memoize
 from .tokenization_bert import BasicTokenizer
 
 logger = logging.getLogger(__name__)
@@ -481,7 +480,7 @@ def replace_unicode_punct(text):
     return text
 
 
-@functools.lru_cache(maxsize=1024)
+@py3_memoize
 def _is_printing_char(char):
     cat = unicodedata.category(char)
     return not cat.startswith('C')

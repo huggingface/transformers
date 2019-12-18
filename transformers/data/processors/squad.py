@@ -8,6 +8,7 @@ import functools
 
 
 from ...tokenization_bert import BasicTokenizer, whitespace_tokenize
+from ...tokenization_utils import py3_memoize
 from .utils import DataProcessor, InputExample, InputFeatures
 from ...file_utils import is_tf_available, is_torch_available
 
@@ -76,7 +77,7 @@ def _new_check_is_max_context(doc_spans, cur_span_index, position):
     return cur_span_index == best_span_index
 
 
-@functools.lru_cache(maxsize=1024)
+@py3_memoize
 def _is_whitespace(c):
     if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
         return True

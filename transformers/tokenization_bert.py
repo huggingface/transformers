@@ -20,10 +20,9 @@ import collections
 import logging
 import os
 import unicodedata
-import functools
 from io import open
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, py3_memoize
 
 logger = logging.getLogger(__name__)
 
@@ -322,12 +321,13 @@ class BasicTokenizer(object):
         return output_tokens
 
     @staticmethod
-    @functools.lru_cache(maxsize=1024)
+    @py3_memoize
     def is_mark_non_spacing_char(char):
         cat = unicodedata.category(char)
         return cat == "Mn"
 
     @staticmethod
+    @py3_memoize
     def _run_strip_accents(text):
         """Strips accents from a piece of text."""
         text = unicodedata.normalize("NFD", text)
@@ -335,6 +335,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
     @staticmethod
+    @py3_memoize
     def _run_split_on_punc(text, never_split=None):
         """Splits punctuation on a piece of text."""
         if never_split is not None and text in never_split:
@@ -358,7 +359,7 @@ class BasicTokenizer(object):
         return ["".join(x) for x in output]
 
     @staticmethod
-    @functools.lru_cache(maxsize=1024)
+    @py3_memoize
     def _add_whitespace_around_chinese_chars(char):
         cp = ord(char)
         if BasicTokenizer._is_chinese_char(cp):
@@ -373,7 +374,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
     @staticmethod
-    @functools.lru_cache(maxsize=1024)
+    @py3_memoize
     def _is_chinese_char(cp):
         """Checks whether CP is the codepoint of a CJK character."""
         # This defines a "chinese character" as anything in the CJK Unicode block:
@@ -397,7 +398,7 @@ class BasicTokenizer(object):
         return False
 
     @staticmethod
-    @functools.lru_cache(maxsize=1024)
+    @py3_memoize
     def _clean_text_helper(char):
         cp = ord(char)
         if cp == 0 or cp == 0xfffd or _is_control(char):
@@ -474,7 +475,7 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
-@functools.lru_cache(maxsize=1024)
+@py3_memoize
 def _is_whitespace(char):
     """Checks whether `chars` is a whitespace character."""
     # \t, \n, and \r are technically contorl characters but we treat them
@@ -487,7 +488,7 @@ def _is_whitespace(char):
     return False
 
 
-@functools.lru_cache(maxsize=1024)
+@py3_memoize
 def _is_control(char):
     """Checks whether `chars` is a control character."""
     # These are technically control characters but we count them as whitespace
@@ -500,7 +501,7 @@ def _is_control(char):
     return False
 
 
-@functools.lru_cache(maxsize=1024)
+@py3_memoize
 def _is_punctuation(char):
     """Checks whether `chars` is a punctuation character."""
     cp = ord(char)

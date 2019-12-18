@@ -22,7 +22,9 @@ import json
 import six
 import copy
 import itertools
+import functools
 import re
+import sys
 from io import open
 
 from .file_utils import cached_path, is_remote_url, hf_bucket_url, is_tf_available, is_torch_available
@@ -37,6 +39,15 @@ logger = logging.getLogger(__name__)
 SPECIAL_TOKENS_MAP_FILE = 'special_tokens_map.json'
 ADDED_TOKENS_FILE = 'added_tokens.json'
 TOKENIZER_CONFIG_FILE = 'tokenizer_config.json'
+
+
+def py3_memoize(func):
+    if sys.version_info[0] == 2:  # if python 2
+        return func
+    else:
+        return functools.lru_cache(maxsize=1024)(func)
+
+
 
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
