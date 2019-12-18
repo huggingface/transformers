@@ -467,7 +467,7 @@ Training with the previously defined hyper-parameters yields the following resul
 ## Named Entity Recognition
 
 Based on the scripts [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/run_ner.py) for Pytorch and
-[`run_tf_ner.py`(https://github.com/huggingface/transformers/blob/master/examples/run_tf_ner.py)] for Tensorflow 2.
+[`run_tf_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/run_tf_ner.py) for Tensorflow 2.
 This example fine-tune Bert Multilingual on GermEval 2014 (German NER).
 Details and results for the fine-tuning provided by @stefan-it.
 
