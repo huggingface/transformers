@@ -7,7 +7,7 @@ from functools import partial
 from multiprocessing import Pool
 
 
-import tqdm
+from tqdm import tqdm
 import pickle
 import torch
 from torch.utils.data import Dataset
