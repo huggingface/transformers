@@ -283,7 +283,9 @@ class TextClassificationPipeline(Pipeline):
         self._nb_classes = nb_classes
 
     def __call__(self, *args, **kwargs):
-        return super().__call__(*args, **kwargs).tolist()
+        outputs = super().__call__(*args, **kwargs)
+        scores = np.exp(outputs) / np.exp(outputs).sum(-1)
+        return [{'label': self.model.config.id2label[item.argmax()], 'score': item.max()} for item in scores]
 
 
 class NerPipeline(Pipeline):
