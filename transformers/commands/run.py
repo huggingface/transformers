@@ -36,11 +36,10 @@ class RunCommand(BaseTransformersCLICommand):
         run_parser.add_argument('--model', type=str, required=True, help='Name or path to the model to instantiate.')
         run_parser.add_argument('--config', type=str, help='Name or path to the model\'s config to instantiate.')
         run_parser.add_argument('--tokenizer', type=str, help='Name of the tokenizer to use. (default: same as the model name)')
-        run_parser.add_argument('--column', type=str, required=True, help='Name of the column to use as input. (For multi columns input as QA use column1,columns2)')
+        run_parser.add_argument('--column', type=str, help='Name of the column to use as input. (For multi columns input as QA use column1,columns2)')
         run_parser.add_argument('--format', type=str, default='infer', choices=PipelineDataFormat.SUPPORTED_FORMATS, help='Input format to read from')
-        run_parser.add_argument('--input', type=str, required=True, help='Path to the file to use for inference')
-        run_parser.add_argument('--output', type=str, required=True, help='Path to the file that will be used post to write results.')
-        run_parser.add_argument('kwargs', nargs='*', help='Arguments to forward to the file format reader')
+        run_parser.add_argument('--input', type=str, help='Path to the file to use for inference')
+        run_parser.add_argument('--output', type=str, help='Path to the file that will be used post to write results.')
         run_parser.set_defaults(func=run_command_factory)
 
     def run(self):
