@@ -113,6 +113,8 @@ class XLMConfig(PretrainedConfig):
                  summary_first_dropout=0.1,
                  start_n_top=5,
                  end_n_top=5,
+                 mask_token_id = 0,
+                 lang_id = 0,
                  **kwargs):
         """Constructs XLMConfig.
         """
@@ -156,6 +158,8 @@ class XLMConfig(PretrainedConfig):
             self.summary_first_dropout = summary_first_dropout
             self.start_n_top = start_n_top
             self.end_n_top = end_n_top
+            self.mask_token_id = mask_token_id
+            self.lang_id = lang_id
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              " or the path to a pretrained model config file (str)")

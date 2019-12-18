@@ -761,7 +761,7 @@ class PreTrainedTokenizer(object):
                 padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
                 The tokenizer padding sides are handled by the following strings:
                 - 'left': pads on the left of the sequences
-                - 'right': pads on the right of the sequences   
+                - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
