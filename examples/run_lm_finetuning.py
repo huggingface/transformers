@@ -50,8 +50,7 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                                   DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer,
                                   CamembertConfig, CamembertForMaskedLM, CamembertTokenizer)
 
-from transformers.data.processors.utils import TextDataset
-
+from transformers.data.processors.torch_text_dataset import TextDataset
 
 logger = logging.getLogger(__name__)
 
