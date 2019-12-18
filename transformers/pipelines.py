@@ -20,6 +20,7 @@ import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import groupby
+from os.path import abspath, exists
 from typing import Union, Optional, Tuple, List, Dict
 
 import numpy as np
@@ -100,12 +101,12 @@ class PipelineDataFormat:
         if self.is_multi_columns:
             self.column = [tuple(c.split('=')) if '=' in c else (c, c) for c in self.column]
 
-        from os.path import abspath, exists
-        if exists(abspath(self.output)):
-            raise OSError('{} already exists on disk'.format(self.output))
+        if output is not None:
+            if exists(abspath(self.output)):
+                raise OSError('{} already exists on disk'.format(self.output))
 
-        if not exists(abspath(self.path)):
-            raise OSError('{} doesnt exist on disk'.format(self.path))
+            if not exists(abspath(self.path)):
+                raise OSError('{} doesnt exist on disk'.format(self.path))
 
     @abstractmethod
     def __iter__(self):
