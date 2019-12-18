@@ -144,6 +144,9 @@ class XLMConfig(PretrainedConfig):
         self.start_n_top = start_n_top
         self.end_n_top = end_n_top
 
+        if "n_words" in kwargs:
+            self.n_words = kwargs["n_words"]
+
     @property
     def n_words(self):  # For backward compatibility
         return self.vocab_size
