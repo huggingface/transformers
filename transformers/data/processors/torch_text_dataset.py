@@ -6,7 +6,6 @@ import logging
 from functools import partial
 from multiprocessing import Pool
 
-
 from tqdm import tqdm
 import pickle
 import torch
