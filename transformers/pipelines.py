@@ -318,8 +318,6 @@ class NerPipeline(Pipeline):
     """
     Named Entity Recognition pipeline using ModelForTokenClassification head.
     """
-    def __init__(self, model, tokenizer: PreTrainedTokenizer):
-        super().__init__(model, tokenizer)
 
     def __call__(self, *texts, **kwargs):
         inputs, answers = self._args_parser(*texts, **kwargs), []
@@ -344,14 +342,16 @@ class NerPipeline(Pipeline):
 
             # Normalize scores
             answer, token_start = [], 1
-            for idx, word in groupby(token_to_word[1:-1]):
+            for idx, word in groupby(token_to_word):
 
                 # Sum log prob over token, then normalize across labels
                 score = np.exp(entities[token_start]) / np.exp(entities[token_start]).sum(-1, keepdims=True)
                 label_idx = score.argmax()
 
                 answer += [{
-                    'word': words[idx - 1], 'score': score[label_idx].item(), 'entity': self.model.config.id2label[label_idx]
+                    'word': words[idx],
+                    'score': score[label_idx].item(),
+                    'entity': self.model.config.id2label[label_idx]
                 }]
 
                 # Update token start
