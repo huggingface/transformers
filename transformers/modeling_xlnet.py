@@ -947,6 +947,30 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
+    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
+        # Add dummy token at the end (no attention on this one)
+        dummy_token = torch.zeros((1, 1), dtype=torch.long, device=input_ids.device)
+        input_ids = torch.cat([input_ids, dummy_token], dim=1)
+
+        # Build permutation mask so that previous tokens don't see last token
+        perm_mask = torch.zeros(
+            (input_ids.shape[0], input_ids.shape[1], input_ids.shape[1]),
+            dtype=torch.float, device=input_ids.device
+        )
+        perm_mask[:, :, -1] = 1.0
+
+        # We'll only predict the last token
+        target_mapping = torch.zeros(
+            (input_ids.shape[0], 1, input_ids.shape[1]),
+            dtype=torch.float, device=input_ids.device
+        )
+        target_mapping[0, 0, -1] = 1.0
+
+        return {"input_ids": input_ids,
+                "perm_mask": perm_mask,
+                "target_mapping": target_mapping
+               }
+
     def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
                 token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,
@@ -971,40 +995,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             outputs = (loss,) + outputs
 
         return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
-
-    def _prepare_inputs_for_decoding(self, input_ids, **model_kwargs):
-        input_ids = self._add_dummy_token(input_ids)
-        perm_mask = self._create_perm_mask(input_ids)
-        target_mapping = self._create_target_mapping(input_ids)
-        arguments = {
-            "input_ids": input_ids,
-            "perm_mask": perm_mask,
-            "target_mapping": target_mapping,
-        }
-        return arguments
-
-    @staticmethod
-    def _add_dummy_token(sequence):
-        dummy = torch.zeros((sequence.size(0), 1), dtype=torch.long)
-        return torch.cat((sequence, dummy), dim=1)
-
-    @staticmethod
-    def _create_perm_mask(sequence):
-        mask = torch.zeros(
-            (sequence.shape[0], sequence.shape[1], sequence.shape[1]),
-            dtype=torch.float,
-        )
-        mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-        return mask
-
-    @staticmethod
-    def _create_target_mapping(sequence):
-        target_mapping = torch.zeros(
-            (sequence.shape[0], 1, sequence.shape[1]),
-            dtype=torch.float,
-        )
-        target_mapping[0, 0, -1] = 1.0  # predict last token
-        return target_mapping
 
 
 @add_start_docstrings("""XLNet Model with a sequence classification/regression head on top (a linear layer on top of

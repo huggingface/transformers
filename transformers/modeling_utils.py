@@ -488,7 +488,7 @@ class PreTrainedModel(nn.Module):
     def generate(self, input_ids=None, max_length=None, do_sample=None, num_beams=None,
                  temperature=None, top_k=None, top_p=None, repetition_penalty=None,
                  bos_token_id=None, pad_token_id=None, eos_token_ids=None, batch_size=None,
-                 length_penalty=None, num_return_sequences=None, **kwargs):
+                 length_penalty=None, num_return_sequences=None, **model_kwargs):
         """ Sequence generator for models with a LM head.
 
         The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
@@ -575,11 +575,13 @@ class PreTrainedModel(nn.Module):
             output = self._generate_beam_search(input_ids, cur_len, max_length, do_sample,
                                                 temperature, top_k, top_p, repetition_penalty,
                                                 pad_token_id, eos_token_ids, effective_batch_size,
-                                                length_penalty, num_beams, vocab_size)
+                                                length_penalty, num_beams, vocab_size,
+                                                **model_kwargs)
         else:
             output = self._generate_no_beam_search(input_ids, cur_len, max_length, do_sample,
                                              temperature, top_k, top_p, repetition_penalty,
-                                             pad_token_id, eos_token_ids, effective_batch_size)
+                                             pad_token_id, eos_token_ids, effective_batch_size,
+                                             **model_kwargs)
 
         if num_return_sequences != 1:
             output = output.view(batch_size, num_return_sequences, -1)
@@ -587,7 +589,8 @@ class PreTrainedModel(nn.Module):
 
     def _generate_no_beam_search(self, input_ids, cur_len, max_length, do_sample,
                                  temperature, top_k, top_p, repetition_penalty,
-                                 pad_token_id, eos_token_ids, batch_size):
+                                 pad_token_id, eos_token_ids, batch_size,
+                                 **model_kwargs):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
         """
@@ -598,7 +601,7 @@ class PreTrainedModel(nn.Module):
         pasts = None
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts, **model_kwargs)
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
 
@@ -640,7 +643,8 @@ class PreTrainedModel(nn.Module):
     def _generate_beam_search(self, input_ids, cur_len, max_length, do_sample,
                               temperature, top_k, top_p, repetition_penalty,
                               pad_token_id, eos_token_ids, batch_size,
-                              length_penalty, num_beams, vocab_size):
+                              length_penalty, num_beams, vocab_size,
+                              **model_kwargs):
         """ Generate sequences for each example with beam search.
         """
         # Expand input to num beams
@@ -662,7 +666,7 @@ class PreTrainedModel(nn.Module):
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts, **model_kwargs)
             scores = self(**model_inputs)[0]                                    # (batch_size * num_beams, cur_len, vocab_size)
             scores = scores[:, -1, :]                                           # (batch_size * num_beams, vocab_size)
 
