@@ -30,6 +30,7 @@ from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizer, Pretrai
     SquadExample, squad_convert_examples_to_features, is_tf_available, is_torch_available, logger
 
 if is_tf_available():
+    import tensorflow as tf
     from transformers import TFAutoModel, TFAutoModelForSequenceClassification, \
         TFAutoModelForQuestionAnswering, TFAutoModelForTokenClassification
 
@@ -79,9 +80,9 @@ class PipelineDataFormat:
     """
     SUPPORTED_FORMATS = ['json', 'csv', 'pipe']
 
-    def __init__(self, output: Optional[str], path: Optional[str], column: Optional[str]):
+    def __init__(self, output: Optional[str], input: Optional[str], column: Optional[str]):
         self.output = output
-        self.path = path
+        self.path = input
         self.column = column.split(',') if column else ['']
         self.is_multi_columns = len(self.column) > 1
 
@@ -92,7 +93,7 @@ class PipelineDataFormat:
             if exists(abspath(self.output)):
                 raise OSError('{} already exists on disk'.format(self.output))
 
-        if path is not None:
+        if input is not None:
             if not exists(abspath(self.path)):
                 raise OSError('{} doesnt exist on disk'.format(self.path))
 
@@ -136,8 +137,8 @@ class PipelineDataFormat:
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output: Optional[str], path: Optional[str], column: Optional[str]):
-        super().__init__(output, path, column)
+    def __init__(self, output: Optional[str], input: Optional[str], column: Optional[str]):
+        super().__init__(output, input, column)
 
     def __iter__(self):
         with open(self.path, 'r') as f:
@@ -157,10 +158,10 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
 
 class JsonPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output: Optional[str], path: Optional[str], column: Optional[str]):
-        super().__init__(output, path, column)
+    def __init__(self, output: Optional[str], input: Optional[str], column: Optional[str]):
+        super().__init__(output, input, column)
 
-        with open(path, 'r') as f:
+        with open(input, 'r') as f:
             self._entries = json.load(f)
 
     def __iter__(self):
@@ -321,11 +322,9 @@ class Pipeline(_ScikitCompat):
             Context manager
         """
         if is_tf_available():
-            import tensorflow as tf
             with tf.device('/CPU:0' if self.device == -1 else '/device:GPU:{}'.format(self.device)):
                 yield
         else:
-            import torch
             if self.device >= 0:
                 torch.cuda.set_device(self.device)
 
@@ -358,11 +357,10 @@ class Pipeline(_ScikitCompat):
 
         # Encode for forward
         with self.device_placement():
-            # TODO : Remove this 512 hard-limit
             inputs = self.tokenizer.batch_encode_plus(
                 inputs, add_special_tokens=True,
                 return_tensors='tf' if is_tf_available() else 'pt',
-                max_length=512
+                max_length=self.tokenizer.max_len
             )
 
             # Filter out features not available on specific models
@@ -379,11 +377,10 @@ class Pipeline(_ScikitCompat):
         """
         if is_tf_available():
             # TODO trace model
-            predictions = self.model(inputs)[0]
+            predictions = self.model(inputs, training=False)[0]
         else:
-            import torch
             with torch.no_grad():
-                predictions = self.model(**inputs)[0]
+                predictions = self.model(**inputs).cpu()[0]
 
         return predictions.numpy()
 
@@ -432,19 +429,18 @@ class NerPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
 
-                # TODO : Remove this 512 hard-limit
                 tokens = self.tokenizer.encode_plus(
                     sentence, return_attention_mask=False,
                     return_tensors='tf' if is_tf_available() else 'pt',
-                    max_length=512
+                    max_length=self.tokenizer.max_len
                 )
 
                 # Forward
-                if is_torch_available():
+                if is_tf_available():
+                    entities = self.model(**tokens)[0][0].numpy()
+                else:
                     with torch.no_grad():
                         entities = self.model(**tokens)[0][0].cpu().numpy()
-                else:
-                    entities = self.model(tokens)[0][0].numpy()
 
             # Normalize scores
             answer, token_start = [], 1
@@ -484,28 +480,29 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             else:
                 kwargs['X'] = list(args)
 
-            # Generic compatibility with sklearn and Keras
-            # Batched data
+        # Generic compatibility with sklearn and Keras
+        # Batched data
         if 'X' in kwargs or 'data' in kwargs:
-            data = kwargs['X'] if 'X' in kwargs else kwargs['data']
+            inputs = kwargs['X'] if 'X' in kwargs else kwargs['data']
 
-            if not isinstance(data, list):
-                data = [data]
+            if isinstance(inputs, dict):
+                inputs = [inputs]
+            else:
+                # Copy to avoid overriding arguments
+                inputs = [i for i in inputs]
 
-            for i, item in enumerate(data):
+            for i, item in enumerate(inputs):
                 if isinstance(item, dict):
                     if any(k not in item for k in ['question', 'context']):
                         raise KeyError('You need to provide a dictionary with keys {question:..., context:...}')
-                    data[i] = QuestionAnsweringPipeline.create_sample(**item)
 
-                elif isinstance(item, SquadExample):
-                    continue
-                else:
+                    inputs[i] = QuestionAnsweringPipeline.create_sample(**item)
+
+                elif not isinstance(item, SquadExample):
                     raise ValueError(
                         '{} argument needs to be of type (list[SquadExample | dict], SquadExample, dict)'
                             .format('X' if 'X' in kwargs else 'data')
                     )
-            inputs = data
 
             # Tabular input
         elif 'question' in kwargs and 'context' in kwargs:
@@ -588,12 +585,10 @@ class QuestionAnsweringPipeline(Pipeline):
         # Manage tensor allocation on correct device
         with self.device_placement():
             if is_tf_available():
-                import tensorflow as tf
                 fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
                 start, end = self.model(fw_args)
                 start, end = start.numpy(), end.numpy()
             else:
-                import torch
                 with torch.no_grad():
                     # Retrieve the score for the context tokens only (removing question tokens)
                     fw_args = {k: torch.tensor(v) for (k, v) in fw_args.items()}
@@ -812,8 +807,9 @@ def pipeline(task: str, model: Optional = None,
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config)
 
-    if allocator.__name__.startswith('TF'):
-        model = allocator.from_pretrained(model, config=config, from_pt=from_pt)
-    else:
-        model = allocator.from_pretrained(model, config=config, from_tf=from_tf)
+    if isinstance(model, str):
+        if allocator.__name__.startswith('TF'):
+            model = allocator.from_pretrained(model, config=config, from_pt=from_pt)
+        else:
+            model = allocator.from_pretrained(model, config=config, from_tf=from_tf)
     return task(model, tokenizer, **kwargs)
