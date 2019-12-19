@@ -61,7 +61,6 @@ MODEL_CLASSES = {
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer),
     'albert': (AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer),
-    'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer)
 }
 
 def set_seed(args):
