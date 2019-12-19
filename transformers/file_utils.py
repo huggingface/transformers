@@ -77,6 +77,7 @@ DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
+CLOUDFRONT_DISTRIB_PREFIX = "https://d2ws9o8vfrpkyk.cloudfront.net"
 
 
 def is_torch_available():
@@ -114,11 +115,12 @@ def is_remote_url(url_or_filename):
     parsed = urlparse(url_or_filename)
     return parsed.scheme in ('http', 'https', 's3')
 
-def hf_bucket_url(identifier, postfix=None):
+def hf_bucket_url(identifier, postfix=None, cdn=False):
+    endpoint = CLOUDFRONT_DISTRIB_PREFIX if cdn else S3_BUCKET_PREFIX
     if postfix is None:
-        return "/".join((S3_BUCKET_PREFIX, identifier))
+        return "/".join((endpoint, identifier))
     else:
-        return "/".join((S3_BUCKET_PREFIX, identifier, postfix))
+        return "/".join((endpoint, identifier, postfix))
 
 
 def url_to_filename(url, etag=None):
@@ -126,7 +128,7 @@ def url_to_filename(url, etag=None):
     Convert `url` into a hashed filename in a repeatable way.
     If `etag` is specified, append its hash to the url's, delimited
     by a period.
-    If the url ends with .h5 (Keras HDF5 weights) ands '.h5' to the name
+    If the url ends with .h5 (Keras HDF5 weights) adds '.h5' to the name
     so that TF 2.0 can identify it as a HDF5 file
     (see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1380)
     """
