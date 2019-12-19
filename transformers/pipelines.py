@@ -504,7 +504,7 @@ class QuestionAnsweringPipeline(Pipeline):
         # Convert inputs to features
         examples = self._args_parser(*texts, **kwargs)
         features = squad_convert_examples_to_features(examples, self.tokenizer, kwargs['max_seq_len'], kwargs['doc_stride'], kwargs['max_question_len'], False)
-        fw_args = self.inputs_for_model(features.__dict__)
+        fw_args = self.inputs_for_model([f.__dict__ for f in features])
 
         # Manage tensor allocation on correct device
         with self.device_placement():
