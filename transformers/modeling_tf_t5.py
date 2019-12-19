@@ -610,7 +610,7 @@ class TFT5Model(TFT5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5Model.from_pretrained('t5-small')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
+        outputs = model(input_ids=input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
@@ -701,7 +701,7 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5WithLMHeadModel.from_pretrained('t5-small')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
+        outputs = model(input_ids=input_ids)
         prediction_scores = outputs[0]
 
     """
