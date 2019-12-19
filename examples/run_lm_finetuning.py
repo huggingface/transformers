@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa).
-GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
-using a masked language modeling (MLM) loss.
+Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa, DistilBERT and CamemBERT).
+GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT, RoBERTa, DistilBERT and CamemBERT
+are fine-tuned using a masked language modeling (MLM) loss.
 """
 
 from __future__ import absolute_import, division, print_function
