@@ -5,7 +5,6 @@ from transformers.commands.download import DownloadCommand
 from transformers.commands.run import RunCommand
 from transformers.commands.serving import ServeCommand
 from transformers.commands.user import UserCommands
-from transformers.commands.train import TrainCommand
 from transformers.commands.convert import ConvertCommand
 
 if __name__ == '__main__':
@@ -17,7 +16,6 @@ if __name__ == '__main__':
     DownloadCommand.register_subcommand(commands_parser)
     RunCommand.register_subcommand(commands_parser)
     ServeCommand.register_subcommand(commands_parser)
-    TrainCommand.register_subcommand(commands_parser)
     UserCommands.register_subcommand(commands_parser)
 
     # Let's go
