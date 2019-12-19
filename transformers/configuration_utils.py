@@ -57,8 +57,6 @@ class PretrainedConfig(object):
         self.use_bfloat16 = kwargs.pop('use_bfloat16', False)
         self.pruned_heads = kwargs.pop('pruned_heads', {})
         self.is_decoder = kwargs.pop('is_decoder', False)
-        self.id2label = kwargs.pop('id2label', {i: 'LABEL_{}'.format(i) for i in range(self.num_labels)})
-        self.label2id = kwargs.pop('label2id', dict(zip(self.id2label.values(), self.id2label.keys())))
 
         # Fine-tuning task arguments
         self.finetuning_task = kwargs.pop('finetuning_task', None)
