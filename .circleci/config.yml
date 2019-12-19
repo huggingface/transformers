@@ -80,17 +80,6 @@ jobs:
             - run: sudo pip install pytest
             - run: sudo pip install mecab-python3
             - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./transformers/tests/tokenization_bert_japanese_test.py
-    build_py2_custom_tokenizers:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:2.7
-        steps:
-            - checkout
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest
-            - run: sudo apt-get -y install libmecab-dev mecab mecab-ipadic-utf8 swig
-            - run: sudo pip install mecab-python
-            - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./transformers/tests/tokenization_bert_japanese_test.py
     deploy_doc:
         working_directory: ~/transformers
         docker:
@@ -124,7 +113,6 @@ workflows:
         jobs:
             - repository_consistency
             - build_py3_custom_tokenizers
-            - build_py2_custom_tokenizers
             - build_py3_torch_and_tf
             - build_py3_torch
             - build_py3_tf
