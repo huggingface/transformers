@@ -1,4 +1,4 @@
-__version__ = "2.2.1"
+__version__ = "2.2.2"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 # Files and general utilities
 from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH_PRETRAINED_BERT_CACHE,
                          cached_path, add_start_docstrings, add_end_docstrings,
-                         WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME,
+                         WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, CONFIG_NAME, MODEL_CARD_NAME,
                          is_tf_available, is_torch_available)
 
 from .data import (is_sklearn_available,
@@ -34,10 +34,14 @@ from .data import (is_sklearn_available,
 if is_sklearn_available():
     from .data import glue_compute_metrics, xnli_compute_metrics
 
+# Model Cards
+from .model_card import ModelCard
+
 # Tokenizers
 from .tokenization_utils import (PreTrainedTokenizer)
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
+from .tokenization_bert_japanese import BertJapaneseTokenizer, MecabTokenizer, CharacterTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_transfo_xl import (TransfoXLTokenizer, TransfoXLCorpus)
 from .tokenization_gpt2 import GPT2Tokenizer
@@ -48,28 +52,29 @@ from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_camembert import CamembertTokenizer
+from .tokenization_t5 import T5Tokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
-from .configuration_auto import AutoConfig
+from .configuration_auto import AutoConfig, ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_transfo_xl import TransfoXLConfig, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_gpt2 import GPT2Config, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlnet import XLNetConfig, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlm import XLMConfig, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # Modeling
 if is_torch_available():
     from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
     from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
-                                AutoModelWithLMHead, AutoModelForTokenClassification)
+                                AutoModelWithLMHead, AutoModelForTokenClassification, ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
                                 BertForMaskedLM, BertForNextSentencePrediction,
@@ -77,8 +82,8 @@ if is_torch_available():
                                 BertForTokenClassification, BertForQuestionAnswering,
                                 load_tf_weights_in_bert, BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_openai import (OpenAIGPTPreTrainedModel, OpenAIGPTModel,
-                                OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
-                                load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                  OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel,
+                                  load_tf_weights_in_openai_gpt, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_transfo_xl import (TransfoXLPreTrainedModel, TransfoXLModel, TransfoXLLMHeadModel,
                                     AdaptiveEmbedding,
                                     load_tf_weights_in_transfo_xl, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP)
@@ -110,6 +115,9 @@ if is_torch_available():
                                 CamembertForTokenClassification,
                                 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
+    from .modeling_t5 import (T5PreTrainedModel, T5Model, T5WithLMHeadModel,
+                              load_tf_weights_in_t5,
+                              T5_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_albert import (AlbertPreTrainedModel, AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
                                 AlbertForQuestionAnswering,
@@ -124,7 +132,7 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
-                                   TFAutoModelWithLMHead, TFAutoModelForTokenClassification)
+                                   TFAutoModelWithLMHead, TFAutoModelForTokenClassification, TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertMainLayer, TFBertEmbeddings,
                                    TFBertModel, TFBertForPreTraining,
@@ -178,6 +186,10 @@ if is_tf_available():
     from .modeling_tf_albert import (TFAlbertPreTrainedModel, TFAlbertModel, TFAlbertForMaskedLM,
                                      TFAlbertForSequenceClassification,
                                     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    from .modeling_tf_t5 import (TFT5PreTrainedModel, TFT5Model, TFT5WithLMHeadModel,
+                                 TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP)
+
     # Optimization
     from .optimization_tf import (WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator)
 

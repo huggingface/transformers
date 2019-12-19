@@ -6,18 +6,26 @@ from distutils.util import strtobool
 from transformers.file_utils import _tf_available, _torch_available
 
 
-try:
-    run_slow = os.environ["RUN_SLOW"]
-except KeyError:
-    # RUN_SLOW isn't set, default to skipping slow tests.
-    _run_slow_tests = False
-else:
-    # RUN_SLOW is set, convert it to True or False.
+SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
+
+
+def parse_flag_from_env(key, default=False):
     try:
-        _run_slow_tests = strtobool(run_slow)
-    except ValueError:
-        # More values are supported, but let's keep the message simple.
-        raise ValueError("If set, RUN_SLOW must be yes or no.")
+        value = os.environ[key]
+    except KeyError:
+        # KEY isn't set, default to `default`.
+        _value = default
+    else:
+        # KEY is set, convert it to True or False.
+        try:
+            _value = strtobool(value)
+        except ValueError:
+            # More values are supported, but let's keep the message simple.
+            raise ValueError("If set, {} must be yes or no.".format(key))
+    return _value
+
+_run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
+_run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 
 
 def slow(test_case):
@@ -30,6 +38,19 @@ def slow(test_case):
     """
     if not _run_slow_tests:
         test_case = unittest.skip("test is slow")(test_case)
+    return test_case
+
+
+def custom_tokenizers(test_case):
+    """
+    Decorator marking a test for a custom tokenizer.
+
+    Custom tokenizers require additional dependencies, and are skipped
+    by default. Set the RUN_CUSTOM_TOKENIZERS environment variable
+    to a truthy value to run them.
+    """
+    if not _run_custom_tokenizers:
+        test_case = unittest.skip("test of custom tokenizers")(test_case)
     return test_case
 
 
@@ -59,6 +80,6 @@ def require_tf(test_case):
 
 if _torch_available:
     # Set the USE_CUDA environment variable to select a GPU.
-    torch_device = "cuda" if os.environ.get("USE_CUDA") else "cpu"
+    torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"
 else:
     torch_device = None

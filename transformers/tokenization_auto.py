@@ -19,6 +19,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import logging
 
 from .tokenization_bert import BertTokenizer
+from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_ctrl import CTRLTokenizer
@@ -29,6 +30,7 @@ from .tokenization_roberta import RobertaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_albert import AlbertTokenizer
+from .tokenization_t5 import T5Tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ class AutoTokenizer(object):
 
         The tokenizer class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Tokenizer (T5 model)
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
@@ -68,10 +71,12 @@ class AutoTokenizer(object):
 
         The tokenizer class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: T5Tokenizer (T5 model)
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
             - contains `roberta`: RobertaTokenizer (RoBERTa model)
+            - contains `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
             - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
@@ -84,6 +89,7 @@ class AutoTokenizer(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
 
@@ -106,11 +112,19 @@ class AutoTokenizer(object):
 
         Examples::
 
-            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')    # Download vocabulary from S3 and cache.
-            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')  # E.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`
+            # Download vocabulary from S3 and cache.
+            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+
+            # Download vocabulary from S3 (user-uploaded) and cache.
+            tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
+
+            # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
+            tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return T5Tokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'albert' in pretrained_model_name_or_path:
             return AlbertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -118,6 +132,8 @@ class AutoTokenizer(object):
             return CamembertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'bert-base-japanese' in pretrained_model_name_or_path:
+            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
             return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'openai-gpt' in pretrained_model_name_or_path:

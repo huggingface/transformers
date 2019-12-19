@@ -78,6 +78,7 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
     logger.info("Loading PyTorch weights from {}".format(pt_path))
 
     pt_state_dict = torch.load(pt_path, map_location='cpu')
+    logger.info("PyTorch checkpoint contains {:,} parameters".format(sum(t.numel() for t in pt_state_dict.values())))
 
     return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys)
 
@@ -134,7 +135,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         start_prefix_to_remove = tf_model.base_model_prefix + '.'
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
-
+    tf_loaded_numel = 0
     weight_value_tuples = []
     all_pytorch_weights = set(list(pt_state_dict.keys()))
     for symbolic_weight in symbolic_weights:
@@ -142,7 +143,11 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         name, transpose = convert_tf_weight_name_to_pt_weight_name(sw_name, start_prefix_to_remove=start_prefix_to_remove)
 
         # Find associated numpy array in pytorch model state dict
-        assert name in pt_state_dict, "{} not found in PyTorch model".format(name)
+        if name not in pt_state_dict:
+            if allow_missing_keys:
+                continue
+            raise AttributeError("{} not found in PyTorch model".format(name))
+
         array = pt_state_dict[name].numpy()
 
         if transpose:
@@ -159,7 +164,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             e.args += (symbolic_weight.shape, array.shape)
             raise e
 
-        logger.info("Initialize TF weight {}".format(symbolic_weight.name))
+        tf_loaded_numel += array.size
+        # logger.warning("Initialize TF weight {}".format(symbolic_weight.name))
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
@@ -168,6 +174,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if tf_inputs is not None:
         tfo = tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+
+    logger.info("Loaded {:,} parameters in the TF 2.0 model.".format(tf_loaded_numel))
 
     logger.info("Weights or buffers not loaded from PyTorch model: {}".format(all_pytorch_weights))
 
@@ -246,6 +254,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     all_tf_weights = set(list(tf_weights_map.keys()))
     loaded_pt_weights_data_ptr = {}
+    missing_keys_pt = []
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
         # Handle PyTorch shared weight ()not duplicated in TF 2.0
         if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
@@ -254,7 +263,10 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
         # Find associated numpy array in pytorch model state dict
         if pt_weight_name not in tf_weights_map:
-            raise ValueError("{} not found in TF 2.0 model".format(pt_weight_name))
+            if allow_missing_keys:
+                missing_keys_pt.append(pt_weight_name)
+                continue
+            raise AttributeError("{} not found in TF 2.0 model".format(pt_weight_name))
 
         array, transpose = tf_weights_map[pt_weight_name]
 
@@ -272,13 +284,14 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             e.args += (pt_weight.shape, array.shape)
             raise e
 
-        logger.info("Initialize PyTorch weight {}".format(pt_weight_name))
+        # logger.warning("Initialize PyTorch weight {}".format(pt_weight_name))
 
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
 
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
+    missing_keys += missing_keys_pt
 
     if len(missing_keys) > 0:
         logger.info("Weights of {} not initialized from TF 2.0 model: {}".format(

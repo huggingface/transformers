@@ -23,20 +23,41 @@ from .configuration_auto import (BertConfig, CTRLConfig, DistilBertConfig,
                                  TransfoXLConfig, XLMConfig, XLNetConfig)
 
 from .modeling_tf_bert import TFBertModel, TFBertForMaskedLM, TFBertForSequenceClassification, \
-    TFBertForQuestionAnswering, TFBertForTokenClassification
-from .modeling_tf_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel
-from .modeling_tf_gpt2 import TFGPT2Model, TFGPT2LMHeadModel
-from .modeling_tf_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel
+    TFBertForQuestionAnswering, TFBertForTokenClassification, TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_gpt2 import TFGPT2Model, TFGPT2LMHeadModel, TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel, TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
 from .modeling_tf_xlnet import TFXLNetModel, TFXLNetLMHeadModel, TFXLNetForSequenceClassification, \
-    TFXLNetForQuestionAnsweringSimple, TFXLNetForTokenClassification
-from .modeling_tf_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple
-from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification, TFRobertaForTokenClassification
-from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification, TFDistilBertForTokenClassification
-from .modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel
+    TFXLNetForQuestionAnsweringSimple, TFXLNetForTokenClassification, TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, \
+    TFXLMForQuestionAnsweringSimple, TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification, \
+    TFRobertaForTokenClassification, TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification, TFDistilBertForTokenClassification, TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel, TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_albert import TFAlbertModel, TFAlbertForMaskedLM, TFAlbertForSequenceClassification, TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
+
+
+TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict((key, value)
+    for pretrained_map in [
+        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ]
+    for key, value, in pretrained_map.items())
 
 
 class TFAutoModel(object):
@@ -51,6 +72,7 @@ class TFAutoModel(object):
 
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5Model (T5 model)
             - contains `distilbert`: TFDistilBertModel (DistilBERT model)
             - contains `roberta`: TFRobertaModel (RoBERTa model)
             - contains `bert`: TFBertModel (Bert model)
@@ -117,6 +139,7 @@ class TFAutoModel(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5Model (T5 model)
             - contains `distilbert`: TFDistilBertModel (DistilBERT model)
             - contains `roberta`: TFRobertaModel (RoBERTa model)
             - contains `bert`: TFTFBertModel (Bert model)
@@ -130,6 +153,7 @@ class TFAutoModel(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
 
@@ -185,8 +209,12 @@ class TFAutoModel(object):
             model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return TFT5Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return TFDistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'albert' in pretrained_model_name_or_path:
+            return TFAlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return TFRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -221,6 +249,7 @@ class TFAutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5WithLMHeadModel (T5 model)
             - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
             - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
             - contains `bert`: TFBertForMaskedLM (Bert model)
@@ -290,6 +319,7 @@ class TFAutoModelWithLMHead(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: TFT5WithLMHeadModel (T5 model)
             - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
             - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
             - contains `bert`: TFBertForMaskedLM (Bert model)
@@ -304,6 +334,7 @@ class TFAutoModelWithLMHead(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
 
@@ -359,8 +390,12 @@ class TFAutoModelWithLMHead(object):
             model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if 't5' in pretrained_model_name_or_path:
+            return TFT5WithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'distilbert' in pretrained_model_name_or_path:
             return TFDistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'albert' in pretrained_model_name_or_path:
+            return TFAlbertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return TFRobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -461,6 +496,7 @@ class TFAutoModelForSequenceClassification(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
 
@@ -518,6 +554,8 @@ class TFAutoModelForSequenceClassification(object):
         """
         if 'distilbert' in pretrained_model_name_or_path:
             return TFDistilBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'albert' in pretrained_model_name_or_path:
+            return TFAlbertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return TFRobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -604,6 +642,7 @@ class TFAutoModelForQuestionAnswering(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
 
