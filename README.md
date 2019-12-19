@@ -17,6 +17,11 @@
         <img alt="GitHub release" src="https://img.shields.io/github/release/huggingface/transformers.svg">
     </a>
 </p>
+<p align="center">
+    <a href="https://app.valohai.com/projects/create/?template=huggingface-transformers">
+        <img alt="Train on Valohai" src="https://static.valohai.com/buttons/train.svg">
+    </a>
+</p>
 
 <h3 align="center">
 <p>State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch
@@ -97,6 +102,14 @@ git clone https://github.com/huggingface/transformers
 cd transformers
 pip install [--editable] .
 ```
+
+Alternatively, you can use [Valohai machine learning platform](https://valohai.com/) to automatically setup the project and run the examples within. 
+
+Click on the "Train on Valohai" button below, login/register, follow the instructions and get started. 
+
+<a href="https://app.valohai.com/projects/create/?template=huggingface-transformers">
+    <img alt="Train on Valohai" src="https://static.valohai.com/buttons/train.svg">
+</a>
 
 ### Tests
 
