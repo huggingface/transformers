@@ -68,11 +68,6 @@ setup(
     scripts=[
         'transformers-cli'
     ],
-    entry_points={
-      'console_scripts': [
-        "transformers=transformers.__main__:main",
-      ]
-    },
     # python_requires='>=3.5.0',
     classifiers=[
           'Intended Audience :: Science/Research',
