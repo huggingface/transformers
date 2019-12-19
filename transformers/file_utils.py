@@ -27,8 +27,9 @@ from contextlib import contextmanager
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 try:
-    if 'NO_TF' in os.environ and os.environ['NO_TF'].upper() in ('1', 'ON'):
-        logger.info("Found NO_TF, disabling TensorFlow")
+    os.environ.setdefault('USE_TF', 'YES')
+    if os.environ['USE_TF'].upper() in ('1', 'ON', 'YES'):
+        logger.info("USE_TF override through env variable, disabling Tensorflow")
         _tf_available = False
     else:
         import tensorflow as tf
@@ -39,8 +40,9 @@ except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
 try:
-    if 'NO_TORCH' in os.environ and os.environ['NO_TORCH'].upper() in ('1', 'ON'):
-        logger.info("Found NO_TORCH, disabling PyTorch")
+    os.environ.setdefault('USE_TORCH', 'YES')
+    if os.environ['USE_TORCH'].upper() in ('1', 'ON', 'YES'):
+        logger.info("USE_TORCH override through env variable, disabling PyTorch")
         _torch_available = False
     else:
         import torch
