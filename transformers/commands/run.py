@@ -1,7 +1,11 @@
+import logging
 from argparse import ArgumentParser
 
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import pipeline, Pipeline, PipelineDataFormat, SUPPORTED_TASKS
+
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def try_infer_format_from_ext(path: str):
@@ -51,7 +55,11 @@ class RunCommand(BaseTransformersCLICommand):
                 output += [nlp(entry)]
 
         # Saving data
-        self._reader.save(output)
+        if self._nlp.binary_output:
+            binary_path = self._reader.save_binary(output)
+            logger.warning('Current pipeline requires output to be in binary format, saving at {}'.format(binary_path))
+        else:
+            self._reader.save(output)
 
 
 
