@@ -102,9 +102,19 @@ class PipelineDataFormat:
 
     @abstractmethod
     def save(self, data: dict):
+        """
+        Save the provided data object with the representation for the current `DataFormat`.
+        :param data: data to store
+        :return:
+        """
         raise NotImplementedError()
 
     def save_binary(self, data: Union[dict, List[dict]]) -> str:
+        """
+        Save the provided data object as a pickle-formatted binary data on the disk.
+        :param data: data to store
+        :return: (str) Path where the data has been saved
+        """
         path, _ = os.path.splitext(self.output)
         binary_path = os.path.extsep.join((path, 'pickle'))
 
@@ -222,6 +232,42 @@ class Pipeline(_ScikitCompat):
     Base class implementing pipelined operations.
     Pipeline workflow is defined as a sequence of the following operations:
         Input -> Tokenization -> Model Inference -> Post-Processing (Task dependent) -> Output
+
+    Pipeline supports running on CPU or GPU through the device argument. Users can specify
+    device argument as an integer, -1 meaning "CPU", >= 0 referring the CUDA device ordinal.
+
+    Some pipeline, like for instance FeatureExtractionPipeline ('feature-extraction') outputs large
+    tensor object as nested-lists. In order to avoid dumping such large structure as textual data we
+    provide the binary_output constructor argument. If set to True, the output will be stored in the
+    pickle format.
+
+    Arguments:
+        **model**: ``(str, PretrainedModel, TFPretrainedModel)``:
+            Reference to the model to use through this pipeline.
+
+        **tokenizer**: ``(str, PreTrainedTokenizer)``:
+            Reference to the tokenizer to use through this pipeline.
+
+        **args_parser**: ``ArgumentHandler``:
+            Reference to the object in charge of parsing supplied pipeline parameters.
+
+        **device**: ``int``:
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+
+        **binary_output** ``bool`` (default: False):
+            Flag indicating if the output the pipeline should happen in a binary format (i.e. pickle) or as raw text.
+
+    Return:
+        Pipeline returns list or dictionary depending on:
+         - Does the user provided multiple sample
+         - The pipeline expose multiple fields in the output object
+
+    Examples:
+        nlp = pipeline('ner')
+        nlp = pipeline('ner', model='...', config='...', tokenizer='...')
+        nlp = NerPipeline(model='...', config='...', tokenizer='...')
+        nlp = QuestionAnsweringPipeline(model=AutoModel.from_pretrained('...'), tokenizer='...')
     """
     def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
                  args_parser: ArgumentHandler = None, device: int = -1,
@@ -312,11 +358,11 @@ class Pipeline(_ScikitCompat):
 
         # Encode for forward
         with self.device_placement():
+            # TODO : Remove this 512 hard-limit
             inputs = self.tokenizer.batch_encode_plus(
                 inputs, add_special_tokens=True,
                 return_tensors='tf' if is_tf_available() else 'pt',
-                # max_length=self.model.config.max_position_embedding
-                max_length=511
+                max_length=512
             )
 
             # Filter out features not available on specific models
@@ -385,6 +431,8 @@ class NerPipeline(Pipeline):
 
             # Manage correct placement of the tensors
             with self.device_placement():
+
+                # TODO : Remove this 512 hard-limit
                 tokens = self.tokenizer.encode_plus(
                     sentence, return_attention_mask=False,
                     return_tensors='tf' if is_tf_available() else 'pt',
@@ -488,9 +536,12 @@ class QuestionAnsweringPipeline(Pipeline):
         QuestionAnsweringPipeline leverages the SquadExample/SquadFeatures internally.
         This helper method encapsulate all the logic for converting question(s) and context(s) to SquadExample(s).
         We currently support extractive question answering.
-        Args:
+        Arguments:
              question: (str, List[str]) The question to be ask for the associated context
              context: (str, List[str]) The context in which we will look for the answer.
+
+        Returns:
+            SquadExample initialized with the corresponding question and context.
         """
         if isinstance(question, list):
             return [SquadExample(None, q, c, None, None, None) for q, c in zip(question, context)]
@@ -717,7 +768,10 @@ def pipeline(task: str, model: Optional = None,
         Some (optional) post processing for enhancing model's output
 
     Examples:
-        pipeline('ner')
+        pipeline('sentiment-analysis')
+        pipeline('question-answering', model='distilbert-base-uncased-distilled-squad', tokenizer='bert-base-cased')
+        pipeline('ner', model=AutoModel.from_pretrained(...), tokenizer=AutoTokenizer.from_pretrained(...)
+        pipeline('ner', model='https://...pytorch-model.bin', config='https://...config.json', tokenizer='bert-base-cased')
     """
     # Try to infer tokenizer from model name (if provided as str)
     if tokenizer is None:
