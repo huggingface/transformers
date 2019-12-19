@@ -23,7 +23,7 @@ import logging
 from transformers import AutoTokenizer, BertTokenizer, AutoTokenizer, GPT2Tokenizer
 from transformers import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from .utils import slow
+from .utils import slow, SMALL_MODEL_IDENTIFIER
 
 
 class AutoTokenizerTest(unittest.TestCase):
@@ -42,6 +42,11 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertIsInstance(tokenizer, GPT2Tokenizer)
             self.assertGreater(len(tokenizer), 0)
 
+    def test_tokenizer_from_pretrained_identifier(self):
+        logging.basicConfig(level=logging.INFO)
+        tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
+        self.assertIsInstance(tokenizer, BertTokenizer)
+        self.assertEqual(len(tokenizer), 12)
 
 if __name__ == "__main__":
     unittest.main()

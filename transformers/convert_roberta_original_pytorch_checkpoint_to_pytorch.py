@@ -20,6 +20,13 @@ import argparse
 import logging
 import numpy as np
 import torch
+import pathlib
+
+import fairseq
+from packaging import version
+
+if version.parse(fairseq.__version__) < version.parse("0.9.0"):
+    raise Exception("requires fairseq >= 0.9.0")
 
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
@@ -45,8 +52,9 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
     """
     roberta = FairseqRobertaModel.from_pretrained(roberta_checkpoint_path)
     roberta.eval()  # disable dropout
+    roberta_sent_encoder = roberta.model.decoder.sentence_encoder
     config = BertConfig(
-        vocab_size_or_config_json_file=50265,
+        vocab_size=roberta_sent_encoder.embed_tokens.num_embeddings,
         hidden_size=roberta.args.encoder_embed_dim,
         num_hidden_layers=roberta.args.encoder_layers,
         num_attention_heads=roberta.args.encoder_attention_heads,
@@ -64,7 +72,6 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
 
     # Now let's copy all the weights.
     # Embeddings
-    roberta_sent_encoder = roberta.model.decoder.sentence_encoder
     model.roberta.embeddings.word_embeddings.weight = roberta_sent_encoder.embed_tokens.weight
     model.roberta.embeddings.position_embeddings.weight = roberta_sent_encoder.embed_positions.weight
     model.roberta.embeddings.token_type_embeddings.weight.data = torch.zeros_like(model.roberta.embeddings.token_type_embeddings.weight)  # just zero them out b/c RoBERTa doesn't use them.
@@ -79,15 +86,18 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         ### self attention
         self_attn: BertSelfAttention = layer.attention.self
         assert(
-            roberta_layer.self_attn.in_proj_weight.shape == torch.Size((3 * config.hidden_size, config.hidden_size))
+            roberta_layer.self_attn.k_proj.weight.data.shape == \
+            roberta_layer.self_attn.q_proj.weight.data.shape == \
+            roberta_layer.self_attn.v_proj.weight.data.shape == \
+            torch.Size((config.hidden_size, config.hidden_size))
         )
-        # we use three distinct linear layers so we split the source layer here.
-        self_attn.query.weight.data = roberta_layer.self_attn.in_proj_weight[:config.hidden_size, :]
-        self_attn.query.bias.data = roberta_layer.self_attn.in_proj_bias[:config.hidden_size]
-        self_attn.key.weight.data = roberta_layer.self_attn.in_proj_weight[config.hidden_size:2*config.hidden_size, :]
-        self_attn.key.bias.data = roberta_layer.self_attn.in_proj_bias[config.hidden_size:2*config.hidden_size]
-        self_attn.value.weight.data = roberta_layer.self_attn.in_proj_weight[2*config.hidden_size:, :]
-        self_attn.value.bias.data = roberta_layer.self_attn.in_proj_bias[2*config.hidden_size:]
+
+        self_attn.query.weight.data = roberta_layer.self_attn.q_proj.weight
+        self_attn.query.bias.data = roberta_layer.self_attn.q_proj.bias
+        self_attn.key.weight.data = roberta_layer.self_attn.k_proj.weight
+        self_attn.key.bias.data = roberta_layer.self_attn.k_proj.bias
+        self_attn.value.weight.data = roberta_layer.self_attn.v_proj.weight
+        self_attn.value.bias.data = roberta_layer.self_attn.v_proj.bias
 
         ### self-attention output
         self_output: BertSelfOutput = layer.attention.output
@@ -151,6 +161,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
     if not success:
         raise Exception("Something went wRoNg")
 
+    pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 

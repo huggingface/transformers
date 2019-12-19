@@ -139,5 +139,6 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         assert encoded_sentence == [101] + text + [102]
         assert encoded_pair == [101] + text + [102] + text_2 + [102]
 
+
 if __name__ == '__main__':
     unittest.main()

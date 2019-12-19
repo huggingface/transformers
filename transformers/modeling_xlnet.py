@@ -609,7 +609,7 @@ class XLNetModel(XLNetPreTrainedModel):
         self.clamp_len = config.clamp_len
         self.n_layer = config.n_layer
 
-        self.word_embedding = nn.Embedding(config.n_token, config.d_model)
+        self.word_embedding = nn.Embedding(config.vocab_size, config.d_model)
         self.mask_emb = nn.Parameter(torch.FloatTensor(1, 1, config.d_model))
         self.layer = nn.ModuleList([XLNetLayer(config) for _ in range(config.n_layer)])
         self.dropout = nn.Dropout(config.dropout)
@@ -940,7 +940,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         self.same_length = config.same_length
 
         self.transformer = XLNetModel(config)
-        self.lm_loss = nn.Linear(config.d_model, config.n_token, bias=True)
+        self.lm_loss = nn.Linear(config.d_model, config.vocab_size, bias=True)
 
         self.init_weights()
 

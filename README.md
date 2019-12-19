@@ -56,9 +56,10 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: TF 2.0 and PyTorch ](#Quick-tour-TF-20-training-and-PyTorch-interoperability) | Train a TF 2.0 model in 10 lines of code, load it in PyTorch |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
+| [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| [Documentation][(v2.2.0/v2.2.1)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
+| [Documentation][(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
 
 ## Installation
 
@@ -144,7 +145,8 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 9. **[CTRL](https://github.com/salesforce/ctrl/)** (from Salesforce) released with the paper [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
 10. **[CamemBERT](https://camembert-model.fr)** (from Inria/Facebook/Sorbonne) released with the paper [CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) by Louis Martin*, Benjamin Muller*, Pedro Javier Ortiz Suárez*, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah and Benoît Sagot.
 11. **[ALBERT](https://github.com/google-research/ALBERT)** (from Google Research and the Toyota Technological Institute at Chicago) released with the paper [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942), by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut.
-11. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
+12. **[T5](https://github.com/google-research/text-to-text-transfer-transformer)** (from Google AI) released with the paper [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu.
+13. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
@@ -443,6 +445,46 @@ python ./examples/run_generation.py \
     --model_name_or_path=ctrl \
     --temperature=0 \
     --repetition_penalty=1.2 \
+```
+
+## Quick tour of model sharing
+
+New in `v2.2.2`: you can now upload and share your fine-tuned models with the community, using the <abbr title="Command-line interface">CLI</abbr> that's built-in to the library.
+
+**First, create an account on [https://huggingface.co/join](https://huggingface.co/join)**. Then:
+
+```shell
+transformers-cli login
+# log in using the same credentials as on huggingface.co
+```
+Upload your model:
+```shell
+transformers-cli upload ./path/to/pretrained_model/
+
+# ^^ Upload folder containing weights/tokenizer/config
+# saved via `.save_pretrained()`
+
+transformers-cli upload ./config.json [--filename folder/foobar.json]
+
+# ^^ Upload a single file
+# (you can optionally override its filename, which can be nested inside a folder)
+```
+
+Your model will then be accessible through its identifier, a concatenation of your username and the folder name above:
+```python
+"username/model_name"
+```
+
+Anyone can load it from code:
+```python
+tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")
+model = AutoModel.from_pretrained("username/pretrained_model")
+```
+
+Finally, list all your files on S3:
+```shell
+transformers-cli ls
+# List all your S3 objects.
 ```
 
 ## Migrating from pytorch-transformers to transformers

@@ -21,10 +21,22 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 import requests
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+try:
+    os.environ.setdefault('USE_TORCH', 'YES')
+    if os.environ['USE_TORCH'].upper() in ('1', 'ON', 'YES'):
+        import torch
+        _torch_available = True  # pylint: disable=invalid-name
+        logger.info("PyTorch version {} available.".format(torch.__version__))
+    else:
+        logger.info("USE_TORCH override through env variable, disabling PyTorch")
+        _torch_available = False
+except ImportError:
+    _torch_available = False  # pylint: disable=invalid-name
 
 try:
     os.environ.setdefault('USE_TF', 'YES')
@@ -36,23 +48,8 @@ try:
     else:
         logger.info("USE_TF override through env variable, disabling Tensorflow")
         _tf_available = False
-
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
-
-try:
-    os.environ.setdefault('USE_TORCH', 'YES')
-    if os.environ['USE_TORCH'].upper() in ('1', 'ON', 'YES'):
-        import torch
-        _torch_available = True  # pylint: disable=invalid-name
-        logger.info("PyTorch version {} available.".format(torch.__version__))
-
-    else:
-        logger.info("USE_TORCH override through env variable, disabling PyTorch")
-        _torch_available = False
-except ImportError:
-    _torch_available = False  # pylint: disable=invalid-name
-
 
 try:
     from torch.hub import _get_torch_home
@@ -84,6 +81,13 @@ WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = 'tf_model.h5'
 TF_WEIGHTS_NAME = 'model.ckpt'
 CONFIG_NAME = "config.json"
+MODEL_CARD_NAME = "model_card.json"
+
+DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
+DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
+
+S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
+
 
 def is_torch_available():
     return _torch_available
@@ -115,6 +119,18 @@ else:
         def docstring_decorator(fn):
             return fn
         return docstring_decorator
+
+
+def is_remote_url(url_or_filename):
+    parsed = urlparse(url_or_filename)
+    return parsed.scheme in ('http', 'https', 's3')
+
+def hf_bucket_url(identifier, postfix=None):
+    if postfix is None:
+        return "/".join((S3_BUCKET_PREFIX, identifier))
+    else:
+        return "/".join((S3_BUCKET_PREFIX, identifier, postfix))
+
 
 def url_to_filename(url, etag=None):
     """
@@ -184,9 +200,7 @@ def cached_path(url_or_filename, cache_dir=None, force_download=False, proxies=N
     if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
-    parsed = urlparse(url_or_filename)
-
-    if parsed.scheme in ('http', 'https', 's3'):
+    if is_remote_url(url_or_filename):
         # URL, so get it from the cache (downloading if necessary)
         return get_from_cache(url_or_filename, cache_dir=cache_dir,
             force_download=force_download, proxies=proxies,
@@ -194,7 +208,7 @@ def cached_path(url_or_filename, cache_dir=None, force_download=False, proxies=N
     elif os.path.exists(url_or_filename):
         # File, and it exists.
         return url_or_filename
-    elif parsed.scheme == '':
+    elif urlparse(url_or_filename).scheme == '':
         # File, but it doesn't exist.
         raise EnvironmentError("file {} not found".format(url_or_filename))
     else:
@@ -258,7 +272,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0):
         return
     content_length = response.headers.get('Content-Length')
     total = resume_size + int(content_length) if content_length is not None else None
-    progress = tqdm(unit="B", total=total, initial=resume_size)
+    progress = tqdm(unit="B", unit_scale=True, total=total, initial=resume_size, desc="Downloading")
     for chunk in response.iter_content(chunk_size=1024):
         if chunk: # filter out keep-alive new chunks
             progress.update(len(chunk))
