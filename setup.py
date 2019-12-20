@@ -46,7 +46,7 @@ extras['all'] = [package for package in extras.values()]
 
 setup(
     name="transformers",
-    version="2.2.2",
+    version="2.3.0",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
