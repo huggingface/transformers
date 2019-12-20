@@ -10,8 +10,7 @@ import numpy as np
 from seqeval import metrics
 import _pickle as pickle
 from absl import logging
-from transformers import TF2_WEIGHTS_NAME
-from transformers import BertConfig, BertTokenizer, TFBertForTokenClassification
+from transformers import TF2_WEIGHTS_NAME, BertConfig, BertTokenizer, TFBertForTokenClassification
 from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
 from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForTokenClassification
 from transformers import create_optimizer, GradientAccumulator
