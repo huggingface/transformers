@@ -35,7 +35,6 @@ from .tokenization_t5 import T5Tokenizer
 
 logger = logging.getLogger(__name__)
 
-
 class AutoTokenizer(object):
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
         that will be instantiated as one of the tokenizer classes of the library
