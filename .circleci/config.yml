@@ -4,6 +4,8 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
+        environment:
+            OMP_NUM_THREADS: 1
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -19,6 +21,8 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
+        environment:
+            OMP_NUM_THREADS: 1
         resource_class: xlarge
         parallelism: 1
         steps:
@@ -34,6 +38,8 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
+        environment:
+            OMP_NUM_THREADS: 1
         resource_class: xlarge
         parallelism: 1
         steps:
