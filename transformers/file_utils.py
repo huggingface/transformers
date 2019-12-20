@@ -10,10 +10,9 @@ import json
 import logging
 import os
 import six
-import shutil
 import tempfile
 import fnmatch
-from functools import wraps
+from functools import partial, wraps
 from hashlib import sha256
 from io import open
 
@@ -345,14 +344,13 @@ def get_from_cache(url, cache_dir=None, force_download=False, proxies=None, etag
         def _resumable_file_manager():
             with open(incomplete_path,'a+b') as f:
                 yield f
-            os.remove(incomplete_path)
         temp_file_manager = _resumable_file_manager
         if os.path.exists(incomplete_path):
             resume_size = os.stat(incomplete_path).st_size
         else:
             resume_size = 0
     else:
-        temp_file_manager = tempfile.NamedTemporaryFile
+        temp_file_manager = partial(tempfile.NamedTemporaryFile, dir=cache_dir, delete=False)
         resume_size = 0
 
     if etag is not None and (not os.path.exists(cache_path) or force_download):
@@ -371,12 +369,9 @@ def get_from_cache(url, cache_dir=None, force_download=False, proxies=None, etag
 
             # we are copying the file before closing it, so flush to avoid truncation
             temp_file.flush()
-            # shutil.copyfileobj() starts at the current position, so go to the start
-            temp_file.seek(0)
 
-            logger.info("copying %s to cache at %s", temp_file.name, cache_path)
-            with open(cache_path, 'wb') as cache_file:
-                shutil.copyfileobj(temp_file, cache_file)
+            logger.info("storing %s in cache at %s", url, cache_path)
+            os.rename(temp_file.name, cache_path)
 
             logger.info("creating metadata file for %s", cache_path)
             meta = {'url': url, 'etag': etag}
@@ -386,7 +381,5 @@ def get_from_cache(url, cache_dir=None, force_download=False, proxies=None, etag
                 if sys.version_info[0] == 2 and isinstance(output_string, str):
                     output_string = unicode(output_string, 'utf-8')  # The beauty of python 2
                 meta_file.write(output_string)
-
-            logger.info("removing temp file %s", temp_file.name)
 
     return cache_path
