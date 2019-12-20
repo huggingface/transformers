@@ -776,7 +776,10 @@ SUPPORTED_TASKS = {
         'tf': TFAutoModel if is_tf_available() else None,
         'pt': AutoModel if is_torch_available() else None,
         'default': {
-            'model': 'distilbert-base-uncased',
+            'model': {
+                'pt': 'distilbert-base-uncased',
+                'tf': 'distilbert-base-uncased',
+            },
             'config': None,
             'tokenizer': 'distilbert-base-uncased'
         }
@@ -786,7 +789,10 @@ SUPPORTED_TASKS = {
         'tf': TFAutoModelForSequenceClassification if is_tf_available() else None,
         'pt': AutoModelForSequenceClassification if is_torch_available() else None,
         'default': {
-            'model': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin',
+            'model': {
+                'pt': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin',
+                'tf': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5',
+            },
             'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json',
             'tokenizer': 'distilbert-base-uncased'
         }
@@ -796,7 +802,10 @@ SUPPORTED_TASKS = {
         'tf': TFAutoModelForTokenClassification if is_tf_available() else None,
         'pt': AutoModelForTokenClassification if is_torch_available() else None,
         'default': {
-            'model': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin',
+            'model': {
+                'pt':'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin',
+                'tf': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-tf_model.h5',
+            },
             'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json',
             'tokenizer': 'bert-large-cased'
         }
@@ -806,7 +815,10 @@ SUPPORTED_TASKS = {
         'tf': TFAutoModelForQuestionAnswering if is_tf_available() else None,
         'pt': AutoModelForQuestionAnswering if is_torch_available() else None,
         'default': {
-            'model': 'distilbert-base-uncased-distilled-squad',
+            'model': {
+                'pt': 'distilbert-base-uncased-distilled-squad',
+                'tf': 'distilbert-base-uncased-distilled-squad',
+            },
             'config': None,
             'tokenizer': 'distilbert-base-uncased'
         }
@@ -843,7 +855,8 @@ def pipeline(task: str, model: Optional = None,
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
-        model, config, tokenizer = tuple(targeted_task['default'].values())
+        models, config, tokenizer = tuple(targeted_task['default'].values())
+        model = models[framework]
 
     # Try to infer tokenizer from model or config name (if provided as str)
     if tokenizer is None:
