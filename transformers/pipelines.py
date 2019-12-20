@@ -343,8 +343,9 @@ class Pipeline(_ScikitCompat):
         if 'distilbert' not in model_type and 'xlm' not in model_type:
             args += ['token_type_ids']
 
-        if 'xlnet' in model_type or 'xlm' in model_type:
-            args += ['cls_index', 'p_mask']
+        # PR #1548 (CLI) There is an issue with attention_mask
+        # if 'xlnet' in model_type or 'xlm' in model_type:
+        #     args += ['cls_index', 'p_mask']
 
         if isinstance(features, dict):
             return {k: features[k] for k in args}
@@ -380,7 +381,7 @@ class Pipeline(_ScikitCompat):
             predictions = self.model(inputs, training=False)[0]
         else:
             with torch.no_grad():
-                predictions = self.model(**inputs).cpu()[0]
+                predictions = self.model(**inputs)[0].cpu()
 
         return predictions.numpy()
 
@@ -444,7 +445,7 @@ class NerPipeline(Pipeline):
 
                 # Forward
                 if is_tf_available():
-                    entities = self.model(**tokens)[0][0].numpy()
+                    entities = self.model(tokens)[0][0].numpy()
                 else:
                     with torch.no_grad():
                         entities = self.model(**tokens)[0][0].cpu().numpy()
