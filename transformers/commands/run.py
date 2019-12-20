@@ -63,7 +63,6 @@ class RunCommand(BaseTransformersCLICommand):
 
         for entry in self._reader:
             output = nlp(**entry) if self._reader.is_multi_columns else nlp(entry)
-            print(output)
             if isinstance(output, dict):
                 outputs.append(output)
             else:
