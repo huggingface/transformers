@@ -52,6 +52,7 @@ from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
 # Configurations
 from .configuration_utils import PretrainedConfig
@@ -68,6 +69,7 @@ from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CO
 from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_xlm_roberta import XLMRobertaConfig, XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 # Modeling
 if is_torch_available():
@@ -121,6 +123,9 @@ if is_torch_available():
     from .modeling_albert import (AlbertPreTrainedModel, AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
                                 AlbertForQuestionAnswering,
                                 load_tf_weights_in_albert, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
+
+    from .modeling_xlm_roberta import (XLMRobertaForMaskedLM, XLMRobertaModel, XLMRobertaForMultipleChoice,
+                                       XLMRobertaForSequenceClassification, XLMRobertaForTokenClassification)
 
     # Optimization
     from .optimization import (AdamW, get_constant_schedule, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup,
