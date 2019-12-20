@@ -59,6 +59,7 @@ setup(
                                     "tests.*", "tests"]),
     install_requires=['numpy',
                       'boto3',
+                      'filelock',
                       'requests',
                       'tqdm',
                       'regex != 2019.12.17',
