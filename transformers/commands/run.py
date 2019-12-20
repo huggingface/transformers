@@ -32,7 +32,8 @@ def run_command_factory(args):
     reader = PipelineDataFormat.from_str(format=format,
                                          output_path=args.output,
                                          input_path=args.input,
-                                         column=args.column if args.column else nlp.default_input_names)
+                                         column=args.column if args.column else nlp.default_input_names,
+                                         overwrite=args.overwrite)
     return RunCommand(nlp, reader)
 
 
@@ -54,6 +55,7 @@ class RunCommand(BaseTransformersCLICommand):
         run_parser.add_argument('--column', type=str, help='Name of the column to use as input. (For multi columns input as QA use column1,columns2)')
         run_parser.add_argument('--format', type=str, default='infer', choices=PipelineDataFormat.SUPPORTED_FORMATS, help='Input format to read from')
         run_parser.add_argument('--device', type=int, default=-1, help='Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU (default: -1)')
+        run_parser.add_argument('--overwrite', action='store_true', help='Allow overwriting the output file.')
         run_parser.set_defaults(func=run_command_factory)
 
     def run(self):
@@ -61,6 +63,7 @@ class RunCommand(BaseTransformersCLICommand):
 
         for entry in self._reader:
             output = nlp(**entry) if self._reader.is_multi_columns else nlp(entry)
+            print(output)
             if isinstance(output, dict):
                 outputs.append(output)
             else:
@@ -68,10 +71,10 @@ class RunCommand(BaseTransformersCLICommand):
 
         # Saving data
         if self._nlp.binary_output:
-            binary_path = self._reader.save_binary(output)
+            binary_path = self._reader.save_binary(outputs)
             logger.warning('Current pipeline requires output to be in binary format, saving at {}'.format(binary_path))
         else:
-            self._reader.save(output)
+            self._reader.save(outputs)
 
 
 

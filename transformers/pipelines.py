@@ -107,7 +107,7 @@ class PipelineDataFormat:
     """
     SUPPORTED_FORMATS = ['json', 'csv', 'pipe']
 
-    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
+    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
         self.output_path = output_path
         self.input_path = input_path
         self.column = column.split(',') if column is not None else ['']
@@ -116,7 +116,7 @@ class PipelineDataFormat:
         if self.is_multi_columns:
             self.column = [tuple(c.split('=')) if '=' in c else (c, c) for c in self.column]
 
-        if output_path is not None:
+        if output_path is not None and not overwrite:
             if exists(abspath(self.output_path)):
                 raise OSError('{} already exists on disk'.format(self.output_path))
 
@@ -152,25 +152,26 @@ class PipelineDataFormat:
         return binary_path
 
     @staticmethod
-    def from_str(format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
+    def from_str(format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
         if format == 'json':
-            return JsonPipelineDataFormat(output_path, input_path, column)
+            return JsonPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
         elif format == 'csv':
-            return CsvPipelineDataFormat(output_path, input_path, column)
+            return CsvPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
         elif format == 'pipe':
-            return PipedPipelineDataFormat(output_path, input_path, column)
+            return PipedPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
         else:
             raise KeyError('Unknown reader {} (Available reader are json/csv/pipe)'.format(format))
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
-        super().__init__(output_path, input_path, column)
+    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
+        super().__init__(output_path, input_path, column, overwrite=overwrite)
 
     def __iter__(self):
         with open(self.input_path, 'r') as f:
             reader = csv.DictReader(f)
             for row in reader:
+                print(row, self.column)
                 if self.is_multi_columns:
                     yield {k: row[c] for k, c in self.column}
                 else:
@@ -185,8 +186,8 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
 
 class JsonPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
-        super().__init__(output_path, input_path, column)
+    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
+        super().__init__(output_path, input_path, column, overwrite=overwrite)
 
         with open(input_path, 'r') as f:
             self._entries = json.load(f)
@@ -460,6 +461,8 @@ class NerPipeline(Pipeline):
     Named Entity Recognition pipeline using ModelForTokenClassification head.
     """
 
+    default_input_names = 'sequences'
+
     def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
                  modelcard: ModelCard = None, framework: Optional[str] = None,
                  args_parser: ArgumentHandler = None, device: int = -1,
@@ -504,7 +507,7 @@ class NerPipeline(Pipeline):
             for idx, label_idx in enumerate(labels_idx):
                 if self.model.config.id2label[label_idx] not in self.ignore_labels:
                     answer += [{
-                        'word': self.tokenizer.decode(int(input_ids[idx])),
+                        'word': self.tokenizer.decode([int(input_ids[idx])]),
                         'score': score[idx][label_idx].item(),
                         'entity': self.model.config.id2label[label_idx]
                     }]
