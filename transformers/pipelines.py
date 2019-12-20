@@ -450,11 +450,12 @@ class NerPipeline(Pipeline):
                 score = np.exp(entities[token_start]) / np.exp(entities[token_start]).sum(-1, keepdims=True)
                 label_idx = score.argmax()
 
-                answer += [{
-                    'word': words[idx],
-                    'score': score[label_idx].item(),
-                    'entity': self.model.config.id2label[label_idx]
-                }]
+                if label_idx > 0:
+                    answer += [{
+                        'word': words[idx],
+                        'score': score[label_idx].item(),
+                        'entity': self.model.config.id2label[label_idx]
+                    }]
 
                 # Update token start
                 token_start += len(list(word))
