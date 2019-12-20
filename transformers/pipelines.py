@@ -27,7 +27,7 @@ from typing import Union, Optional, Tuple, List, Dict
 import numpy as np
 
 from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizer, PretrainedConfig, \
-    SquadExample, squad_convert_examples_to_features, is_tf_available, is_torch_available, logger
+    SquadExample, squad_convert_examples_to_features, is_tf_available, is_torch_available, logger, BasicTokenizer
 
 if is_tf_available():
     import tensorflow as tf
@@ -416,12 +416,19 @@ class NerPipeline(Pipeline):
     Named Entity Recognition pipeline using ModelForTokenClassification head.
     """
 
+    def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
+                 args_parser: ArgumentHandler = None, device: int = -1,
+                 binary_output: bool = False):
+        super().__init__(model, tokenizer, args_parser, device, binary_output)
+
+        self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
+
     def __call__(self, *texts, **kwargs):
         inputs, answers = self._args_parser(*texts, **kwargs), []
         for sentence in inputs:
 
             # Ugly token to word idx mapping (for now)
-            token_to_word, words = [], sentence.split(' ')
+            token_to_word, words = [], self._basic_tokenizer.tokenize(sentence)
             for i, w in enumerate(words):
                 tokens = self.tokenizer.tokenize(w)
                 token_to_word += [i] * len(tokens)
