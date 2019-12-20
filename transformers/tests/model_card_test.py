@@ -18,7 +18,7 @@ import os
 import json
 import unittest
 
-from transformers.model_card import ModelCard
+from transformers.modelcard import ModelCard
 from .tokenization_tests_commons import TemporaryDirectory
 
 class ModelCardTester(unittest.TestCase):
@@ -49,20 +49,20 @@ class ModelCardTester(unittest.TestCase):
                             }
 
     def test_model_card_common_properties(self):
-        model_card = ModelCard.from_dict(self.inputs_dict)
-        self.assertTrue(hasattr(model_card, 'model_details'))
-        self.assertTrue(hasattr(model_card, 'intended_use'))
-        self.assertTrue(hasattr(model_card, 'factors'))
-        self.assertTrue(hasattr(model_card, 'metrics'))
-        self.assertTrue(hasattr(model_card, 'evaluation_data'))
-        self.assertTrue(hasattr(model_card, 'training_data'))
-        self.assertTrue(hasattr(model_card, 'quantitative_analyses'))
-        self.assertTrue(hasattr(model_card, 'ethical_considerations'))
-        self.assertTrue(hasattr(model_card, 'caveats_and_recommendations'))
+        modelcard = ModelCard.from_dict(self.inputs_dict)
+        self.assertTrue(hasattr(modelcard, 'model_details'))
+        self.assertTrue(hasattr(modelcard, 'intended_use'))
+        self.assertTrue(hasattr(modelcard, 'factors'))
+        self.assertTrue(hasattr(modelcard, 'metrics'))
+        self.assertTrue(hasattr(modelcard, 'evaluation_data'))
+        self.assertTrue(hasattr(modelcard, 'training_data'))
+        self.assertTrue(hasattr(modelcard, 'quantitative_analyses'))
+        self.assertTrue(hasattr(modelcard, 'ethical_considerations'))
+        self.assertTrue(hasattr(modelcard, 'caveats_and_recommendations'))
 
     def test_model_card_to_json_string(self):
-        model_card = ModelCard.from_dict(self.inputs_dict)
-        obj = json.loads(model_card.to_json_string())
+        modelcard = ModelCard.from_dict(self.inputs_dict)
+        obj = json.loads(modelcard.to_json_string())
         for key, value in self.inputs_dict.items():
             self.assertEqual(obj[key], value)
 
@@ -70,7 +70,7 @@ class ModelCardTester(unittest.TestCase):
         model_card_first = ModelCard.from_dict(self.inputs_dict)
 
         with TemporaryDirectory() as tmpdirname:
-            filename = os.path.join(tmpdirname, u"model_card.json")
+            filename = os.path.join(tmpdirname, u"modelcard.json")
             model_card_first.to_json_file(filename)
             model_card_second = ModelCard.from_json_file(filename)
 
