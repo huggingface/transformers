@@ -353,12 +353,11 @@ class CommonTestCases:
                 heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
                                 -1: [0]}
                 model.prune_heads(heads_to_prune)
-                directory = "pruned_model"
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-                model.save_pretrained(directory)
-                model = model_class.from_pretrained(directory)
-                model.to(torch_device)
+
+                with TemporaryDirectory() as temp_dir_name:
+                    model.save_pretrained(temp_dir_name)
+                    model = model_class.from_pretrained(temp_dir_name)
+                    model.to(torch_device)
 
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
@@ -367,7 +366,6 @@ class CommonTestCases:
                 self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
                 self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
-                shutil.rmtree(directory)
 
         def test_head_pruning_save_load_from_config_init(self):
             if not self.test_pruning:
@@ -427,14 +425,10 @@ class CommonTestCases:
                 self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads)
                 self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
-                directory = "pruned_model"
-
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-                model.save_pretrained(directory)
-                model = model_class.from_pretrained(directory)
-                model.to(torch_device)
-                shutil.rmtree(directory)
+                with TemporaryDirectory() as temp_dir_name:
+                    model.save_pretrained(temp_dir_name)
+                    model = model_class.from_pretrained(temp_dir_name)
+                    model.to(torch_device)
 
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
