@@ -18,6 +18,8 @@ import csv
 import json
 import os
 import pickle
+import logging
+import six
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import groupby
@@ -26,8 +28,12 @@ from typing import Union, Optional, Tuple, List, Dict
 
 import numpy as np
 
-from transformers import AutoConfig, AutoTokenizer, PreTrainedTokenizer, PretrainedConfig, \
-    SquadExample, squad_convert_examples_to_features, is_tf_available, is_torch_available, logger, BasicTokenizer
+from transformers import (AutoConfig, AutoTokenizer, PreTrainedTokenizer,
+                          PretrainedConfig, ModelCard, SquadExample,
+                          squad_convert_examples_to_features, is_tf_available,
+                          is_torch_available, BasicTokenizer,
+                          ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
+                          ALL_PRETRAINED_CONFIG_ARCHIVE_MAP)
 
 if is_tf_available():
     import tensorflow as tf
@@ -39,6 +45,8 @@ if is_torch_available():
     from transformers import AutoModel, AutoModelForSequenceClassification, \
         AutoModelForQuestionAnswering, AutoModelForTokenClassification
 
+
+logger = logging.getLogger(__name__)
 
 class ArgumentHandler(ABC):
     """
@@ -271,11 +279,13 @@ class Pipeline(_ScikitCompat):
         nlp = QuestionAnsweringPipeline(model=AutoModel.from_pretrained('...'), tokenizer='...')
     """
     def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
+                 modelcard: ModelCard = None,
                  args_parser: ArgumentHandler = None, device: int = -1,
                  binary_output: bool = False):
 
         self.model = model
         self.tokenizer = tokenizer
+        self.modelcard = modelcard
         self.device = device
         self.binary_output = binary_output
         self._args_parser = args_parser or DefaultArgumentHandler()
@@ -294,6 +304,7 @@ class Pipeline(_ScikitCompat):
 
         self.model.save_pretrained(save_directory)
         self.tokenizer.save_pretrained(save_directory)
+        self.modelcard.save_pretrained(save_directory)
 
     def transform(self, X):
         """
@@ -393,9 +404,10 @@ class FeatureExtractionPipeline(Pipeline):
 
     def __init__(self, model,
                  tokenizer: PreTrainedTokenizer = None,
+                 modelcard: ModelCard = None,
                  args_parser: ArgumentHandler = None,
                  device: int = -1):
-        super().__init__(model, tokenizer, args_parser, device, binary_output=True)
+        super().__init__(model, tokenizer, modelcard, args_parser, device, binary_output=True)
 
     def __call__(self, *args, **kwargs):
         return super().__call__(*args, **kwargs).tolist()
@@ -418,9 +430,10 @@ class NerPipeline(Pipeline):
     """
 
     def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
+                 modelcard: ModelCard = None,
                  args_parser: ArgumentHandler = None, device: int = -1,
                  binary_output: bool = False):
-        super().__init__(model, tokenizer, args_parser, device, binary_output)
+        super().__init__(model, tokenizer, modelcard, args_parser, device, binary_output)
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
 
@@ -554,8 +567,10 @@ class QuestionAnsweringPipeline(Pipeline):
         else:
             return SquadExample(None, question, context, None, None, None)
 
-    def __init__(self, model, tokenizer: Optional[PreTrainedTokenizer], device: int = -1, **kwargs):
-        super().__init__(model, tokenizer, args_parser=QuestionAnsweringArgumentHandler(),
+    def __init__(self, model, tokenizer: Optional[PreTrainedTokenizer],
+                 modelcard: Optional[ModelCard],
+                 device: int = -1, **kwargs):
+        super().__init__(model, tokenizer, modelcard, args_parser=QuestionAnsweringArgumentHandler(),
                          device=device, **kwargs)
 
     def __call__(self, *texts, **kwargs):
@@ -725,7 +740,7 @@ SUPPORTED_TASKS = {
         'default': {
             'model': 'distilbert-base-uncased',
             'config': None,
-            'tokenizer': 'bert-base-uncased'
+            'tokenizer': 'distilbert-base-uncased'
         }
     },
     'sentiment-analysis': {
@@ -735,7 +750,7 @@ SUPPORTED_TASKS = {
         'default': {
             'model': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin',
             'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json',
-            'tokenizer': 'bert-base-uncased'
+            'tokenizer': 'distilbert-base-uncased'
         }
     },
     'ner': {
@@ -745,7 +760,7 @@ SUPPORTED_TASKS = {
         'default': {
             'model': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin',
             'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json',
-            'tokenizer': 'bert-base-cased'
+            'tokenizer': 'bert-large-cased'
         }
     },
     'question-answering': {
@@ -755,7 +770,7 @@ SUPPORTED_TASKS = {
         'default': {
             'model': 'distilbert-base-uncased-distilled-squad',
             'config': None,
-            'tokenizer': 'bert-base-uncased'
+            'tokenizer': 'distilbert-base-uncased'
         }
     }
 }
@@ -763,7 +778,9 @@ SUPPORTED_TASKS = {
 
 def pipeline(task: str, model: Optional = None,
              config: Optional[Union[str, PretrainedConfig]] = None,
-             tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None, **kwargs) -> Pipeline:
+             tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+             modelcard: Optional[Union[str, ModelCard]] = None,
+             **kwargs) -> Pipeline:
     """
     Utility factory method to build a pipeline.
     Pipeline are made of:
@@ -777,48 +794,63 @@ def pipeline(task: str, model: Optional = None,
         pipeline('ner', model=AutoModel.from_pretrained(...), tokenizer=AutoTokenizer.from_pretrained(...)
         pipeline('ner', model='https://...pytorch-model.bin', config='https://...config.json', tokenizer='bert-base-cased')
     """
-    # Try to infer tokenizer from model name (if provided as str)
-    if tokenizer is None:
-        if model is not None and not isinstance(model, str):
-            # Impossible to guest what is the right tokenizer here
-            raise Exception('Tokenizer cannot be None if provided model is a PreTrainedModel instance')
-        else:
-            tokenizer = model
-
     # Retrieve the task
     if task not in SUPPORTED_TASKS:
         raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
 
-    targeted_task = SUPPORTED_TASKS[task]
-    task, allocator = targeted_task['impl'], targeted_task['tf'] if is_tf_available() else targeted_task['pt']
+    pipeline_framework = 'tf' if is_tf_available() else ('pt' if is_torch_available() else None)
+    if pipeline_framework is None:
+        raise ImportError("At least one of TensorFlow 2.0 or PyTorch should be installed. "
+                          "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
+                          "To install PyTorch, read the instructions at https://pytorch.org/.")
 
-    # Handling for default model for the task
+
+    targeted_task = SUPPORTED_TASKS[task]
+    task, model_class = targeted_task['impl'], targeted_task[pipeline_framework]
+
+    # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         model, config, tokenizer = tuple(targeted_task['default'].values())
 
-    # Allocate tokenizer
-    tokenizer = tokenizer if isinstance(tokenizer, PreTrainedTokenizer) else AutoTokenizer.from_pretrained(tokenizer)
+    # Try to infer tokenizer from model or config name (if provided as str)
+    if tokenizer is None:
+        if isinstance(model, str) and model in ALL_PRETRAINED_MODEL_ARCHIVE_MAP:
+            tokenizer = model
+        elif isinstance(config, str) and model in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+            tokenizer = config
+        else:
+            # Impossible to guest what is the right tokenizer here
+            raise Exception("Impossible to guess which tokenizer to use. "
+                            "Please provided a PretrainedTokenizer class or a path/url/shortcut name to a pretrained tokenizer.")
 
-    # Special handling for model conversion
-    if isinstance(model, str):
-        from_tf = model.endswith('.h5') and not is_tf_available()
-        from_pt = model.endswith('.bin') and not is_torch_available()
+    # Try to infer modelcard from model or config name (if provided as str)
+    if modelcard is None:
+        # Try to fallback on one of the provided string for model or config (will replace the suffix)
+        if isinstance(model, str):
+            modelcard = model
+        elif isinstance(config, str):
+            modelcard = config
 
-        if from_tf:
-            logger.warning('Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. '
-                           'Trying to load the model with PyTorch.')
-        elif from_pt:
-            logger.warning('Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. '
-                           'Trying to load the model with Tensorflow.')
-    else:
-        from_tf = from_pt = False
+    # Instantiate tokenizer if needed
+    if isinstance(tokenizer, six.string_types):
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
 
+    # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config)
 
+    # Instantiate model if needed
     if isinstance(model, str):
-        if allocator.__name__.startswith('TF'):
-            model = allocator.from_pretrained(model, config=config, from_pt=from_pt)
-        else:
-            model = allocator.from_pretrained(model, config=config, from_tf=from_tf)
+        # Handle transparent TF/PT model conversion
+        model_kwargs = {}
+        if pipeline_framework == 'pt' and model.endswith('.h5'):
+            model_kwargs['from_tf'] = True
+            logger.warning('Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. '
+                           'Trying to load the model with PyTorch.')
+        elif pipeline_framework == 'tf' and model.endswith('.bin'):
+            model_kwargs['from_pt'] = True
+            logger.warning('Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. '
+                           'Trying to load the model with Tensorflow.')
+        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+
     return task(model, tokenizer, **kwargs)

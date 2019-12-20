@@ -25,7 +25,8 @@ from io import open
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-from .file_utils import CONFIG_NAME, MODEL_CARD_NAME, cached_path, is_remote_url, hf_bucket_url
+from .file_utils import CONFIG_NAME, MODEL_CARD_NAME, WEIGHTS_NAME, TF2_WEIGHTS_NAME, \
+                        cached_path, is_remote_url, hf_bucket_url
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ class ModelCard(object):
                 - a string with the `shortcut name` of a pre-trained model card to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model card that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a mode card file saved using the :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
-                - a path or url to a saved model card JSON `file`, e.g.: ``./my_model_directory/model_card.json``.
+                - a path or url to a saved model card JSON `file`, e.g.: ``./my_model_directory/modelcard.json``.
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model
@@ -100,15 +101,13 @@ class ModelCard(object):
                 - The values in kwargs of any keys which are model card attributes will be used to override the loaded values.
                 - Behavior concerning key/value pairs whose keys are *not* model card attributes is controlled by the `return_unused_kwargs` keyword parameter.
 
-            force_download: (`optional`) boolean, default False:
-                Force to (re-)download the model card file and override the cached version if it exists.
-
-            resume_download: (`optional`) boolean, default False:
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
-
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
+
+            find_from_standard_name: (`optional`) boolean, default True:
+                If the pretrained_model_name_or_path ends with our standard model or config filenames, replace them with our standard modelcard filename.
+                Can be used to directly feed a model/config url and access the colocated modelcard.
 
             return_unused_kwargs: (`optional`) bool:
 
@@ -117,22 +116,21 @@ class ModelCard(object):
 
         Examples::
 
-            model_card = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
-            model_card = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
-            model_card = ModelCard.from_pretrained('./test/saved_model/model_card.json')
-            model_card = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
+            modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
+            modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
+            modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
+            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
 
         """
         cache_dir = kwargs.pop('cache_dir', None)
-        force_download = kwargs.pop('force_download', False)
-        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
+        find_from_standard_name = kwargs.pop('find_from_standard_name', True)
         return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
 
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            # For simplicity we use the same pretrained url than the configuration files but with a different suffix (model_card.json)
+            # For simplicity we use the same pretrained url than the configuration files
+            # but with a different suffix (modelcard.json). This suffix is replaced below.
             model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-            model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
         elif os.path.isdir(pretrained_model_name_or_path):
             model_card_file = os.path.join(pretrained_model_name_or_path, MODEL_CARD_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -140,17 +138,22 @@ class ModelCard(object):
         else:
             model_card_file = hf_bucket_url(pretrained_model_name_or_path, postfix=MODEL_CARD_NAME)
 
+        if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+            model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
+            model_card_file = model_card_file.replace(WEIGHTS_NAME, MODEL_CARD_NAME)
+            model_card_file = model_card_file.replace(TF2_WEIGHTS_NAME, MODEL_CARD_NAME)
+
         try:
             # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, force_download=force_download,
-                                               proxies=proxies, resume_download=resume_download)
+            resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, force_download=True,
+                                               proxies=proxies, resume_download=False)
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:
                 logger.info("loading model card file {} from cache at {}".format(
                     model_card_file, resolved_model_card_file))
             # Load model card
-            model_card = cls.from_json_file(resolved_model_card_file)
+            modelcard = cls.from_json_file(resolved_model_card_file)
 
         except EnvironmentError:
             if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
@@ -166,7 +169,7 @@ class ModelCard(object):
             logger.warning("Creating an empty model card.")
 
             # We fall back on creating an empty model card
-            model_card = cls()
+            modelcard = cls()
 
         except json.JSONDecodeError:
             logger.warning("Couldn't reach server at '{}' to download model card file or "
@@ -175,22 +178,22 @@ class ModelCard(object):
             logger.warning("Creating an empty model card.")
 
             # We fall back on creating an empty model card
-            model_card = cls()
+            modelcard = cls()
 
         # Update model card with kwargs if needed
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(model_card, key):
-                setattr(model_card, key, value)
+            if hasattr(modelcard, key):
+                setattr(modelcard, key, value)
                 to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info("Model card: %s", str(model_card))
+        logger.info("Model card: %s", str(modelcard))
         if return_unused_kwargs:
-            return model_card, kwargs
+            return modelcard, kwargs
         else:
-            return model_card
+            return modelcard
 
     @classmethod
     def from_dict(cls, json_object):
