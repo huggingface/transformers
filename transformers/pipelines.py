@@ -32,7 +32,6 @@ from transformers import (AutoConfig, AutoTokenizer, PreTrainedTokenizer,
                           PretrainedConfig, ModelCard, SquadExample,
                           squad_convert_examples_to_features, is_tf_available,
                           is_torch_available, BasicTokenizer,
-                          ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
                           ALL_PRETRAINED_CONFIG_ARCHIVE_MAP)
 
 if is_tf_available():
@@ -845,9 +844,9 @@ def pipeline(task: str, model: Optional = None,
 
     # Try to infer tokenizer from model or config name (if provided as str)
     if tokenizer is None:
-        if isinstance(model, str) and model in ALL_PRETRAINED_MODEL_ARCHIVE_MAP:
+        if isinstance(model, str) and model in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             tokenizer = model
-        elif isinstance(config, str) and model in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+        elif isinstance(config, str) and config in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             tokenizer = config
         else:
             # Impossible to guest what is the right tokenizer here
