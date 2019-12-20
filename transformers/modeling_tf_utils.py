@@ -22,6 +22,8 @@ import logging
 import os
 
 import tensorflow as tf
+from tensorflow.python.keras.saving import hdf5_format
+import h5py
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
@@ -182,7 +184,9 @@ class TFPreTrainedModel(tf.keras.Model):
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+            config: (`optional`) one of:
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
                 - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
@@ -205,6 +209,9 @@ class TFPreTrainedModel(tf.keras.Model):
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
@@ -229,11 +236,13 @@ class TFPreTrainedModel(tf.keras.Model):
         force_download = kwargs.pop('force_download', False)
         resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
+        output_loading_info = kwargs.pop('output_loading_info', False)
 
-        # Load config
-        if config is None:
+        # Load config if we don't provide a configuration
+        if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args,
+                config_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
@@ -304,9 +313,38 @@ class TFPreTrainedModel(tf.keras.Model):
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
-        model.load_weights(resolved_archive_file, by_name=True)
+        try:
+            model.load_weights(resolved_archive_file, by_name=True)
+        except OSError:
+            raise OSError("Unable to load weights from h5 file. "
+                          "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. ")
 
         ret = model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+
+        # Check if the models are the same to output loading informations
+        with h5py.File(resolved_archive_file, 'r') as f:
+            if 'layer_names' not in f.attrs and 'model_weights' in f:
+                f = f['model_weights']
+            hdf5_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, 'layer_names'))
+        model_layer_names = set(layer.name for layer in model.layers)
+        missing_keys = list(model_layer_names - hdf5_layer_names)
+        unexpected_keys = list(hdf5_layer_names - model_layer_names)
+        error_msgs = []
+
+        if len(missing_keys) > 0:
+            logger.info("Layers of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, missing_keys))
+        if len(unexpected_keys) > 0:
+            logger.info("Layers from pretrained model not used in {}: {}".format(
+                model.__class__.__name__, unexpected_keys))
+        if len(error_msgs) > 0:
+            raise RuntimeError('Error(s) in loading weights for {}:\n\t{}'.format(
+                            model.__class__.__name__, "\n\t".join(error_msgs)))
+        if output_loading_info:
+            loading_info = {"missing_keys": missing_keys,
+                            "unexpected_keys": unexpected_keys,
+                            "error_msgs": error_msgs}
+            return model, loading_info
 
         return model
 

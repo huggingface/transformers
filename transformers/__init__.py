@@ -24,6 +24,7 @@ from .file_utils import (TRANSFORMERS_CACHE, PYTORCH_TRANSFORMERS_CACHE, PYTORCH
 
 from .data import (is_sklearn_available,
                    InputExample, InputFeatures, DataProcessor,
+                   SingleSentenceClassificationProcessor,
                    glue_output_modes, glue_convert_examples_to_features,
                    glue_processors, glue_tasks_num_labels,
                    xnli_output_modes, xnli_processors, xnli_tasks_num_labels,
@@ -34,7 +35,7 @@ if is_sklearn_available():
     from .data import glue_compute_metrics, xnli_compute_metrics
 
 # Model Cards
-from .model_card import ModelCard
+from .modelcard import ModelCard
 
 # Tokenizers
 from .tokenization_utils import (PreTrainedTokenizer)
@@ -75,7 +76,7 @@ from .configuration_xlm_roberta import XLMRobertaConfig, XLM_ROBERTA_PRETRAINED_
 if is_torch_available():
     from .modeling_utils import (PreTrainedModel, prune_layer, Conv1D)
     from .modeling_auto import (AutoModel, AutoModelForSequenceClassification, AutoModelForQuestionAnswering,
-                                AutoModelWithLMHead, ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                AutoModelWithLMHead, AutoModelForTokenClassification, ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_bert import (BertPreTrainedModel, BertModel, BertForPreTraining,
                                 BertForMaskedLM, BertForNextSentencePrediction,
@@ -136,7 +137,7 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (TFAutoModel, TFAutoModelForSequenceClassification, TFAutoModelForQuestionAnswering,
-                                   TFAutoModelWithLMHead, TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
+                                   TFAutoModelWithLMHead, TFAutoModelForTokenClassification, TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
 
     from .modeling_tf_bert import (TFBertPreTrainedModel, TFBertMainLayer, TFBertEmbeddings,
                                    TFBertModel, TFBertForPreTraining,
@@ -205,6 +206,10 @@ from .modeling_tf_pytorch_utils import (convert_tf_weight_name_to_pt_weight_name
                                         load_tf2_checkpoint_in_pytorch_model,
                                         load_tf2_weights_in_pytorch_model,
                                         load_tf2_model_in_pytorch_model)
+
+# Pipelines
+from .pipelines import pipeline, PipelineDataFormat, CsvPipelineDataFormat, JsonPipelineDataFormat, PipedPipelineDataFormat, \
+    Pipeline, FeatureExtractionPipeline, QuestionAnsweringPipeline, NerPipeline, TextClassificationPipeline
 
 if not is_tf_available() and not is_torch_available():
     logger.warning("Neither PyTorch nor TensorFlow >= 2.0 have been found."
