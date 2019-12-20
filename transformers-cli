@@ -3,9 +3,9 @@ from argparse import ArgumentParser
 
 from transformers.commands.download import DownloadCommand
 from transformers.commands.run import RunCommand
-from transformers.commands.serving import ServeCommand
 from transformers.commands.user import UserCommands
 from transformers.commands.convert import ConvertCommand
+from transformers.commands.serving import ServeCommand
 
 if __name__ == '__main__':
     parser = ArgumentParser('Transformers CLI tool', usage='transformers-cli <command> [<args>]')

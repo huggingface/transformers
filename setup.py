@@ -38,9 +38,9 @@ from setuptools import find_packages, setup
 
 
 extras = {
-    'serving': ['uvicorn', 'fastapi'],
-    'serving-tf': ['uvicorn', 'fastapi', 'tensorflow'],
-    'serving-torch': ['uvicorn', 'fastapi', 'torch']
+    'serving': ['pydantic', 'uvicorn', 'fastapi'],
+    'serving-tf': ['pydantic', 'uvicorn', 'fastapi', 'tensorflow'],
+    'serving-torch': ['pydantic', 'uvicorn', 'fastapi', 'torch']
 }
 extras['all'] = [package for package in extras.values()]
 
