@@ -40,8 +40,12 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'xlm-roberta-base': None,
-    'xlm-roberta-large': None,
+    'xlm-roberta-base': 512,
+    'xlm-roberta-large': 512,
+    'xlm-roberta-large-finetuned-conll02-dutch': 512,
+    'xlm-roberta-large-finetuned-conll02-spanish': 512,
+    'xlm-roberta-large-finetuned-conll03-english': 512,
+    'xlm-roberta-large-finetuned-conll03-german': 512,
 }
 
 class XLMRobertaTokenizer(PreTrainedTokenizer):
@@ -58,10 +62,10 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     def __init__(self, vocab_file, bos_token="<s>", eos_token="</s>", sep_token="</s>",
                  cls_token="<s>", unk_token="<unk>", pad_token='<pad>', mask_token='<mask>',
                  **kwargs):
-        super(XLMRobertaTokenizer, self).__init__(max_len=512, bos_token=bos_token, eos_token=eos_token, unk_token=unk_token,
-                                                 sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
-                                                 mask_token=mask_token,
-                                                 **kwargs)
+        super(XLMRobertaTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token,
+                                                  sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
+                                                  mask_token=mask_token,
+                                                  **kwargs)
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
         self.sp_model = spm.SentencePieceProcessor()

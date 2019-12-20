@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 def get_framework(model=None):
     """ Select framework (TensorFlow/PyTorch) to use.
-        If both frameworks are installed and no specific model is provided, defaults to using TensorFlow.
+        If both frameworks are installed and no specific model is provided, defaults to using PyTorch.
     """
     if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
         # Both framework are available but the use supplied a model class instance.
@@ -60,7 +60,8 @@ def get_framework(model=None):
                           "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
                           "To install PyTorch, read the instructions at https://pytorch.org/.")
     else:
-        framework = 'tf' if is_tf_available() else 'pt'
+        # framework = 'tf' if is_tf_available() else 'pt'
+        framework = 'pt' if is_torch_available() else 'tf'
     return framework
 
 class ArgumentHandler(ABC):
