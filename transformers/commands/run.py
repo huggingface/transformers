@@ -50,9 +50,9 @@ class RunCommand(BaseTransformersCLICommand):
         nlp, output = self._nlp, []
         for entry in self._reader:
             if self._reader.is_multi_columns:
-                output += [nlp(**entry)]
+                output += nlp(**entry)
             else:
-                output += [nlp(entry)]
+                output += nlp(entry)
 
         # Saving data
         if self._nlp.binary_output:
