@@ -138,8 +138,7 @@ class CommonTestCases:
             tokenized_sequence = tokenizer.tokenize(sequence_with_special_tokens)
 
             for special_token in tokenizer.all_special_tokens:
-                print(special_token, special_token in tokenized_sequence)
-                assert special_token in tokenized_sequence
+                self.assertTrue(special_token in tokenized_sequence)
 
             tokenizer = self.get_tokenizer(do_lower_case=False)
 
