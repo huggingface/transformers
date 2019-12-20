@@ -891,6 +891,10 @@ def pipeline(task: str, model: Optional = None,
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config)
 
+    # Instantiate modelcard if needed
+    if isinstance(modelcard, str):
+        modelcard = ModelCard.from_pretrained(modelcard)
+
     # Instantiate model if needed
     if isinstance(model, str):
         # Handle transparent TF/PT model conversion
