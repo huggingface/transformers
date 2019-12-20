@@ -1227,6 +1227,7 @@ class PreTrainedTokenizer(object):
                 return self._convert_id_to_token(ids)
         tokens = []
         for index in ids:
+            index = int(index)
             if skip_special_tokens and index in self.all_special_ids:
                 continue
             if index in self.added_tokens_decoder:
