@@ -14,12 +14,14 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import sys
 import csv
 import json
 import os
 import pickle
 import logging
 import six
+
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import groupby
@@ -49,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 def get_framework(model=None):
     """ Select framework (TensorFlow/PyTorch) to use.
-        If both frameworks are installed and no specific model is provided, defaults to using TensorFlow.
+        If both frameworks are installed and no specific model is provided, defaults to using PyTorch.
     """
     if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
         # Both framework are available but the use supplied a model class instance.
@@ -60,7 +62,8 @@ def get_framework(model=None):
                           "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
                           "To install PyTorch, read the instructions at https://pytorch.org/.")
     else:
-        framework = 'tf' if is_tf_available() else 'pt'
+        # framework = 'tf' if is_tf_available() else 'pt'
+        framework = 'pt' if is_torch_available() else 'tf'
     return framework
 
 class ArgumentHandler(ABC):
@@ -97,28 +100,29 @@ class PipelineDataFormat:
     Supported data formats currently includes:
      - JSON
      - CSV
+     - stdin/stdout (pipe)
 
     PipelineDataFormat also includes some utilities to work with multi-columns like mapping from datasets columns
     to pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
     """
     SUPPORTED_FORMATS = ['json', 'csv', 'pipe']
 
-    def __init__(self, output: Optional[str], input: Optional[str], column: Optional[str]):
-        self.output = output
-        self.path = input
-        self.column = column.split(',') if column else ['']
+    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
+        self.output_path = output_path
+        self.input_path = input_path
+        self.column = column.split(',') if column is not None else ['']
         self.is_multi_columns = len(self.column) > 1
 
         if self.is_multi_columns:
             self.column = [tuple(c.split('=')) if '=' in c else (c, c) for c in self.column]
 
-        if output is not None:
-            if exists(abspath(self.output)):
-                raise OSError('{} already exists on disk'.format(self.output))
+        if output_path is not None:
+            if exists(abspath(self.output_path)):
+                raise OSError('{} already exists on disk'.format(self.output_path))
 
-        if input is not None:
-            if not exists(abspath(self.path)):
-                raise OSError('{} doesnt exist on disk'.format(self.path))
+        if input_path is not None:
+            if not exists(abspath(self.input_path)):
+                raise OSError('{} doesnt exist on disk'.format(self.input_path))
 
     @abstractmethod
     def __iter__(self):
@@ -139,7 +143,7 @@ class PipelineDataFormat:
         :param data: data to store
         :return: (str) Path where the data has been saved
         """
-        path, _ = os.path.splitext(self.output)
+        path, _ = os.path.splitext(self.output_path)
         binary_path = os.path.extsep.join((path, 'pickle'))
 
         with open(binary_path, 'wb+') as f_output:
@@ -148,23 +152,23 @@ class PipelineDataFormat:
         return binary_path
 
     @staticmethod
-    def from_str(name: str, output: Optional[str], path: Optional[str], column: Optional[str]):
-        if name == 'json':
-            return JsonPipelineDataFormat(output, path, column)
-        elif name == 'csv':
-            return CsvPipelineDataFormat(output, path, column)
-        elif name == 'pipe':
-            return PipedPipelineDataFormat(output, path, column)
+    def from_str(format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
+        if format == 'json':
+            return JsonPipelineDataFormat(output_path, input_path, column)
+        elif format == 'csv':
+            return CsvPipelineDataFormat(output_path, input_path, column)
+        elif format == 'pipe':
+            return PipedPipelineDataFormat(output_path, input_path, column)
         else:
-            raise KeyError('Unknown reader {} (Available reader are json/csv/pipe)'.format(name))
+            raise KeyError('Unknown reader {} (Available reader are json/csv/pipe)'.format(format))
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output: Optional[str], input: Optional[str], column: Optional[str]):
-        super().__init__(output, input, column)
+    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
+        super().__init__(output_path, input_path, column)
 
     def __iter__(self):
-        with open(self.path, 'r') as f:
+        with open(self.input_path, 'r') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if self.is_multi_columns:
@@ -173,7 +177,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
                     yield row[self.column[0]]
 
     def save(self, data: List[dict]):
-        with open(self.output, 'w') as f:
+        with open(self.output_path, 'w') as f:
             if len(data) > 0:
                 writer = csv.DictWriter(f, list(data[0].keys()))
                 writer.writeheader()
@@ -181,10 +185,10 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
 
 class JsonPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output: Optional[str], input: Optional[str], column: Optional[str]):
-        super().__init__(output, input, column)
+    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str]):
+        super().__init__(output_path, input_path, column)
 
-        with open(input, 'r') as f:
+        with open(input_path, 'r') as f:
             self._entries = json.load(f)
 
     def __iter__(self):
@@ -195,7 +199,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
                 yield entry[self.column[0]]
 
     def save(self, data: dict):
-        with open(self.output, 'w') as f:
+        with open(self.output_path, 'w') as f:
             json.dump(data, f)
 
 
@@ -207,9 +211,7 @@ class PipedPipelineDataFormat(PipelineDataFormat):
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
     """
     def __iter__(self):
-        import sys
         for line in sys.stdin:
-
             # Split for multi-columns
             if '\t' in line:
 
@@ -228,7 +230,7 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         print(data)
 
     def save_binary(self, data: Union[dict, List[dict]]) -> str:
-        if self.output is None:
+        if self.output_path is None:
             raise KeyError(
                 'When using piped input on pipeline outputting large object requires an output file path. '
                 'Please provide such output path through --output argument.'
@@ -293,6 +295,9 @@ class Pipeline(_ScikitCompat):
         nlp = NerPipeline(model='...', config='...', tokenizer='...')
         nlp = QuestionAnsweringPipeline(model=AutoModel.from_pretrained('...'), tokenizer='...')
     """
+
+    default_input_names = None
+
     def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
                  modelcard: ModelCard = None, framework: Optional[str] = None,
                  args_parser: ArgumentHandler = None, device: int = -1,
@@ -581,6 +586,8 @@ class QuestionAnsweringPipeline(Pipeline):
     Question Answering pipeline using ModelForQuestionAnswering head.
     """
 
+    default_input_names = 'question,context'
+
     def __init__(self, model,
                  tokenizer: Optional[PreTrainedTokenizer],
                  modelcard: Optional[ModelCard],
@@ -683,7 +690,6 @@ class QuestionAnsweringPipeline(Pipeline):
                 }
                 for s, e, score in zip(starts, ends, scores)
             ]
-
         if len(answers) == 1:
             return answers[0]
         return answers
