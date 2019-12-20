@@ -184,7 +184,9 @@ class TFPreTrainedModel(tf.keras.Model):
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+            config: (`optional`) one of:
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
                 - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
@@ -236,10 +238,11 @@ class TFPreTrainedModel(tf.keras.Model):
         proxies = kwargs.pop('proxies', None)
         output_loading_info = kwargs.pop('output_loading_info', False)
 
-        # Load config
-        if config is None:
+        # Load config if we don't provide a configuration
+        if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args,
+                config_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
@@ -310,7 +313,11 @@ class TFPreTrainedModel(tf.keras.Model):
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
-        model.load_weights(resolved_archive_file, by_name=True)
+        try:
+            model.load_weights(resolved_archive_file, by_name=True)
+        except OSError:
+            raise OSError("Unable to load weights from h5 file. "
+                          "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. ")
 
         ret = model(model.dummy_inputs, training=False)  # Make sure restore ops are run
 

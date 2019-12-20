@@ -281,7 +281,9 @@ class PreTrainedModel(nn.Module):
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+            config: (`optional`) one of:
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
                 - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
@@ -336,10 +338,11 @@ class PreTrainedModel(nn.Module):
         proxies = kwargs.pop('proxies', None)
         output_loading_info = kwargs.pop('output_loading_info', False)
 
-        # Load config
-        if config is None:
+        # Load config if we don't provide a configuration
+        if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args,
+                config_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
@@ -408,7 +411,11 @@ class PreTrainedModel(nn.Module):
         model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
-            state_dict = torch.load(resolved_archive_file, map_location='cpu')
+            try:
+                state_dict = torch.load(resolved_archive_file, map_location='cpu')
+            except:
+                raise OSError("Unable to load weights from pytorch checkpoint file. "
+                            "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. ")
 
         missing_keys = []
         unexpected_keys = []
