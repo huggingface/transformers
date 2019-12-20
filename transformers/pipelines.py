@@ -491,9 +491,11 @@ class NerPipeline(Pipeline):
                 # Forward
                 if self.framework == 'tf':
                     entities = self.model(tokens)[0][0].numpy()
+                    input_ids = tokens['input_ids'].numpy()[0]
                 else:
                     with torch.no_grad():
                         entities = self.model(**tokens)[0][0].cpu().numpy()
+                        input_ids = tokens['input_ids'].cpu().numpy()[0]
 
             score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
             labels_idx = score.argmax(axis=-1)
@@ -502,7 +504,7 @@ class NerPipeline(Pipeline):
             for idx, label_idx in enumerate(labels_idx):
                 if self.model.config.id2label[label_idx] not in self.ignore_labels:
                     answer += [{
-                        'word': self.tokenizer.decode(tokens['input_ids'][0][idx].cpu().tolist()),
+                        'word': self.tokenizer.decode(int(input_ids[idx])),
                         'score': score[idx][label_idx].item(),
                         'entity': self.model.config.id2label[label_idx]
                     }]
