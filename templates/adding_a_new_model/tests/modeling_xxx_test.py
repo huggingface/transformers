@@ -17,13 +17,12 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
 
 from transformers import is_torch_available
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 if is_torch_available():
     from transformers import (XxxConfig, XxxModel, XxxForMaskedLM,
@@ -249,10 +248,8 @@ class XxxModelTest(CommonTestCases.CommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(XXX_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = XxxModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = XxxModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 if __name__ == "__main__":

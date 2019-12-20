@@ -1,10 +1,13 @@
 import os
 import unittest
+import tempfile
 
 from distutils.util import strtobool
 
 from transformers.file_utils import _tf_available, _torch_available
 
+
+CACHE_DIR = os.path.join(tempfile.gettempdir(), "transformers_test")
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 

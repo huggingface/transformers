@@ -30,7 +30,7 @@ import logging
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
@@ -753,10 +753,8 @@ class CommonTestCases:
                 [[], []])
 
         def create_and_check_model_from_pretrained(self):
-            cache_dir = "/tmp/transformers_test/"
             for model_name in list(self.base_model_class.pretrained_model_archive_map.keys())[:1]:
-                model = self.base_model_class.from_pretrained(model_name, cache_dir=cache_dir)
-                shutil.rmtree(cache_dir)
+                model = self.base_model_class.from_pretrained(model_name, cache_dir=CACHE_DIR)
                 self.parent.assertIsNotNone(model)
 
         def prepare_config_and_inputs_for_common(self):

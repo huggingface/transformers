@@ -20,7 +20,6 @@ import os
 import unittest
 import json
 import random
-import shutil
 
 from transformers import XLNetConfig, is_tf_available
 
@@ -35,7 +34,7 @@ if is_tf_available():
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_tf, slow
+from .utils import CACHE_DIR, require_tf, slow
 
 
 @require_tf
@@ -319,10 +318,8 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFXLNetModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFXLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 
