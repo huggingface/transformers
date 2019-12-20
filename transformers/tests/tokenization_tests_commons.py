@@ -133,6 +133,14 @@ class CommonTestCases:
             self.assertNotEqual(len(toks), len(toks0))  # toks0 should be longer
             self.assertListEqual(toks, toks2)
 
+            # Check that none of the special tokens are lowercased
+            sequence_with_special_tokens = "A " + " yEs ".join(tokenizer.all_special_tokens) + " B"
+            tokenized_sequence = tokenizer.tokenize(sequence_with_special_tokens)
+
+            for special_token in tokenizer.all_special_tokens:
+                print(special_token, special_token in tokenized_sequence)
+                assert special_token in tokenized_sequence
+
             tokenizer = self.get_tokenizer(do_lower_case=False)
 
             added = tokenizer.add_tokens(new_toks)
