@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 from typing import Iterable
 
@@ -35,16 +34,6 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
 }
 
 
-@require_tf
-def tf_pipeline(*args, **kwargs):
-    return pipeline(**kwargs)
-
-
-@require_torch
-def torch_pipeline(*args, **kwargs):
-    return pipeline(**kwargs)
-
-
 class MonoColumnInputTestCase(unittest.TestCase):
     def _test_mono_column_pipeline(self, nlp, valid_inputs: list, invalid_inputs: list, output_keys: Iterable[str]):
         self.assertIsNotNone(nlp)
@@ -72,43 +61,57 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
         self.assertRaises(Exception, nlp, invalid_inputs)
 
+    @require_torch
     def test_ner(self):
         mandatory_keys = {'entity', 'word', 'score'}
         valid_inputs = ['HuggingFace is solving NLP one commit at a time.', 'HuggingFace is based in New-York & Paris']
         invalid_inputs = [None]
         for tokenizer, model, config in NER_FINETUNED_MODELS:
-            with patch('transformers.pipelines.is_torch_available', return_value=False):
-                nlp = tf_pipeline(task='ner', model=model, config=config, tokenizer=tokenizer)
-                self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
+            nlp = pipeline(task='ner', model=model, config=config, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
-            with patch('transformers.pipelines.is_tf_available', return_value=False):
-                nlp = torch_pipeline(task='ner', model=model, config=config, tokenizer=tokenizer)
-                self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
+    @require_tf
+    def test_tf_ner(self):
+        mandatory_keys = {'entity', 'word', 'score'}
+        valid_inputs = ['HuggingFace is solving NLP one commit at a time.', 'HuggingFace is based in New-York & Paris']
+        invalid_inputs = [None]
+        for tokenizer, model, config in NER_FINETUNED_MODELS:
+            nlp = pipeline(task='ner', model=model, config=config, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
+    @require_torch
     def test_sentiment_analysis(self):
         mandatory_keys = {'label'}
         valid_inputs = ['HuggingFace is solving NLP one commit at a time.', 'HuggingFace is based in New-York & Paris']
         invalid_inputs = [None]
         for tokenizer, model, config in TEXT_CLASSIF_FINETUNED_MODELS:
-            with patch('transformers.pipelines.is_torch_available', return_value=False):
-                nlp = tf_pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
-                self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
+            nlp = pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
-            with patch('transformers.pipelines.is_tf_available', return_value=False):
-                nlp = torch_pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
-                self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
+    @require_tf
+    def test_tf_sentiment_analysis(self):
+        mandatory_keys = {'label'}
+        valid_inputs = ['HuggingFace is solving NLP one commit at a time.', 'HuggingFace is based in New-York & Paris']
+        invalid_inputs = [None]
+        for tokenizer, model, config in TEXT_CLASSIF_FINETUNED_MODELS:
+            nlp = pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
+    @require_torch
     def test_features_extraction(self):
         valid_inputs = ['HuggingFace is solving NLP one commit at a time.', 'HuggingFace is based in New-York & Paris']
         invalid_inputs = [None]
         for tokenizer, model, config in FEATURE_EXTRACT_FINETUNED_MODELS:
-            with patch('transformers.pipelines.is_torch_available', return_value=False):
-                nlp = tf_pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
-                self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
+            nlp = pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
-            with patch('transformers.pipelines.is_tf_available', return_value=False):
-                nlp = torch_pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
-                self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
+    @require_tf
+    def test_tf_features_extraction(self):
+        valid_inputs = ['HuggingFace is solving NLP one commit at a time.', 'HuggingFace is based in New-York & Paris']
+        invalid_inputs = [None]
+        for tokenizer, model, config in FEATURE_EXTRACT_FINETUNED_MODELS:
+            nlp = pipeline(task='sentiment-analysis', model=model, config=config, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
 
 class MultiColumnInputTestCase(unittest.TestCase):
@@ -132,6 +135,7 @@ class MultiColumnInputTestCase(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs[0])
         self.assertRaises(Exception, nlp, invalid_inputs)
 
+    @require_torch
     def test_question_answering(self):
         mandatory_output_keys = {'score', 'answer', 'start', 'end'}
         valid_samples = [
@@ -149,16 +153,29 @@ class MultiColumnInputTestCase(unittest.TestCase):
         ]
 
         for tokenizer, model, config in QA_FINETUNED_MODELS:
+            nlp = pipeline(task='question-answering', model=model, config=config, tokenizer=tokenizer)
+            self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
 
-            # Test for Tensorflow
-            with patch('transformers.pipelines.is_torch_available', return_value=False):
-                nlp = pipeline(task='question-answering', model=model, config=config, tokenizer=tokenizer)
-                self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
+    @require_tf
+    def test_tf_question_answering(self):
+        mandatory_output_keys = {'score', 'answer', 'start', 'end'}
+        valid_samples = [
+            {'question': 'Where was HuggingFace founded ?', 'context': 'HuggingFace was founded in Paris.'},
+            {
+                'question': 'In what field is HuggingFace working ?',
+                'context': 'HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.'
+            }
+        ]
+        invalid_samples = [
+            {'question': '', 'context': 'This is a test to try empty question edge case'},
+            {'question': None, 'context': 'This is a test to try empty question edge case'},
+            {'question': 'What is does with empty context ?', 'context': ''},
+            {'question': 'What is does with empty context ?', 'context': None},
+        ]
 
-            # Test for PyTorch
-            with patch('transformers.pipelines.is_tf_available', return_value=False):
-                nlp = pipeline(task='question-answering', model=model, config=config, tokenizer=tokenizer)
-                self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
+        for tokenizer, model, config in QA_FINETUNED_MODELS:
+            nlp = pipeline(task='question-answering', model=model, config=config, tokenizer=tokenizer)
+            self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
 
 
 if __name__ == '__main__':
