@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
+""" Finetuning the library models for question-answering on SQuAD (BERT, XLM, XLNet, DistilBERT and AlBERT)."""
 
 from __future__ import absolute_import, division, print_function
 from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor, SquadResult
@@ -37,33 +37,30 @@ except:
 
 from tqdm import tqdm, trange
 
-from transformers import (WEIGHTS_NAME, BertConfig,
-                                  BertForQuestionAnswering, BertTokenizer,
-                                  XLMConfig, XLMForQuestionAnswering,
-                                  XLMTokenizer, XLNetConfig,
-                                  XLNetForQuestionAnswering,
-                                  XLNetTokenizer,
-                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer,
-                                  AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer,
-                                  XLMConfig, XLMForQuestionAnswering, XLMTokenizer,
-                                  )
+from transformers import (WEIGHTS_NAME,
+                            BertConfig, BertTokenizer, BertForQuestionAnswering,
+                            XLMConfig, XLMTokenizer, XLMForQuestionAnswering,
+                            XLNetConfig, XLNetTokenizer, XLNetForQuestionAnswering,
+                            DistilBertConfig, DistilBertTokenizer, DistilBertForQuestionAnswering,
+                            AlbertConfig, AlbertTokenizer, AlbertForQuestionAnswering,
+                        )
 
 from transformers import AdamW, get_linear_schedule_with_warmup, squad_convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) \
-                  for conf in (BertConfig, XLNetConfig, XLMConfig)), ())
+                  for conf in (BertConfig, XLMConfig, XLNetConfig, DistilBertConfig, AlbertConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
-    'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
+    'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer),
     'albert': (AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer),
 }
 
-def set_seed(args):
+def set_seed(args): 
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
