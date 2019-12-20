@@ -218,12 +218,11 @@ class CommonTestCases:
                 inputs = inputs_dict['input_ids']  # Let's keep only input_ids
 
                 try:
-                    torch.jit.trace(model, inputs)
+                    traced_gpt2 = torch.jit.trace(model, inputs)
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
 
                 try:
-                    traced_gpt2 = torch.jit.trace(model, inputs)
                     torch.jit.save(traced_gpt2, "traced_model.pt")
                 except RuntimeError:
                     self.fail("Couldn't save module.")
