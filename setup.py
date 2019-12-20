@@ -38,7 +38,9 @@ from setuptools import find_packages, setup
 
 
 extras = {
-    'serving': ['uvicorn', 'fastapi']
+    'serving': ['pydantic', 'uvicorn', 'fastapi'],
+    'serving-tf': ['pydantic', 'uvicorn', 'fastapi', 'tensorflow'],
+    'serving-torch': ['pydantic', 'uvicorn', 'fastapi', 'torch']
 }
 extras['all'] = [package for package in extras.values()]
 
@@ -62,11 +64,6 @@ setup(
                       'regex != 2019.12.17',
                       'sentencepiece',
                       'sacremoses'],
-    entry_points={
-      'console_scripts': [
-        "transformers=transformers.__main__:main",
-      ]
-    },
     extras_require=extras,
     scripts=[
         'transformers-cli'
