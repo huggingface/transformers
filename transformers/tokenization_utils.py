@@ -434,7 +434,11 @@ class PreTrainedTokenizer(object):
                     init_kwargs[key] = value
 
         # Instantiate tokenizer.
-        tokenizer = cls(*init_inputs, **init_kwargs)
+        try:
+            tokenizer = cls(*init_inputs, **init_kwargs)
+        except OSError:
+            OSError("Unable to load vocabulary from file. "
+                    "Please check that the provided vocabulary is accessible and not corrupted.")
 
         # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
         tokenizer.init_inputs = init_inputs

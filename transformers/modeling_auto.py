@@ -20,7 +20,7 @@ import logging
 
 from .configuration_auto import (AlbertConfig, BertConfig, CamembertConfig, CTRLConfig,
                                  DistilBertConfig, GPT2Config, OpenAIGPTConfig, RobertaConfig,
-                                 TransfoXLConfig, XLMConfig, XLNetConfig)
+                                 TransfoXLConfig, XLMConfig, XLNetConfig, XLMRobertaConfig)
 
 from .modeling_bert import BertModel, BertForMaskedLM, BertForSequenceClassification, BertForQuestionAnswering, \
     BertForTokenClassification, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
@@ -41,7 +41,8 @@ from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertF
 from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, \
     AlbertForQuestionAnswering, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 from .modeling_t5 import T5Model, T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_xlm_roberta import XLMRobertaModel, XLMRobertaForMaskedLM, XLMRobertaForSequenceClassification, XLMRobertaForMultipleChoice, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_xlm_roberta import XLMRobertaModel, XLMRobertaForMaskedLM, XLMRobertaForSequenceClassification, \
+    XLMRobertaForMultipleChoice, XLMRobertaForTokenClassification, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
@@ -146,6 +147,8 @@ class AutoModel(object):
             return AlbertModel(config)
         elif isinstance(config, CamembertConfig):
             return CamembertModel(config)
+        elif isinstance(config, XLMRobertaConfig):
+            return XLMRobertaModel(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
@@ -333,6 +336,8 @@ class AutoModelWithLMHead(object):
             return XLMWithLMHeadModel(config)
         elif isinstance(config, CTRLConfig):
             return CTRLLMHeadModel(config)
+        elif isinstance(config, XLMRobertaConfig):
+            return XLMRobertaForMaskedLM(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
@@ -509,6 +514,8 @@ class AutoModelForSequenceClassification(object):
             return XLNetForSequenceClassification(config)
         elif isinstance(config, XLMConfig):
             return XLMForSequenceClassification(config)
+        elif isinstance(config, XLMRobertaConfig):
+            return XLMRobertaForSequenceClassification(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
@@ -787,6 +794,8 @@ class AutoModelForTokenClassification:
             return XLNetForTokenClassification(config)
         elif isinstance(config, RobertaConfig):
             return RobertaForTokenClassification(config)
+        elif isinstance(config, XLMRobertaConfig):
+            return XLMRobertaForTokenClassification(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
     
     @classmethod
@@ -865,6 +874,8 @@ class AutoModelForTokenClassification:
             return CamembertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'distilbert' in pretrained_model_name_or_path:
             return DistilBertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif 'xlm-roberta' in pretrained_model_name_or_path:
+            return XLMRobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         elif 'bert' in pretrained_model_name_or_path:
@@ -873,4 +884,4 @@ class AutoModelForTokenClassification:
             return XLNetForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'camembert', 'distilbert', 'roberta'".format(pretrained_model_name_or_path))
+                         "'bert', 'xlnet', 'camembert', 'distilbert', 'xlm-roberta', 'roberta'".format(pretrained_model_name_or_path))
