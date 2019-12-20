@@ -55,6 +55,7 @@ Choose the right framework for every part of a model's lifetime
 | [Online demo](#online-demo) | Experimenting with this repo’s text generation capabilities |
 | [Quick tour: Usage](#quick-tour) | Tokenizers & models usage: Bert and GPT-2 |
 | [Quick tour: TF 2.0 and PyTorch ](#Quick-tour-TF-20-training-and-PyTorch-interoperability) | Train a TF 2.0 model in 10 lines of code, load it in PyTorch |
+| [Quick tour: pipelines](#quick-tour-of-pipelines) | Using Pipelines: Wrapper around tokenizer and models to use finetuned models |
 | [Quick tour: Fine-tuning/usage scripts](#quick-tour-of-the-fine-tuningusage-scripts) | Using provided scripts: GLUE, SQuAD and Text generation |
 | [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
@@ -496,6 +497,7 @@ New in version `v2.3`: `Pipeline` are high-level objects which automatically han
 and outputting the result in a structured object. 
 
 You can create `Pipeline` objects for the following down-stream tasks:
+
  - `feature-extraction`: Generates a tensor representation for the input sequence
  - `ner`: Generates named entity mapping for each word in the input sequence.
  - `sentiment-analysis`: Gives the polarity (positive / negative) of the whole input sequence. 
