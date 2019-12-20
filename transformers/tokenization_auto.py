@@ -31,6 +31,7 @@ from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class AutoTokenizer(object):
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
+            - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
             - contains `roberta`: RobertaTokenizer (RoBERTa model)
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
@@ -75,6 +77,7 @@ class AutoTokenizer(object):
             - contains `distilbert`: DistilBertTokenizer (DistilBert model)
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
+            - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
             - contains `roberta`: RobertaTokenizer (RoBERTa model)
             - contains `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
             - contains `bert`: BertTokenizer (Bert model)
@@ -130,6 +133,8 @@ class AutoTokenizer(object):
             return AlbertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'camembert' in pretrained_model_name_or_path:
             return CamembertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif 'xlm-roberta' in pretrained_model_name_or_path:
+            return XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'roberta' in pretrained_model_name_or_path:
             return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif 'bert-base-japanese' in pretrained_model_name_or_path:
@@ -150,4 +155,4 @@ class AutoTokenizer(object):
             return CTRLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'distilbert,' 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
+                         "'xlm-roberta', 'xlm', 'roberta', 'distilbert,' 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
