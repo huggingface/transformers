@@ -642,7 +642,7 @@ class PreTrainedTokenizer(object):
         def lowercase_text(t):
             # convert non-special tokens to lowercase
             escaped_special_toks = [re.escape(s_tok) for s_tok in all_special_tokens]
-            pattern = r'(^' + r'|'.join(escaped_special_toks) + r')|' + \
+            pattern = r'(' + r'|'.join(escaped_special_toks) + r')|' + \
                       r'(.+?)'
             return re.sub(
                 pattern,
