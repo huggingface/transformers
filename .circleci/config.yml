@@ -44,32 +44,6 @@ jobs:
             - run: sudo pip install tensorboardX scikit-learn
             - run: python -m pytest -sv ./transformers/tests/ --cov
             - run: codecov
-    build_py2_torch:
-        working_directory: ~/transformers
-        resource_class: large
-        parallelism: 1
-        docker:
-            - image: circleci/python:2.7
-        steps:
-            - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: codecov
-    build_py2_tf:
-        working_directory: ~/transformers
-        resource_class: large
-        parallelism: 1
-        docker:
-            - image: circleci/python:2.7
-        steps:
-            - checkout
-            - run: sudo pip install tensorflow
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: codecov
     build_py3_custom_tokenizers:
         working_directory: ~/transformers
         docker:
@@ -116,6 +90,4 @@ workflows:
             - build_py3_torch_and_tf
             - build_py3_torch
             - build_py3_tf
-            - build_py2_torch
-            - build_py2_tf
             - deploy_doc: *workflow_filters
