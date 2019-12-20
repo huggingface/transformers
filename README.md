@@ -490,6 +490,35 @@ transformers-cli ls
 # List all your S3 objects.
 ```
 
+## Quick tour of pipelines
+
+New in version `v2.3`: `Pipeline` are high-level objects which automatically handle tokenization, running your data through a transformers model
+and outputting the result in a structured object. 
+
+You can create `Pipeline` objects for the following down-stream tasks:
+ - `feature-extraction`: Generates a tensor representation for the input sequence
+ - `ner`: Generates named entity mapping for each word in the input sequence.
+ - `sentiment-analysis`: Gives the polarity (positive / negative) of the whole input sequence. 
+ - `question-answering`: Provided some context and a question refering to the context, it will extract the answer to the question
+ in the context.
+
+```python
+from transformers import pipeline
+
+# Allocate a pipeline for sentiment-analysis
+nlp = pipeline('sentiment-analysis')
+nlp('We are very happy to include pipeline into the transformers repository.')
+>>> {'label': 'POSITIVE', 'score': 0.99893874}
+
+# Allocate a pipeline for question-answering
+nlp = pipeline('question-answering')
+nlp({
+    'question': 'What is the name of the repository ?', 
+    'context': 'Pipeline have been included in the huggingface/transformers repository'
+})
+>>> {'score': 0.28756016668193496, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+```
+
 ## Migrating from pytorch-transformers to transformers
 
 Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to `transformers`.
