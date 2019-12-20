@@ -13,7 +13,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -n 8 -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./transformers/tests/ --cov
             - run: codecov
     build_py3_torch:
         working_directory: ~/transformers
@@ -27,8 +27,8 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -n 8 -s -v ./transformers/tests/ --cov
-            - run: python -m pytest -n 8 -s -v ./examples/
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
             - run: codecov
     build_py3_tf:
         working_directory: ~/transformers
@@ -42,7 +42,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -n 8 -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./transformers/tests/ --cov
             - run: codecov
     build_py3_custom_tokenizers:
         working_directory: ~/transformers
