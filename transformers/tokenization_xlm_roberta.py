@@ -22,6 +22,7 @@ from shutil import copyfile
 
 import sentencepiece as spm
 from transformers.tokenization_utils import PreTrainedTokenizer
+from .tokenization_xlnet import SPIECE_UNDERLINE
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,11 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
+        return out_string
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
