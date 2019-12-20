@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # if model_file exists, sentence piece tokenizer is selected.
 # this can be happen when you use from_pretrain by setting dir
 VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt',
-                     'model_file': 'spiece.model'}
+                     'sp_model_file': 'spiece.model'}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     'vocab_file':
@@ -130,7 +130,7 @@ class BertTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, model_file=None, do_lower_case=True, do_basic_tokenize=True, never_split=None,
+    def __init__(self, vocab_file, sp_model_file=None, do_lower_case=True, do_basic_tokenize=True, never_split=None,
                  unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
                  mask_token="[MASK]", tokenize_chinese_chars=True, **kwargs):
         """Constructs a BertTokenizer.
@@ -160,7 +160,7 @@ class BertTokenizer(PreTrainedTokenizer):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
                 "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
-        if model_file is None or not(vocab_file.endswith(".model")):
+        if sp_model_file is None or not(vocab_file.endswith(".model")):
             self.spm_tokenize = False
             self.vocab = load_vocab(vocab_file)
             self.ids_to_tokens = collections.OrderedDict(
@@ -177,12 +177,12 @@ class BertTokenizer(PreTrainedTokenizer):
             self.do_lower_case = do_lower_case
             self.spm_tokenize = True
             self.sp_model = spm.SentencePieceProcessor()
-            if model_file is not None:
-                self.vocab_file = model_file
-                load_status = self.sp_model.Load(model_file)
-            else:
+            if sp_model_file is None:
                 self.vocab_file = vocab_file
                 load_status = self.sp_model.Load(vocab_file)
+            else:
+                self.vocab_file = sp_model_file
+                load_status = self.sp_model.Load(sp_model_file)
 
             if load_status:
                 print("Loaded a trained SentencePiece model.")
