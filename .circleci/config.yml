@@ -11,9 +11,9 @@ jobs:
             - run: sudo pip install torch
             - run: sudo pip install tensorflow
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 -s -v ./transformers/tests/ --cov
             - run: codecov
     build_py3_torch:
         working_directory: ~/transformers
@@ -25,10 +25,10 @@ jobs:
             - checkout
             - run: sudo pip install torch
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: python -m pytest -sv ./examples/
+            - run: python -m pytest -n 8 -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 -s -v ./examples/
             - run: codecov
     build_py3_tf:
         working_directory: ~/transformers
@@ -40,9 +40,9 @@ jobs:
             - checkout
             - run: sudo pip install tensorflow
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
+            - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 -s -v ./transformers/tests/ --cov
             - run: codecov
     build_py3_custom_tokenizers:
         working_directory: ~/transformers
@@ -51,7 +51,7 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest
+            - run: sudo pip install pytest pytest-xdist
             - run: sudo pip install mecab-python3
             - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./transformers/tests/tokenization_bert_japanese_test.py
     deploy_doc:
