@@ -947,6 +947,30 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
+    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
+        # Add dummy token at the end (no attention on this one)
+        dummy_token = torch.zeros((1, 1), dtype=torch.long, device=input_ids.device)
+        input_ids = torch.cat([input_ids, dummy_token], dim=1)
+
+        # Build permutation mask so that previous tokens don't see last token
+        perm_mask = torch.zeros(
+            (input_ids.shape[0], input_ids.shape[1], input_ids.shape[1]),
+            dtype=torch.float, device=input_ids.device
+        )
+        perm_mask[:, :, -1] = 1.0
+
+        # We'll only predict the last token
+        target_mapping = torch.zeros(
+            (input_ids.shape[0], 1, input_ids.shape[1]),
+            dtype=torch.float, device=input_ids.device
+        )
+        target_mapping[0, 0, -1] = 1.0
+
+        return {"input_ids": input_ids,
+                "perm_mask": perm_mask,
+                "target_mapping": target_mapping
+               }
+
     def forward(self, input_ids=None, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
                 token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, labels=None):
         transformer_outputs = self.transformer(input_ids,

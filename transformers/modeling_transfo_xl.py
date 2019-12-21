@@ -36,7 +36,7 @@ from torch.nn.parameter import Parameter
 
 from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_transfo_xl import TransfoXLConfig
-from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
+from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits, LogUniformSampler
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -908,3 +908,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
                 outputs = [softmax_output, None] + outputs
 
         return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
+
+    def get_output_embeddings(self):
+        """ Double-check if you are using adaptive softmax.
+        """
+        if self.sample_softmax > 0:
+            return self.out_layer
+        else:
+            return self.crit.out_layers[-1]
