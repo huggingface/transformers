@@ -554,7 +554,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads] (a head_mask for each layer)
         # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
-        if not head_mask is None:
+        if head_mask is not None:
             raise NotImplementedError
         else:
             head_mask = [None] * self.n_layer

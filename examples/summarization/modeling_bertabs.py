@@ -519,7 +519,7 @@ class MultiHeadedAttention(nn.Module):
 
         attn = self.softmax(scores)
 
-        if not predefined_graph_1 is None:
+        if predefined_graph_1 is not None:
             attn_masked = attn[:, -1] * predefined_graph_1
             attn_masked = attn_masked / (torch.sum(attn_masked, 2).unsqueeze(2) + 1e-9)
 
