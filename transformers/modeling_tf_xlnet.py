@@ -366,7 +366,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.use_bfloat16 = config.use_bfloat16
         self.initializer_range = config.initializer_range
 
-        self.word_embedding = TFSharedEmbeddings(config.n_token, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
+        self.word_embedding = TFSharedEmbeddings(config.vocab_size, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
         self.layer = [TFXLNetLayer(config, name='layer_._{}'.format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
@@ -552,7 +552,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) " \
             "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
-            input_mask = 1.0 - attention_mask
+            input_mask = 1.0 - tf.cast(attention_mask, dtype=dtype_float)
         if input_mask is not None and perm_mask is not None:
             data_mask = input_mask[None] + perm_mask
         elif input_mask is not None and perm_mask is None:
@@ -811,7 +811,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
         model = TFXLNetModel.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -855,7 +855,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         model = TFXLNetLMHeadModel.from_pretrained('xlnet-large-cased')
 
         # We show how to setup inputs to predict a next token using a bi-directional context.
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>"))[None, :]  # We will predict the masked token
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[None, :]  # We will predict the masked token
         perm_mask = tf.zeros((1, input_ids.shape[1], input_ids.shape[1]))
         perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
         target_mapping = tf.zeros((1, 1, input_ids.shape[1]))  # Shape [1, 1, seq_length] => let's predict one token
@@ -911,7 +911,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
         model = TFXLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
 
@@ -1022,7 +1022,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
         model = TFXLNetForQuestionAnsweringSimple.from_pretrained('xlnet-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
@@ -1086,7 +1086,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
 
 #         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
 #         model = XLMForQuestionAnswering.from_pretrained('xlnet-large-cased')
-#         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+#         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
 #         start_positions = tf.constant([1])
 #         end_positions = tf.constant([3])
 #         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)

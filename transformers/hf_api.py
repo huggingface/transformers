@@ -131,8 +131,9 @@ class HfApi:
         # the client still has to specify it when uploading the file.
         with open(filepath, "rb") as f:
             pf = TqdmProgressFileReader(f)
+            data = f if pf.total_size > 0 else ""
 
-            r = requests.put(urls.write, data=f, headers={
+            r = requests.put(urls.write, data=data, headers={
                 "content-type": urls.type,
             })
             r.raise_for_status()

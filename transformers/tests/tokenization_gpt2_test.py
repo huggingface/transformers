@@ -67,6 +67,5 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-
 if __name__ == '__main__':
     unittest.main()
