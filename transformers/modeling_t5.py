@@ -95,29 +95,29 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
         array = tf_weights[txt_name]
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                l = re.split(r"_(\d+)", m_name)
+                scope_names = re.split(r"_(\d+)", m_name)
             else:
-                l = [m_name]
-            if l[0] in ["kernel", "scale", "embedding"]:
+                scope_names = [m_name]
+            if scope_names[0] in ["kernel", "scale", "embedding"]:
                 pointer = getattr(pointer, "weight")
-            # elif l[0] == 'scale':
+            # elif scope_names[0] == 'scale':
             #     pointer = getattr(pointer, 'weight')
-            # elif l[0] == 'output_bias' or l[0] == 'beta':
+            # elif scope_names[0] == 'output_bias' or scope_names[0] == 'beta':
             #     pointer = getattr(pointer, 'bias')
-            # elif l[0] == 'squad':
+            # elif scope_names[0] == 'squad':
             #     pointer = getattr(pointer, 'classifier')
             else:
                 try:
-                    pointer = getattr(pointer, l[0])
+                    pointer = getattr(pointer, scope_names[0])
                 except AttributeError:
                     logger.info("Skipping {}".format("/".join(name)))
                     continue
-            if len(l) >= 2:
-                num = int(l[1])
+            if len(scope_names) >= 2:
+                num = int(scope_names[1])
                 pointer = pointer[num]
-        if l[0] not in ["kernel", "scale", "embedding"]:
+        if scope_names[0] not in ["kernel", "scale", "embedding"]:
             pointer = getattr(pointer, "weight")
-        if l[0] != "embedding":
+        if scope_names[0] != "embedding":
             logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, name))
             array = np.transpose(array)
         try:

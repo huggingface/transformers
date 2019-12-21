@@ -160,8 +160,8 @@ class T5Tokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
         if token.startswith("<extra_id_"):
-            l = re.match(r"<extra_id_(\d+)>", token)
-            num = int(l.group(1))
+            match = re.match(r"<extra_id_(\d+)>", token)
+            num = int(match.group(1))
             return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 

@@ -77,20 +77,20 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
         pointer = model
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-                l = re.split(r"(\d+)", m_name)
+                scope_names = re.split(r"(\d+)", m_name)
             else:
-                l = [m_name]
-            if l[0] == "w" or l[0] == "g":
+                scope_names = [m_name]
+            if scope_names[0] == "w" or scope_names[0] == "g":
                 pointer = getattr(pointer, "weight")
-            elif l[0] == "b":
+            elif scope_names[0] == "b":
                 pointer = getattr(pointer, "bias")
-            elif l[0] == "wpe" or l[0] == "wte":
-                pointer = getattr(pointer, l[0])
+            elif scope_names[0] == "wpe" or scope_names[0] == "wte":
+                pointer = getattr(pointer, scope_names[0])
                 pointer = getattr(pointer, "weight")
             else:
-                pointer = getattr(pointer, l[0])
-            if len(l) >= 2:
-                num = int(l[1])
+                pointer = getattr(pointer, scope_names[0])
+            if len(scope_names) >= 2:
+                num = int(scope_names[1])
                 pointer = pointer[num]
         try:
             assert pointer.shape == array.shape
