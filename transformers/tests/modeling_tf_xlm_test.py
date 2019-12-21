@@ -252,7 +252,7 @@ class TFXLMModelTest(TFCommonTestCases.TFCommonModelTester):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = XLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = TFXLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 
