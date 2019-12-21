@@ -31,10 +31,10 @@ from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
+                         cached_path, hf_bucket_url, is_remote_url)
 
 logger = logging.getLogger(__name__)
-
 
 try:
     from torch.nn import Identity
@@ -70,6 +70,15 @@ class PreTrainedModel(nn.Module):
     pretrained_model_archive_map = {}
     load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to do a forward pass in the network.
+
+        Returns:
+            torch.Tensor with dummy inputs
+        """
+        return {'input_ids': torch.tensor(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(PreTrainedModel, self).__init__()
@@ -160,8 +169,7 @@ class PreTrainedModel(nn.Module):
         base_model.vocab_size = new_num_tokens
 
         # Tie weights again if needed
-        if hasattr(self, 'tie_weights'):
-            self.tie_weights()
+        self.tie_weights()
 
         return model_embeds
 
@@ -265,6 +273,7 @@ class PreTrainedModel(nn.Module):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
                 - None if you are both providing the configuration and state dictionary (resp. with keyword arguments ``config`` and ``state_dict``)
@@ -272,7 +281,9 @@ class PreTrainedModel(nn.Module):
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+            config: (`optional`) one of:
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
                 - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
@@ -290,6 +301,9 @@ class PreTrainedModel(nn.Module):
 
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
@@ -320,15 +334,18 @@ class PreTrainedModel(nn.Module):
         cache_dir = kwargs.pop('cache_dir', None)
         from_tf = kwargs.pop('from_tf', False)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
         output_loading_info = kwargs.pop('output_loading_info', False)
 
-        # Load config
-        if config is None:
+        # Load config if we don't provide a configuration
+        if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args,
+                config_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
+                resume_download=resume_download,
                 proxies=proxies,
                 **kwargs
             )
@@ -353,15 +370,21 @@ class PreTrainedModel(nn.Module):
                     raise EnvironmentError("Error no file named {} found in directory {} or `from_tf` set to False".format(
                         [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
                         pretrained_model_name_or_path))
-            elif os.path.isfile(pretrained_model_name_or_path):
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
-            else:
-                assert from_tf, "Error finding file {}, no file or TF 1.X checkpoint found".format(pretrained_model_name_or_path)
+            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
+                assert from_tf, "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
+                    pretrained_model_name_or_path + ".index")
                 archive_file = pretrained_model_name_or_path + ".index"
+            else:
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
+                if from_tf:
+                    raise EnvironmentError("Loading a PyTorch model from a TF checkpoint is not supported when using a model identifier name.")
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
+                                                    proxies=proxies, resume_download=resume_download)
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                     msg = "Couldn't reach server at '{}' to download pretrained weights.".format(
@@ -388,7 +411,11 @@ class PreTrainedModel(nn.Module):
         model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
-            state_dict = torch.load(resolved_archive_file, map_location='cpu')
+            try:
+                state_dict = torch.load(resolved_archive_file, map_location='cpu')
+            except:
+                raise OSError("Unable to load weights from pytorch checkpoint file. "
+                              "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. ")
 
         missing_keys = []
         unexpected_keys = []
@@ -458,8 +485,7 @@ class PreTrainedModel(nn.Module):
                 raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                 model.__class__.__name__, "\n\t".join(error_msgs)))
 
-        if hasattr(model, 'tie_weights'):
-            model.tie_weights()  # make sure word embedding weights are still tied
+        model.tie_weights()  # make sure word embedding weights are still tied if needed
 
         # Set model in evaluation mode to desactivate DropOut modules by default
         model.eval()
@@ -728,7 +754,7 @@ class SequenceSummary(nn.Module):
     def __init__(self, config):
         super(SequenceSummary, self).__init__()
 
-        self.summary_type = config.summary_type if hasattr(config, 'summary_use_proj') else 'last'
+        self.summary_type = config.summary_type if hasattr(config, 'summary_type') else 'last'
         if self.summary_type == 'attn':
             # We should use a standard multi-head attention module with absolute positional embedding for that.
             # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276

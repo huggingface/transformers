@@ -28,7 +28,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,12 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-tf_model.h5",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-tf_model.h5",
+    'bert-base-japanese': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-tf_model.h5",
+    'bert-base-japanese-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-tf_model.h5",
+    'bert-base-japanese-char': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-tf_model.h5",
+    'bert-base-japanese-char-whole-word-masking': "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-tf_model.h5",
+    'bert-base-finnish-cased-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/tf_model.h5",
+    'bert-base-finnish-uncased-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/tf_model.h5",
 }
 
 
@@ -129,7 +135,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 linear tensor, float32 with shape [batch_size, length, vocab_size].
         Raises:
             ValueError: if mode is not valid.
-        
+
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
@@ -145,10 +151,10 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         input_ids, position_ids, token_type_ids, inputs_embeds = inputs
 
         if input_ids is not None:
-            input_shape = tf.shape(input_ids)
+            input_shape = shape_list(input_ids)
         else:
-            input_shape = tf.shape(inputs_embeds)[:-1]
-        
+            input_shape = shape_list(inputs_embeds)[:-1]
+
         seq_length = input_shape[1]
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
@@ -172,8 +178,8 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             Returns:
                 float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = tf.shape(inputs)[0]
-        length = tf.shape(inputs)[1]
+        batch_size = shape_list(inputs)[0]
+        length = shape_list(inputs)[1]
 
         x = tf.reshape(inputs, [-1, self.hidden_size])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
@@ -214,7 +220,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
-        batch_size = tf.shape(hidden_states)[0]
+        batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -225,7 +231,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(tf.shape(key_layer)[-1], tf.float32) # scale attention_scores
+        dk = tf.cast(shape_list(key_layer)[-1], tf.float32) # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
@@ -246,7 +252,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         context_layer = tf.matmul(attention_probs, value_layer)
 
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(context_layer, 
+        context_layer = tf.reshape(context_layer,
                                   (batch_size, -1, self.all_head_size))  # (batch_size, seq_len_q, all_head_size)
 
         outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
@@ -502,9 +508,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.shape
+            input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.shape[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -591,7 +597,7 @@ BERT_START_DOCSTRING = r"""    The BERT model was proposed in
             `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
-        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -605,13 +611,13 @@ BERT_INPUTS_DOCSTRING = r"""
             (a) For sequence pairs:
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-                
+
                 ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
 
             (b) For single sequences:
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
-                
+
                 ``token_type_ids:   0   0   0   0  0     0   0``
 
             Bert is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -671,7 +677,7 @@ class TFBertModel(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertModel.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -710,7 +716,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores, seq_relationship_scores = outputs[:2]
 
@@ -759,7 +765,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForMaskedLM.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores = outputs[0]
 
@@ -806,7 +812,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         seq_relationship_scores = outputs[0]
 
@@ -851,7 +857,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
 
@@ -939,11 +945,11 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
             input_ids = inputs
 
         if input_ids is not None:
-            num_choices = tf.shape(input_ids)[1]
-            seq_length = tf.shape(input_ids)[2]
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
         else:
-            num_choices = tf.shape(inputs_embeds)[1]
-            seq_length = tf.shape(inputs_embeds)[2]
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
@@ -988,7 +994,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForTokenClassification.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         scores = outputs[0]
 
@@ -1041,7 +1047,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForQuestionAnswering.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 

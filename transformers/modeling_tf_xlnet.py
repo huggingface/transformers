@@ -112,8 +112,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    @staticmethod
-    def rel_shift(x, klen=-1):
+    def rel_shift(self, x, klen=-1):
         """perform relative shift to form the relative attention score."""
         x_size = shape_list(x)
 
@@ -135,7 +134,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         # position based attention score
         bd = tf.einsum('ibnd,jbnd->ijbn', q_head + self.r_r_bias, k_head_r)
-        bd = self.rel_shift(bd, klen=ac.shape[1])
+        bd = self.rel_shift(bd, klen=shape_list(ac)[1])
 
         # segment based attention score
         if seg_mat is None:
@@ -192,7 +191,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         if g is not None:
             ###### Two-stream attention with relative positional encoding.
             # content based attention score
-            if mems is not None and mems.shape.ndims > 1:
+            if mems is not None and len(shape_list(mems)) > 1:
                 cat = tf.concat([mems, h], axis=0)
             else:
                 cat = h
@@ -252,7 +251,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         else:
             ###### Multi-head attention with relative positional encoding
-            if mems is not None and mems.shape.ndims > 1:
+            if mems is not None and len(shape_list(mems)) > 1:
                 cat = tf.concat([mems, h], axis=0)
             else:
                 cat = h
@@ -367,7 +366,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.use_bfloat16 = config.use_bfloat16
         self.initializer_range = config.initializer_range
 
-        self.word_embedding = TFSharedEmbeddings(config.n_token, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
+        self.word_embedding = TFSharedEmbeddings(config.vocab_size, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
         self.layer = [TFXLNetLayer(config, name='layer_._{}'.format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
@@ -553,7 +552,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) " \
             "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
-            input_mask = 1.0 - attention_mask
+            input_mask = 1.0 - tf.cast(attention_mask, dtype=dtype_float)
         if input_mask is not None and perm_mask is not None:
             data_mask = input_mask[None] + perm_mask
         elif input_mask is not None and perm_mask is None:
@@ -565,7 +564,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         if data_mask is not None:
             # all mems can be attended to
-            mems_mask = tf.zeros([tf.shape(data_mask)[0], mlen, bsz],
+            mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz],
                                 dtype=dtype_float)
             data_mask = tf.concat([mems_mask, data_mask], axis=1)
             if attn_mask is None:
@@ -590,7 +589,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k, training=training)
         if target_mapping is not None:
-            word_emb_q = tf.tile(self.mask_emb, [tf.shape(target_mapping)[0], bsz, 1])
+            word_emb_q = tf.tile(self.mask_emb, [shape_list(target_mapping)[0], bsz, 1])
         # else:  # We removed the inp_q input which was same as target mapping
         #     inp_q_ext = inp_q[:, :, None]
         #     word_emb_q = inp_q_ext * self.mask_emb + (1 - inp_q_ext) * word_emb_k
@@ -812,7 +811,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
         model = TFXLNetModel.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -856,7 +855,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         model = TFXLNetLMHeadModel.from_pretrained('xlnet-large-cased')
 
         # We show how to setup inputs to predict a next token using a bi-directional context.
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>"))[None, :]  # We will predict the masked token
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[None, :]  # We will predict the masked token
         perm_mask = tf.zeros((1, input_ids.shape[1], input_ids.shape[1]))
         perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
         target_mapping = tf.zeros((1, 1, input_ids.shape[1]))  # Shape [1, 1, seq_length] => let's predict one token
@@ -912,7 +911,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
         model = TFXLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
 
@@ -933,6 +932,59 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
 
         output = self.sequence_summary(output)
         logits = self.logits_proj(output)
+
+        outputs = (logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+
+        return outputs  # return logits, (mems), (hidden states), (attentions)
+
+
+@add_start_docstrings("""XLNet Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
+class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
+    r"""
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **mems**: (`optional`, returned when ``config.mem_len > 0``)
+            list of ``tf.Tensor`` (one for each layer):
+            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
+            if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
+            See details in the docstring of the `mems` input above.
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import XLNetTokenizer, TFXLNetForTokenClassification
+
+        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
+        model = TFXLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+
+    """
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFXLNetForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.transformer = TFXLNetMainLayer(config, name='transformer')
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='classifier')
+
+    def call(self, inputs, **kwargs):
+        transformer_outputs = self.transformer(inputs, **kwargs)
+        output = transformer_outputs[0]
+
+        logits = self.classifier(output)
 
         outputs = (logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
 
@@ -970,7 +1022,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
         model = TFXLNetForQuestionAnsweringSimple.from_pretrained('xlnet-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
@@ -1034,7 +1086,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
 
 #         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
 #         model = XLMForQuestionAnswering.from_pretrained('xlnet-large-cased')
-#         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+#         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
 #         start_positions = tf.constant([1])
 #         end_positions = tf.constant([3])
 #         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)

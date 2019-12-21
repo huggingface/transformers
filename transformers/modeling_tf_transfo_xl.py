@@ -337,7 +337,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                 emb_i = tf.einsum('id,de->ie', emb_i, self.emb_projs[i])
 
                 mask_idx = tf.cast(tf.where(mask_i), dtype=tf.int64)
-                emb_flat += tf.scatter_nd(mask_idx, emb_i, tf.cast(tf.shape(emb_flat), dtype=tf.int64))
+                emb_flat += tf.scatter_nd(mask_idx, emb_i, tf.cast(shape_list(emb_flat), dtype=tf.int64))
 
             embed_shape = shape_list(inp) + [self.d_proj]
             embed = tf.reshape(emb_flat, embed_shape)
@@ -353,7 +353,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.n_token = config.n_token
+        self.n_token = config.vocab_size
 
         self.d_embed = config.d_embed
         self.d_model = config.d_model
@@ -361,7 +361,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         self.d_head = config.d_head
         self.untie_r = config.untie_r
 
-        self.word_emb = TFAdaptiveEmbedding(config.n_token, config.d_embed, config.d_model, config.cutoffs, 
+        self.word_emb = TFAdaptiveEmbedding(config.vocab_size, config.d_embed, config.d_model, config.cutoffs, 
                                             div_val=config.div_val, init_std=config.init_std, name='word_emb')
 
         self.drop = tf.keras.layers.Dropout(config.dropout)
@@ -673,7 +673,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TFTransfoXLModel.from_pretrained('transfo-xl-wt103')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states, mems = outputs[:2]
 
@@ -715,7 +715,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TFTransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores, mems = outputs[:2]
 
@@ -729,7 +729,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             raise NotImplementedError
         # use adaptive softmax (including standard softmax)
         else:
-            self.crit = TFAdaptiveSoftmaxMask(config.n_token, config.d_embed, config.d_model, 
+            self.crit = TFAdaptiveSoftmaxMask(config.vocab_size, config.d_embed, config.d_model, 
                                               config.cutoffs, div_val=config.div_val, name='crit')
 
     def reset_length(self, tgt_len, ext_len, mem_len):

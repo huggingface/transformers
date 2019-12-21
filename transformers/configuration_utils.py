@@ -24,7 +24,7 @@ import logging
 import os
 from io import open
 
-from .file_utils import cached_path, CONFIG_NAME
+from .file_utils import CONFIG_NAME, cached_path, is_remote_url, hf_bucket_url
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,7 @@ class PretrainedConfig(object):
     pretrained_config_archive_map = {}
 
     def __init__(self, **kwargs):
-        self.finetuning_task = kwargs.pop('finetuning_task', None)
-        self.num_labels = kwargs.pop('num_labels', 2)
+        # Attributes with defaults
         self.output_attentions = kwargs.pop('output_attentions', False)
         self.output_hidden_states = kwargs.pop('output_hidden_states', False)
         self.output_past = kwargs.pop('output_past', True)  # Not used by all models
@@ -58,6 +57,22 @@ class PretrainedConfig(object):
         self.use_bfloat16 = kwargs.pop('use_bfloat16', False)
         self.pruned_heads = kwargs.pop('pruned_heads', {})
         self.is_decoder = kwargs.pop('is_decoder', False)
+
+        # Fine-tuning task arguments
+        self.finetuning_task = kwargs.pop('finetuning_task', None)
+        self.num_labels = kwargs.pop('num_labels', 2)
+        self.id2label = kwargs.pop('id2label', {i: 'LABEL_{}'.format(i) for i in range(self.num_labels)})
+        self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+        self.label2id = kwargs.pop('label2id', dict(zip(self.id2label.values(), self.id2label.keys())))
+        self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
+
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                raise err
 
     def save_pretrained(self, save_directory):
         """ Save a configuration object to the directory `save_directory`, so that it
@@ -79,6 +94,7 @@ class PretrainedConfig(object):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model configuration to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model configuration that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a configuration file saved using the :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - a path or url to a saved configuration JSON `file`, e.g.: ``./my_model_directory/configuration.json``.
 
@@ -93,6 +109,9 @@ class PretrainedConfig(object):
 
             force_download: (`optional`) boolean, default False:
                 Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
@@ -120,6 +139,7 @@ class PretrainedConfig(object):
         """
         cache_dir = kwargs.pop('cache_dir', None)
         force_download = kwargs.pop('force_download', False)
+        resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
         return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
 
@@ -127,11 +147,18 @@ class PretrainedConfig(object):
             config_file = cls.pretrained_config_archive_map[pretrained_model_name_or_path]
         elif os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        else:
+        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
-        # redirect to the cache, if necessary
+        else:
+            config_file = hf_bucket_url(pretrained_model_name_or_path, postfix=CONFIG_NAME)
+
         try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
+            # Load from URL or cache if already cached
+            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download,
+                                               proxies=proxies, resume_download=resume_download)
+            # Load config
+            config = cls.from_json_file(resolved_config_file)
+
         except EnvironmentError:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
                 msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
@@ -145,14 +172,17 @@ class PretrainedConfig(object):
                         config_file, CONFIG_NAME)
             raise EnvironmentError(msg)
 
+        except json.JSONDecodeError:
+            msg = "Couldn't reach server at '{}' to download configuration file or " \
+                  "configuration file is not a valid JSON file. " \
+                  "Please check network or file content here: {}.".format(config_file, resolved_config_file)
+            raise EnvironmentError(msg)
+
         if resolved_config_file == config_file:
             logger.info("loading configuration file {}".format(config_file))
         else:
             logger.info("loading configuration file {} from cache at {}".format(
                 config_file, resolved_config_file))
-
-        # Load config
-        config = cls.from_json_file(resolved_config_file)
 
         if hasattr(config, 'pruned_heads'):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
@@ -175,17 +205,15 @@ class PretrainedConfig(object):
     @classmethod
     def from_dict(cls, json_object):
         """Constructs a `Config` from a Python dictionary of parameters."""
-        config = cls(vocab_size_or_config_json_file=-1)
-        for key, value in json_object.items():
-            setattr(config, key, value)
-        return config
+        return cls(**json_object)
 
     @classmethod
     def from_json_file(cls, json_file):
-        """Constructs a `BertConfig` from a json file of parameters."""
+        """Constructs a `Config` from a json file of parameters."""
         with open(json_file, "r", encoding='utf-8') as reader:
             text = reader.read()
-        return cls.from_dict(json.loads(text))
+        dict_obj = json.loads(text)
+        return cls(**dict_obj)
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
