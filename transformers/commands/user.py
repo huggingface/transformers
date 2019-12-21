@@ -1,6 +1,7 @@
 import os
 from argparse import ArgumentParser
 from getpass import getpass
+from typing import List, Union
 
 from transformers.commands import BaseTransformersCLICommand
 from transformers.hf_api import HfApi, HfFolder, HTTPError
@@ -96,8 +97,7 @@ class LogoutCommand(BaseUserCommand):
 
 
 class ListObjsCommand(BaseUserCommand):
-    def tabulate(self, rows, headers):
-        # type: (List[List[Union[str, int]]], List[str]) -> str
+    def tabulate(self, rows: List[List[Union[str, int]]], headers: List[str]) -> str:
         """
         Inspired by:
         stackoverflow.com/a/8356620/593036

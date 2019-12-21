@@ -68,6 +68,14 @@ TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
 #
 # See the conversion methods in modeling_tf_pytorch_utils.py for more details
 ####################################################
+
+TFXxxAttention = tf.keras.layers.Layer
+
+TFXxxIntermediate = tf.keras.layers.Layer
+
+TFXxxOutput = tf.keras.layers.Layer
+
+
 class TFXxxLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFXxxLayer, self).__init__(**kwargs)
@@ -314,6 +322,9 @@ class TFXxxModel(TFXxxPreTrainedModel):
     def call(self, inputs, **kwargs):
         outputs = self.transformer(inputs, **kwargs)
         return outputs
+
+
+TFXxxMLMHead = tf.keras.layers.Layer
 
 
 @add_start_docstrings(

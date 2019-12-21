@@ -295,7 +295,7 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         if isinstance(config.ff_activation, str) or (
-            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)
+            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)  # noqa: F821
         ):
             self.activation_function = ACT2FN[config.ff_activation]
         else:
@@ -483,7 +483,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             if dtype is not None and dtype != tf.float32:
                 fwd_pos_seq = tf.cast(fwd_pos_seq, dtype=dtype)
             if self.clamp_len > 0:
-                fwd_pos_seq = tf.clip_by_value(fwd_pos_seq, -clamp_len, clamp_len)
+                fwd_pos_seq = tf.clip_by_value(fwd_pos_seq, -self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)
 
         return pos_emb

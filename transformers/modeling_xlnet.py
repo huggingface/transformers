@@ -431,7 +431,7 @@ class XLNetFeedForward(nn.Module):
         self.layer_2 = nn.Linear(config.d_inner, config.d_model)
         self.dropout = nn.Dropout(config.dropout)
         if isinstance(config.ff_activation, str) or (
-            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)
+            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)  # noqa: F821
         ):
             self.activation_function = ACT2FN[config.ff_activation]
         else:

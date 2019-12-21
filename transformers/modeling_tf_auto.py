@@ -690,9 +690,9 @@ class TFAutoModelForQuestionAnswering(object):
         elif isinstance(config, BertConfig):
             return TFBertForQuestionAnswering(config)
         elif isinstance(config, XLNetConfig):
-            return TFXLNetForQuestionAnswering(config)
+            raise NotImplementedError("TFXLNetForQuestionAnswering isn't implemented")
         elif isinstance(config, XLMConfig):
-            return TFXLMForQuestionAnswering(config)
+            raise NotImplementedError("TFXLMForQuestionAnswering isn't implemented")
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod

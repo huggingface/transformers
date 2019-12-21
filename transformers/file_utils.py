@@ -419,7 +419,7 @@ def get_from_cache(
                 with open(meta_path, "w") as meta_file:
                     output_string = json.dumps(meta)
                     if sys.version_info[0] == 2 and isinstance(output_string, str):
-                        output_string = unicode(output_string, "utf-8")  # The beauty of python 2
+                        output_string = unicode(output_string, "utf-8")  # noqa: F821
                     meta_file.write(output_string)
 
     return cache_path

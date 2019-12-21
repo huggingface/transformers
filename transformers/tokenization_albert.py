@@ -156,7 +156,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         """
         text = self.preprocess_text(text)
         # note(zhiliny): in some systems, sentencepiece only accepts str for py2
-        if six.PY2 and isinstance(text, unicode):
+        if six.PY2 and isinstance(text, unicode):  # noqa: F821
             text = text.encode("utf-8")
 
         if not sample:

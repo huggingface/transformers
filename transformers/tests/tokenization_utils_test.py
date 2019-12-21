@@ -35,7 +35,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
             for special_tok in tokenizer.all_special_tokens:
                 if six.PY2:
-                    self.assertIsInstance(special_tok, unicode)
+                    self.assertIsInstance(special_tok, unicode)  # noqa: F821
                 else:
                     self.assertIsInstance(special_tok, str)
                 special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
