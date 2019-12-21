@@ -18,9 +18,10 @@ import os
 import unittest
 from io import open
 
-from transformers.tokenization_bert import (XxxTokenizer, VOCAB_FILES_NAMES)
+from transformers.tokenization_bert import XxxTokenizer, VOCAB_FILES_NAMES
 
 from .tokenization_tests_commons import CommonTestCases
+
 
 class XxxTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
@@ -30,28 +31,39 @@ class XxxTokenizationTest(CommonTestCases.CommonTokenizerTester):
         super(XxxTokenizationTest, self).setUp()
 
         vocab_tokens = [
-            "[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn",
-            "##ing", ",", "low", "lowest",
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "want",
+            "##want",
+            "##ed",
+            "wa",
+            "un",
+            "runn",
+            "##ing",
+            ",",
+            "low",
+            "lowest",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-        with open(self.vocab_file, "w", encoding='utf-8') as vocab_writer:
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_tokenizer(self, **kwargs):
         return XxxTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
-        input_text = u"UNwant\u00E9d,running"
-        output_text = u"unwanted, running"
+        input_text = "UNwant\u00E9d,running"
+        output_text = "unwanted, running"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
-        tokens = tokenizer.tokenize(u"UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

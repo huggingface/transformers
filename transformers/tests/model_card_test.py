@@ -21,44 +21,39 @@ import unittest
 from transformers.modelcard import ModelCard
 from .tokenization_tests_commons import TemporaryDirectory
 
-class ModelCardTester(unittest.TestCase):
 
+class ModelCardTester(unittest.TestCase):
     def setUp(self):
-        self.inputs_dict = {'model_details': {
-                                'Organization': 'testing',
-                                'Model date': 'today',
-                                'Model version': 'v2.1, Developed by Test Corp in 2019.',
-                                'Architecture': 'Convolutional Neural Network.',
-                                },
-                            'metrics': 'BLEU and ROUGE-1',
-                            'evaluation_data':{
-                                'Datasets':{
-                                    'BLEU': 'My-great-dataset-v1',
-                                    'ROUGE-1': 'My-short-dataset-v2.1',
-                                },
-                                'Preprocessing': 'See details on https://arxiv.org/pdf/1810.03993.pdf'
-                            },
-                            'training_data':{
-                                'Dataset': 'English Wikipedia dump dated 2018-12-01',
-                                'Preprocessing': 'Using SentencePiece vocabulary of size 52k tokens. See details on https://arxiv.org/pdf/1810.03993.pdf'
-                            },
-                            'quantitative_analyses': {
-                                'BLEU': 55.1,
-                                'ROUGE-1': 76,
-                            },
-                            }
+        self.inputs_dict = {
+            "model_details": {
+                "Organization": "testing",
+                "Model date": "today",
+                "Model version": "v2.1, Developed by Test Corp in 2019.",
+                "Architecture": "Convolutional Neural Network.",
+            },
+            "metrics": "BLEU and ROUGE-1",
+            "evaluation_data": {
+                "Datasets": {"BLEU": "My-great-dataset-v1", "ROUGE-1": "My-short-dataset-v2.1",},
+                "Preprocessing": "See details on https://arxiv.org/pdf/1810.03993.pdf",
+            },
+            "training_data": {
+                "Dataset": "English Wikipedia dump dated 2018-12-01",
+                "Preprocessing": "Using SentencePiece vocabulary of size 52k tokens. See details on https://arxiv.org/pdf/1810.03993.pdf",
+            },
+            "quantitative_analyses": {"BLEU": 55.1, "ROUGE-1": 76,},
+        }
 
     def test_model_card_common_properties(self):
         modelcard = ModelCard.from_dict(self.inputs_dict)
-        self.assertTrue(hasattr(modelcard, 'model_details'))
-        self.assertTrue(hasattr(modelcard, 'intended_use'))
-        self.assertTrue(hasattr(modelcard, 'factors'))
-        self.assertTrue(hasattr(modelcard, 'metrics'))
-        self.assertTrue(hasattr(modelcard, 'evaluation_data'))
-        self.assertTrue(hasattr(modelcard, 'training_data'))
-        self.assertTrue(hasattr(modelcard, 'quantitative_analyses'))
-        self.assertTrue(hasattr(modelcard, 'ethical_considerations'))
-        self.assertTrue(hasattr(modelcard, 'caveats_and_recommendations'))
+        self.assertTrue(hasattr(modelcard, "model_details"))
+        self.assertTrue(hasattr(modelcard, "intended_use"))
+        self.assertTrue(hasattr(modelcard, "factors"))
+        self.assertTrue(hasattr(modelcard, "metrics"))
+        self.assertTrue(hasattr(modelcard, "evaluation_data"))
+        self.assertTrue(hasattr(modelcard, "training_data"))
+        self.assertTrue(hasattr(modelcard, "quantitative_analyses"))
+        self.assertTrue(hasattr(modelcard, "ethical_considerations"))
+        self.assertTrue(hasattr(modelcard, "caveats_and_recommendations"))
 
     def test_model_card_to_json_string(self):
         modelcard = ModelCard.from_dict(self.inputs_dict)
@@ -70,7 +65,7 @@ class ModelCardTester(unittest.TestCase):
         model_card_first = ModelCard.from_dict(self.inputs_dict)
 
         with TemporaryDirectory() as tmpdirname:
-            filename = os.path.join(tmpdirname, u"modelcard.json")
+            filename = os.path.join(tmpdirname, "modelcard.json")
             model_card_first.to_json_file(filename)
             model_card_second = ModelCard.from_json_file(filename)
 
@@ -84,6 +79,7 @@ class ModelCardTester(unittest.TestCase):
             model_card_second = ModelCard.from_pretrained(tmpdirname)
 
         self.assertEqual(model_card_second.to_dict(), model_card_first.to_dict())
+
 
 if __name__ == "__main__":
     unittest.main()

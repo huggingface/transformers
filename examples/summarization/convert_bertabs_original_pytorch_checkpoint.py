@@ -34,12 +34,30 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-SAMPLE_TEXT = 'Hello world! cécé herlolip'
+SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
 BertAbsConfig = namedtuple(
     "BertAbsConfig",
-    ["temp_dir", "large", "use_bert_emb", "finetune_bert", "encoder", "share_emb", "max_pos", "enc_layers", "enc_hidden_size", "enc_heads", "enc_ff_size", "enc_dropout", "dec_layers", "dec_hidden_size", "dec_heads", "dec_ff_size", "dec_dropout"],
+    [
+        "temp_dir",
+        "large",
+        "use_bert_emb",
+        "finetune_bert",
+        "encoder",
+        "share_emb",
+        "max_pos",
+        "enc_layers",
+        "enc_hidden_size",
+        "enc_heads",
+        "enc_ff_size",
+        "enc_dropout",
+        "dec_layers",
+        "dec_hidden_size",
+        "dec_heads",
+        "dec_ff_size",
+        "dec_dropout",
+    ],
 )
 
 
@@ -119,7 +137,9 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     output_original_model = original(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)[0]
     output_original_generator = original.generator(output_original_model)
 
-    output_converted_model = new_model(encoder_input_ids, decoder_input_ids, token_type_ids, encoder_attention_mask, decoder_attention_mask)[0]
+    output_converted_model = new_model(
+        encoder_input_ids, decoder_input_ids, token_type_ids, encoder_attention_mask, decoder_attention_mask
+    )[0]
     output_converted_generator = new_model.generator(output_converted_model)
 
     maximum_absolute_difference = torch.max(torch.abs(output_converted_model - output_original_model)).item()
@@ -136,28 +156,21 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     # The model has been saved with torch.save(model) and this is bound to the exact
     # directory structure. We save the state_dict instead.
     logging.info("saving the model's state dictionary")
-    torch.save(new_model.state_dict(), "bertabs-finetuned-cnndm-extractive-abstractive-summarization-pytorch_model.bin")
+    torch.save(
+        new_model.state_dict(), "bertabs-finetuned-cnndm-extractive-abstractive-summarization-pytorch_model.bin"
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--bertabs_checkpoint_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path the official PyTorch dump.",
+        "--bertabs_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path to the output PyTorch model.",
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
 
     convert_bertabs_checkpoints(
-        args.bertabs_checkpoint_path,
-        args.pytorch_dump_folder_path,
+        args.bertabs_checkpoint_path, args.pytorch_dump_folder_path,
     )

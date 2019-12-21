@@ -19,7 +19,7 @@ from __future__ import print_function
 import unittest
 import sys
 
-from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
+from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
 from .configuration_common_test import ConfigTester
 from .utils import CACHE_DIR, require_tf, slow
 
@@ -27,46 +27,57 @@ from transformers import XxxConfig, is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers.modeling_tf_xxx import (TFXxxModel, TFXxxForMaskedLM,
-                                               TFXxxForSequenceClassification,
-                                               TFXxxForTokenClassification,
-                                               TFXxxForQuestionAnswering,
-                                               TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from transformers.modeling_tf_xxx import (
+        TFXxxModel,
+        TFXxxForMaskedLM,
+        TFXxxForSequenceClassification,
+        TFXxxForTokenClassification,
+        TFXxxForQuestionAnswering,
+        TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
 
 @require_tf
 class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (TFXxxModel, TFXxxForMaskedLM, TFXxxForQuestionAnswering,
-                         TFXxxForSequenceClassification,
-                         TFXxxForTokenClassification) if is_tf_available() else ()
+    all_model_classes = (
+        (
+            TFXxxModel,
+            TFXxxForMaskedLM,
+            TFXxxForQuestionAnswering,
+            TFXxxForSequenceClassification,
+            TFXxxForTokenClassification,
+        )
+        if is_tf_available()
+        else ()
+    )
 
     class TFXxxModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_input_mask=True,
-                     use_token_type_ids=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     intermediate_size=37,
-                     hidden_act="gelu",
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
-                     scope=None,
-                    ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_input_mask=True,
+            use_token_type_ids=True,
+            use_labels=True,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            intermediate_size=37,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            max_position_embeddings=512,
+            type_vocab_size=16,
+            type_sequence_label_size=2,
+            initializer_range=0.02,
+            num_labels=3,
+            num_choices=4,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -120,15 +131,16 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range)
+                initializer_range=self.initializer_range,
+            )
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-        def create_and_check_xxx_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xxx_model(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
             model = TFXxxModel(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             sequence_output, pooled_output = model(inputs)
 
             inputs = [input_ids, input_mask]
@@ -141,78 +153,74 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
                 "pooled_output": pooled_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
-
-        def create_and_check_xxx_for_masked_lm(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xxx_for_masked_lm(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
             model = TFXxxForMaskedLM(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
-            prediction_scores, = model(inputs)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            (prediction_scores,) = model(inputs)
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].shape),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
-
-        def create_and_check_xxx_for_sequence_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xxx_for_sequence_classification(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
             config.num_labels = self.num_labels
             model = TFXxxForSequenceClassification(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
-            logits, = model(inputs)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            (logits,) = model(inputs)
             result = {
                 "logits": logits.numpy(),
             }
-            self.parent.assertListEqual(
-                list(result["logits"].shape),
-                [self.batch_size, self.num_labels])
+            self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
-
-        def create_and_check_xxx_for_token_classification(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xxx_for_token_classification(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
             config.num_labels = self.num_labels
             model = TFXxxForTokenClassification(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
-            logits, = model(inputs)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            (logits,) = model(inputs)
             result = {
                 "logits": logits.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["logits"].shape),
-                [self.batch_size, self.seq_length, self.num_labels])
+                list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels]
+            )
 
-
-        def create_and_check_xxx_for_question_answering(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        def create_and_check_xxx_for_question_answering(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
             model = TFXxxForQuestionAnswering(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             start_logits, end_logits = model(inputs)
             result = {
                 "start_logits": start_logits.numpy(),
                 "end_logits": end_logits.numpy(),
             }
-            self.parent.assertListEqual(
-                list(result["start_logits"].shape),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["end_logits"].shape),
-                [self.batch_size, self.seq_length])
-
+            self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, token_type_ids, input_mask,
-             sequence_labels, token_labels, choice_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
+            (
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = config_and_inputs
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
             return config, inputs_dict
 
     def setUp(self):
@@ -244,9 +252,10 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ['xxx-base-uncased']:
+        for model_name in ["xxx-base-uncased"]:
             model = TFXxxModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
 
 if __name__ == "__main__":
     unittest.main()

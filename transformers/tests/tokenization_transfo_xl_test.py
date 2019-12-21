@@ -37,45 +37,53 @@ class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
         super(TransfoXLTokenizationTest, self).setUp()
 
         vocab_tokens = [
-            "<unk>", "[CLS]", "[SEP]", "want", "unwanted", "wa", "un",
-            "running", ",", "low", "l",
+            "<unk>",
+            "[CLS]",
+            "[SEP]",
+            "want",
+            "unwanted",
+            "wa",
+            "un",
+            "running",
+            ",",
+            "low",
+            "l",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-        with open(self.vocab_file, "w", encoding='utf-8') as vocab_writer:
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     def get_tokenizer(self, **kwargs):
-        kwargs['lower_case'] = True
+        kwargs["lower_case"] = True
         return TransfoXLTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
-        input_text = u"<unk> UNwanted , running"
-        output_text = u"<unk> unwanted, running"
+        input_text = "<unk> UNwanted , running"
+        output_text = "<unk> unwanted, running"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = TransfoXLTokenizer(vocab_file=self.vocab_file, lower_case=True)
 
-        tokens = tokenizer.tokenize(u"<unk> UNwanted , running")
+        tokens = tokenizer.tokenize("<unk> UNwanted , running")
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
 
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
 
     def test_full_tokenizer_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=True)
 
         self.assertListEqual(
-            tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
-            ["hello", "!", "how", "are", "you", "?"])
+            tokenizer.tokenize(" \tHeLLo ! how  \n Are yoU ?  "), ["hello", "!", "how", "are", "you", "?"]
+        )
 
     def test_full_tokenizer_no_lower(self):
         tokenizer = TransfoXLTokenizer(lower_case=False)
 
         self.assertListEqual(
-            tokenizer.tokenize(u" \tHeLLo ! how  \n Are yoU ?  "),
-            ["HeLLo", "!", "how", "Are", "yoU", "?"])
+            tokenizer.tokenize(" \tHeLLo ! how  \n Are yoU ?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -26,26 +26,25 @@ from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
-SPIECE_UNDERLINE = u'▁'
+SPIECE_UNDERLINE = "▁"
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to file names for serializing Tokenizer instances
 ####################################################
-VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to pretrained vocabulary URL for all the model shortcut names.
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
-    'vocab_file':
-    {
-        't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        't5-3b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        't5-11b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+    "vocab_file": {
+        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
     }
 }
 
@@ -53,12 +52,13 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Mapping from model shortcut names to max length of inputs
 ####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    't5-small': 512,
-    't5-base': 512,
-    't5-large': 512,
-    't5-3b': 512,
-    't5-11b': 512,
+    "t5-small": 512,
+    "t5-base": 512,
+    "t5-large": 512,
+    "t5-3b": 512,
+    "t5-11b": 512,
 }
+
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
@@ -71,28 +71,43 @@ class T5Tokenizer(PreTrainedTokenizer):
                 (like in T5 preprocessing
                 see: https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, eos_token="</s>", unk_token="<unk>",
-                 pad_token="<pad>", extra_ids=100, additional_special_tokens=None, **kwargs):
+    def __init__(
+        self,
+        vocab_file,
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        extra_ids=100,
+        additional_special_tokens=None,
+        **kwargs
+    ):
         # Add extra_ids to the special token list
         if extra_ids > 0:
             if additional_special_tokens is None:
                 additional_special_tokens = []
-            additional_special_tokens.extend([u"<extra_id_{}>".format(i) for i in range(extra_ids)])
+            additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids)])
 
-        super(T5Tokenizer, self).__init__(eos_token=eos_token, unk_token=unk_token,
-                                          pad_token=pad_token, additional_special_tokens=additional_special_tokens,
-                                          **kwargs)
+        super(T5Tokenizer, self).__init__(
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs
+        )
 
         try:
             import sentencepiece as spm
         except ImportError:
-            logger.warning("You need to install SentencePiece to use T5Tokenizer:"
-                           "https://github.com/google/sentencepiece"
-                           "pip install sentencepiece")
+            logger.warning(
+                "You need to install SentencePiece to use T5Tokenizer:"
+                "https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
 
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
@@ -114,8 +129,10 @@ class T5Tokenizer(PreTrainedTokenizer):
         try:
             import sentencepiece as spm
         except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                           "pip install sentencepiece")
+            logger.warning(
+                "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -132,7 +149,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             ret_pieces = []
             for piece in pieces:
                 if isinstance(piece, str):
-                    piece = piece.decode('utf-8')
+                    piece = piece.decode("utf-8")
                 ret_pieces.append(piece)
             pieces = ret_pieces
 
@@ -140,8 +157,8 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str/unicode) in an id using the vocab. """
-        if token.startswith(u"<extra_id_"):
-            l = re.match(r'<extra_id_(\d+)>', token)
+        if token.startswith("<extra_id_"):
+            l = re.match(r"<extra_id_(\d+)>", token)
             num = int(l.group(1))
             return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
@@ -151,9 +168,9 @@ class T5Tokenizer(PreTrainedTokenizer):
         if index < self.sp_model.get_piece_size():
             token = self.sp_model.IdToPiece(index)
         else:
-            token = u"<extra_id_{}>".format(self.vocab_size - 1 - index)
+            token = "<extra_id_{}>".format(self.vocab_size - 1 - index)
         if six.PY2 and return_unicode and isinstance(token, str):
-            token = token.decode('utf-8')
+            token = token.decode("utf-8")
         return token
 
     def convert_tokens_to_string(self, tokens):
@@ -168,7 +185,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES['vocab_file'])
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

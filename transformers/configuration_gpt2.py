@@ -26,11 +26,14 @@ from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
-GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {"gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
-                                      "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json",
-                                      "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-config.json",
-                                      "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-config.json",
-                                      "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-config.json",}
+GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
+    "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json",
+    "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-config.json",
+    "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-config.json",
+    "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-config.json",
+}
+
 
 class GPT2Config(PretrainedConfig):
     """Configuration class to store the configuration of a `GPT2Model`.
@@ -52,6 +55,7 @@ class GPT2Config(PretrainedConfig):
         initializer_range: The sttdev of the truncated_normal_initializer for
             initializing all weight matrices.
     """
+
     pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
@@ -67,7 +71,7 @@ class GPT2Config(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        summary_type='cls_index',
+        summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,

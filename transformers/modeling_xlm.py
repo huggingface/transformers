@@ -34,24 +34,21 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'xlm-mlm-en-2048': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-pytorch_model.bin",
-    'xlm-mlm-ende-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-ende-1024-pytorch_model.bin",
-    'xlm-mlm-enfr-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enfr-1024-pytorch_model.bin",
-    'xlm-mlm-enro-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enro-1024-pytorch_model.bin",
-    'xlm-mlm-tlm-xnli15-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-tlm-xnli15-1024-pytorch_model.bin",
-    'xlm-mlm-xnli15-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-xnli15-1024-pytorch_model.bin",
-    'xlm-clm-enfr-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-enfr-1024-pytorch_model.bin",
-    'xlm-clm-ende-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-ende-1024-pytorch_model.bin",
-    'xlm-mlm-17-1280': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-pytorch_model.bin",
-    'xlm-mlm-100-1280': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-pytorch_model.bin",
+    "xlm-mlm-en-2048": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-pytorch_model.bin",
+    "xlm-mlm-ende-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-ende-1024-pytorch_model.bin",
+    "xlm-mlm-enfr-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enfr-1024-pytorch_model.bin",
+    "xlm-mlm-enro-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enro-1024-pytorch_model.bin",
+    "xlm-mlm-tlm-xnli15-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-tlm-xnli15-1024-pytorch_model.bin",
+    "xlm-mlm-xnli15-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-xnli15-1024-pytorch_model.bin",
+    "xlm-clm-enfr-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-enfr-1024-pytorch_model.bin",
+    "xlm-clm-ende-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-ende-1024-pytorch_model.bin",
+    "xlm-mlm-17-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-pytorch_model.bin",
+    "xlm-mlm-100-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-pytorch_model.bin",
 }
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
-    position_enc = np.array([
-        [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
-        for pos in range(n_pos)
-    ])
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
@@ -142,7 +139,7 @@ class MultiHeadAttention(nn.Module):
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = input.size()
         if kv is None:
-            klen = qlen if cache is None else cache['slen'] + qlen
+            klen = qlen if cache is None else cache["slen"] + qlen
         else:
             klen = kv.size(1)
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
@@ -158,39 +155,39 @@ class MultiHeadAttention(nn.Module):
             """  compute context """
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
-        q = shape(self.q_lin(input))                                          # (bs, n_heads, qlen, dim_per_head)
+        q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
         if kv is None:
-            k = shape(self.k_lin(input))                                      # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(input))                                      # (bs, n_heads, qlen, dim_per_head)
+            k = shape(self.k_lin(input))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(input))  # (bs, n_heads, qlen, dim_per_head)
         elif cache is None or self.layer_id not in cache:
             k = v = kv
-            k = shape(self.k_lin(k))                                          # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(v))                                          # (bs, n_heads, qlen, dim_per_head)
+            k = shape(self.k_lin(k))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(v))  # (bs, n_heads, qlen, dim_per_head)
 
         if cache is not None:
             if self.layer_id in cache:
                 if kv is None:
                     k_, v_ = cache[self.layer_id]
-                    k = torch.cat([k_, k], dim=2)                             # (bs, n_heads, klen, dim_per_head)
-                    v = torch.cat([v_, v], dim=2)                             # (bs, n_heads, klen, dim_per_head)
+                    k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
+                    v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
                 else:
                     k, v = cache[self.layer_id]
             cache[self.layer_id] = (k, v)
 
-        q = q / math.sqrt(dim_per_head)                                       # (bs, n_heads, qlen, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))                           # (bs, n_heads, qlen, klen)
-        mask = (mask == 0).view(mask_reshape).expand_as(scores)               # (bs, n_heads, qlen, klen)
-        scores.masked_fill_(mask, -float('inf'))                              # (bs, n_heads, qlen, klen)
+        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, qlen, klen)
+        mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
+        scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, qlen, klen)
 
-        weights = F.softmax(scores.float(), dim=-1).type_as(scores)           # (bs, n_heads, qlen, klen)
+        weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
         weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = torch.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
-        context = unshape(context)                                            # (bs, qlen, dim)
+        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
+        context = unshape(context)  # (bs, qlen, dim)
 
         outputs = (self.out_lin(context),)
         if self.output_attentions:
@@ -199,7 +196,6 @@ class MultiHeadAttention(nn.Module):
 
 
 class TransformerFFN(nn.Module):
-
     def __init__(self, in_dim, dim_hidden, out_dim, config):
         super(TransformerFFN, self).__init__()
         self.dropout = config.dropout
@@ -219,6 +215,7 @@ class XLMPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = XLMConfig
     pretrained_model_archive_map = XLM_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = None
@@ -235,7 +232,7 @@ class XLMPreTrainedModel(PreTrainedModel):
             langs_list = torch.tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
         else:
             langs_list = None
-        return {'input_ids': inputs_list, 'attention_mask': attns_list, 'langs': langs_list}
+        return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
     def _init_weights(self, module):
         """ Initialize the weights. """
@@ -245,8 +242,8 @@ class XLMPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
                 nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
-                if hasattr(module, 'bias') and module.bias is not None:
-                    nn.init.constant_(module.bias, 0.)
+                if hasattr(module, "bias") and module.bias is not None:
+                    nn.init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -327,8 +324,12 @@ XLM_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
-                      XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class XLMModel(XLMPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -351,7 +352,8 @@ class XLMModel(XLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
-    def __init__(self, config):  #, dico, is_encoder, with_output):
+
+    def __init__(self, config):  # , dico, is_encoder, with_output):
         super(XLMModel, self).__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -377,13 +379,13 @@ class XLMModel(XLMPreTrainedModel):
         # assert len(self.id2lang) == len(self.lang2id) == self.n_langs
 
         # model parameters
-        self.dim = config.emb_dim       # 512 by default
+        self.dim = config.emb_dim  # 512 by default
         self.hidden_dim = self.dim * 4  # 2048 by default
-        self.n_heads = config.n_heads   # 8 by default
+        self.n_heads = config.n_heads  # 8 by default
         self.n_layers = config.n_layers
         self.dropout = config.dropout
         self.attention_dropout = config.attention_dropout
-        assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
+        assert self.dim % self.n_heads == 0, "transformer dim must be a multiple of n_heads"
 
         # embeddings
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, self.dim)
@@ -435,8 +437,18 @@ class XLMModel(XLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, inputs_embeds=None):  # removed: src_enc=None, src_len=None
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+    ):  # removed: src_enc=None, src_len=None
         if input_ids is not None:
             bs, slen = input_ids.size()
         else:
@@ -446,7 +458,7 @@ class XLMModel(XLMPreTrainedModel):
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.LongTensor([slen]*bs)
+                lengths = torch.LongTensor([slen] * bs)
         # mask = input_ids != self.pad_index
 
         # check inputs
@@ -488,14 +500,18 @@ class XLMModel(XLMPreTrainedModel):
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
                 head_mask = head_mask.expand(self.n_layers, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.n_layers
 
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
-            _slen = slen - cache['slen']
+            _slen = slen - cache["slen"]
             input_ids = input_ids[:, -_slen:]
             position_ids = position_ids[:, -_slen:]
             if langs is not None:
@@ -550,7 +566,7 @@ class XLMModel(XLMPreTrainedModel):
 
         # update cache length
         if cache is not None:
-            cache['slen'] += tensor.size(1)
+            cache["slen"] += tensor.size(1)
 
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
@@ -567,6 +583,7 @@ class XLMPredLayer(nn.Module):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
     """
+
     def __init__(self, config):
         super(XLMPredLayer, self).__init__()
         self.asm = config.asm
@@ -593,7 +610,7 @@ class XLMPredLayer(nn.Module):
             scores = self.proj(x)
             outputs = (scores,) + outputs
             if y is not None:
-                loss = F.cross_entropy(scores.view(-1, self.n_words), y.view(-1), reduction='elementwise_mean')
+                loss = F.cross_entropy(scores.view(-1, self.n_words), y.view(-1), reduction="elementwise_mean")
                 outputs = (loss,) + outputs
         else:
             scores = self.proj.log_prob(x)
@@ -605,9 +622,12 @@ class XLMPredLayer(nn.Module):
         return outputs
 
 
-@add_start_docstrings("""The XLM Model transformer with a language modeling head on top
+@add_start_docstrings(
+    """The XLM Model transformer with a language modeling head on top
     (linear layer with weights tied to the input embeddings). """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class XLMWithLMHeadModel(XLMPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -639,6 +659,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config):
         super(XLMWithLMHeadModel, self).__init__(config)
         self.transformer = XLMModel(config)
@@ -661,17 +682,30 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             langs = None
         return {"input_ids": input_ids, "langs": langs}
 
-    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, inputs_embeds=None, labels=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               attention_mask=attention_mask,
-                                               langs=langs,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               lengths=lengths,
-                                               cache=cache,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            langs=langs,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         output = transformer_outputs[0]
         outputs = self.pred_layer(output, labels)
@@ -680,9 +714,12 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""XLM Model with a sequence classification/regression head on top (a linear layer on top of
+@add_start_docstrings(
+    """XLM Model with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class XLMForSequenceClassification(XLMPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -714,6 +751,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         loss, logits = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(XLMForSequenceClassification, self).__init__(config)
         self.num_labels = config.num_labels
@@ -723,17 +761,30 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, inputs_embeds=None, labels=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               attention_mask=attention_mask,
-                                               langs=langs,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               lengths=lengths, 
-                                               cache=cache,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            langs=langs,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
@@ -753,9 +804,12 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings(
+    """XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     r"""
         **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -799,6 +853,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         loss, start_scores, end_scores = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(XLMForQuestionAnsweringSimple, self).__init__(config)
 
@@ -807,17 +862,31 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, inputs_embeds=None, start_positions=None, end_positions=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               attention_mask=attention_mask,
-                                               langs=langs,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               lengths=lengths, 
-                                               cache=cache,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            langs=langs,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         sequence_output = transformer_outputs[0]
 
@@ -826,7 +895,10 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        outputs = (start_logits, end_logits,)
+        outputs = (
+            start_logits,
+            end_logits,
+        )
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
@@ -849,9 +921,12 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""XLM Model with a beam-search span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings(
+    """XLM Model with a beam-search span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class XLMForQuestionAnswering(XLMPreTrainedModel):
     r"""
         **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -895,6 +970,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         loss, start_scores, end_scores = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(XLMForQuestionAnswering, self).__init__(config)
 
@@ -903,23 +979,45 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None,
-                lengths=None, cache=None, head_mask=None, inputs_embeds=None, start_positions=None, end_positions=None,
-                is_impossible=None, cls_index=None, p_mask=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               attention_mask=attention_mask,
-                                               langs=langs,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               lengths=lengths, 
-                                               cache=cache,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+        is_impossible=None,
+        cls_index=None,
+        p_mask=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            langs=langs,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         output = transformer_outputs[0]
 
-        outputs = self.qa_outputs(output, start_positions=start_positions, end_positions=end_positions,
-                                  cls_index=cls_index, is_impossible=is_impossible, p_mask=p_mask)
+        outputs = self.qa_outputs(
+            output,
+            start_positions=start_positions,
+            end_positions=end_positions,
+            cls_index=cls_index,
+            is_impossible=is_impossible,
+            p_mask=p_mask,
+        )
 
         outputs = outputs + transformer_outputs[1:]  # Keep new_mems and attention/hidden states if they are here
 

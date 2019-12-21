@@ -28,18 +28,13 @@ PASS = "__DUMMY_TRANSFORMERS_PASS__"
 FILES = [
     (
         "Test-{}.txt".format(int(time.time())),
-        os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "fixtures/input.txt"
-        )
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/input.txt"),
     ),
     (
-        "yoyo {}.txt".format(int(time.time())), # space is intentional
-        os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"
-        )
+        "yoyo {}.txt".format(int(time.time())),  # space is intentional
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
-
 
 
 class HfApiCommonTest(unittest.TestCase):
@@ -76,11 +71,9 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     def test_presign_and_upload(self):
         for FILE_KEY, FILE_PATH in FILES:
-            access_url = self._api.presign_and_upload(
-                token=self._token, filename=FILE_KEY, filepath=FILE_PATH
-            )
+            access_url = self._api.presign_and_upload(token=self._token, filename=FILE_KEY, filepath=FILE_PATH)
             self.assertIsInstance(access_url, six.string_types)
-            with open(FILE_PATH, 'r') as f:
+            with open(FILE_PATH, "r") as f:
                 body = f.read()
             r = requests.get(access_url)
             self.assertEqual(r.text, body)
@@ -93,7 +86,6 @@ class HfApiEndpointsTest(HfApiCommonTest):
             self.assertIsInstance(o, S3Obj)
 
 
-
 class HfFolderTest(unittest.TestCase):
     def test_token_workflow(self):
         """
@@ -102,18 +94,12 @@ class HfFolderTest(unittest.TestCase):
         """
         token = "token-{}".format(int(time.time()))
         HfFolder.save_token(token)
-        self.assertEqual(
-            HfFolder.get_token(),
-            token
-        )
+        self.assertEqual(HfFolder.get_token(), token)
         HfFolder.delete_token()
         HfFolder.delete_token()
         # ^^ not an error, we test that the
         # second call does not fail.
-        self.assertEqual(
-            HfFolder.get_token(),
-            None
-        )
+        self.assertEqual(HfFolder.get_token(), None)
 
 
 if __name__ == "__main__":

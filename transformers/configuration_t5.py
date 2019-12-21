@@ -27,11 +27,11 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    't5-small': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-config.json",
-    't5-base': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-config.json",
-    't5-large': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-config.json",
-    't5-3b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-config.json",
-    't5-11b': "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-config.json",
+    "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-config.json",
+    "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-config.json",
+    "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-config.json",
+    "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-config.json",
+    "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-config.json",
 }
 
 
@@ -65,19 +65,21 @@ class T5Config(PretrainedConfig):
     """
     pretrained_config_archive_map = T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-    def __init__(self,
-                 vocab_size=32128,
-                 n_positions=512,
-                 d_model=512,
-                 d_kv=64,
-                 d_ff=2048,
-                 num_layers=6,
-                 num_heads=8,
-                 relative_attention_num_buckets=32,
-                 dropout_rate=0.1,
-                 layer_norm_epsilon=1e-6,
-                 initializer_factor=1.0,
-                 **kwargs):
+    def __init__(
+        self,
+        vocab_size=32128,
+        n_positions=512,
+        d_model=512,
+        d_kv=64,
+        d_ff=2048,
+        num_layers=6,
+        num_heads=8,
+        relative_attention_num_buckets=32,
+        dropout_rate=0.1,
+        layer_norm_epsilon=1e-6,
+        initializer_factor=1.0,
+        **kwargs
+    ):
         super(T5Config, self).__init__(**kwargs)
         self.vocab_size = vocab_size
         self.n_positions = n_positions

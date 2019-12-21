@@ -24,8 +24,8 @@ from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 from .utils import slow
 
-class TokenizerUtilsTest(unittest.TestCase):
 
+class TokenizerUtilsTest(unittest.TestCase):
     def check_tokenizer_from_pretrained(self, tokenizer_class):
         s3_models = list(tokenizer_class.max_model_input_sizes.keys())
         for model_name in s3_models[:1]:
@@ -45,6 +45,7 @@ class TokenizerUtilsTest(unittest.TestCase):
     @slow
     def test_pretrained_tokenizers(self):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
+
 
 if __name__ == "__main__":
     unittest.main()

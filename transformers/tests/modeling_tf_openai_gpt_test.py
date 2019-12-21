@@ -19,7 +19,7 @@ from __future__ import print_function
 import unittest
 import sys
 
-from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
+from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
 from .configuration_common_test import ConfigTester
 from .utils import CACHE_DIR, require_tf, slow
 
@@ -27,44 +27,48 @@ from transformers import OpenAIGPTConfig, is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers.modeling_tf_openai import (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel,
-                                                         TFOpenAIGPTDoubleHeadsModel,
-                                                         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from transformers.modeling_tf_openai import (
+        TFOpenAIGPTModel,
+        TFOpenAIGPTLMHeadModel,
+        TFOpenAIGPTDoubleHeadsModel,
+        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
 
 @require_tf
 class TFOpenAIGPTModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes = (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel,
-                         TFOpenAIGPTDoubleHeadsModel) if is_tf_available() else ()
+    all_model_classes = (
+        (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel) if is_tf_available() else ()
+    )
 
     class TFOpenAIGPTModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_token_type_ids=True,
-                     use_input_mask=True,
-                     use_labels=True,
-                     use_mc_token_ids=True,
-                     vocab_size=99,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     intermediate_size=37,
-                     hidden_act="gelu",
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
-                     scope=None,
-                     ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_token_type_ids=True,
+            use_input_mask=True,
+            use_labels=True,
+            use_mc_token_ids=True,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            intermediate_size=37,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            max_position_embeddings=512,
+            type_vocab_size=16,
+            type_sequence_label_size=2,
+            initializer_range=0.02,
+            num_labels=3,
+            num_choices=4,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -129,13 +133,21 @@ class TFOpenAIGPTModelTest(TFCommonTestCases.TFCommonModelTester):
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
-            return config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, token_labels, choice_labels
+            return (
+                config,
+                input_ids,
+                input_mask,
+                head_mask,
+                token_type_ids,
+                mc_token_ids,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            )
 
         def create_and_check_openai_gpt_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = TFOpenAIGPTModel(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             sequence_output = model(inputs)[0]
 
             inputs = [input_ids, input_mask]
@@ -147,54 +159,58 @@ class TFOpenAIGPTModelTest(TFCommonTestCases.TFCommonModelTester):
                 "sequence_output": sequence_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape),
-                [self.batch_size, self.seq_length, self.hidden_size])
-
+                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            )
 
         def create_and_check_openai_gpt_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = TFOpenAIGPTLMHeadModel(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             prediction_scores = model(inputs)[0]
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].shape),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
-
-        def create_and_check_openai_gpt_double_head(self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args):
+        def create_and_check_openai_gpt_double_head(
+            self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
+        ):
             model = TFOpenAIGPTDoubleHeadsModel(config=config)
 
             multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
             multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
             multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
 
-            inputs = {'input_ids': multiple_choice_inputs_ids,
-                      'mc_token_ids': mc_token_ids,
-                      'attention_mask': multiple_choice_input_mask,
-                      'token_type_ids': multiple_choice_token_type_ids}
-            lm_logits, mc_logits = model(inputs)[:2]
-            result = {
-                "lm_logits": lm_logits.numpy(),
-                "mc_logits": mc_logits.numpy()
+            inputs = {
+                "input_ids": multiple_choice_inputs_ids,
+                "mc_token_ids": mc_token_ids,
+                "attention_mask": multiple_choice_input_mask,
+                "token_type_ids": multiple_choice_token_type_ids,
             }
+            lm_logits, mc_logits = model(inputs)[:2]
+            result = {"lm_logits": lm_logits.numpy(), "mc_logits": mc_logits.numpy()}
             self.parent.assertListEqual(
-                list(result["lm_logits"].shape),
-                [self.batch_size, self.num_choices, self.seq_length, self.vocab_size])
-            self.parent.assertListEqual(
-                list(result["mc_logits"].shape),
-                [self.batch_size, self.num_choices])
+                list(result["lm_logits"].shape), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size]
+            )
+            self.parent.assertListEqual(list(result["mc_logits"].shape), [self.batch_size, self.num_choices])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
 
-            (config, input_ids, input_mask, head_mask, token_type_ids,
-             mc_token_ids, sequence_labels, token_labels, choice_labels) = config_and_inputs
+            (
+                config,
+                input_ids,
+                input_mask,
+                head_mask,
+                token_type_ids,
+                mc_token_ids,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = config_and_inputs
 
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
             return config, inputs_dict
 
     def setUp(self):
@@ -222,6 +238,6 @@ class TFOpenAIGPTModelTest(TFCommonTestCases.TFCommonModelTester):
             model = TFOpenAIGPTModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
+
 if __name__ == "__main__":
     unittest.main()
-

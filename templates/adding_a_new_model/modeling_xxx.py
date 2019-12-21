@@ -44,8 +44,8 @@ logger = logging.getLogger(__name__)
 # for the pretrained weights provided with the models
 ####################################################
 XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'xxx-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-pytorch_model.bin",
-    'xxx-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-pytorch_model.bin",
+    "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-pytorch_model.bin",
+    "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-pytorch_model.bin",
 }
 
 ####################################################
@@ -60,8 +60,10 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        logger.error("Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
@@ -76,7 +78,7 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
         arrays.append(array)
 
     for name, array in zip(names, arrays):
-        name = name.split('/')
+        name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(n in ["adam_v", "adam_m", "global_step"] for n in name):
@@ -84,18 +86,18 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
             continue
         pointer = model
         for m_name in name:
-            if re.fullmatch(r'[A-Za-z]+_\d+', m_name):
-                l = re.split(r'_(\d+)', m_name)
+            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
+                l = re.split(r"_(\d+)", m_name)
             else:
                 l = [m_name]
-            if l[0] == 'kernel' or l[0] == 'gamma':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'output_bias' or l[0] == 'beta':
-                pointer = getattr(pointer, 'bias')
-            elif l[0] == 'output_weights':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'squad':
-                pointer = getattr(pointer, 'classifier')
+            if l[0] == "kernel" or l[0] == "gamma":
+                pointer = getattr(pointer, "weight")
+            elif l[0] == "output_bias" or l[0] == "beta":
+                pointer = getattr(pointer, "bias")
+            elif l[0] == "output_weights":
+                pointer = getattr(pointer, "weight")
+            elif l[0] == "squad":
+                pointer = getattr(pointer, "classifier")
             else:
                 try:
                     pointer = getattr(pointer, l[0])
@@ -105,9 +107,9 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
             if len(l) >= 2:
                 num = int(l[1])
                 pointer = pointer[num]
-        if m_name[-11:] == '_embeddings':
-            pointer = getattr(pointer, 'weight')
-        elif m_name == 'kernel':
+        if m_name[-11:] == "_embeddings":
+            pointer = getattr(pointer, "weight")
+        elif m_name == "kernel":
             array = np.transpose(array)
         try:
             assert pointer.shape == array.shape
@@ -147,7 +149,6 @@ class XxxLayer(nn.Module):
         return outputs
 
 
-
 ####################################################
 # PreTrainedModel is a sub-class of torch.nn.Module
 # which take care of loading and saving pretrained weights
@@ -161,6 +162,7 @@ class XxxPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = XxxConfig
     pretrained_model_archive_map = XXX_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_xxx
@@ -246,8 +248,12 @@ XXX_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare Xxx Model transformer outputting raw hidden-states without any specific head on top.",
-                      XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare Xxx Model transformer outputting raw hidden-states without any specific head on top.",
+    XXX_START_DOCSTRING,
+    XXX_INPUTS_DOCSTRING,
+)
 class XxxModel(XxxPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -277,6 +283,7 @@ class XxxModel(XxxPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config):
         super(XxxModel, self).__init__(config)
 
@@ -300,7 +307,15 @@ class XxxModel(XxxPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+    ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -329,7 +344,7 @@ class XxxModel(XxxPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # Prepare head mask if needed
@@ -342,14 +357,20 @@ class XxxModel(XxxPreTrainedModel):
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
                 head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
         ##################################
         # Replace this with your model code
-        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds)
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
         encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
@@ -357,8 +378,9 @@ class XxxModel(XxxPreTrainedModel):
         return outputs  # sequence_output, (hidden_states), (attentions)
 
 
-@add_start_docstrings("""Xxx Model with a `language modeling` head on top. """,
-    XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """Xxx Model with a `language modeling` head on top. """, XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING
+)
 class XxxForMaskedLM(XxxPreTrainedModel):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -389,6 +411,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         loss, prediction_scores = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(XxxForMaskedLM, self).__init__(config)
 
@@ -400,15 +423,25 @@ class XxxForMaskedLM(XxxPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                masked_lm_labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        masked_lm_labels=None,
+    ):
 
-        outputs = self.transformer(input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
@@ -422,9 +455,12 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
 
-@add_start_docstrings("""Xxx Model transformer with a sequence classification/regression head on top (a linear layer on top of
+@add_start_docstrings(
+    """Xxx Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING)
+    XXX_START_DOCSTRING,
+    XXX_INPUTS_DOCSTRING,
+)
 class XxxForSequenceClassification(XxxPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -456,6 +492,7 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
         loss, logits = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(XxxForSequenceClassification, self).__init__(config)
         self.num_labels = config.num_labels
@@ -466,15 +503,25 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
 
-        outputs = self.transformer(input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         pooled_output = outputs[1]
 
@@ -496,9 +543,12 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
-@add_start_docstrings("""Xxx Model with a token classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """Xxx Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING)
+    XXX_START_DOCSTRING,
+    XXX_INPUTS_DOCSTRING,
+)
 class XxxForTokenClassification(XxxPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -528,6 +578,7 @@ class XxxForTokenClassification(XxxPreTrainedModel):
         loss, scores = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(XxxForTokenClassification, self).__init__(config)
         self.num_labels = config.num_labels
@@ -538,15 +589,25 @@ class XxxForTokenClassification(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
 
-        outputs = self.transformer(input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         sequence_output = outputs[0]
 
@@ -569,9 +630,12 @@ class XxxForTokenClassification(XxxPreTrainedModel):
         return outputs  # (loss), scores, (hidden_states), (attentions)
 
 
-@add_start_docstrings("""Xxx Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings(
+    """Xxx Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING)
+    XXX_START_DOCSTRING,
+    XXX_INPUTS_DOCSTRING,
+)
 class XxxForQuestionAnswering(XxxPreTrainedModel):
     r"""
         **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -613,6 +677,7 @@ class XxxForQuestionAnswering(XxxPreTrainedModel):
 
 
     """
+
     def __init__(self, config):
         super(XxxForQuestionAnswering, self).__init__(config)
         self.num_labels = config.num_labels
@@ -622,15 +687,26 @@ class XxxForQuestionAnswering(XxxPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                start_positions=None, end_positions=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+    ):
 
-        outputs = self.transformer(input_ids,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            position_ids=position_ids, 
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         sequence_output = outputs[0]
 

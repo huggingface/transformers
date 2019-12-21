@@ -23,10 +23,10 @@ from transformers import is_torch_available
 
 if is_torch_available():
     import torch
-    from transformers import (TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel)
+    from transformers import TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel
     from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
 
-from .modeling_common_test import (CommonTestCases, ids_tensor)
+from .modeling_common_test import CommonTestCases, ids_tensor
 from .configuration_common_test import ConfigTester
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
@@ -40,27 +40,27 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
     test_resize_embeddings = False
 
     class TransfoXLModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     mem_len=30,
-                     clamp_len=15,
-                     is_training=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     cutoffs=[10, 50, 80],
-                     hidden_size=32,
-                     d_embed=32,
-                     num_attention_heads=4,
-                     d_head=8,
-                     d_inner=128,
-                     div_val=2,
-                     num_hidden_layers=5,
-                     scope=None,
-                     seed=1,
-                     ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            mem_len=30,
+            clamp_len=15,
+            is_training=True,
+            use_labels=True,
+            vocab_size=99,
+            cutoffs=[10, 50, 80],
+            hidden_size=32,
+            d_embed=32,
+            num_attention_heads=4,
+            d_head=8,
+            d_inner=128,
+            div_val=2,
+            num_hidden_layers=5,
+            scope=None,
+            seed=1,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -100,7 +100,8 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
                 d_head=self.d_head,
                 d_inner=self.d_inner,
                 div_val=self.div_val,
-                n_layer=self.num_hidden_layers)
+                n_layer=self.num_hidden_layers,
+            )
 
             return (config, input_ids_1, input_ids_2, lm_labels)
 
@@ -125,18 +126,19 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
 
         def check_transfo_xl_model_output(self, result):
             self.parent.assertListEqual(
-                list(result["hidden_states_1"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(
-                list(result["hidden_states_2"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
-
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
         def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
             model = TransfoXLLMHeadModel(config)
@@ -159,32 +161,29 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
             return outputs
 
         def check_transfo_xl_lm_head_output(self, result):
+            self.parent.assertListEqual(list(result["loss_1"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["loss_1"].size()),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["lm_logits_1"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
+            self.parent.assertListEqual(list(result["loss_2"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["loss_2"].size()),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["lm_logits_2"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids_1, input_ids_2, lm_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids_1}
+            inputs_dict = {"input_ids": input_ids_1}
             return config, inputs_dict
-
 
     def setUp(self):
         self.model_tester = TransfoXLModelTest.TransfoXLModelTester(self)

@@ -145,16 +145,12 @@ class PreTrainedEncoderDecoder(nn.Module):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            encoder = AutoModel.from_pretrained(
-                encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder
-            )
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            decoder = AutoModelWithLMHead.from_pretrained(
-                decoder_pretrained_model_name_or_path, **kwargs_decoder
-            )
+            decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
 
         model = cls(encoder, decoder)
@@ -168,18 +164,23 @@ class PreTrainedEncoderDecoder(nn.Module):
         We save the encoder' and decoder's parameters in two separate directories.
         """
 
-        # If the root output directory does not exist, create it 
+        # If the root output directory does not exist, create it
         if not os.path.exists(save_directory):
             os.mkdir(save_directory)
 
         # Check whether the output directory is empty or not
-        sub_directories = [directory for directory in os.listdir(save_directory)
-            if os.path.isdir(os.path.join(save_directory, directory))]
+        sub_directories = [
+            directory
+            for directory in os.listdir(save_directory)
+            if os.path.isdir(os.path.join(save_directory, directory))
+        ]
 
         if len(sub_directories) > 0:
             if "encoder" in sub_directories and "decoder" in sub_directories:
-                print("WARNING: there is an older version of encoder-decoder saved in" +\
-                    " the output directory. The default behaviour is to overwrite them.")
+                print(
+                    "WARNING: there is an older version of encoder-decoder saved in"
+                    + " the output directory. The default behaviour is to overwrite them."
+                )
 
             # Empty the output directory
             for directory_to_remove in sub_directories:
@@ -190,7 +191,7 @@ class PreTrainedEncoderDecoder(nn.Module):
                 # Remove the subdirectory itself
                 os.rmdir(os.path.join(save_directory, directory_to_remove))
 
-            assert(len(os.listdir(save_directory)) == 0) # sanity check
+            assert len(os.listdir(save_directory)) == 0  # sanity check
 
         # Create the "encoder" directory inside the output directory and save the encoder into it
         if not os.path.exists(os.path.join(save_directory, "encoder")):

@@ -24,11 +24,12 @@ from .utils import DataProcessor, InputExample
 
 logger = logging.getLogger(__name__)
 
+
 class XnliProcessor(DataProcessor):
     """Processor for the XNLI dataset.
     Adapted from https://github.com/google-research/bert/blob/f39e881b169b9d53bea03d2d341b31707a6c052b/run_classifier.py#L207"""
 
-    def __init__(self, language, train_language = None):
+    def __init__(self, language, train_language=None):
         self.language = language
         self.train_language = train_language
 
@@ -40,13 +41,12 @@ class XnliProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % ('train', i)
+            guid = "%s-%s" % ("train", i)
             text_a = line[0]
             text_b = line[1]
             label = "contradiction" if line[2] == "contradictory" else line[2]
             assert isinstance(text_a, str) and isinstance(text_b, str) and isinstance(label, str)
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
     def get_test_examples(self, data_dir):
@@ -59,18 +59,18 @@ class XnliProcessor(DataProcessor):
             language = line[0]
             if language != self.language:
                 continue
-            guid = "%s-%s" % ('test', i)
+            guid = "%s-%s" % ("test", i)
             text_a = line[6]
             text_b = line[7]
             label = line[1]
             assert isinstance(text_a, str) and isinstance(text_b, str) and isinstance(label, str)
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
     def get_labels(self):
         """See base class."""
         return ["contradiction", "entailment", "neutral"]
+
 
 xnli_processors = {
     "xnli": XnliProcessor,

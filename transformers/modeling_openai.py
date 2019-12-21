@@ -36,7 +36,9 @@ from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
-OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-pytorch_model.bin"}
+OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-pytorch_model.bin"
+}
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
@@ -45,17 +47,17 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     import re
     import numpy as np
 
-    if '.ckpt' in openai_checkpoint_folder_path:
+    if ".ckpt" in openai_checkpoint_folder_path:
         openai_checkpoint_folder_path = os.path.dirname(openai_checkpoint_folder_path)
 
     logger.info("Loading weights from {}".format(openai_checkpoint_folder_path))
 
-    with open(openai_checkpoint_folder_path + '/parameters_names.json', "r", encoding='utf-8') as names_handle:
+    with open(openai_checkpoint_folder_path + "/parameters_names.json", "r", encoding="utf-8") as names_handle:
         names = json.load(names_handle)
-    with open(openai_checkpoint_folder_path + '/params_shapes.json', "r", encoding='utf-8') as shapes_handle:
+    with open(openai_checkpoint_folder_path + "/params_shapes.json", "r", encoding="utf-8") as shapes_handle:
         shapes = json.load(shapes_handle)
     offsets = np.cumsum([np.prod(shape) for shape in shapes])
-    init_params = [np.load(openai_checkpoint_folder_path + '/params_{}.npy'.format(n)) for n in range(10)]
+    init_params = [np.load(openai_checkpoint_folder_path + "/params_{}.npy".format(n)) for n in range(10)]
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
     init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
 
@@ -79,23 +81,23 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     init_params.pop(0)
     init_params.pop(0)
 
-    for name, array in zip(names, init_params): # names[1:n_transfer], init_params[1:n_transfer]):
+    for name, array in zip(names, init_params):  # names[1:n_transfer], init_params[1:n_transfer]):
         name = name[6:]  # skip "model/"
         assert name[-2:] == ":0"
         name = name[:-2]
-        name = name.split('/')
+        name = name.split("/")
         pointer = model
         for m_name in name:
-            if re.fullmatch(r'[A-Za-z]+\d+', m_name):
-                l = re.split(r'(\d+)', m_name)
+            if re.fullmatch(r"[A-Za-z]+\d+", m_name):
+                l = re.split(r"(\d+)", m_name)
             else:
                 l = [m_name]
-            if l[0] == 'g':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'b':
-                pointer = getattr(pointer, 'bias')
-            elif l[0] == 'w':
-                pointer = getattr(pointer, 'weight')
+            if l[0] == "g":
+                pointer = getattr(pointer, "weight")
+            elif l[0] == "b":
+                pointer = getattr(pointer, "bias")
+            elif l[0] == "w":
+                pointer = getattr(pointer, "weight")
             else:
                 pointer = getattr(pointer, l[0])
             if len(l) >= 2:
@@ -156,7 +158,7 @@ class Attention(nn.Module):
             mask[head] = 0
         mask = mask.view(-1).contiguous().eq(1)
         index = torch.arange(len(mask))[mask].long()
-        index_attn = torch.cat([index, index + self.split_size, index + (2*self.split_size)])
+        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
         # Prune conv1d layers
         self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
         self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
@@ -172,7 +174,7 @@ class Attention(nn.Module):
         # w = w * self.bias + -1e9 * (1 - self.bias)  # TF implem method: mask_attn_weights
         # XD: self.b may be larger than w, so we need to crop it
         b = self.bias[:, :, : w.size(-2), : w.size(-1)]
-        w = w * b + - 1e4 * (1 - b)
+        w = w * b + -1e4 * (1 - b)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -261,6 +263,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = OpenAIGPTConfig
     pretrained_model_archive_map = OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_openai_gpt
@@ -330,8 +333,12 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""    Inputs:
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
-                      OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
+    OPENAI_GPT_START_DOCSTRING,
+    OPENAI_GPT_INPUTS_DOCSTRING,
+)
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -354,6 +361,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config):
         super(OpenAIGPTModel, self).__init__(config)
         self.output_attentions = config.output_attentions
@@ -379,7 +387,15 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+    ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -410,7 +426,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
 
         # Prepare head mask if needed
@@ -422,8 +438,12 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
                 head_mask = head_mask.expand(self.config.n_layer, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.n_layer
 
@@ -463,8 +483,12 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         return outputs  # last hidden state, (all hidden states), (all attentions)
 
 
-@add_start_docstrings("""OpenAI GPT Model transformer with a language modeling head on top
-(linear layer with weights tied to the input embeddings). """, OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """OpenAI GPT Model transformer with a language modeling head on top
+(linear layer with weights tied to the input embeddings). """,
+    OPENAI_GPT_START_DOCSTRING,
+    OPENAI_GPT_INPUTS_DOCSTRING,
+)
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -496,6 +520,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         loss, logits = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(OpenAIGPTLMHeadModel, self).__init__(config)
         self.transformer = OpenAIGPTModel(config)
@@ -506,14 +531,24 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                labels=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               attention_mask=attention_mask,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
 
@@ -524,18 +559,21 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
-                            shift_labels.view(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             outputs = (loss,) + outputs
 
         return outputs  # (loss), lm_logits, (all hidden states), (all attentions)
 
 
-@add_start_docstrings("""OpenAI GPT Model transformer with a language modeling and a multiple-choice classification
+@add_start_docstrings(
+    """OpenAI GPT Model transformer with a language modeling and a multiple-choice classification
 head on top e.g. for RocStories/SWAG tasks. The two heads are two linear layers.
 The language modeling head has its weights tied to the input embeddings,
 the classification head takes as input the input of a specified classification token index in the input sequence).
-""", OPENAI_GPT_START_DOCSTRING, OPENAI_GPT_INPUTS_DOCSTRING)
+""",
+    OPENAI_GPT_START_DOCSTRING,
+    OPENAI_GPT_INPUTS_DOCSTRING,
+)
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     r"""
         **mc_token_ids**: (`optional`, default to index of the last token of the input) ``torch.LongTensor`` of shape ``(batch_size, num_choices)``:
@@ -587,6 +625,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(OpenAIGPTDoubleHeadsModel, self).__init__(config)
 
@@ -600,14 +639,26 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                mc_token_ids=None, lm_labels=None, mc_labels=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               attention_mask=attention_mask,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        mc_token_ids=None,
+        lm_labels=None,
+        mc_labels=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
@@ -616,15 +667,13 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         outputs = (lm_logits, mc_logits) + transformer_outputs[1:]
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)),
-                            mc_labels.view(-1))
+            loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
             outputs = (loss,) + outputs
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
-                            shift_labels.view(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             outputs = (loss,) + outputs
 
         return outputs  # (lm loss), (mc loss), lm logits, mc logits, (all hidden_states), (attentions)

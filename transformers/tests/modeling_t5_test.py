@@ -20,12 +20,12 @@ import unittest
 
 from transformers import is_torch_available
 
-from .modeling_common_test import (CommonTestCases, ids_tensor, floats_tensor)
+from .modeling_common_test import CommonTestCases, ids_tensor, floats_tensor
 from .configuration_common_test import ConfigTester
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 if is_torch_available():
-    from transformers import (T5Config, T5Model, T5WithLMHeadModel)
+    from transformers import T5Config, T5Model, T5WithLMHeadModel
     from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
@@ -39,26 +39,26 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
     is_encoder_decoder = True
 
     class T5ModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     encoder_seq_length=7,
-                     decoder_seq_length=9,
-                     is_training=True,
-                     use_attention_mask=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     n_positions=14,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     d_ff=37,
-                     relative_attention_num_buckets=8,
-                     dropout_rate=0.1,
-                     initializer_factor=0.002,
-                     scope=None,
-                    ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            encoder_seq_length=7,
+            decoder_seq_length=9,
+            is_training=True,
+            use_attention_mask=True,
+            use_labels=True,
+            vocab_size=99,
+            n_positions=14,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            d_ff=37,
+            relative_attention_num_buckets=8,
+            dropout_rate=0.1,
+            initializer_factor=0.002,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.encoder_seq_length = encoder_seq_length
@@ -101,60 +101,96 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
                 num_heads=self.num_attention_heads,
                 relative_attention_num_buckets=self.relative_attention_num_buckets,
                 dropout_rate=self.dropout_rate,
-                initializer_factor=self.initializer_factor)
+                initializer_factor=self.initializer_factor,
+            )
 
-            return (config, encoder_input_ids, decoder_input_ids, encoder_attention_mask, decoder_attention_mask, decoder_lm_labels)
+            return (
+                config,
+                encoder_input_ids,
+                decoder_input_ids,
+                encoder_attention_mask,
+                decoder_attention_mask,
+                decoder_lm_labels,
+            )
 
         def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+            self.parent.assertListEqual(list(result["loss"].size()), [])
 
-        def create_and_check_t5_model(self, config, encoder_input_ids, decoder_input_ids, encoder_attention_mask, decoder_attention_mask, decoder_lm_labels):
+        def create_and_check_t5_model(
+            self,
+            config,
+            encoder_input_ids,
+            decoder_input_ids,
+            encoder_attention_mask,
+            decoder_attention_mask,
+            decoder_lm_labels,
+        ):
             model = T5Model(config=config)
             model.eval()
-            decoder_output, encoder_output = model(encoder_input_ids=encoder_input_ids,
-                                                   decoder_input_ids=decoder_input_ids,
-                                                   encoder_attention_mask=encoder_attention_mask,
-                                                   decoder_attention_mask=decoder_attention_mask)
-            decoder_output, encoder_output = model(encoder_input_ids=encoder_input_ids,
-                                                   decoder_input_ids=decoder_input_ids)
+            decoder_output, encoder_output = model(
+                encoder_input_ids=encoder_input_ids,
+                decoder_input_ids=decoder_input_ids,
+                encoder_attention_mask=encoder_attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+            decoder_output, encoder_output = model(
+                encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids
+            )
 
             result = {
                 "encoder_output": encoder_output,
                 "decoder_output": decoder_output,
             }
             self.parent.assertListEqual(
-                list(result["encoder_output"].size()),
-                [self.batch_size, self.encoder_seq_length, self.hidden_size])
+                list(result["encoder_output"].size()), [self.batch_size, self.encoder_seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(
-                list(result["decoder_output"].size()),
-                [self.batch_size, self.decoder_seq_length, self.hidden_size])
+                list(result["decoder_output"].size()), [self.batch_size, self.decoder_seq_length, self.hidden_size]
+            )
 
-
-        def create_and_check_t5_with_lm_head(self, config, encoder_input_ids, decoder_input_ids, encoder_attention_mask, decoder_attention_mask, decoder_lm_labels):
+        def create_and_check_t5_with_lm_head(
+            self,
+            config,
+            encoder_input_ids,
+            decoder_input_ids,
+            encoder_attention_mask,
+            decoder_attention_mask,
+            decoder_lm_labels,
+        ):
             model = T5WithLMHeadModel(config=config)
             model.eval()
-            outputs = model(encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids,
-                            decoder_attention_mask=decoder_attention_mask, decoder_lm_labels=decoder_lm_labels)
+            outputs = model(
+                encoder_input_ids=encoder_input_ids,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                decoder_lm_labels=decoder_lm_labels,
+            )
             loss, prediction_scores = outputs[0], outputs[1]
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].size()),
-                [self.batch_size, self.decoder_seq_length, self.vocab_size])
+                list(result["prediction_scores"].size()), [self.batch_size, self.decoder_seq_length, self.vocab_size]
+            )
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, encoder_input_ids, decoder_input_ids, encoder_attention_mask,
-             decoder_attention_mask, decoder_lm_labels) = config_and_inputs
-            inputs_dict = {'encoder_input_ids': encoder_input_ids,
-                           'decoder_input_ids': decoder_input_ids,
-                           'decoder_attention_mask': decoder_attention_mask,
-                           'encoder_attention_mask': encoder_attention_mask}
+            (
+                config,
+                encoder_input_ids,
+                decoder_input_ids,
+                encoder_attention_mask,
+                decoder_attention_mask,
+                decoder_lm_labels,
+            ) = config_and_inputs
+            inputs_dict = {
+                "encoder_input_ids": encoder_input_ids,
+                "decoder_input_ids": decoder_input_ids,
+                "decoder_attention_mask": decoder_attention_mask,
+                "encoder_attention_mask": encoder_attention_mask,
+            }
             return config, inputs_dict
 
     def setUp(self):
@@ -177,6 +213,7 @@ class T5ModelTest(CommonTestCases.CommonModelTester):
         for model_name in list(T5_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = T5Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
 
 if __name__ == "__main__":
     unittest.main()

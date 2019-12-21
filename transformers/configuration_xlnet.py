@@ -26,8 +26,8 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-config.json",
-    'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-config.json",
+    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-config.json",
+    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-config.json",
 }
 
 
@@ -69,32 +69,35 @@ class XLNetConfig(PretrainedConfig):
         same_length: bool, whether to use the same attention length for each token.
         finetuning_task: name of the glue task on which the model was fine-tuned if any
     """
+
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-    def __init__(self,
-                 vocab_size=32000,
-                 d_model=1024,
-                 n_layer=24,
-                 n_head=16,
-                 d_inner=4096,
-                 ff_activation="gelu",
-                 untie_r=True,
-                 attn_type="bi",
-                 initializer_range=0.02,
-                 layer_norm_eps=1e-12,
-                 dropout=0.1,
-                 mem_len=None,
-                 reuse_len=None,
-                 bi_data=False,
-                 clamp_len=-1,
-                 same_length=False,
-                 summary_type='last',
-                 summary_use_proj=True,
-                 summary_activation='tanh',
-                 summary_last_dropout=0.1,
-                 start_n_top=5,
-                 end_n_top=5,
-                 **kwargs):
+    def __init__(
+        self,
+        vocab_size=32000,
+        d_model=1024,
+        n_layer=24,
+        n_head=16,
+        d_inner=4096,
+        ff_activation="gelu",
+        untie_r=True,
+        attn_type="bi",
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        dropout=0.1,
+        mem_len=None,
+        reuse_len=None,
+        bi_data=False,
+        clamp_len=-1,
+        same_length=False,
+        summary_type="last",
+        summary_use_proj=True,
+        summary_activation="tanh",
+        summary_last_dropout=0.1,
+        start_n_top=5,
+        end_n_top=5,
+        **kwargs
+    ):
         """Constructs XLNetConfig.
         """
         super(XLNetConfig, self).__init__(**kwargs)

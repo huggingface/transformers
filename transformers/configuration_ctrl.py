@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-ctrl/pytorch/ctrl-config.json"}
 
+
 class CTRLConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `CTRLModel`.
 
@@ -48,6 +49,7 @@ class CTRLConfig(PretrainedConfig):
         initializer_range: The sttdev of the truncated_normal_initializer for
             initializing all weight matrices.
     """
+
     pretrained_config_archive_map = CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
@@ -64,7 +66,7 @@ class CTRLConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-6,
         initializer_range=0.02,
-        summary_type='cls_index',
+        summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,

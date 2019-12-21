@@ -43,7 +43,7 @@ def scan_code_for_links(source):
     """ Scans the file to find links using a regular expression.
     Returns a list of links.
     """
-    with open(source, 'r') as content:
+    with open(source, "r") as content:
         content = content.read()
         raw_links = re.findall(REGEXP_FIND_S3_LINKS, content)
         links = [prefix + suffix for _, prefix, suffix in raw_links]

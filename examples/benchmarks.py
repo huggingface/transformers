@@ -247,16 +247,18 @@ the wall, slowly on into the Social Predestination Room.
 as they entered."""
 
 
-def create_setup_and_compute(model_names: List[str],
-                             gpu: bool = True,
-                             tensorflow: bool = False,
-                             average_over: int = 3,
-                             torchscript: bool = False,
-                             xla: bool = False,
-                             amp: bool = False,
-                             fp16: bool = False,
-                             save_to_csv: bool = False,
-                             csv_filename: str = f"results_{round(time())}.csv"):
+def create_setup_and_compute(
+    model_names: List[str],
+    gpu: bool = True,
+    tensorflow: bool = False,
+    average_over: int = 3,
+    torchscript: bool = False,
+    xla: bool = False,
+    amp: bool = False,
+    fp16: bool = False,
+    save_to_csv: bool = False,
+    csv_filename: str = f"results_{round(time())}.csv",
+):
     if xla:
         tf.config.optimizer.set_jit(True)
     if amp:
@@ -266,7 +268,7 @@ def create_setup_and_compute(model_names: List[str],
         dictionary = {model_name: {} for model_name in model_names}
         results = _compute_tensorflow(model_names, dictionary, average_over, amp)
     else:
-        device = 'cuda' if (gpu and torch.cuda.is_available()) else 'cpu'
+        device = "cuda" if (gpu and torch.cuda.is_available()) else "cpu"
         dictionary = {model_name: {} for model_name in model_names}
         results = _compute_pytorch(model_names, dictionary, average_over, device, torchscript, fp16)
 
@@ -276,34 +278,52 @@ def create_setup_and_compute(model_names: List[str],
         for batch_size in results[model_name]["bs"]:
             print("\t\t" + f"===== BATCH SIZE: {batch_size} =====")
             for slice_size in results[model_name]["ss"]:
-                result = results[model_name]['results'][batch_size][slice_size]
+                result = results[model_name]["results"][batch_size][slice_size]
                 if isinstance(result, str):
-                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: "
-                          f"{result}")
+                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{result}")
                 else:
-                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: "
-                          f"{(round(1000 * result) / 1000)}"
-                          f"s")
+                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{(round(1000 * result) / 1000)}" f"s")
 
     if save_to_csv:
-        with open(csv_filename, mode='w') as csv_file:
-            fieldnames = ['model',
-                          '1x8', '1x64', '1x128', '1x256', '1x512', '1x1024',
-                          '2x8', '2x64', '2x128', '2x256', '2x512', '2x1024',
-                          '4x8', '4x64', '4x128', '4x256', '4x512', '4x1024',
-                          '8x8', '8x64', '8x128', '8x256', '8x512', '8x1024',
-                          ]
+        with open(csv_filename, mode="w") as csv_file:
+            fieldnames = [
+                "model",
+                "1x8",
+                "1x64",
+                "1x128",
+                "1x256",
+                "1x512",
+                "1x1024",
+                "2x8",
+                "2x64",
+                "2x128",
+                "2x256",
+                "2x512",
+                "2x1024",
+                "4x8",
+                "4x64",
+                "4x128",
+                "4x256",
+                "4x512",
+                "4x1024",
+                "8x8",
+                "8x64",
+                "8x128",
+                "8x256",
+                "8x512",
+                "8x1024",
+            ]
 
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writeheader()
 
             for model_name in model_names:
                 model_results = {
-                    f'{bs}x{ss}': results[model_name]['results'][bs][ss]
+                    f"{bs}x{ss}": results[model_name]["results"][bs][ss]
                     for bs in results[model_name]["results"]
-                    for ss in results[model_name]['results'][bs]
+                    for ss in results[model_name]["results"][bs]
                 }
-                writer.writerow({'model': model_name, **model_results})
+                writer.writerow({"model": model_name, **model_results})
 
 
 def _compute_pytorch(model_names, dictionary, average_over, device, torchscript, fp16):
@@ -343,7 +363,7 @@ def _compute_pytorch(model_names, dictionary, average_over, device, torchscript,
 
                         print("Going through model with sequence of shape", sequence.shape)
                         runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
-                        average_time = sum(runtimes)/float(len(runtimes)) / 3.0
+                        average_time = sum(runtimes) / float(len(runtimes)) / 3.0
                         dictionary[model_name]["results"][batch_size][slice_size] = average_time
                     except RuntimeError as e:
                         print("Doesn't fit on GPU.", e)
@@ -379,7 +399,9 @@ def _compute_tensorflow(model_names, dictionary, average_over, amp):
                 if max_input_size is not None and slice_size > max_input_size:
                     dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
                 else:
-                    sequence = tf.stack([tf.squeeze(tf.constant(tokenized_sequence[:slice_size])[None, :])] * batch_size)
+                    sequence = tf.stack(
+                        [tf.squeeze(tf.constant(tokenized_sequence[:slice_size])[None, :])] * batch_size
+                    )
 
                     try:
                         print("Going through model with sequence of shape", sequence.shape)
@@ -387,7 +409,7 @@ def _compute_tensorflow(model_names, dictionary, average_over, amp):
                         inference(sequence)
 
                         runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
-                        average_time = sum(runtimes)/float(len(runtimes)) / 3.0
+                        average_time = sum(runtimes) / float(len(runtimes)) / 3.0
                         dictionary[model_name]["results"][batch_size][slice_size] = average_time
                     except tf.errors.ResourceExhaustedError as e:
                         print("Doesn't fit on GPU.", e)
@@ -399,33 +421,64 @@ def _compute_tensorflow(model_names, dictionary, average_over, amp):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--models", required=False, type=str, default='all', help="Model checkpoints to be provided "
-                                                                                  "to the AutoModel classes. Leave "
-                                                                                  "blank to benchmark the base version "
-                                                                                  "of all available model "
-                                                                                  "architectures.")
-    parser.add_argument("--torch", required=False, action="store_true", help="Benchmark the Pytorch version of the "
-                                                                             "models")
-    parser.add_argument("--torch_cuda", required=False, action="store_true", help="Pytorch only: run on available "
-                                                                                  "cuda devices")
-    parser.add_argument("--torchscript", required=False, action="store_true", help="Pytorch only: trace the models "
-                                                                                   "using torchscript")
-    parser.add_argument("--tensorflow", required=False, action="store_true", help="Benchmark the TensorFlow version "
-                                                                                  "of the models. Will run on GPU if "
-                                                                                  "the correct dependencies are "
-                                                                                  "installed")
+    parser.add_argument(
+        "--models",
+        required=False,
+        type=str,
+        default="all",
+        help="Model checkpoints to be provided "
+        "to the AutoModel classes. Leave "
+        "blank to benchmark the base version "
+        "of all available model "
+        "architectures.",
+    )
+    parser.add_argument(
+        "--torch", required=False, action="store_true", help="Benchmark the Pytorch version of the " "models"
+    )
+    parser.add_argument(
+        "--torch_cuda", required=False, action="store_true", help="Pytorch only: run on available " "cuda devices"
+    )
+    parser.add_argument(
+        "--torchscript",
+        required=False,
+        action="store_true",
+        help="Pytorch only: trace the models " "using torchscript",
+    )
+    parser.add_argument(
+        "--tensorflow",
+        required=False,
+        action="store_true",
+        help="Benchmark the TensorFlow version "
+        "of the models. Will run on GPU if "
+        "the correct dependencies are "
+        "installed",
+    )
     parser.add_argument("--xla", required=False, action="store_true", help="TensorFlow only: use XLA acceleration.")
-    parser.add_argument("--amp", required=False, action="store_true", help="TensorFlow only: use automatic mixed precision acceleration.")
-    parser.add_argument("--fp16", required=False, action="store_true", help="PyTorch only: use FP16 to accelerate inference.")
-    parser.add_argument("--keras_predict", required=False, action="store_true", help="Whether to use model.predict "
-                                                                                     "instead of model() to do a "
-                                                                                     "forward pass.")
+    parser.add_argument(
+        "--amp",
+        required=False,
+        action="store_true",
+        help="TensorFlow only: use automatic mixed precision acceleration.",
+    )
+    parser.add_argument(
+        "--fp16", required=False, action="store_true", help="PyTorch only: use FP16 to accelerate inference."
+    )
+    parser.add_argument(
+        "--keras_predict",
+        required=False,
+        action="store_true",
+        help="Whether to use model.predict " "instead of model() to do a " "forward pass.",
+    )
     parser.add_argument("--save_to_csv", required=False, action="store_true", help="Save to a CSV file.")
-    parser.add_argument("--csv_filename", required=False, default=None, help="CSV filename used if saving results to csv.")
-    parser.add_argument("--average_over", required=False, default=30, type=int, help="Times an experiment will be run.")
+    parser.add_argument(
+        "--csv_filename", required=False, default=None, help="CSV filename used if saving results to csv."
+    )
+    parser.add_argument(
+        "--average_over", required=False, default=30, type=int, help="Times an experiment will be run."
+    )
 
     args = parser.parse_args()
-    if args.models == 'all':
+    if args.models == "all":
         args.models = [
             "gpt2",
             "bert-base-cased",
@@ -436,7 +489,7 @@ def main():
             "distilbert-base-uncased",
             "distilgpt2",
             "roberta-base",
-            "ctrl"
+            "ctrl",
         ]
     else:
         args.models = args.models.split()
@@ -453,7 +506,7 @@ def main():
                 fp16=args.fp16,
                 save_to_csv=args.save_to_csv,
                 csv_filename=args.csv_filename,
-                average_over=args.average_over
+                average_over=args.average_over,
             )
         else:
             raise ImportError("Trying to run a PyTorch benchmark but PyTorch was not found in the environment.")
@@ -467,11 +520,11 @@ def main():
                 amp=args.amp,
                 save_to_csv=args.save_to_csv,
                 csv_filename=args.csv_filename,
-                average_over=args.average_over
+                average_over=args.average_over,
             )
         else:
             raise ImportError("Trying to run a TensorFlow benchmark but TensorFlow was not found in the environment.")
 
-if __name__ == '__main__':
-    main()
 
+if __name__ == "__main__":
+    main()

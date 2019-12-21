@@ -15,8 +15,7 @@
 # limitations under the License.
 """ PyTorch - TF 2.0 general utilities."""
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 import os
@@ -25,7 +24,8 @@ import numpy
 
 logger = logging.getLogger(__name__)
 
-def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=''):
+
+def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
     """ Convert a TF 2.0 model variable name in a pytorch model weight name.
 
         Conventions for TF2.0 scopes -> PyTorch attribute names conversions:
@@ -36,32 +36,37 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove='')
             - pytorch model weight name
             - transpose: boolean indicating weither TF2.0 and PyTorch weights matrices are transposed with regards to each other
     """
-    tf_name = tf_name.replace(':0', '')                       # device ids
-    tf_name = re.sub(r'/[^/]*___([^/]*)/', r'/\1/', tf_name)  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
-    tf_name = tf_name.replace('_._', '/')                     # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
-    tf_name = re.sub(r'//+', '/', tf_name)                    # Remove empty levels at the end
-    tf_name = tf_name.split('/')                              # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    tf_name = tf_name[1:]                                     # Remove level zero
+    tf_name = tf_name.replace(":0", "")  # device ids
+    tf_name = re.sub(
+        r"/[^/]*___([^/]*)/", r"/\1/", tf_name
+    )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
+    tf_name = tf_name.replace(
+        "_._", "/"
+    )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
+    tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
+    tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
+    tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(tf_name[-1] == 'kernel' or 'emb_projs' in tf_name or 'out_projs' in tf_name)
+    transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
 
     # Convert standard TF2.0 names in PyTorch names
-    if tf_name[-1] == 'kernel' or tf_name[-1] == 'embeddings' or tf_name[-1] == 'gamma':
-        tf_name[-1] = 'weight'
-    if tf_name[-1] == 'beta':
-        tf_name[-1] = 'bias'
+    if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
+        tf_name[-1] = "weight"
+    if tf_name[-1] == "beta":
+        tf_name[-1] = "bias"
 
     # Remove prefix if needed
-    tf_name = '.'.join(tf_name)
+    tf_name = ".".join(tf_name)
     if start_prefix_to_remove:
-        tf_name = tf_name.replace(start_prefix_to_remove, '', 1)
+        tf_name = tf_name.replace(start_prefix_to_remove, "", 1)
 
     return tf_name, transpose
 
 
 #####################
 ### PyTorch => TF 2.0
+
 
 def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
     """ Load pytorch checkpoints in a TF 2.0 model
@@ -70,17 +75,21 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
         import tensorflow as tf
         import torch
     except ImportError as e:
-        logger.error("Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
-            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
+            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise e
 
     pt_path = os.path.abspath(pytorch_checkpoint_path)
     logger.info("Loading PyTorch weights from {}".format(pt_path))
 
-    pt_state_dict = torch.load(pt_path, map_location='cpu')
+    pt_state_dict = torch.load(pt_path, map_location="cpu")
     logger.info("PyTorch checkpoint contains {:,} parameters".format(sum(t.numel() for t in pt_state_dict.values())))
 
-    return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys)
+    return load_pytorch_weights_in_tf2_model(
+        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+    )
 
 
 def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_missing_keys=False):
@@ -88,7 +97,9 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
     """
     pt_state_dict = pt_model.state_dict()
 
-    return load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys)
+    return load_pytorch_weights_in_tf2_model(
+        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+    )
 
 
 def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False):
@@ -99,8 +110,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         import tensorflow as tf
         from tensorflow.python.keras import backend as K
     except ImportError as e:
-        logger.error("Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
-            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
+            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise e
 
     if tf_inputs is None:
@@ -115,10 +128,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     new_keys = []
     for key in pt_state_dict.keys():
         new_key = None
-        if 'gamma' in key:
-            new_key = key.replace('gamma', 'weight')
-        if 'beta' in key:
-            new_key = key.replace('beta', 'bias')
+        if "gamma" in key:
+            new_key = key.replace("gamma", "weight")
+        if "beta" in key:
+            new_key = key.replace("beta", "bias")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -127,9 +140,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
-    start_prefix_to_remove = ''
+    start_prefix_to_remove = ""
     if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
-        start_prefix_to_remove = tf_model.base_model_prefix + '.'
+        start_prefix_to_remove = tf_model.base_model_prefix + "."
 
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     tf_loaded_numel = 0
@@ -137,7 +150,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     all_pytorch_weights = set(list(pt_state_dict.keys()))
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
-        name, transpose = convert_tf_weight_name_to_pt_weight_name(sw_name, start_prefix_to_remove=start_prefix_to_remove)
+        name, transpose = convert_tf_weight_name_to_pt_weight_name(
+            sw_name, start_prefix_to_remove=start_prefix_to_remove
+        )
 
         # Find associated numpy array in pytorch model state dict
         if name not in pt_state_dict:
@@ -182,6 +197,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 #####################
 ### TF 2.0 => PyTorch
 
+
 def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
     """ Load TF 2.0 HDF5 checkpoint in a PyTorch model
         We use HDF5 to easily do transfer learning
@@ -191,8 +207,10 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
         import tensorflow as tf
         import torch
     except ImportError as e:
-        logger.error("Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
-            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
+            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise e
 
     import transformers
@@ -215,6 +233,7 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
 
+
 def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
     """ Load TF 2.0 model in a pytorch model
     """
@@ -230,8 +249,10 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         import tensorflow as tf
         import torch
     except ImportError as e:
-        logger.error("Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
-            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
+            "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise e
 
     new_pt_params_dict = {}
@@ -239,14 +260,16 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     # Make sure we are able to load PyTorch base models as well as derived models (with heads)
     # TF models always have a prefix, some of PyTorch models (base ones) don't
-    start_prefix_to_remove = ''
+    start_prefix_to_remove = ""
     if not any(s.startswith(pt_model.base_model_prefix) for s in current_pt_params_dict.keys()):
-        start_prefix_to_remove = pt_model.base_model_prefix + '.'
+        start_prefix_to_remove = pt_model.base_model_prefix + "."
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables
     tf_weights_map = {}
     for tf_weight in tf_weights:
-        pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(tf_weight.name, start_prefix_to_remove=start_prefix_to_remove)
+        pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
+            tf_weight.name, start_prefix_to_remove=start_prefix_to_remove
+        )
         tf_weights_map[pt_name] = (tf_weight.numpy(), transpose)
 
     all_tf_weights = set(list(tf_weights_map.keys()))
@@ -291,11 +314,13 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     missing_keys += missing_keys_pt
 
     if len(missing_keys) > 0:
-        logger.info("Weights of {} not initialized from TF 2.0 model: {}".format(
-            pt_model.__class__.__name__, missing_keys))
+        logger.info(
+            "Weights of {} not initialized from TF 2.0 model: {}".format(pt_model.__class__.__name__, missing_keys)
+        )
     if len(unexpected_keys) > 0:
-        logger.info("Weights from TF 2.0 model not used in {}: {}".format(
-            pt_model.__class__.__name__, unexpected_keys))
+        logger.info(
+            "Weights from TF 2.0 model not used in {}: {}".format(pt_model.__class__.__name__, unexpected_keys)
+        )
 
     logger.info("Weights or buffers not loaded from TF 2.0 model: {}".format(all_tf_weights))
 

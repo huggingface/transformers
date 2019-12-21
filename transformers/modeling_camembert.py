@@ -15,19 +15,24 @@
 # limitations under the License.
 """PyTorch CamemBERT model. """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 
-from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification, RobertaForMultipleChoice, RobertaForTokenClassification
+from .modeling_roberta import (
+    RobertaModel,
+    RobertaForMaskedLM,
+    RobertaForSequenceClassification,
+    RobertaForMultipleChoice,
+    RobertaForTokenClassification,
+)
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'camembert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
+    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
 }
 
 
@@ -100,8 +105,12 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
-                      CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertModel(RobertaModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -149,8 +158,11 @@ class CamembertModel(RobertaModel):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model with a `language modeling` head on top. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top. """,
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForMaskedLM(RobertaForMaskedLM):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -185,9 +197,12 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer 
+@add_start_docstrings(
+    """CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer 
     on top of the pooled output) e.g. for GLUE tasks. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForSequenceClassification(RobertaForSequenceClassification):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -223,9 +238,12 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model with a multiple choice classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """CamemBERT Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForMultipleChoice(RobertaForMultipleChoice):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -257,9 +275,12 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model with a token classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """CamemBERT Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForTokenClassification(RobertaForTokenClassification):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:

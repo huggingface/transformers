@@ -35,8 +35,8 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tf_model.h5",
-    'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tf_model.h5",
+    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tf_model.h5",
+    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tf_model.h5",
 }
 
 
@@ -45,8 +45,7 @@ def gelu(x):
         XLNet is using OpenAI GPT's gelu
         Also see https://arxiv.org/abs/1606.08415
     """
-    cdf = 0.5 * (1.0 + tf.tanh(
-        (np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
+    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
     return x * cdf
 
 
@@ -54,9 +53,11 @@ def swish(x):
     return x * tf.sigmoid(x)
 
 
-ACT2FN = {"gelu": tf.keras.layers.Activation(gelu),
-          "relu": tf.keras.activations.relu,
-          "swish": tf.keras.layers.Activation(swish)}
+ACT2FN = {
+    "gelu": tf.keras.layers.Activation(gelu),
+    "relu": tf.keras.activations.relu,
+    "swish": tf.keras.layers.Activation(swish),
+}
 
 
 class TFXLNetRelativeAttention(tf.keras.layers.Layer):
@@ -67,7 +68,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         if config.d_model % config.n_head != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.d_model, config.n_head))
+                "heads (%d)" % (config.d_model, config.n_head)
+            )
 
         self.n_head = config.n_head
         self.d_head = config.d_head
@@ -75,38 +77,38 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.scale = 1 / (config.d_head ** 0.5)
         self.initializer_range = config.initializer_range
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm')
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def build(self, input_shape):
         initializer = get_initializer(self.initializer_range)
-        self.q = self.add_weight(shape=(self.d_model, self.n_head, self.d_head),
-                                 initializer=initializer,
-                                 trainable=True, name='q')
-        self.k = self.add_weight(shape=(self.d_model, self.n_head, self.d_head),
-                                 initializer=initializer,
-                                 trainable=True, name='k')
-        self.v = self.add_weight(shape=(self.d_model, self.n_head, self.d_head),
-                                 initializer=initializer,
-                                 trainable=True, name='v')
-        self.o = self.add_weight(shape=(self.d_model, self.n_head, self.d_head),
-                                 initializer=initializer,
-                                 trainable=True, name='o')
-        self.r = self.add_weight(shape=(self.d_model, self.n_head, self.d_head),
-                                 initializer=initializer,
-                                 trainable=True, name='r')
-        self.r_r_bias = self.add_weight(shape=(self.n_head, self.d_head),
-                                        initializer='zeros',
-                                        trainable=True, name='r_r_bias')
-        self.r_s_bias = self.add_weight(shape=(self.n_head, self.d_head),
-                                        initializer='zeros',
-                                        trainable=True, name='r_s_bias')
-        self.r_w_bias = self.add_weight(shape=(self.n_head, self.d_head),
-                                        initializer='zeros',
-                                        trainable=True, name='r_w_bias')
-        self.seg_embed = self.add_weight(shape=(2, self.n_head, self.d_head),
-                                        initializer=initializer,
-                                        trainable=True, name='seg_embed')
+        self.q = self.add_weight(
+            shape=(self.d_model, self.n_head, self.d_head), initializer=initializer, trainable=True, name="q"
+        )
+        self.k = self.add_weight(
+            shape=(self.d_model, self.n_head, self.d_head), initializer=initializer, trainable=True, name="k"
+        )
+        self.v = self.add_weight(
+            shape=(self.d_model, self.n_head, self.d_head), initializer=initializer, trainable=True, name="v"
+        )
+        self.o = self.add_weight(
+            shape=(self.d_model, self.n_head, self.d_head), initializer=initializer, trainable=True, name="o"
+        )
+        self.r = self.add_weight(
+            shape=(self.d_model, self.n_head, self.d_head), initializer=initializer, trainable=True, name="r"
+        )
+        self.r_r_bias = self.add_weight(
+            shape=(self.n_head, self.d_head), initializer="zeros", trainable=True, name="r_r_bias"
+        )
+        self.r_s_bias = self.add_weight(
+            shape=(self.n_head, self.d_head), initializer="zeros", trainable=True, name="r_s_bias"
+        )
+        self.r_w_bias = self.add_weight(
+            shape=(self.n_head, self.d_head), initializer="zeros", trainable=True, name="r_w_bias"
+        )
+        self.seg_embed = self.add_weight(
+            shape=(2, self.n_head, self.d_head), initializer=initializer, trainable=True, name="seg_embed"
+        )
         super(TFXLNetRelativeAttention, self).build(input_shape)
 
     def prune_heads(self, heads):
@@ -130,18 +132,18 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         q_head, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask, head_mask = inputs
 
         # content based attention score
-        ac = tf.einsum('ibnd,jbnd->ijbn', q_head + self.r_w_bias, k_head_h)
+        ac = tf.einsum("ibnd,jbnd->ijbn", q_head + self.r_w_bias, k_head_h)
 
         # position based attention score
-        bd = tf.einsum('ibnd,jbnd->ijbn', q_head + self.r_r_bias, k_head_r)
+        bd = tf.einsum("ibnd,jbnd->ijbn", q_head + self.r_r_bias, k_head_r)
         bd = self.rel_shift(bd, klen=shape_list(ac)[1])
 
         # segment based attention score
         if seg_mat is None:
             ef = 0
         else:
-            ef = tf.einsum('ibnd,snd->ibns', q_head + self.r_s_bias, self.seg_embed)
-            ef = tf.einsum('ijbs,ibns->ijbn', seg_mat, ef)
+            ef = tf.einsum("ibnd,snd->ibns", q_head + self.r_s_bias, self.seg_embed)
+            ef = tf.einsum("ijbs,ibns->ijbn", seg_mat, ef)
 
         # merge attention scores and perform masking
         attn_score = (ac + bd + ef) * self.scale
@@ -162,7 +164,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
             attn_prob = attn_prob * head_mask
 
         # attention output
-        attn_vec = tf.einsum('ijbn,jbnd->ibnd', attn_prob, v_head_h)
+        attn_vec = tf.einsum("ijbn,jbnd->ibnd", attn_prob, v_head_h)
 
         if self.output_attentions:
             return attn_vec, attn_prob
@@ -174,7 +176,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         # post-attention projection (back to `d_model`)
         h, attn_vec = inputs
 
-        attn_out = tf.einsum('ibnd,hnd->ibh', attn_vec, self.o)
+        attn_out = tf.einsum("ibnd,hnd->ibh", attn_vec, self.o)
 
         attn_out = self.dropout(attn_out, training=training)
 
@@ -185,8 +187,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         return output
 
     def call(self, inputs, training=False):
-        (h, g, attn_mask_h, attn_mask_g,
-         r, seg_mat, mems, target_mapping, head_mask) = inputs
+        (h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems, target_mapping, head_mask) = inputs
 
         if g is not None:
             ###### Two-stream attention with relative positional encoding.
@@ -197,22 +198,22 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                 cat = h
 
             # content-based key head
-            k_head_h = tf.einsum('ibh,hnd->ibnd', cat, self.k)
+            k_head_h = tf.einsum("ibh,hnd->ibnd", cat, self.k)
 
             # content-based value head
-            v_head_h = tf.einsum('ibh,hnd->ibnd', cat, self.v)
+            v_head_h = tf.einsum("ibh,hnd->ibnd", cat, self.v)
 
             # position-based key head
-            k_head_r = tf.einsum('ibh,hnd->ibnd', r, self.r)
+            k_head_r = tf.einsum("ibh,hnd->ibnd", r, self.r)
 
             ##### h-stream
             # content-stream query head
-            q_head_h = tf.einsum('ibh,hnd->ibnd', h, self.q)
+            q_head_h = tf.einsum("ibh,hnd->ibnd", h, self.q)
 
             # core attention ops
             attn_vec_h = self.rel_attn_core(
-                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask],
-                training=training)
+                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask], training=training
+            )
 
             if self.output_attentions:
                 attn_vec_h, attn_prob_h = attn_vec_h
@@ -222,23 +223,23 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
             ##### g-stream
             # query-stream query head
-            q_head_g = tf.einsum('ibh,hnd->ibnd', g, self.q)
+            q_head_g = tf.einsum("ibh,hnd->ibnd", g, self.q)
 
             # core attention ops
             if target_mapping is not None:
-                q_head_g = tf.einsum('mbnd,mlb->lbnd', q_head_g, target_mapping)
+                q_head_g = tf.einsum("mbnd,mlb->lbnd", q_head_g, target_mapping)
                 attn_vec_g = self.rel_attn_core(
-                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask],
-                    training=training)
+                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask], training=training
+                )
 
                 if self.output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
-                attn_vec_g = tf.einsum('lbnd,mlb->mbnd', attn_vec_g, target_mapping)
+                attn_vec_g = tf.einsum("lbnd,mlb->mbnd", attn_vec_g, target_mapping)
             else:
                 attn_vec_g = self.rel_attn_core(
-                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask],
-                    training=training)
+                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask], training=training
+                )
 
                 if self.output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
@@ -257,17 +258,17 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                 cat = h
 
             # content heads
-            q_head_h = tf.einsum('ibh,hnd->ibnd', h, self.q)
-            k_head_h = tf.einsum('ibh,hnd->ibnd', cat, self.k)
-            v_head_h = tf.einsum('ibh,hnd->ibnd', cat, self.v)
+            q_head_h = tf.einsum("ibh,hnd->ibnd", h, self.q)
+            k_head_h = tf.einsum("ibh,hnd->ibnd", cat, self.k)
+            v_head_h = tf.einsum("ibh,hnd->ibnd", cat, self.v)
 
             # positional heads
-            k_head_r = tf.einsum('ibh,hnd->ibnd', r, self.r)
+            k_head_r = tf.einsum("ibh,hnd->ibnd", r, self.r)
 
             # core attention ops
             attn_vec = self.rel_attn_core(
-                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask],
-                training=training)
+                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask], training=training
+            )
 
             if self.output_attentions:
                 attn_vec, attn_prob = attn_vec
@@ -281,19 +282,21 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
             outputs = outputs + (attn_prob,)
         return outputs
 
+
 class TFXLNetFeedForward(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFXLNetFeedForward, self).__init__(**kwargs)
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm')
-        self.layer_1 = tf.keras.layers.Dense(config.d_inner,
-                                             kernel_initializer=get_initializer(config.initializer_range),
-                                             name='layer_1')
-        self.layer_2 = tf.keras.layers.Dense(config.d_model,
-                                             kernel_initializer=get_initializer(config.initializer_range),
-                                             name='layer_2')
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_1 = tf.keras.layers.Dense(
+            config.d_inner, kernel_initializer=get_initializer(config.initializer_range), name="layer_1"
+        )
+        self.layer_2 = tf.keras.layers.Dense(
+            config.d_model, kernel_initializer=get_initializer(config.initializer_range), name="layer_2"
+        )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        if isinstance(config.ff_activation, str) or \
-                (sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)):
+        if isinstance(config.ff_activation, str) or (
+            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)
+        ):
             self.activation_function = ACT2FN[config.ff_activation]
         else:
             self.activation_function = config.ff_activation
@@ -308,11 +311,12 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
         output = self.layer_norm(output + inp)
         return output
 
+
 class TFXLNetLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super(TFXLNetLayer, self).__init__(**kwargs)
-        self.rel_attn = TFXLNetRelativeAttention(config, name='rel_attn')
-        self.ff = TFXLNetFeedForward(config, name='ff')
+        self.rel_attn = TFXLNetRelativeAttention(config, name="rel_attn")
+        self.ff = TFXLNetFeedForward(config, name="ff")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def call(self, inputs, training=False):
@@ -336,10 +340,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,),
-                                    initializer='zeros',
-                                    trainable=True,
-                                    name='bias')
+        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super(TFXLNetLMHead, self).build(input_shape)
 
     def call(self, hidden_states):
@@ -366,8 +367,10 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.use_bfloat16 = config.use_bfloat16
         self.initializer_range = config.initializer_range
 
-        self.word_embedding = TFSharedEmbeddings(config.vocab_size, config.d_model, initializer_range=config.initializer_range, name='word_embedding')
-        self.layer = [TFXLNetLayer(config, name='layer_._{}'.format(i)) for i in range(config.n_layer)]
+        self.word_embedding = TFSharedEmbeddings(
+            config.vocab_size, config.d_model, initializer_range=config.initializer_range, name="word_embedding"
+        )
+        self.layer = [TFXLNetLayer(config, name="layer_._{}".format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def get_input_embeddings(self):
@@ -375,9 +378,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         initializer = get_initializer(self.initializer_range)
-        self.mask_emb = self.add_weight(shape=(1, 1, self.d_model),
-                                 initializer=initializer,
-                                 trainable=True, name='mask_emb')
+        self.mask_emb = self.add_weight(
+            shape=(1, 1, self.d_model), initializer=initializer, trainable=True, name="mask_emb"
+        )
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -417,18 +420,18 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
     def cache_mem(self, curr_out, prev_mem):
         """cache hidden states into memory."""
         if self.reuse_len is not None and self.reuse_len > 0:
-            curr_out = curr_out[:self.reuse_len]
+            curr_out = curr_out[: self.reuse_len]
 
         if prev_mem is None:
-            new_mem = curr_out[-self.mem_len:]
+            new_mem = curr_out[-self.mem_len :]
         else:
-            new_mem = tf.concat([prev_mem, curr_out], 0)[-self.mem_len:]
+            new_mem = tf.concat([prev_mem, curr_out], 0)[-self.mem_len :]
 
         return tf.stop_gradient(new_mem)
 
     @staticmethod
     def positional_embedding(pos_seq, inv_freq, bsz=None):
-        sinusoid_inp = tf.einsum('i,d->id', pos_seq, inv_freq)
+        sinusoid_inp = tf.einsum("i,d->id", pos_seq, inv_freq)
         pos_emb = tf.concat([tf.sin(sinusoid_inp), tf.cos(sinusoid_inp)], axis=-1)
         pos_emb = pos_emb[:, None, :]
 
@@ -444,14 +447,14 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             freq_seq = tf.cast(freq_seq, dtype=dtype)
         inv_freq = 1 / (10000 ** (freq_seq / self.d_model))
 
-        if self.attn_type == 'bi':
+        if self.attn_type == "bi":
             # beg, end = klen - 1, -qlen
             beg, end = klen, -qlen
-        elif self.attn_type == 'uni':
+        elif self.attn_type == "uni":
             # beg, end = klen - 1, -1
             beg, end = klen, -1
         else:
-            raise ValueError('Unknown `attn_type` {}.'.format(self.attn_type))
+            raise ValueError("Unknown `attn_type` {}.".format(self.attn_type))
 
         if self.bi_data:
             fwd_pos_seq = tf.range(beg, end, -1.0)
@@ -467,9 +470,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
             if bsz is not None:
                 # With bi_data, the batch size should be divisible by 2.
-                assert bsz%2 == 0
-                fwd_pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz//2)
-                bwd_pos_emb = self.positional_embedding(bwd_pos_seq, inv_freq, bsz//2)
+                assert bsz % 2 == 0
+                fwd_pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz // 2)
+                bwd_pos_emb = self.positional_embedding(bwd_pos_seq, inv_freq, bsz // 2)
             else:
                 fwd_pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq)
                 bwd_pos_emb = self.positional_embedding(bwd_pos_seq, inv_freq)
@@ -485,8 +488,19 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         return pos_emb
 
-    def call(self, inputs, attention_mask=None, mems=None, perm_mask=None, target_mapping=None,
-            token_type_ids=None, input_mask=None, head_mask=None, inputs_embeds=None, training=False):
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        mems=None,
+        perm_mask=None,
+        target_mapping=None,
+        token_type_ids=None,
+        input_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
+    ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
@@ -499,15 +513,15 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, dict):
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', attention_mask)
-            mems = inputs.get('mems', mems)
-            perm_mask = inputs.get('perm_mask', perm_mask)
-            target_mapping = inputs.get('target_mapping', target_mapping)
-            token_type_ids = inputs.get('token_type_ids', token_type_ids)
-            input_mask = inputs.get('input_mask', input_mask)
-            head_mask = inputs.get('head_mask', head_mask)
-            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            mems = inputs.get("mems", mems)
+            perm_mask = inputs.get("perm_mask", perm_mask)
+            target_mapping = inputs.get("target_mapping", target_mapping)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            input_mask = inputs.get("input_mask", input_mask)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
@@ -540,17 +554,19 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         ##### Attention mask
         # causal attention mask
-        if self.attn_type == 'uni':
+        if self.attn_type == "uni":
             attn_mask = self.create_mask(qlen, mlen)
             attn_mask = attn_mask[:, :, None, None]
-        elif self.attn_type == 'bi':
+        elif self.attn_type == "bi":
             attn_mask = None
         else:
-            raise ValueError('Unsupported attention type: {}'.format(self.attn_type))
+            raise ValueError("Unsupported attention type: {}".format(self.attn_type))
 
         # data mask: input mask & perm mask
-        assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) " \
+        assert input_mask is None or attention_mask is None, (
+            "You can only use one of input_mask (uses 1 for padding) "
             "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+        )
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - tf.cast(attention_mask, dtype=dtype_float)
         if input_mask is not None and perm_mask is not None:
@@ -564,8 +580,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         if data_mask is not None:
             # all mems can be attended to
-            mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz],
-                                dtype=dtype_float)
+            mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz], dtype=dtype_float)
             data_mask = tf.concat([mems_mask, data_mask], axis=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
@@ -590,9 +605,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         output_h = self.dropout(word_emb_k, training=training)
         if target_mapping is not None:
             word_emb_q = tf.tile(self.mask_emb, [shape_list(target_mapping)[0], bsz, 1])
-        # else:  # We removed the inp_q input which was same as target mapping
-        #     inp_q_ext = inp_q[:, :, None]
-        #     word_emb_q = inp_q_ext * self.mask_emb + (1 - inp_q_ext) * word_emb_k
+            # else:  # We removed the inp_q input which was same as target mapping
+            #     inp_q_ext = inp_q[:, :, None]
+            #     word_emb_q = inp_q_ext * self.mask_emb + (1 - inp_q_ext) * word_emb_k
             output_g = self.dropout(word_emb_q, training=training)
         else:
             output_g = None
@@ -604,9 +619,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             cat_ids = tf.concat([mem_pad, token_type_ids], 0)
 
             # `1` indicates not in the same segment [qlen x klen x bsz]
-            seg_mat = tf.cast(
-                tf.logical_not(tf.equal(token_type_ids[:, None], cat_ids[None, :])),
-                tf.int32)
+            seg_mat = tf.cast(tf.logical_not(tf.equal(token_type_ids[:, None], cat_ids[None, :])), tf.int32)
             seg_mat = tf.one_hot(seg_mat, 2, dtype=dtype_float)
         else:
             seg_mat = None
@@ -626,7 +639,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.n_layer
 
@@ -643,9 +658,10 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
-            outputs = layer_module([output_h, output_g, non_tgt_mask, attn_mask,
-                                    pos_emb, seg_mat, mems[i], target_mapping,
-                                    head_mask[i]], training=training)
+            outputs = layer_module(
+                [output_h, output_g, non_tgt_mask, attn_mask, pos_emb, seg_mat, mems[i], target_mapping, head_mask[i]],
+                training=training,
+            )
             output_h, output_g = outputs[:2]
             if self.output_attentions:
                 attentions.append(outputs[2])
@@ -679,6 +695,7 @@ class TFXLNetPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = XLNetConfig
     pretrained_model_archive_map = TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
@@ -784,8 +801,12 @@ XLNET_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare XLNet Model transformer outputing raw hidden-states without any specific head on top.",
-                      XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare XLNet Model transformer outputing raw hidden-states without any specific head on top.",
+    XLNET_START_DOCSTRING,
+    XLNET_INPUTS_DOCSTRING,
+)
 class TFXLNetModel(TFXLNetPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -816,18 +837,22 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLNetMainLayer(config, name='transformer')
+        self.transformer = TFXLNetMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
 
-@add_start_docstrings("""XLNet Model with a language modeling head on top
+@add_start_docstrings(
+    """XLNet Model with a language modeling head on top
     (linear layer with weights tied to the input embeddings). """,
-    XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
+    XLNET_START_DOCSTRING,
+    XLNET_INPUTS_DOCSTRING,
+)
 class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -865,10 +890,11 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetLMHeadModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLNetMainLayer(config, name='transformer')
-        self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name='lm_loss')
+        self.transformer = TFXLNetMainLayer(config, name="transformer")
+        self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
@@ -883,9 +909,12 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         return outputs  # return logits, (mems), (hidden states), (attentions)
 
 
-@add_start_docstrings("""XLNet Model with a sequence classification/regression head on top (a linear layer on top of
+@add_start_docstrings(
+    """XLNet Model with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
+    XLNET_START_DOCSTRING,
+    XLNET_INPUTS_DOCSTRING,
+)
 class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -916,15 +945,18 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
         logits = outputs[0]
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetForSequenceClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.transformer = TFXLNetMainLayer(config, name='transformer')
-        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name='sequence_summary')
-        self.logits_proj = tf.keras.layers.Dense(config.num_labels,
-                                                 kernel_initializer=get_initializer(config.initializer_range),
-                                                 name='logits_proj')
+        self.transformer = TFXLNetMainLayer(config, name="transformer")
+        self.sequence_summary = TFSequenceSummary(
+            config, initializer_range=config.initializer_range, name="sequence_summary"
+        )
+        self.logits_proj = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
+        )
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -938,9 +970,12 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
         return outputs  # return logits, (mems), (hidden states), (attentions)
 
 
-@add_start_docstrings("""XLNet Model with a token classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """XLNet Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    XLNET_START_DOCSTRING, XLNET_INPUTS_DOCSTRING)
+    XLNET_START_DOCSTRING,
+    XLNET_INPUTS_DOCSTRING,
+)
 class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -971,14 +1006,15 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
         scores = outputs[0]
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetForTokenClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.transformer = TFXLNetMainLayer(config, name='transformer')
-        self.classifier = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(config.initializer_range),
-                                                name='classifier')
+        self.transformer = TFXLNetMainLayer(config, name="transformer")
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -1027,12 +1063,13 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
         start_scores, end_scores = outputs[:2]
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLNetForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLNetMainLayer(config, name='transformer')
-        self.qa_outputs = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(config.initializer_range),
-                                                name='qa_outputs')
+        self.transformer = TFXLNetMainLayer(config, name="transformer")
+        self.qa_outputs = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -1044,9 +1081,12 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+        outputs = (start_logits, end_logits,) + transformer_outputs[
+            1:
+        ]  # Keep mems, hidden states, attentions if there are in it
 
         return outputs  # start_logits, end_logits, (mems), (hidden_states), (attentions)
+
 
 # @add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
 #     the hidden-states output to compute `span start logits` and `span end logits`). """,

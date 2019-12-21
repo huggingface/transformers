@@ -19,7 +19,7 @@ from __future__ import print_function
 import unittest
 import sys
 
-from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
+from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
 from .configuration_common_test import ConfigTester
 from .utils import CACHE_DIR, require_tf, slow
 
@@ -27,8 +27,7 @@ from transformers import T5Config, is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers.modeling_tf_t5 import (TFT5Model, TFT5WithLMHeadModel,
-                                             TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from transformers.modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @require_tf
@@ -38,25 +37,25 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
     all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if is_tf_available() else ()
 
     class TFT5ModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_input_mask=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     n_positions=14,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     d_ff=37,
-                     relative_attention_num_buckets=8,
-                     dropout_rate=0.1,
-                     initializer_factor=0.002,
-                     scope=None,
-                    ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_input_mask=True,
+            use_labels=True,
+            vocab_size=99,
+            n_positions=14,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            d_ff=37,
+            relative_attention_num_buckets=8,
+            dropout_rate=0.1,
+            initializer_factor=0.002,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -95,53 +94,58 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
                 num_heads=self.num_attention_heads,
                 relative_attention_num_buckets=self.relative_attention_num_buckets,
                 dropout_rate=self.dropout_rate,
-                initializer_factor=self.initializer_factor)
+                initializer_factor=self.initializer_factor,
+            )
 
             return (config, input_ids, input_mask, token_labels)
 
         def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
             model = TFT5Model(config=config)
-            inputs = {'encoder_input_ids': input_ids,
-                      'decoder_input_ids': input_ids,
-                      'decoder_attention_mask': input_mask}
+            inputs = {
+                "encoder_input_ids": input_ids,
+                "decoder_input_ids": input_ids,
+                "decoder_attention_mask": input_mask,
+            }
             encoder_output, decoder_output = model(inputs)
 
-            encoder_output, decoder_output = model(input_ids,
-                                                   decoder_attention_mask=input_mask,
-                                                   encoder_input_ids=input_ids)
+            encoder_output, decoder_output = model(
+                input_ids, decoder_attention_mask=input_mask, encoder_input_ids=input_ids
+            )
 
             result = {
                 "encoder_output": encoder_output.numpy(),
                 "decoder_output": decoder_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["encoder_output"].shape),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(
-                list(result["decoder_output"].shape),
-                [self.batch_size, self.seq_length, self.hidden_size])
-
+                list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            )
 
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
             model = TFT5WithLMHeadModel(config=config)
-            inputs = {'encoder_input_ids': input_ids,
-                      'decoder_input_ids': input_ids,
-                      'decoder_attention_mask': input_mask}
+            inputs = {
+                "encoder_input_ids": input_ids,
+                "decoder_input_ids": input_ids,
+                "decoder_attention_mask": input_mask,
+            }
             prediction_scores, decoder_output = model(inputs)
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].shape),
-                [self.batch_size, self.seq_length, self.vocab_size])
-
+                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask, token_labels) = config_and_inputs
-            inputs_dict = {'encoder_input_ids': input_ids,
-                           'decoder_input_ids': input_ids,
-                           'decoder_attention_mask': input_mask}
+            inputs_dict = {
+                "encoder_input_ids": input_ids,
+                "decoder_input_ids": input_ids,
+                "decoder_attention_mask": input_mask,
+            }
             return config, inputs_dict
 
     def setUp(self):
@@ -161,9 +165,10 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ['t5-small']:
+        for model_name in ["t5-small"]:
             model = TFT5Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
 
 if __name__ == "__main__":
     unittest.main()

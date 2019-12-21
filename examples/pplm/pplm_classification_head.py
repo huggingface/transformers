@@ -1,5 +1,6 @@
 import torch
 
+
 class ClassificationHead(torch.nn.Module):
     """Classification Head for  transformer encoders"""
 

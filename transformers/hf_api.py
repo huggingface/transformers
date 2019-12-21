@@ -24,13 +24,14 @@ from tqdm import tqdm
 
 ENDPOINT = "https://huggingface.co"
 
+
 class S3Obj:
     def __init__(
         self,
-        filename,     # type: str
-        LastModified, # type: str
-        ETag,         # type: str
-        Size,         # type: int
+        filename,  # type: str
+        LastModified,  # type: str
+        ETag,  # type: str
+        Size,  # type: int
         **kwargs
     ):
         self.filename = filename
@@ -43,13 +44,13 @@ class PresignedUrl:
     def __init__(
         self,
         write,  # type: str
-        access, # type: str
-        type,   # type: str
+        access,  # type: str
+        type,  # type: str
         **kwargs
     ):
         self.write = write
         self.access = access
-        self.type = type # mime-type to send to S3.
+        self.type = type  # mime-type to send to S3.
 
 
 class HfApi:
@@ -58,8 +59,8 @@ class HfApi:
 
     def login(
         self,
-        username, # type: str
-        password, # type: str
+        username,  # type: str
+        password,  # type: str
     ):
         # type: (...) -> str
         """
@@ -78,8 +79,7 @@ class HfApi:
         return d["token"]
 
     def whoami(
-        self,
-        token, # type: str
+        self, token,  # type: str
     ):
         # type: (...) -> str
         """
@@ -106,11 +106,7 @@ class HfApi:
         Call HF API to get a presigned url to upload `filename` to S3.
         """
         path = "{}/api/presign".format(self.endpoint)
-        r = requests.post(
-            path,
-            headers={"authorization": "Bearer {}".format(token)},
-            json={"filename": filename},
-        )
+        r = requests.post(path, headers={"authorization": "Bearer {}".format(token)}, json={"filename": filename},)
         r.raise_for_status()
         d = r.json()
         return PresignedUrl(**d)
@@ -126,16 +122,14 @@ class HfApi:
         urls = self.presign(token, filename=filename)
         # streaming upload:
         # https://2.python-requests.org/en/master/user/advanced/#streaming-uploads
-        # 
+        #
         # Even though we presign with the correct content-type,
         # the client still has to specify it when uploading the file.
         with open(filepath, "rb") as f:
             pf = TqdmProgressFileReader(f)
             data = f if pf.total_size > 0 else ""
 
-            r = requests.put(urls.write, data=data, headers={
-                "content-type": urls.type,
-            })
+            r = requests.put(urls.write, data=data, headers={"content-type": urls.type,})
             r.raise_for_status()
             pf.close()
         return urls.access
@@ -152,7 +146,6 @@ class HfApi:
         return [S3Obj(**x) for x in d]
 
 
-
 class TqdmProgressFileReader:
     """
     Wrap an io.BufferedReader `f` (such as the output of `open(…, "rb")`)
@@ -161,12 +154,12 @@ class TqdmProgressFileReader:
     see github.com/huggingface/transformers/pull/2078#discussion_r354739608
     for implementation details.
     """
+
     def __init__(
-        self,
-        f   # type: io.BufferedReader
+        self, f  # type: io.BufferedReader
     ):
         self.f = f
-        self.total_size = os.fstat(f.fileno()).st_size # type: int
+        self.total_size = os.fstat(f.fileno()).st_size  # type: int
         self.pbar = tqdm(total=self.total_size, leave=False)
         if six.PY3:
             # does not work unless PY3
@@ -180,7 +173,6 @@ class TqdmProgressFileReader:
 
     def close(self):
         self.pbar.close()
-
 
 
 class HfFolder:
@@ -201,7 +193,7 @@ class HfFolder:
                 if e.errno != os.errno.EEXIST:
                     raise e
                 pass
-        with open(cls.path_token, 'w+') as f:
+        with open(cls.path_token, "w+") as f:
             f.write(token)
 
     @classmethod
@@ -210,7 +202,7 @@ class HfFolder:
         Get token or None if not existent.
         """
         try:
-            with open(cls.path_token, 'r') as f:
+            with open(cls.path_token, "r") as f:
                 return f.read()
         except:
             # this is too wide. When Py2 is dead use:
