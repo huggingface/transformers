@@ -72,7 +72,6 @@ class PretrainedConfig(object):
         self.bos_token_id = kwargs.pop('bos_token_id', 0)
         self.pad_token_id = kwargs.pop('pad_token_id', 0)
         self.eos_token_ids = kwargs.pop('eos_token_ids', 0)
-        self.batch_size = kwargs.pop('batch_size', 1)
         self.length_penalty = kwargs.pop('length_penalty', 1.)
         self.num_return_sequences = kwargs.pop('num_return_sequences', 1)
 
