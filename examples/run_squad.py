@@ -64,7 +64,7 @@ from transformers.data.processors.squad import SquadResult, SquadV1Processor, Sq
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except:
+except ImportError:
     from tensorboardX import SummaryWriter
 
 

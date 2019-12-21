@@ -48,7 +48,7 @@ from utils_multiple_choice import convert_examples_to_features, processors
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except:
+except ImportError:
     from tensorboardX import SummaryWriter
 
 

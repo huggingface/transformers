@@ -64,7 +64,7 @@ from transformers import glue_processors as processors
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except:
+except ImportError:
     from tensorboardX import SummaryWriter
 
 

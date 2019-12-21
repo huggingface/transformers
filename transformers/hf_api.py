@@ -205,10 +205,8 @@ class HfFolder:
         try:
             with open(cls.path_token, "r") as f:
                 return f.read()
-        except:
-            # this is too wide. When Py2 is dead use:
-            # `except FileNotFoundError:` instead
-            return None
+        except FileNotFoundError:
+            pass
 
     @classmethod
     def delete_token(cls):
@@ -218,5 +216,5 @@ class HfFolder:
         """
         try:
             os.remove(cls.path_token)
-        except:
-            return
+        except FileNotFoundError:
+            pass

@@ -285,7 +285,7 @@ def train_discriminator(
             for i, line in enumerate(f):
                 try:
                     data.append(eval(line))
-                except:
+                except Exception:
                     print("Error evaluating line {}: {}".format(i, line))
                     continue
         x = []
@@ -303,7 +303,7 @@ def train_discriminator(
                         continue
                     x.append(seq)
                     y.append(d["label"])
-                except:
+                except Exception:
                     print("Error evaluating / tokenizing" " line {}, skipping it".format(i))
                     pass
 
@@ -343,7 +343,7 @@ def train_discriminator(
                         continue
                     x.append(seq)
                     y.append(int(np.sum(d["label"]) > 0))
-                except:
+                except Exception:
                     print("Error evaluating / tokenizing" " line {}, skipping it".format(i))
                     pass
 
@@ -402,7 +402,7 @@ def train_discriminator(
                         x.append(seq)
                         y.append(class2idx[label])
 
-                    except:
+                    except Exception:
                         print("Error tokenizing line {}, skipping it".format(i))
                         pass
 
