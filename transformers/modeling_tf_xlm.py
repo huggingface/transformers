@@ -25,30 +25,34 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer, DUMMY_INPUTS
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSharedEmbeddings,
+    TFSequenceSummary,
+    shape_list,
+    get_initializer,
+    DUMMY_INPUTS,
+)
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'xlm-mlm-en-2048': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-tf_model.h5",
-    'xlm-mlm-ende-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-ende-1024-tf_model.h5",
-    'xlm-mlm-enfr-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enfr-1024-tf_model.h5",
-    'xlm-mlm-enro-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enro-1024-tf_model.h5",
-    'xlm-mlm-tlm-xnli15-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-tlm-xnli15-1024-tf_model.h5",
-    'xlm-mlm-xnli15-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-xnli15-1024-tf_model.h5",
-    'xlm-clm-enfr-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-enfr-1024-tf_model.h5",
-    'xlm-clm-ende-1024': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-ende-1024-tf_model.h5",
-    'xlm-mlm-17-1280': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-tf_model.h5",
-    'xlm-mlm-100-1280': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-tf_model.h5",
+    "xlm-mlm-en-2048": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-tf_model.h5",
+    "xlm-mlm-ende-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-ende-1024-tf_model.h5",
+    "xlm-mlm-enfr-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enfr-1024-tf_model.h5",
+    "xlm-mlm-enro-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enro-1024-tf_model.h5",
+    "xlm-mlm-tlm-xnli15-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-tlm-xnli15-1024-tf_model.h5",
+    "xlm-mlm-xnli15-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-xnli15-1024-tf_model.h5",
+    "xlm-clm-enfr-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-enfr-1024-tf_model.h5",
+    "xlm-clm-ende-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-ende-1024-tf_model.h5",
+    "xlm-mlm-17-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-tf_model.h5",
+    "xlm-mlm-100-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-tf_model.h5",
 }
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
-    position_enc = np.array([
-        [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
-        for pos in range(n_pos)
-    ])
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out[:, 0::2] = tf.constant(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = tf.constant(np.cos(position_enc[:, 1::2]))
 
@@ -78,8 +82,9 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
-        attn_mask = tf.less_equal(tf.tile(alen[tf.newaxis, tf.newaxis, :], (bs, slen, 1)),
-                                  alen[tf.newaxis, :, tf.newaxis])
+        attn_mask = tf.less_equal(
+            tf.tile(alen[tf.newaxis, tf.newaxis, :], (bs, slen, 1)), alen[tf.newaxis, :, tf.newaxis]
+        )
     else:
         attn_mask = mask
 
@@ -106,10 +111,10 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         self.n_heads = n_heads
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='q_lin')
-        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='k_lin')
-        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='v_lin')
-        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name='out_lin')
+        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
+        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
+        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
+        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.pruned_heads = set()
 
@@ -125,7 +130,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = shape_list(input)
         if kv is None:
-            klen = qlen if cache is None else cache['slen'] + qlen
+            klen = qlen if cache is None else cache["slen"] + qlen
         else:
             klen = shape_list(kv)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
@@ -141,40 +146,40 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             """  compute context """
             return tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.n_heads * dim_per_head))
 
-        q = shape(self.q_lin(input))                                          # (bs, n_heads, qlen, dim_per_head)
+        q = shape(self.q_lin(input))  # (bs, n_heads, qlen, dim_per_head)
         if kv is None:
-            k = shape(self.k_lin(input))                                      # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(input))                                      # (bs, n_heads, qlen, dim_per_head)
+            k = shape(self.k_lin(input))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(input))  # (bs, n_heads, qlen, dim_per_head)
         elif cache is None or self.layer_id not in cache:
             k = v = kv
-            k = shape(self.k_lin(k))                                          # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v_lin(v))                                          # (bs, n_heads, qlen, dim_per_head)
+            k = shape(self.k_lin(k))  # (bs, n_heads, qlen, dim_per_head)
+            v = shape(self.v_lin(v))  # (bs, n_heads, qlen, dim_per_head)
 
         if cache is not None:
             if self.layer_id in cache:
                 if kv is None:
                     k_, v_ = cache[self.layer_id]
-                    k = tf.concat([k_, k], axis=2)                             # (bs, n_heads, klen, dim_per_head)
-                    v = tf.concat([v_, v], axis=2)                             # (bs, n_heads, klen, dim_per_head)
+                    k = tf.concat([k_, k], axis=2)  # (bs, n_heads, klen, dim_per_head)
+                    v = tf.concat([v_, v], axis=2)  # (bs, n_heads, klen, dim_per_head)
                 else:
                     k, v = cache[self.layer_id]
             cache[self.layer_id] = (k, v)
 
-        q = q / math.sqrt(dim_per_head)                                       # (bs, n_heads, qlen, dim_per_head)
-        scores = tf.matmul(q, k, transpose_b=True)                            # (bs, n_heads, qlen, klen)
-        mask = tf.reshape(mask, mask_reshape)                           # (bs, n_heads, qlen, klen)
+        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
+        mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
         scores = scores - 1e30 * (1.0 - mask)
 
-        weights = tf.nn.softmax(scores, axis=-1)                              # (bs, n_heads, qlen, klen)
-        weights = self.dropout(weights, training=training)                    # (bs, n_heads, qlen, klen)
+        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
         if head_mask is not None:
             weights = weights * head_mask
 
-        context = tf.matmul(weights, v)                                    # (bs, n_heads, qlen, dim_per_head)
-        context = unshape(context)                                            # (bs, qlen, dim)
+        context = tf.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
+        context = unshape(context)  # (bs, qlen, dim)
 
         outputs = (self.out_lin(context),)
         if self.output_attentions:
@@ -183,11 +188,10 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
 
 class TFTransformerFFN(tf.keras.layers.Layer):
-
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super(TFTransformerFFN, self).__init__(**kwargs)
-        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name='lin1')
-        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name='lin2')
+        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
+        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = tf.keras.layers.Activation(gelu) if config.gelu_activation else tf.keras.activations.relu
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
@@ -226,30 +230,36 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # assert len(self.id2lang) == len(self.lang2id) == self.n_langs
 
         # model parameters
-        self.dim = config.emb_dim       # 512 by default
+        self.dim = config.emb_dim  # 512 by default
         self.hidden_dim = self.dim * 4  # 2048 by default
-        self.n_heads = config.n_heads   # 8 by default
+        self.n_heads = config.n_heads  # 8 by default
         self.n_layers = config.n_layers
-        assert self.dim % self.n_heads == 0, 'transformer dim must be a multiple of n_heads'
+        assert self.dim % self.n_heads == 0, "transformer dim must be a multiple of n_heads"
 
         # embeddings
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.attention_dropout = tf.keras.layers.Dropout(config.attention_dropout)
 
-        self.position_embeddings = tf.keras.layers.Embedding(config.max_position_embeddings,
-                                                             self.dim,
-                                                             embeddings_initializer=get_initializer(config.embed_init_std),
-                                                             name='position_embeddings')
+        self.position_embeddings = tf.keras.layers.Embedding(
+            config.max_position_embeddings,
+            self.dim,
+            embeddings_initializer=get_initializer(config.embed_init_std),
+            name="position_embeddings",
+        )
         if config.sinusoidal_embeddings:
             raise NotImplementedError
             # create_sinusoidal_embeddings(config.max_position_embeddings, self.dim, out=self.position_embeddings.weight)
         if config.n_langs > 1 and config.use_lang_emb:
-            self.lang_embeddings = tf.keras.layers.Embedding(self.n_langs,
-                                                             self.dim,
-                                                             embeddings_initializer=get_initializer(config.embed_init_std),
-                                                             name='lang_embeddings')
-        self.embeddings = TFSharedEmbeddings(self.n_words, self.dim, initializer_range=config.embed_init_std, name='embeddings')  # padding_idx=self.pad_index)
-        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm_emb')
+            self.lang_embeddings = tf.keras.layers.Embedding(
+                self.n_langs,
+                self.dim,
+                embeddings_initializer=get_initializer(config.embed_init_std),
+                name="lang_embeddings",
+            )
+        self.embeddings = TFSharedEmbeddings(
+            self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
+        )  # padding_idx=self.pad_index)
+        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
 
         # transformer layers
         self.attentions = []
@@ -261,13 +271,21 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         #     self.encoder_attn = []
 
         for i in range(self.n_layers):
-            self.attentions.append(TFMultiHeadAttention(self.n_heads, self.dim, config=config, name='attentions_._{}'.format(i)))
-            self.layer_norm1.append(tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm1_._{}'.format(i)))
+            self.attentions.append(
+                TFMultiHeadAttention(self.n_heads, self.dim, config=config, name="attentions_._{}".format(i))
+            )
+            self.layer_norm1.append(
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1_._{}".format(i))
+            )
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
-            self.ffns.append(TFTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name='ffns_._{}'.format(i)))
-            self.layer_norm2.append(tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name='layer_norm2_._{}'.format(i)))
+            self.ffns.append(
+                TFTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name="ffns_._{}".format(i))
+            )
+            self.layer_norm2.append(
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2_._{}".format(i))
+            )
 
         if hasattr(config, "pruned_heads"):
             pruned_heads = config.pruned_heads.copy().items()
@@ -275,7 +293,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             for layer, heads in pruned_heads:
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
-
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -290,9 +307,19 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    def call(self, inputs, attention_mask=None, langs=None, token_type_ids=None,
-             position_ids=None, lengths=None, cache=None, head_mask=None, inputs_embeds=None,
-             training=False):  # removed: src_enc=None, src_len=None
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
+    ):  # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
@@ -305,15 +332,15 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, dict):
-            input_ids = inputs.get('input_ids')
-            attention_mask = inputs.get('attention_mask', attention_mask)
-            langs = inputs.get('langs', langs)
-            token_type_ids = inputs.get('token_type_ids', token_type_ids)
-            position_ids = inputs.get('position_ids', position_ids)
-            lengths = inputs.get('lengths', lengths)
-            cache = inputs.get('cache', cache)
-            head_mask = inputs.get('head_mask', head_mask)
-            inputs_embeds = inputs.get('inputs_embeds', inputs_embeds)
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            langs = inputs.get("langs", langs)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            lengths = inputs.get("lengths", lengths)
+            cache = inputs.get("cache", cache)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
@@ -331,7 +358,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             if input_ids is not None:
                 lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.pad_index), dtype=tf.int32), axis=1)
             else:
-                lengths = tf.convert_to_tensor([slen]*bs, tf.int32)
+                lengths = tf.convert_to_tensor([slen] * bs, tf.int32)
         # mask = input_ids != self.pad_index
 
         # check inputs
@@ -375,7 +402,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
-            _slen = slen - cache['slen']
+            _slen = slen - cache["slen"]
             input_ids = input_ids[:, -_slen:]
             position_ids = position_ids[:, -_slen:]
             if langs is not None:
@@ -430,7 +457,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # update cache length
         if cache is not None:
-            cache['slen'] += tensor.size(1)
+            cache["slen"] += tensor.size(1)
 
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
@@ -447,6 +474,7 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = XLMConfig
     pretrained_model_archive_map = TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
@@ -460,7 +488,7 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
             langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
         else:
             langs_list = None
-        return {'input_ids': inputs_list, 'attention_mask': attns_list, 'langs': langs_list}
+        return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
 
 XLM_START_DOCSTRING = r"""    The XLM model was proposed in
@@ -554,8 +582,12 @@ XLM_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare XLM Model transformer outputing raw hidden-states without any specific head on top.",
-                      XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare XLM Model transformer outputing raw hidden-states without any specific head on top.",
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class TFXLMModel(TFXLMPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -581,20 +613,21 @@ class TFXLMModel(TFXLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLMModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name='transformer')
+        self.transformer = TFXLMMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
 
-
 class TFXLMPredLayer(tf.keras.layers.Layer):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
     """
+
     def __init__(self, config, input_embeddings, **kwargs):
         super(TFXLMPredLayer, self).__init__(**kwargs)
         self.asm = config.asm
@@ -614,10 +647,7 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         # The output weights are the same as the input embeddings, but there is an output-only bias for each token.
-        self.bias = self.add_weight(shape=(self.n_words,),
-                                    initializer='zeros',
-                                    trainable=True,
-                                    name='bias')
+        self.bias = self.add_weight(shape=(self.n_words,), initializer="zeros", trainable=True, name="bias")
         super(TFXLMPredLayer, self).build(input_shape)
 
     def call(self, hidden_states):
@@ -626,9 +656,12 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-@add_start_docstrings("""The XLM Model transformer with a language modeling head on top
+@add_start_docstrings(
+    """The XLM Model transformer with a language modeling head on top
     (linear layer with weights tied to the input embeddings). """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -654,10 +687,11 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLMWithLMHeadModel, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name='transformer')
-        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name='pred_layer_._proj')
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
     def get_output_embeddings(self):
         return self.pred_layer.input_embeddings
@@ -672,9 +706,12 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""XLM Model with a sequence classification/regression head on top (a linear layer on top of
+@add_start_docstrings(
+    """XLM Model with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -701,12 +738,13 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         logits = outputs[0]
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLMForSequenceClassification, self).__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.transformer = TFXLMMainLayer(config, name='transformer')
-        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name='sequence_summary')
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -718,9 +756,12 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings(
+    """XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XLM_START_DOCSTRING, XLM_INPUTS_DOCSTRING)
+    XLM_START_DOCSTRING,
+    XLM_INPUTS_DOCSTRING,
+)
 class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -748,12 +789,13 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
         start_scores, end_scores = outputs[:2]
 
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(TFXLMForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name='transformer')
-        self.qa_outputs = tf.keras.layers.Dense(config.num_labels,
-                                                kernel_initializer=get_initializer(config.init_std),
-                                                name='qa_outputs')
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+        self.qa_outputs = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
+        )
 
     def call(self, inputs, **kwargs):
         transformer_outputs = self.transformer(inputs, **kwargs)
@@ -765,6 +807,8 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+        outputs = (start_logits, end_logits,) + transformer_outputs[
+            1:
+        ]  # Keep mems, hidden states, attentions if there are in it
 
         return outputs  # start_logits, end_logits, (hidden_states), (attentions)

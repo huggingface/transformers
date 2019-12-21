@@ -42,8 +42,9 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-pytorch_model.bin",
+    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-pytorch_model.bin",
 }
+
 
 def build_tf_to_pytorch_map(model, config):
     """ A map of modules from TF to PyTorch.
@@ -51,56 +52,52 @@ def build_tf_to_pytorch_map(model, config):
     """
     tf_to_pt_map = {}
 
-    if hasattr(model, 'transformer'):
+    if hasattr(model, "transformer"):
         # We are loading in a TransfoXLLMHeadModel => we will load also the Adaptive Softmax
-        tf_to_pt_map.update({
-            "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
-            "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias})
-        for i, (out_l, proj_l, tie_proj) in enumerate(zip(
-                                model.crit.out_layers,
-                                model.crit.out_projs,
-                                config.tie_projs)):
+        tf_to_pt_map.update(
+            {
+                "transformer/adaptive_softmax/cutoff_0/cluster_W": model.crit.cluster_weight,
+                "transformer/adaptive_softmax/cutoff_0/cluster_b": model.crit.cluster_bias,
+            }
+        )
+        for i, (out_l, proj_l, tie_proj) in enumerate(
+            zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
+        ):
             layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
             if config.tie_weight:
-                tf_to_pt_map.update({
-                    layer_str + 'b': out_l.bias})
+                tf_to_pt_map.update({layer_str + "b": out_l.bias})
             else:
                 raise NotImplementedError
                 # I don't think this is implemented in the TF code
-                tf_to_pt_map.update({
-                    layer_str + 'lookup_table': out_l.weight,
-                    layer_str + 'b': out_l.bias})
+                tf_to_pt_map.update({layer_str + "lookup_table": out_l.weight, layer_str + "b": out_l.bias})
             if not tie_proj:
-                tf_to_pt_map.update({
-                    layer_str + 'proj': proj_l
-                    })
+                tf_to_pt_map.update({layer_str + "proj": proj_l})
         # Now load the rest of the transformer
         model = model.transformer
 
     # Embeddings
     for i, (embed_l, proj_l) in enumerate(zip(model.word_emb.emb_layers, model.word_emb.emb_projs)):
         layer_str = "transformer/adaptive_embed/cutoff_%d/" % i
-        tf_to_pt_map.update({
-            layer_str + 'lookup_table': embed_l.weight,
-            layer_str + 'proj_W': proj_l
-            })
+        tf_to_pt_map.update({layer_str + "lookup_table": embed_l.weight, layer_str + "proj_W": proj_l})
 
     # Transformer blocks
     for i, b in enumerate(model.layers):
         layer_str = "transformer/layer_%d/" % i
-        tf_to_pt_map.update({
-            layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
-            layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
-            layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
-            layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
-            layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
-            layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
-            layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
-            layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
-            layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
-            layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
-            layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
-        })
+        tf_to_pt_map.update(
+            {
+                layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
+                layer_str + "rel_attn/LayerNorm/beta": b.dec_attn.layer_norm.bias,
+                layer_str + "rel_attn/o/kernel": b.dec_attn.o_net.weight,
+                layer_str + "rel_attn/qkv/kernel": b.dec_attn.qkv_net.weight,
+                layer_str + "rel_attn/r/kernel": b.dec_attn.r_net.weight,
+                layer_str + "ff/LayerNorm/gamma": b.pos_ff.layer_norm.weight,
+                layer_str + "ff/LayerNorm/beta": b.pos_ff.layer_norm.bias,
+                layer_str + "ff/layer_1/kernel": b.pos_ff.CoreNet[0].weight,
+                layer_str + "ff/layer_1/bias": b.pos_ff.CoreNet[0].bias,
+                layer_str + "ff/layer_2/kernel": b.pos_ff.CoreNet[3].weight,
+                layer_str + "ff/layer_2/bias": b.pos_ff.CoreNet[3].bias,
+            }
+        )
 
     # Relative positioning biases
     if config.untie_r:
@@ -112,10 +109,9 @@ def build_tf_to_pytorch_map(model, config):
     else:
         r_r_list = [model.r_r_bias]
         r_w_list = [model.r_w_bias]
-    tf_to_pt_map.update({
-        'transformer/r_r_bias': r_r_list,
-        'transformer/r_w_bias': r_w_list})
+    tf_to_pt_map.update({"transformer/r_r_bias": r_r_list, "transformer/r_w_bias": r_w_list})
     return tf_to_pt_map
+
 
 def load_tf_weights_in_transfo_xl(model, config, tf_path):
     """ Load tf checkpoints in a pytorch model
@@ -124,8 +120,10 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        logger.error("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise
     # Build TF to PyTorch weights loading map
     tf_to_pt_map = build_tf_to_pytorch_map(model, config)
@@ -143,9 +141,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
         array = tf_weights[name]
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        if 'kernel' in name or 'proj' in name:
+        if "kernel" in name or "proj" in name:
             array = np.transpose(array)
-        if ('r_r_bias' in name or 'r_w_bias' in name) and len(pointer) > 1:
+        if ("r_r_bias" in name or "r_w_bias" in name) and len(pointer) > 1:
             # Here we will split the TF weigths
             assert len(pointer) == array.shape[0]
             for i, p_i in enumerate(pointer):
@@ -166,10 +164,10 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
             logger.info("Initialize PyTorch weight {}".format(name))
             pointer.data = torch.from_numpy(array)
         tf_weights.pop(name, None)
-        tf_weights.pop(name + '/Adam', None)
-        tf_weights.pop(name + '/Adam_1', None)
+        tf_weights.pop(name + "/Adam", None)
+        tf_weights.pop(name + "/Adam_1", None)
 
-    logger.info("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
+    logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
     return model
 
 
@@ -180,17 +178,16 @@ class PositionalEmbedding(nn.Module):
         self.demb = demb
 
         inv_freq = 1 / (10000 ** (torch.arange(0.0, demb, 2.0) / demb))
-        self.register_buffer('inv_freq', inv_freq)
+        self.register_buffer("inv_freq", inv_freq)
 
     def forward(self, pos_seq, bsz=None):
         sinusoid_inp = torch.ger(pos_seq, self.inv_freq)
         pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1)
 
         if bsz is not None:
-            return pos_emb[:,None,:].expand(-1, bsz, -1)
+            return pos_emb[:, None, :].expand(-1, bsz, -1)
         else:
-            return pos_emb[:,None,:]
-
+            return pos_emb[:, None, :]
 
 
 class PositionwiseFF(nn.Module):
@@ -202,7 +199,8 @@ class PositionwiseFF(nn.Module):
         self.dropout = dropout
 
         self.CoreNet = nn.Sequential(
-            nn.Linear(d_model, d_inner), nn.ReLU(inplace=True),
+            nn.Linear(d_model, d_inner),
+            nn.ReLU(inplace=True),
             nn.Dropout(dropout),
             nn.Linear(d_inner, d_model),
             nn.Dropout(dropout),
@@ -230,10 +228,22 @@ class PositionwiseFF(nn.Module):
 
 
 class RelPartialLearnableMultiHeadAttn(nn.Module):
-    def __init__(self, n_head, d_model, d_head, dropout, dropatt=0,
-                 tgt_len=None, ext_len=None, mem_len=None, pre_lnorm=False,
-                 r_r_bias=None, r_w_bias=None, output_attentions=False,
-                 layer_norm_epsilon=1e-5):
+    def __init__(
+        self,
+        n_head,
+        d_model,
+        d_head,
+        dropout,
+        dropatt=0,
+        tgt_len=None,
+        ext_len=None,
+        mem_len=None,
+        pre_lnorm=False,
+        r_r_bias=None,
+        r_w_bias=None,
+        output_attentions=False,
+        layer_norm_epsilon=1e-5,
+    ):
         super(RelPartialLearnableMultiHeadAttn, self).__init__()
 
         self.output_attentions = output_attentions
@@ -254,7 +264,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         self.pre_lnorm = pre_lnorm
 
-        if r_r_bias is None or r_w_bias is None: # Biases are not shared
+        if r_r_bias is None or r_w_bias is None:  # Biases are not shared
             self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
             self.r_w_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
         else:
@@ -299,18 +309,18 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         klen = w_head_k.size(0)
 
-        w_head_q = w_head_q.view(qlen, bsz, self.n_head, self.d_head)           # qlen x bsz x n_head x d_head
-        w_head_k = w_head_k.view(klen, bsz, self.n_head, self.d_head)           # qlen x bsz x n_head x d_head
-        w_head_v = w_head_v.view(klen, bsz, self.n_head, self.d_head)           # qlen x bsz x n_head x d_head
+        w_head_q = w_head_q.view(qlen, bsz, self.n_head, self.d_head)  # qlen x bsz x n_head x d_head
+        w_head_k = w_head_k.view(klen, bsz, self.n_head, self.d_head)  # qlen x bsz x n_head x d_head
+        w_head_v = w_head_v.view(klen, bsz, self.n_head, self.d_head)  # qlen x bsz x n_head x d_head
 
-        r_head_k = r_head_k.view(rlen, self.n_head, self.d_head)                # qlen x n_head x d_head
+        r_head_k = r_head_k.view(rlen, self.n_head, self.d_head)  # qlen x n_head x d_head
 
         #### compute attention score
-        rw_head_q = w_head_q + self.r_w_bias                                    # qlen x bsz x n_head x d_head
-        AC = torch.einsum('ibnd,jbnd->ijbn', (rw_head_q, w_head_k))             # qlen x klen x bsz x n_head
+        rw_head_q = w_head_q + self.r_w_bias  # qlen x bsz x n_head x d_head
+        AC = torch.einsum("ibnd,jbnd->ijbn", (rw_head_q, w_head_k))  # qlen x klen x bsz x n_head
 
         rr_head_q = w_head_q + self.r_r_bias
-        BD = torch.einsum('ibnd,jnd->ijbn', (rr_head_q, r_head_k))              # qlen x klen x bsz x n_head
+        BD = torch.einsum("ibnd,jnd->ijbn", (rr_head_q, r_head_k))  # qlen x klen x bsz x n_head
         BD = self._rel_shift(BD)
 
         # [qlen x klen x bsz x n_head]
@@ -319,21 +329,19 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         #### compute attention probability
         if attn_mask is not None and torch.sum(attn_mask).item():
-            attn_mask = (attn_mask == 1)  # Switch to bool
+            attn_mask = attn_mask == 1  # Switch to bool
             if attn_mask.dim() == 2:
                 if next(self.parameters()).dtype == torch.float16:
-                    attn_score = attn_score.float().masked_fill(
-                        attn_mask[None,:,:,None], -65000).type_as(attn_score)
+                    attn_score = (
+                        attn_score.float().masked_fill(attn_mask[None, :, :, None], -65000).type_as(attn_score)
+                    )
                 else:
-                    attn_score = attn_score.float().masked_fill(
-                        attn_mask[None,:,:,None], -1e30).type_as(attn_score)
+                    attn_score = attn_score.float().masked_fill(attn_mask[None, :, :, None], -1e30).type_as(attn_score)
             elif attn_mask.dim() == 3:
                 if next(self.parameters()).dtype == torch.float16:
-                    attn_score = attn_score.float().masked_fill(
-                        attn_mask[:,:,:,None], -65000).type_as(attn_score)
+                    attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -65000).type_as(attn_score)
                 else:
-                    attn_score = attn_score.float().masked_fill(
-                        attn_mask[:,:,:,None], -1e30).type_as(attn_score)
+                    attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -1e30).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
         attn_prob = F.softmax(attn_score, dim=1)
@@ -344,11 +352,10 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
             attn_prob = attn_prob * head_mask
 
         #### compute attention vector
-        attn_vec = torch.einsum('ijbn,jbnd->ibnd', (attn_prob, w_head_v))
+        attn_vec = torch.einsum("ijbn,jbnd->ibnd", (attn_prob, w_head_v))
 
         # [qlen x bsz x n_head x d_head]
-        attn_vec = attn_vec.contiguous().view(
-            attn_vec.size(0), attn_vec.size(1), self.n_head * self.d_head)
+        attn_vec = attn_vec.contiguous().view(attn_vec.size(0), attn_vec.size(1), self.n_head * self.d_head)
 
         ##### linear projection
         attn_out = self.o_net(attn_vec)
@@ -368,21 +375,19 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
 
 class RelPartialLearnableDecoderLayer(nn.Module):
-    def __init__(self, n_head, d_model, d_head, d_inner, dropout, layer_norm_epsilon=1e-5,
-                 **kwargs):
+    def __init__(self, n_head, d_model, d_head, d_inner, dropout, layer_norm_epsilon=1e-5, **kwargs):
         super(RelPartialLearnableDecoderLayer, self).__init__()
 
-        self.dec_attn = RelPartialLearnableMultiHeadAttn(n_head, d_model,
-                            d_head, dropout, layer_norm_epsilon=layer_norm_epsilon, **kwargs)
-        self.pos_ff = PositionwiseFF(d_model, d_inner, dropout, 
-                                     pre_lnorm=kwargs.get('pre_lnorm'),
-                                     layer_norm_epsilon=layer_norm_epsilon)
+        self.dec_attn = RelPartialLearnableMultiHeadAttn(
+            n_head, d_model, d_head, dropout, layer_norm_epsilon=layer_norm_epsilon, **kwargs
+        )
+        self.pos_ff = PositionwiseFF(
+            d_model, d_inner, dropout, pre_lnorm=kwargs.get("pre_lnorm"), layer_norm_epsilon=layer_norm_epsilon
+        )
 
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None):
 
-        attn_outputs = self.dec_attn(dec_inp, r,
-                               attn_mask=dec_attn_mask,
-                               mems=mems, head_mask=head_mask)
+        attn_outputs = self.dec_attn(dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask)
         ff_output = self.pos_ff(attn_outputs[0])
 
         outputs = [ff_output] + attn_outputs[1:]
@@ -391,8 +396,7 @@ class RelPartialLearnableDecoderLayer(nn.Module):
 
 
 class AdaptiveEmbedding(nn.Module):
-    def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1,
-                 sample_softmax=False):
+    def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, sample_softmax=False):
         super(AdaptiveEmbedding, self).__init__()
 
         self.n_token = n_token
@@ -409,28 +413,25 @@ class AdaptiveEmbedding(nn.Module):
         self.emb_layers = nn.ModuleList()
         self.emb_projs = nn.ParameterList()
         if div_val == 1:
-            self.emb_layers.append(
-                nn.Embedding(n_token, d_embed, sparse=sample_softmax>0)
-            )
+            self.emb_layers.append(nn.Embedding(n_token, d_embed, sparse=sample_softmax > 0))
             if d_proj != d_embed:
                 self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_embed)))
         else:
             for i in range(len(self.cutoffs)):
-                l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i+1]
+                l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
                 d_emb_i = d_embed // (div_val ** i)
-                self.emb_layers.append(nn.Embedding(r_idx-l_idx, d_emb_i))
+                self.emb_layers.append(nn.Embedding(r_idx - l_idx, d_emb_i))
                 self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
 
     def forward(self, inp):
         if self.div_val == 1:
             embed = self.emb_layers[0](inp)
             if self.d_proj != self.d_embed:
-                embed  = F.linear(embed, self.emb_projs[0])
+                embed = F.linear(embed, self.emb_projs[0])
         else:
             param = next(self.parameters())
             inp_flat = inp.view(-1)
-            emb_flat = torch.zeros([inp_flat.size(0), self.d_proj],
-                dtype=param.dtype, device=param.device)
+            emb_flat = torch.zeros([inp_flat.size(0), self.d_proj], dtype=param.dtype, device=param.device)
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
 
@@ -458,15 +459,16 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = TransfoXLConfig
     pretrained_model_archive_map = TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 
     def _init_weight(self, weight):
-        if self.config.init == 'uniform':
+        if self.config.init == "uniform":
             nn.init.uniform_(weight, -self.config.init_range, self.config.init_range)
-        elif self.config.init == 'normal':
+        elif self.config.init == "normal":
             nn.init.normal_(weight, 0.0, self.config.init_std)
 
     def _init_bias(self, bias):
@@ -476,41 +478,41 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         """ Initialize the weights.
         """
         classname = m.__class__.__name__
-        if classname.find('Linear') != -1:
-            if hasattr(m, 'weight') and m.weight is not None:
+        if classname.find("Linear") != -1:
+            if hasattr(m, "weight") and m.weight is not None:
                 self._init_weight(m.weight)
-            if hasattr(m, 'bias') and m.bias is not None:
+            if hasattr(m, "bias") and m.bias is not None:
                 self._init_bias(m.bias)
-        elif classname.find('AdaptiveEmbedding') != -1:
-            if hasattr(m, 'emb_projs'):
+        elif classname.find("AdaptiveEmbedding") != -1:
+            if hasattr(m, "emb_projs"):
                 for i in range(len(m.emb_projs)):
                     if m.emb_projs[i] is not None:
                         nn.init.normal_(m.emb_projs[i], 0.0, self.config.proj_init_std)
-        elif classname.find('Embedding') != -1:
-            if hasattr(m, 'weight'):
+        elif classname.find("Embedding") != -1:
+            if hasattr(m, "weight"):
                 self._init_weight(m.weight)
-        elif classname.find('ProjectedAdaptiveLogSoftmax') != -1:
-            if hasattr(m, 'cluster_weight') and m.cluster_weight is not None:
+        elif classname.find("ProjectedAdaptiveLogSoftmax") != -1:
+            if hasattr(m, "cluster_weight") and m.cluster_weight is not None:
                 self._init_weight(m.cluster_weight)
-            if hasattr(m, 'cluster_bias') and m.cluster_bias is not None:
+            if hasattr(m, "cluster_bias") and m.cluster_bias is not None:
                 self._init_bias(m.cluster_bias)
-            if hasattr(m, 'out_projs'):
+            if hasattr(m, "out_projs"):
                 for i in range(len(m.out_projs)):
                     if m.out_projs[i] is not None:
                         nn.init.normal_(m.out_projs[i], 0.0, self.config.proj_init_std)
-        elif classname.find('LayerNorm') != -1:
-            if hasattr(m, 'weight'):
+        elif classname.find("LayerNorm") != -1:
+            if hasattr(m, "weight"):
                 nn.init.normal_(m.weight, 1.0, self.config.init_std)
-            if hasattr(m, 'bias') and m.bias is not None:
+            if hasattr(m, "bias") and m.bias is not None:
                 self._init_bias(m.bias)
         else:
-            if hasattr(m, 'r_emb'):
+            if hasattr(m, "r_emb"):
                 self._init_weight(m.r_emb)
-            if hasattr(m, 'r_w_bias'):
+            if hasattr(m, "r_w_bias"):
                 self._init_weight(m.r_w_bias)
-            if hasattr(m, 'r_r_bias'):
+            if hasattr(m, "r_r_bias"):
                 self._init_weight(m.r_r_bias)
-            if hasattr(m, 'r_bias'):
+            if hasattr(m, "r_bias"):
                 self._init_bias(m.r_bias)
 
 
@@ -559,8 +561,12 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-                      TRANSFO_XL_START_DOCSTRING, TRANSFO_XL_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    TRANSFO_XL_START_DOCSTRING,
+    TRANSFO_XL_INPUTS_DOCSTRING,
+)
 class TransfoXLModel(TransfoXLPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -587,6 +593,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         last_hidden_states, mems = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(TransfoXLModel, self).__init__(config)
         self.output_attentions = config.output_attentions
@@ -599,8 +606,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.n_head = config.n_head
         self.d_head = config.d_head
 
-        self.word_emb = AdaptiveEmbedding(config.vocab_size, config.d_embed, config.d_model, config.cutoffs,
-                                          div_val=config.div_val)
+        self.word_emb = AdaptiveEmbedding(
+            config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
+        )
 
         self.drop = nn.Dropout(config.dropout)
 
@@ -618,27 +626,35 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             self.r_r_bias = nn.Parameter(torch.FloatTensor(self.n_head, self.d_head))
 
         self.layers = nn.ModuleList()
-        if config.attn_type == 0: # the default attention
+        if config.attn_type == 0:  # the default attention
             for i in range(config.n_layer):
                 self.layers.append(
                     RelPartialLearnableDecoderLayer(
-                        config.n_head, config.d_model, config.d_head, config.d_inner, config.dropout,
-                        tgt_len=config.tgt_len, ext_len=config.ext_len, mem_len=config.mem_len,
-                        dropatt=config.dropatt, pre_lnorm=config.pre_lnorm,
+                        config.n_head,
+                        config.d_model,
+                        config.d_head,
+                        config.d_inner,
+                        config.dropout,
+                        tgt_len=config.tgt_len,
+                        ext_len=config.ext_len,
+                        mem_len=config.mem_len,
+                        dropatt=config.dropatt,
+                        pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if config.untie_r else self.r_w_bias,
                         r_r_bias=None if config.untie_r else self.r_r_bias,
                         output_attentions=self.output_attentions,
-                        layer_norm_epsilon=config.layer_norm_epsilon)
+                        layer_norm_epsilon=config.layer_norm_epsilon,
+                    )
                 )
-        else: # learnable embeddings and absolute embeddings are not used in our pretrained checkpoints
+        else:  # learnable embeddings and absolute embeddings are not used in our pretrained checkpoints
             raise NotImplementedError  # Removed them to avoid maintaining dead code
 
         self.same_length = config.same_length
         self.clamp_len = config.clamp_len
 
-        if self.attn_type == 0: # default attention
+        if self.attn_type == 0:  # default attention
             self.pos_emb = PositionalEmbedding(self.d_model)
-        else: # learnable embeddings and absolute embeddings
+        else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
 
         self.init_weights()
@@ -666,8 +682,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             mems = []
             param = next(self.parameters())
             for i in range(self.n_layer):
-                empty = torch.zeros(self.mem_len, bsz, self.config.d_model,
-                                    dtype=param.dtype, device=param.device)
+                empty = torch.zeros(self.mem_len, bsz, self.config.d_model, dtype=param.dtype, device=param.device)
                 mems.append(empty)
 
             return mems
@@ -676,10 +691,11 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     def _update_mems(self, hids, mems, qlen, mlen):
         # does not deal with None
-        if mems is None: return None
+        if mems is None:
+            return None
 
         # mems is not None
-        assert len(hids) == len(mems), 'len(hids) != len(mems)'
+        assert len(hids) == len(mems), "len(hids) != len(mems)"
 
         # There are `mlen + qlen` steps that can be cached into mems
         # For the next step, the last `ext_len` of the `qlen` tokens
@@ -725,7 +741,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
                 head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.n_layer
 
@@ -743,17 +761,16 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 mask_shift_len = qlen - mask_len
             else:
                 mask_shift_len = qlen
-            dec_attn_mask = (torch.triu(all_ones, 1+mlen)
-                    + torch.tril(all_ones, -mask_shift_len))[:, :, None] # -1
+            dec_attn_mask = (torch.triu(all_ones, 1 + mlen) + torch.tril(all_ones, -mask_shift_len))[:, :, None]  # -1
         else:
-            dec_attn_mask = torch.triu(
-                word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1+mlen)[:,:,None]
+            dec_attn_mask = torch.triu(word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1 + mlen)[
+                :, :, None
+            ]
 
         hids = []
         attentions = []
-        if self.attn_type == 0: # default
-            pos_seq = torch.arange(klen-1, -1, -1.0, device=word_emb.device,
-                                   dtype=word_emb.dtype)
+        if self.attn_type == 0:  # default
+            pos_seq = torch.arange(klen - 1, -1, -1.0, device=word_emb.device, dtype=word_emb.dtype)
             if self.clamp_len > 0:
                 pos_seq.clamp_(max=self.clamp_len)
             pos_emb = self.pos_emb(pos_seq)
@@ -764,12 +781,13 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             for i, layer in enumerate(self.layers):
                 hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
-                layer_outputs = layer(core_out, pos_emb, dec_attn_mask=dec_attn_mask,
-                                      mems=mems_i, head_mask=head_mask[i])
+                layer_outputs = layer(
+                    core_out, pos_emb, dec_attn_mask=dec_attn_mask, mems=mems_i, head_mask=head_mask[i]
+                )
                 core_out = layer_outputs[0]
                 if self.output_attentions:
                     attentions.append(layer_outputs[1])
-        else: # learnable embeddings and absolute embeddings
+        else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
 
         core_out = self.drop(core_out)
@@ -791,9 +809,12 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         return outputs  # last hidden state, new_mems, (all hidden states), (all attentions)
 
 
-@add_start_docstrings("""The Transformer-XL Model with a language modeling head on top
+@add_start_docstrings(
+    """The Transformer-XL Model with a language modeling head on top
     (adaptive softmax with weights tied to the adaptive input embeddings)""",
-    TRANSFO_XL_START_DOCSTRING, TRANSFO_XL_INPUTS_DOCSTRING)
+    TRANSFO_XL_START_DOCSTRING,
+    TRANSFO_XL_INPUTS_DOCSTRING,
+)
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -830,6 +851,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         prediction_scores, mems = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(TransfoXLLMHeadModel, self).__init__(config)
         self.transformer = TransfoXLModel(config)
@@ -840,8 +862,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             self.sampler = LogUniformSampler(config.vocab_size, config.sample_softmax)
         # use adaptive softmax (including standard softmax)
         else:
-            self.crit = ProjectedAdaptiveLogSoftmax(config.vocab_size, config.d_embed, config.d_model,
-                                                    config.cutoffs, div_val=config.div_val)
+            self.crit = ProjectedAdaptiveLogSoftmax(
+                config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
+            )
         self.init_weights()
 
     def tie_weights(self):
@@ -856,8 +879,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             if self.config.tie_weight:
                 for i in range(len(self.crit.out_layers)):
-                    self._tie_or_clone_weights(self.crit.out_layers[i],
-                                               self.transformer.word_emb.emb_layers[i])
+                    self._tie_or_clone_weights(self.crit.out_layers[i], self.transformer.word_emb.emb_layers[i])
             if self.config.tie_projs:
                 for i, tie_proj in enumerate(self.config.tie_projs):
                     if tie_proj and self.config.div_val == 1 and self.config.d_model != self.config.d_embed:

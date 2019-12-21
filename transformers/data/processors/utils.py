@@ -24,6 +24,7 @@ from ...file_utils import is_tf_available, is_torch_available
 
 logger = logging.getLogger(__name__)
 
+
 class InputExample(object):
     """
     A single training/test example for simple sequence classification.
@@ -37,6 +38,7 @@ class InputExample(object):
         label: (Optional) string. The label of the example. This should be
         specified for train and dev examples, but not for test examples.
     """
+
     def __init__(self, guid, text_a, text_b=None, label=None):
         self.guid = guid
         self.text_a = text_a
@@ -99,14 +101,15 @@ class DataProcessor(object):
             lines = []
             for line in reader:
                 if sys.version_info[0] == 2:
-                    line = list(unicode(cell, 'utf-8') for cell in line)
+                    line = list(unicode(cell, "utf-8") for cell in line)
                 lines.append(line)
             return lines
 
 
 class SingleSentenceClassificationProcessor(DataProcessor):
     """ Generic processor for a single sentence classification data set."""
-    def __init__(self, labels=None, examples=None, mode='classification', verbose=False):
+
+    def __init__(self, labels=None, examples=None, mode="classification", verbose=False):
         self.labels = [] if labels is None else labels
         self.examples = [] if examples is None else examples
         self.mode = mode
@@ -117,22 +120,24 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            return SingleSentenceClassificationProcessor(labels=self.labels,
-                                                         examples=self.examples[idx])
+            return SingleSentenceClassificationProcessor(labels=self.labels, examples=self.examples[idx])
         return self.examples[idx]
 
     @classmethod
-    def create_from_csv(cls, file_name, split_name='', column_label=0, column_text=1,
-                        column_id=None, skip_first_row=False, **kwargs):
+    def create_from_csv(
+        cls, file_name, split_name="", column_label=0, column_text=1, column_id=None, skip_first_row=False, **kwargs
+    ):
         processor = cls(**kwargs)
-        processor.add_examples_from_csv(file_name,
-                                        split_name=split_name,
-                                        column_label=column_label,
-                                        column_text=column_text,
-                                        column_id=column_id,
-                                        skip_first_row=skip_first_row,
-                                        overwrite_labels=True,
-                                        overwrite_examples=True)
+        processor.add_examples_from_csv(
+            file_name,
+            split_name=split_name,
+            column_label=column_label,
+            column_text=column_text,
+            column_id=column_id,
+            skip_first_row=skip_first_row,
+            overwrite_labels=True,
+            overwrite_examples=True,
+        )
         return processor
 
     @classmethod
@@ -141,8 +146,17 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         processor.add_examples(texts_or_text_and_labels, labels=labels)
         return processor
 
-    def add_examples_from_csv(self, file_name, split_name='', column_label=0, column_text=1, column_id=None,
-                              skip_first_row=False, overwrite_labels=False, overwrite_examples=False):
+    def add_examples_from_csv(
+        self,
+        file_name,
+        split_name="",
+        column_label=0,
+        column_text=1,
+        column_id=None,
+        skip_first_row=False,
+        overwrite_labels=False,
+        overwrite_examples=False,
+    ):
         lines = self._read_tsv(file_name)
         if skip_first_row:
             lines = lines[1:]
@@ -158,10 +172,13 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 guid = "%s-%s" % (split_name, i) if split_name else "%s" % i
                 ids.append(guid)
 
-        return self.add_examples(texts, labels, ids, overwrite_labels=overwrite_labels, overwrite_examples=overwrite_examples)
+        return self.add_examples(
+            texts, labels, ids, overwrite_labels=overwrite_labels, overwrite_examples=overwrite_examples
+        )
 
-    def add_examples(self, texts_or_text_and_labels, labels=None, ids=None,
-                     overwrite_labels=False, overwrite_examples=False):
+    def add_examples(
+        self, texts_or_text_and_labels, labels=None, ids=None, overwrite_labels=False, overwrite_examples=False
+    ):
         assert labels is None or len(texts_or_text_and_labels) == len(labels)
         assert ids is None or len(texts_or_text_and_labels) == len(ids)
         if ids is None:
@@ -192,13 +209,15 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
         return self.examples
 
-    def get_features(self,
-                     tokenizer,
-                     max_length=None,
-                     pad_on_left=False,
-                     pad_token=0,
-                     mask_padding_with_zero=True,
-                     return_tensors=None):
+    def get_features(
+        self,
+        tokenizer,
+        max_length=None,
+        pad_on_left=False,
+        pad_token=0,
+        mask_padding_with_zero=True,
+        return_tensors=None,
+    ):
         """
         Convert examples in a list of ``InputFeatures``
 
@@ -231,9 +250,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 logger.info("Tokenizing example %d", ex_index)
 
             input_ids = tokenizer.encode(
-                example.text_a,
-                add_special_tokens=True,
-                max_length=min(max_length, tokenizer.max_len),
+                example.text_a, add_special_tokens=True, max_length=min(max_length, tokenizer.max_len),
             )
             all_input_ids.append(input_ids)
 
@@ -256,8 +273,12 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 input_ids = input_ids + ([pad_token] * padding_length)
                 attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
 
-            assert len(input_ids) == batch_length, "Error with input length {} vs {}".format(len(input_ids), batch_length)
-            assert len(attention_mask) == batch_length, "Error with input length {} vs {}".format(len(attention_mask), batch_length)
+            assert len(input_ids) == batch_length, "Error with input length {} vs {}".format(
+                len(input_ids), batch_length
+            )
+            assert len(attention_mask) == batch_length, "Error with input length {} vs {}".format(
+                len(attention_mask), batch_length
+            )
 
             if self.mode == "classification":
                 label = label_map[example.label]
@@ -273,36 +294,31 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
                 logger.info("label: %s (id = %d)" % (example.label, label))
 
-            features.append(
-                    InputFeatures(input_ids=input_ids,
-                                  attention_mask=attention_mask,
-                                  label=label))
+            features.append(InputFeatures(input_ids=input_ids, attention_mask=attention_mask, label=label))
 
         if return_tensors is None:
             return features
-        elif return_tensors == 'tf':
+        elif return_tensors == "tf":
             if not is_tf_available():
                 raise ImportError("return_tensors set to 'tf' but TensorFlow 2.0 can't be imported")
             import tensorflow as tf
+
             def gen():
                 for ex in features:
-                    yield  ({'input_ids': ex.input_ids,
-                            'attention_mask': ex.attention_mask},
-                            ex.label)
+                    yield ({"input_ids": ex.input_ids, "attention_mask": ex.attention_mask}, ex.label)
 
-            dataset = tf.data.Dataset.from_generator(gen,
-                    ({'input_ids': tf.int32,
-                    'attention_mask': tf.int32},
-                    tf.int64),
-                    ({'input_ids': tf.TensorShape([None]),
-                    'attention_mask': tf.TensorShape([None])},
-                    tf.TensorShape([])))
+            dataset = tf.data.Dataset.from_generator(
+                gen,
+                ({"input_ids": tf.int32, "attention_mask": tf.int32}, tf.int64),
+                ({"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None])}, tf.TensorShape([])),
+            )
             return dataset
-        elif return_tensors == 'pt':
+        elif return_tensors == "pt":
             if not is_torch_available():
                 raise ImportError("return_tensors set to 'pt' but PyTorch can't be imported")
             import torch
             from torch.utils.data import TensorDataset
+
             all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
             all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
             if self.mode == "classification":

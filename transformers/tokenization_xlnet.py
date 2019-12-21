@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Tokenization classes for XLNet model."""
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 import os
@@ -27,29 +26,29 @@ from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'vocab_file': 'spiece.model'}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    'vocab_file':
-    {
-    'xlnet-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-spiece.model",
-    'xlnet-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-spiece.model",
+    "vocab_file": {
+        "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-spiece.model",
+        "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'xlnet-base-cased': None,
-    'xlnet-large-cased': None,
+    "xlnet-base-cased": None,
+    "xlnet-large-cased": None,
 }
 
-SPIECE_UNDERLINE = u'▁'
+SPIECE_UNDERLINE = "▁"
 
 # Segments (not really needed)
-SEG_ID_A   = 0
-SEG_ID_B   = 1
+SEG_ID_A = 0
+SEG_ID_B = 1
 SEG_ID_CLS = 2
 SEG_ID_SEP = 3
 SEG_ID_PAD = 4
+
 
 class XLNetTokenizer(PreTrainedTokenizer):
     """
@@ -57,21 +56,39 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
             - requires `SentencePiece <https://github.com/google/sentencepiece>`_
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     padding_side = "left"
 
-    def __init__(self, vocab_file,
-                 do_lower_case=False, remove_space=True, keep_accents=False,
-                 bos_token="<s>", eos_token="</s>", unk_token="<unk>", sep_token="<sep>",
-                 pad_token="<pad>", cls_token="<cls>", mask_token="<mask>",
-                 additional_special_tokens=["<eop>", "<eod>"], **kwargs):
-        super(XLNetTokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token,
-                                             unk_token=unk_token, sep_token=sep_token,
-                                             pad_token=pad_token, cls_token=cls_token,
-                                             mask_token=mask_token, additional_special_tokens=
-                                             additional_special_tokens, **kwargs)
+    def __init__(
+        self,
+        vocab_file,
+        do_lower_case=False,
+        remove_space=True,
+        keep_accents=False,
+        bos_token="<s>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        sep_token="<sep>",
+        pad_token="<pad>",
+        cls_token="<cls>",
+        mask_token="<mask>",
+        additional_special_tokens=["<eop>", "<eod>"],
+        **kwargs
+    ):
+        super(XLNetTokenizer, self).__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs
+        )
 
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
@@ -80,8 +97,10 @@ class XLNetTokenizer(PreTrainedTokenizer):
         try:
             import sentencepiece as spm
         except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                           "pip install sentencepiece")
+            logger.warning(
+                "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
 
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
@@ -105,24 +124,26 @@ class XLNetTokenizer(PreTrainedTokenizer):
         try:
             import sentencepiece as spm
         except ImportError:
-            logger.warning("You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
-                           "pip install sentencepiece")
+            logger.warning(
+                "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
     def preprocess_text(self, inputs):
         if self.remove_space:
-            outputs = ' '.join(inputs.strip().split())
+            outputs = " ".join(inputs.strip().split())
         else:
             outputs = inputs
         outputs = outputs.replace("``", '"').replace("''", '"')
 
         if six.PY2 and isinstance(outputs, str):
-            outputs = outputs.decode('utf-8')
+            outputs = outputs.decode("utf-8")
 
         if not self.keep_accents:
-            outputs = unicodedata.normalize('NFKD', outputs)
-            outputs = ''.join([c for c in outputs if not unicodedata.combining(c)])
+            outputs = unicodedata.normalize("NFKD", outputs)
+            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
         if self.do_lower_case:
             outputs = outputs.lower()
 
@@ -135,7 +156,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         text = self.preprocess_text(text)
         # note(zhiliny): in some systems, sentencepiece only accepts str for py2
         if six.PY2 and isinstance(text, unicode):
-            text = text.encode('utf-8')
+            text = text.encode("utf-8")
 
         if not sample:
             pieces = self.sp_model.EncodeAsPieces(text)
@@ -143,9 +164,8 @@ class XLNetTokenizer(PreTrainedTokenizer):
             pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
         new_pieces = []
         for piece in pieces:
-            if len(piece) > 1 and piece[-1] == str(',') and piece[-2].isdigit():
-                cur_pieces = self.sp_model.EncodeAsPieces(
-                    piece[:-1].replace(SPIECE_UNDERLINE, ''))
+            if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
+                cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
                 if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
                     if len(cur_pieces[0]) == 1:
                         cur_pieces = cur_pieces[1:]
@@ -161,7 +181,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
             ret_pieces = []
             for piece in new_pieces:
                 if isinstance(piece, str):
-                    piece = piece.decode('utf-8')
+                    piece = piece.decode("utf-8")
                 ret_pieces.append(piece)
             new_pieces = ret_pieces
 
@@ -175,12 +195,12 @@ class XLNetTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (string/unicode) using the vocab."""
         token = self.sp_model.IdToPiece(index)
         if six.PY2 and return_unicode and isinstance(token, str):
-            token = token.decode('utf-8')
+            token = token.decode("utf-8")
         return token
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
+        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
@@ -215,8 +235,10 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             if token_ids_1 is not None:
-                raise ValueError("You should not supply a second sequence if the provided sequence of "
-                                 "ids is already formated with special tokens for the model.")
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formated with special tokens for the model."
+                )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is not None:
@@ -247,7 +269,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES['vocab_file'])
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

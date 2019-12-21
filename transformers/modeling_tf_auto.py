@@ -18,24 +18,70 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-from .configuration_auto import (BertConfig, CTRLConfig, DistilBertConfig,
-                                 GPT2Config, OpenAIGPTConfig, RobertaConfig,
-                                 TransfoXLConfig, XLMConfig, XLNetConfig)
+from .configuration_auto import (
+    BertConfig,
+    CTRLConfig,
+    DistilBertConfig,
+    GPT2Config,
+    OpenAIGPTConfig,
+    RobertaConfig,
+    TransfoXLConfig,
+    XLMConfig,
+    XLNetConfig,
+)
 
-from .modeling_tf_bert import TFBertModel, TFBertForMaskedLM, TFBertForSequenceClassification, \
-    TFBertForQuestionAnswering, TFBertForTokenClassification, TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_bert import (
+    TFBertModel,
+    TFBertForMaskedLM,
+    TFBertForSequenceClassification,
+    TFBertForQuestionAnswering,
+    TFBertForTokenClassification,
+    TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
 from .modeling_tf_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
 from .modeling_tf_gpt2 import TFGPT2Model, TFGPT2LMHeadModel, TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_transfo_xl import TFTransfoXLModel, TFTransfoXLLMHeadModel, TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_xlnet import TFXLNetModel, TFXLNetLMHeadModel, TFXLNetForSequenceClassification, \
-    TFXLNetForQuestionAnsweringSimple, TFXLNetForTokenClassification, TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_xlm import TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, \
-    TFXLMForQuestionAnsweringSimple, TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_roberta import TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification, \
-    TFRobertaForTokenClassification, TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_distilbert import TFDistilBertModel, TFDistilBertForQuestionAnswering, TFDistilBertForMaskedLM, TFDistilBertForSequenceClassification, TFDistilBertForTokenClassification, TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_transfo_xl import (
+    TFTransfoXLModel,
+    TFTransfoXLLMHeadModel,
+    TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_tf_xlnet import (
+    TFXLNetModel,
+    TFXLNetLMHeadModel,
+    TFXLNetForSequenceClassification,
+    TFXLNetForQuestionAnsweringSimple,
+    TFXLNetForTokenClassification,
+    TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_tf_xlm import (
+    TFXLMModel,
+    TFXLMWithLMHeadModel,
+    TFXLMForSequenceClassification,
+    TFXLMForQuestionAnsweringSimple,
+    TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_tf_roberta import (
+    TFRobertaModel,
+    TFRobertaForMaskedLM,
+    TFRobertaForSequenceClassification,
+    TFRobertaForTokenClassification,
+    TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_tf_distilbert import (
+    TFDistilBertModel,
+    TFDistilBertForQuestionAnswering,
+    TFDistilBertForMaskedLM,
+    TFDistilBertForSequenceClassification,
+    TFDistilBertForTokenClassification,
+    TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
 from .modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel, TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_albert import TFAlbertModel, TFAlbertForMaskedLM, TFAlbertForSequenceClassification, TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_albert import (
+    TFAlbertModel,
+    TFAlbertForMaskedLM,
+    TFAlbertForSequenceClassification,
+    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
 from .modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .file_utils import add_start_docstrings
@@ -43,7 +89,8 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 
-TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict((key, value)
+TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
+    (key, value)
     for pretrained_map in [
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -56,8 +103,9 @@ TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict((key, value)
         TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-        ]
-    for key, value, in pretrained_map.items())
+    ]
+    for key, value, in pretrained_map.items()
+)
 
 
 class TFAutoModel(object):
@@ -85,10 +133,13 @@ class TFAutoModel(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("TFAutoModel is designed to be instantiated "
+        raise EnvironmentError(
+            "TFAutoModel is designed to be instantiated "
             "using the `TFAutoModel.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModel.from_config(config)` methods.")
+            "`TFAutoModel.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -209,32 +260,34 @@ class TFAutoModel(object):
             model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 't5' in pretrained_model_name_or_path:
+        if "t5" in pretrained_model_name_or_path:
             return TFT5Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
+        elif "distilbert" in pretrained_model_name_or_path:
             return TFDistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return TFAlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        elif "roberta" in pretrained_model_name_or_path:
             return TFRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return TFBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
+        elif "openai-gpt" in pretrained_model_name_or_path:
             return TFOpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
+        elif "gpt2" in pretrained_model_name_or_path:
             return TFGPT2Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
+        elif "transfo-xl" in pretrained_model_name_or_path:
             return TFTransfoXLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return TFXLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return TFXLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
+        elif "ctrl" in pretrained_model_name_or_path:
             return TFCTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path)
+        )
 
 
 class TFAutoModelWithLMHead(object):
@@ -262,10 +315,13 @@ class TFAutoModelWithLMHead(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("TFAutoModelWithLMHead is designed to be instantiated "
+        raise EnvironmentError(
+            "TFAutoModelWithLMHead is designed to be instantiated "
             "using the `TFAutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelWithLMHead.from_config(config)` methods.")
+            "`TFAutoModelWithLMHead.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -390,32 +446,34 @@ class TFAutoModelWithLMHead(object):
             model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 't5' in pretrained_model_name_or_path:
+        if "t5" in pretrained_model_name_or_path:
             return TFT5WithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
+        elif "distilbert" in pretrained_model_name_or_path:
             return TFDistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return TFAlbertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        elif "roberta" in pretrained_model_name_or_path:
             return TFRobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return TFBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
+        elif "openai-gpt" in pretrained_model_name_or_path:
             return TFOpenAIGPTLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
+        elif "gpt2" in pretrained_model_name_or_path:
             return TFGPT2LMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
+        elif "transfo-xl" in pretrained_model_name_or_path:
             return TFTransfoXLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return TFXLNetLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return TFXLMWithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
+        elif "ctrl" in pretrained_model_name_or_path:
             return TFCTRLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm', 'roberta', 'ctrl'".format(pretrained_model_name_or_path)
+        )
 
 
 class TFAutoModelForSequenceClassification(object):
@@ -438,10 +496,13 @@ class TFAutoModelForSequenceClassification(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("TFAutoModelForSequenceClassification is designed to be instantiated "
+        raise EnvironmentError(
+            "TFAutoModelForSequenceClassification is designed to be instantiated "
             "using the `TFAutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForSequenceClassification.from_config(config)` methods.")
+            "`TFAutoModelForSequenceClassification.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -552,21 +613,33 @@ class TFAutoModelForSequenceClassification(object):
             model = TFAutoModelForSequenceClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
-            return TFDistilBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
-            return TFAlbertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return TFRobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
-            return TFBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
-            return TFXLNetForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        if "distilbert" in pretrained_model_name_or_path:
+            return TFDistilBertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "albert" in pretrained_model_name_or_path:
+            return TFAlbertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "roberta" in pretrained_model_name_or_path:
+            return TFRobertaForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "bert" in pretrained_model_name_or_path:
+            return TFBertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "xlnet" in pretrained_model_name_or_path:
+            return TFXLNetForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "xlm" in pretrained_model_name_or_path:
             return TFXLMForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'distilbert', 'bert', 'xlnet', 'xlm', 'roberta'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'distilbert', 'bert', 'xlnet', 'xlm', 'roberta'".format(pretrained_model_name_or_path)
+        )
 
 
 class TFAutoModelForQuestionAnswering(object):
@@ -588,10 +661,13 @@ class TFAutoModelForQuestionAnswering(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("TFAutoModelForQuestionAnswering is designed to be instantiated "
+        raise EnvironmentError(
+            "TFAutoModelForQuestionAnswering is designed to be instantiated "
             "using the `TFAutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)` or "
-            "`TFAutoModelForQuestionAnswering.from_config(config)` methods.")
+            "`TFAutoModelForQuestionAnswering.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -698,24 +774,34 @@ class TFAutoModelForQuestionAnswering(object):
             model = TFAutoModelForQuestionAnswering.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
-            return TFDistilBertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        if "distilbert" in pretrained_model_name_or_path:
+            return TFDistilBertForQuestionAnswering.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "bert" in pretrained_model_name_or_path:
             return TFBertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
-            return TFXLNetForQuestionAnsweringSimple.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
-            return TFXLMForQuestionAnsweringSimple.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif "xlnet" in pretrained_model_name_or_path:
+            return TFXLNetForQuestionAnsweringSimple.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "xlm" in pretrained_model_name_or_path:
+            return TFXLMForQuestionAnsweringSimple.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'distilbert', 'bert', 'xlnet', 'xlm'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'distilbert', 'bert', 'xlnet', 'xlm'".format(pretrained_model_name_or_path)
+        )
 
 
 class TFAutoModelForTokenClassification:
     def __init__(self):
-        raise EnvironmentError("TFAutoModelForTokenClassification is designed to be instantiated "
-                               "using the `TFAutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)` or "
-                               "`AutoModelForTokenClassification.from_config(config)` methods.")
+        raise EnvironmentError(
+            "TFAutoModelForTokenClassification is designed to be instantiated "
+            "using the `TFAutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForTokenClassification.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -815,14 +901,20 @@ class TFAutoModelForTokenClassification:
             model = TFAutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'bert' in pretrained_model_name_or_path:
+        if "bert" in pretrained_model_name_or_path:
             return TFBertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return TFXLNetForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
-            return TFDistilBertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return TFRobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif "distilbert" in pretrained_model_name_or_path:
+            return TFDistilBertForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "roberta" in pretrained_model_name_or_path:
+            return TFRobertaForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'distilbert', 'roberta'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'xlnet', 'distilbert', 'roberta'".format(pretrained_model_name_or_path)
+        )

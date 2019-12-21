@@ -40,14 +40,17 @@ CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-
 
 
 def angle_defn(pos, i, d_model_size):
-    angle_rates = 1 / torch.pow(10000, (2 * (i//2)) / d_model_size)
+    angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / d_model_size)
     return pos * angle_rates
+
 
 def positional_encoding(position, d_model_size, dtype):
     # create the sinusoidal pattern for the positional encoding
-    angle_rads = (angle_defn(torch.arange(position, dtype=dtype).unsqueeze(1),
-                  torch.arange(d_model_size, dtype=dtype).unsqueeze(0),
-                  d_model_size))
+    angle_rads = angle_defn(
+        torch.arange(position, dtype=dtype).unsqueeze(1),
+        torch.arange(d_model_size, dtype=dtype).unsqueeze(0),
+        d_model_size,
+    )
 
     sines = torch.sin(angle_rads[:, 0::2])
     cosines = torch.cos(angle_rads[:, 1::2])
@@ -55,22 +58,23 @@ def positional_encoding(position, d_model_size, dtype):
     pos_encoding = torch.cat([sines, cosines], dim=-1)
     return pos_encoding
 
+
 def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=None):
     # calculate attention
-    matmul_qk = torch.matmul(q, k.permute(0,1,3,2))
+    matmul_qk = torch.matmul(q, k.permute(0, 1, 3, 2))
 
     dk = k.shape[-1]
     scaled_attention_logits = matmul_qk / np.sqrt(dk)
 
     if mask is not None:
         nd, ns = scaled_attention_logits.size(-2), scaled_attention_logits.size(-1)
-        scaled_attention_logits += (mask[ns-nd:ns, :ns] * -1e4)
+        scaled_attention_logits += mask[ns - nd : ns, :ns] * -1e4
 
     if attention_mask is not None:
         # Apply the attention mask
         scaled_attention_logits = scaled_attention_logits + attention_mask
 
-    attention_weights = torch.softmax(scaled_attention_logits, dim=-1) 
+    attention_weights = torch.softmax(scaled_attention_logits, dim=-1)
 
     # Mask heads if we want to
     if head_mask is not None:
@@ -128,11 +132,8 @@ class MultiHeadAttention(torch.nn.Module):
         return outputs
 
 
-
 def point_wise_feed_forward_network(d_model_size, dff):
-    return torch.nn.Sequential(torch.nn.Linear(d_model_size, dff),
-                               torch.nn.ReLU(),
-                               torch.nn.Linear(dff, d_model_size))
+    return torch.nn.Sequential(torch.nn.Linear(d_model_size, dff), torch.nn.ReLU(), torch.nn.Linear(dff, d_model_size))
 
 
 class EncoderLayer(torch.nn.Module):
@@ -150,10 +151,9 @@ class EncoderLayer(torch.nn.Module):
 
     def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None):
         normed = self.layernorm1(x)
-        attn_outputs = self.multi_head_attention(normed, normed, normed, mask,
-                                                      layer_past=layer_past,
-                                                      attention_mask=attention_mask,
-                                                      head_mask=head_mask)
+        attn_outputs = self.multi_head_attention(
+            normed, normed, normed, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask
+        )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
         out1 = x + attn_output
@@ -171,6 +171,7 @@ class CTRLPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = CTRLConfig
     pretrained_model_archive_map = CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
@@ -244,8 +245,12 @@ CTRL_INPUTS_DOCSTRING = r"""    Inputs:
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare CTRL Model transformer outputting raw hidden-states without any specific head on top.",
-                                            CTRL_START_DOCSTRING, CTRL_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare CTRL Model transformer outputting raw hidden-states without any specific head on top.",
+    CTRL_START_DOCSTRING,
+    CTRL_INPUTS_DOCSTRING,
+)
 class CTRLModel(CTRLPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -273,6 +278,7 @@ class CTRLModel(CTRLPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
+
     def __init__(self, config):
         super(CTRLModel, self).__init__(config)
         self.output_hidden_states = config.output_hidden_states
@@ -287,11 +293,12 @@ class CTRLModel(CTRLPreTrainedModel):
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 
         self.dropout = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([EncoderLayer(config.n_embd,
-                                             config.n_head,
-                                             config.dff,
-                                             config.resid_pdrop,
-                                             config.output_attentions) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList(
+            [
+                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, config.output_attentions)
+                for _ in range(config.n_layer)
+            ]
+        )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.init_weights()
@@ -309,7 +316,16 @@ class CTRLModel(CTRLPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    def forward(self, input_ids=None, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None):
+    def forward(
+        self,
+        input_ids=None,
+        past=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+    ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -345,7 +361,7 @@ class CTRLModel(CTRLPreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
 
         # Prepare head mask if needed
@@ -357,8 +373,12 @@ class CTRLModel(CTRLPreTrainedModel):
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
                 head_mask = head_mask.expand(self.config.n_layer, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.n_layer
 
@@ -391,11 +411,9 @@ class CTRLModel(CTRLPreTrainedModel):
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
-            outputs = h(hidden_states,
-                        mask,
-                        layer_past=layer_past,
-                        attention_mask=attention_mask,
-                        head_mask=head_mask[i])
+            outputs = h(
+                hidden_states, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
+            )
             hidden_states, present = outputs[:2]
             if self.output_past:
                 presents = presents + (present,)
@@ -421,8 +439,12 @@ class CTRLModel(CTRLPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""The CTRL Model transformer with a language modeling head on top
-(linear layer with weights tied to the input embeddings). """, CTRL_START_DOCSTRING, CTRL_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """The CTRL Model transformer with a language modeling head on top
+(linear layer with weights tied to the input embeddings). """,
+    CTRL_START_DOCSTRING,
+    CTRL_INPUTS_DOCSTRING,
+)
 class CTRLLMHeadModel(CTRLPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -463,6 +485,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         loss, logits = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(CTRLLMHeadModel, self).__init__(config)
         self.transformer = CTRLModel(config)
@@ -473,15 +496,26 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, input_ids=None, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                labels=None):
-        transformer_outputs = self.transformer(input_ids,
-                                               past=past,
-                                               attention_mask=attention_mask,
-                                               token_type_ids=token_type_ids,
-                                               position_ids=position_ids,
-                                               head_mask=head_mask,
-                                               inputs_embeds=inputs_embeds)
+    def forward(
+        self,
+        input_ids=None,
+        past=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        transformer_outputs = self.transformer(
+            input_ids,
+            past=past,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         hidden_states = transformer_outputs[0]
 
@@ -495,8 +529,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
-                            shift_labels.view(-1))
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             outputs = (loss,) + outputs
 
         return outputs  # (loss), lm_logits, presents, (all hidden_states), (attentions)

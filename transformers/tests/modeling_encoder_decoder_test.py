@@ -39,13 +39,13 @@ class EncoderDecoderModelTest(unittest.TestCase):
     def test_model2model_from_pretrained_not_bert(self):
         logging.basicConfig(level=logging.INFO)
         with self.assertRaises(ValueError):
-            _ = Model2Model.from_pretrained('roberta')
+            _ = Model2Model.from_pretrained("roberta")
 
         with self.assertRaises(ValueError):
-            _ = Model2Model.from_pretrained('distilbert')
+            _ = Model2Model.from_pretrained("distilbert")
 
         with self.assertRaises(ValueError):
-            _ = Model2Model.from_pretrained('does-not-exist')
+            _ = Model2Model.from_pretrained("does-not-exist")
 
 
 if __name__ == "__main__":

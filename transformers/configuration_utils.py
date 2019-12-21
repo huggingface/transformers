@@ -15,8 +15,7 @@
 # limitations under the License.
 """ Configuration base class and utilities."""
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
 import json
@@ -27,6 +26,7 @@ from io import open
 from .file_utils import CONFIG_NAME, cached_path, is_remote_url, hf_bucket_url
 
 logger = logging.getLogger(__name__)
+
 
 class PretrainedConfig(object):
     r""" Base class for all configuration classes.
@@ -50,36 +50,36 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.output_attentions = kwargs.pop('output_attentions', False)
-        self.output_hidden_states = kwargs.pop('output_hidden_states', False)
-        self.output_past = kwargs.pop('output_past', True)  # Not used by all models
-        self.torchscript = kwargs.pop('torchscript', False)  # Only used by PyTorch models
-        self.use_bfloat16 = kwargs.pop('use_bfloat16', False)
-        self.pruned_heads = kwargs.pop('pruned_heads', {})
+        self.output_attentions = kwargs.pop("output_attentions", False)
+        self.output_hidden_states = kwargs.pop("output_hidden_states", False)
+        self.output_past = kwargs.pop("output_past", True)  # Not used by all models
+        self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
+        self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
+        self.pruned_heads = kwargs.pop("pruned_heads", {})
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
-        self.is_decoder = kwargs.pop('is_decoder', False)
+        self.is_decoder = kwargs.pop("is_decoder", False)
 
         # Parameters for sequence generation
-        self.max_length = kwargs.pop('max_length', 20)
-        self.do_sample = kwargs.pop('do_sample', False)
-        self.num_beams = kwargs.pop('num_beams', 1)
-        self.temperature = kwargs.pop('temperature', 1.0)
-        self.top_k = kwargs.pop('top_k', 50)
-        self.top_p = kwargs.pop('top_p', 1.0)
-        self.repetition_penalty = kwargs.pop('repetition_penalty', 1.0)
-        self.bos_token_id = kwargs.pop('bos_token_id', 0)
-        self.pad_token_id = kwargs.pop('pad_token_id', 0)
-        self.eos_token_ids = kwargs.pop('eos_token_ids', 0)
-        self.length_penalty = kwargs.pop('length_penalty', 1.)
-        self.num_return_sequences = kwargs.pop('num_return_sequences', 1)
+        self.max_length = kwargs.pop("max_length", 20)
+        self.do_sample = kwargs.pop("do_sample", False)
+        self.num_beams = kwargs.pop("num_beams", 1)
+        self.temperature = kwargs.pop("temperature", 1.0)
+        self.top_k = kwargs.pop("top_k", 50)
+        self.top_p = kwargs.pop("top_p", 1.0)
+        self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
+        self.bos_token_id = kwargs.pop("bos_token_id", 0)
+        self.pad_token_id = kwargs.pop("pad_token_id", 0)
+        self.eos_token_ids = kwargs.pop("eos_token_ids", 0)
+        self.length_penalty = kwargs.pop("length_penalty", 1.0)
+        self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
         # Fine-tuning task arguments
-        self.finetuning_task = kwargs.pop('finetuning_task', None)
-        self.num_labels = kwargs.pop('num_labels', 2)
-        self.id2label = kwargs.pop('id2label', {i: 'LABEL_{}'.format(i) for i in range(self.num_labels)})
+        self.finetuning_task = kwargs.pop("finetuning_task", None)
+        self.num_labels = kwargs.pop("num_labels", 2)
+        self.id2label = kwargs.pop("id2label", {i: "LABEL_{}".format(i) for i in range(self.num_labels)})
         self.id2label = dict((int(key), value) for key, value in self.id2label.items())
-        self.label2id = kwargs.pop('label2id', dict(zip(self.id2label.values(), self.id2label.keys())))
+        self.label2id = kwargs.pop("label2id", dict(zip(self.id2label.values(), self.id2label.keys())))
         self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
 
         # Additional attributes without default values
@@ -94,7 +94,9 @@ class PretrainedConfig(object):
         """ Save a configuration object to the directory `save_directory`, so that it
             can be re-loaded using the :func:`~transformers.PretrainedConfig.from_pretrained` class method.
         """
-        assert os.path.isdir(save_directory), "Saving path should be a directory where the model and configuration can be saved"
+        assert os.path.isdir(
+            save_directory
+        ), "Saving path should be a directory where the model and configuration can be saved"
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
@@ -153,11 +155,11 @@ class PretrainedConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        cache_dir = kwargs.pop('cache_dir', None)
-        force_download = kwargs.pop('force_download', False)
-        resume_download = kwargs.pop('resume_download', False)
-        proxies = kwargs.pop('proxies', None)
-        return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
             config_file = cls.pretrained_config_archive_map[pretrained_model_name_or_path]
@@ -170,37 +172,48 @@ class PretrainedConfig(object):
 
         try:
             # Load from URL or cache if already cached
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download,
-                                               proxies=proxies, resume_download=resume_download)
+            resolved_config_file = cached_path(
+                config_file,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+            )
             # Load config
             config = cls.from_json_file(resolved_config_file)
 
         except EnvironmentError:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
                 msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                        config_file)
+                    config_file
+                )
             else:
-                msg = "Model name '{}' was not found in model name list ({}). " \
-                      "We assumed '{}' was a path or url to a configuration file named {} or " \
-                      "a directory containing such a file but couldn't find any such file at this path or url.".format(
+                msg = (
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url to a configuration file named {} or "
+                    "a directory containing such a file but couldn't find any such file at this path or url.".format(
                         pretrained_model_name_or_path,
-                        ', '.join(cls.pretrained_config_archive_map.keys()),
-                        config_file, CONFIG_NAME)
+                        ", ".join(cls.pretrained_config_archive_map.keys()),
+                        config_file,
+                        CONFIG_NAME,
+                    )
+                )
             raise EnvironmentError(msg)
 
         except json.JSONDecodeError:
-            msg = "Couldn't reach server at '{}' to download configuration file or " \
-                  "configuration file is not a valid JSON file. " \
-                  "Please check network or file content here: {}.".format(config_file, resolved_config_file)
+            msg = (
+                "Couldn't reach server at '{}' to download configuration file or "
+                "configuration file is not a valid JSON file. "
+                "Please check network or file content here: {}.".format(config_file, resolved_config_file)
+            )
             raise EnvironmentError(msg)
 
         if resolved_config_file == config_file:
             logger.info("loading configuration file {}".format(config_file))
         else:
-            logger.info("loading configuration file {} from cache at {}".format(
-                config_file, resolved_config_file))
+            logger.info("loading configuration file {} from cache at {}".format(config_file, resolved_config_file))
 
-        if hasattr(config, 'pruned_heads'):
+        if hasattr(config, "pruned_heads"):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
 
         # Update config with kwargs if needed
@@ -226,7 +239,7 @@ class PretrainedConfig(object):
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `Config` from a json file of parameters."""
-        with open(json_file, "r", encoding='utf-8') as reader:
+        with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
         dict_obj = json.loads(text)
         return cls(**dict_obj)
@@ -248,5 +261,5 @@ class PretrainedConfig(object):
 
     def to_json_file(self, json_file_path):
         """ Save this instance to a json file."""
-        with open(json_file_path, "w", encoding='utf-8') as writer:
+        with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string())

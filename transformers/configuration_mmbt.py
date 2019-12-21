@@ -15,8 +15,7 @@
 # limitations under the License.
 """ MMBT configuration """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 
@@ -31,6 +30,7 @@ class MMBTConfig(object):
         num_labels: Size of final Linear layer for classification.
         modal_hidden_size: Embedding dimension of the non-text modality encoder.
     """
+
     def __init__(self, config, num_labels=None, modal_hidden_size=2048):
         self.__dict__ = config.__dict__
         self.modal_hidden_size = modal_hidden_size

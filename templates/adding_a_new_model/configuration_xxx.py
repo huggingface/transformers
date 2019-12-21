@@ -27,8 +27,8 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 XXX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'xxx-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-config.json",
-    'xxx-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-config.json",
+    "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-config.json",
+    "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-config.json",
 }
 
 
@@ -63,24 +63,26 @@ class XxxConfig(PretrainedConfig):
     """
     pretrained_config_archive_map = XXX_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-    def __init__(self,
-                 vocab_size=50257,
-                 n_positions=1024,
-                 n_ctx=1024,
-                 n_embd=768,
-                 n_layer=12,
-                 n_head=12,
-                 resid_pdrop=0.1,
-                 embd_pdrop=0.1,
-                 attn_pdrop=0.1,
-                 layer_norm_epsilon=1e-5,
-                 initializer_range=0.02,
-                 summary_type='cls_index',
-                 summary_use_proj=True,
-                 summary_activation=None,
-                 summary_proj_to_labels=True,
-                 summary_first_dropout=0.1,
-                 **kwargs):
+    def __init__(
+        self,
+        vocab_size=50257,
+        n_positions=1024,
+        n_ctx=1024,
+        n_embd=768,
+        n_layer=12,
+        n_head=12,
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
+        layer_norm_epsilon=1e-5,
+        initializer_range=0.02,
+        summary_type="cls_index",
+        summary_use_proj=True,
+        summary_activation=None,
+        summary_proj_to_labels=True,
+        summary_first_dropout=0.1,
+        **kwargs
+    ):
         super(XxxConfig, self).__init__(**kwargs)
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx

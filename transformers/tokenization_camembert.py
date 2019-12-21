@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 """ Tokenization classes for Camembert model."""
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 import os
@@ -26,18 +25,18 @@ from .tokenization_xlnet import SPIECE_UNDERLINE
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {'vocab_file': 'sentencepiece.bpe.model'}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    'vocab_file':
-    {
-    'camembert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model",
+    "vocab_file": {
+        "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'camembert-base': None,
+    "camembert-base": None,
 }
+
 
 class CamembertTokenizer(PreTrainedTokenizer):
     """
@@ -46,17 +45,36 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
             - requires `SentencePiece <https://github.com/google/sentencepiece>`_
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, bos_token="<s>", eos_token="</s>", sep_token="</s>",
-                 cls_token="<s>", unk_token="<unk>", pad_token='<pad>', mask_token='<mask>',
-                 additional_special_tokens=['<s>NOTUSED', '</s>NOTUSED'], **kwargs):
-        super(CamembertTokenizer, self).__init__(max_len=512, bos_token=bos_token, eos_token=eos_token, unk_token=unk_token,
-                                                 sep_token=sep_token, cls_token=cls_token, pad_token=pad_token,
-                                                 mask_token=mask_token, additional_special_tokens=additional_special_tokens,
-                                                 **kwargs)
+    def __init__(
+        self,
+        vocab_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
+        **kwargs
+    ):
+        super(CamembertTokenizer, self).__init__(
+            max_len=512,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs
+        )
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
         self.sp_model = spm.SentencePieceProcessor()
@@ -64,9 +82,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         # HACK: These tokens were added by fairseq but don't seem to be actually used when duplicated in the actual
         # sentencepiece vocabulary (this is the case for <s> and </s>
-        self.fairseq_tokens_to_ids = {'<s>NOTUSED': 0, '<pad>': 1, '</s>NOTUSED': 2, '<unk>': 3}
+        self.fairseq_tokens_to_ids = {"<s>NOTUSED": 0, "<pad>": 1, "</s>NOTUSED": 2, "<unk>": 3}
         self.fairseq_offset = len(self.fairseq_tokens_to_ids)
-        self.fairseq_tokens_to_ids['<mask>'] = len(self.sp_model) + len(self.fairseq_tokens_to_ids)
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.fairseq_tokens_to_ids)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
@@ -100,8 +118,10 @@ class CamembertTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             if token_ids_1 is not None:
-                raise ValueError("You should not supply a second sequence if the provided sequence of "
-                                 "ids is already formated with special tokens for the model.")
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formated with special tokens for the model."
+                )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is None:
@@ -148,7 +168,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = ''.join(tokens).replace(SPIECE_UNDERLINE, ' ').strip()
+        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
     def save_vocabulary(self, save_directory):
@@ -158,7 +178,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES['vocab_file'])
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

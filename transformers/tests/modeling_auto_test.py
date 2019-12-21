@@ -25,14 +25,21 @@ from transformers import is_torch_available
 from .utils import require_torch, slow, SMALL_MODEL_IDENTIFIER
 
 if is_torch_available():
-    from transformers import (AutoConfig, BertConfig,
-                                    AutoModel, BertModel,
-                                    AutoModelWithLMHead, BertForMaskedLM,
-                                    AutoModelForSequenceClassification, BertForSequenceClassification,
-                                    AutoModelForQuestionAnswering, BertForQuestionAnswering)
+    from transformers import (
+        AutoConfig,
+        BertConfig,
+        AutoModel,
+        BertModel,
+        AutoModelWithLMHead,
+        BertForMaskedLM,
+        AutoModelForSequenceClassification,
+        BertForSequenceClassification,
+        AutoModelForQuestionAnswering,
+        BertForQuestionAnswering,
+    )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-    from .modeling_common_test import (CommonTestCases, ids_tensor)
+    from .modeling_common_test import CommonTestCases, ids_tensor
     from .configuration_common_test import ConfigTester
 
 
@@ -75,7 +82,9 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(config, BertConfig)
 
             model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            model, loading_info = AutoModelForSequenceClassification.from_pretrained(model_name, output_loading_info=True)
+            model, loading_info = AutoModelForSequenceClassification.from_pretrained(
+                model_name, output_loading_info=True
+            )
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForSequenceClassification)
 

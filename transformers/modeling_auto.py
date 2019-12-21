@@ -18,31 +18,87 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-from .configuration_auto import (AlbertConfig, BertConfig, CamembertConfig, CTRLConfig,
-                                 DistilBertConfig, GPT2Config, OpenAIGPTConfig, RobertaConfig,
-                                 TransfoXLConfig, XLMConfig, XLNetConfig, XLMRobertaConfig)
+from .configuration_auto import (
+    AlbertConfig,
+    BertConfig,
+    CamembertConfig,
+    CTRLConfig,
+    DistilBertConfig,
+    GPT2Config,
+    OpenAIGPTConfig,
+    RobertaConfig,
+    TransfoXLConfig,
+    XLMConfig,
+    XLNetConfig,
+    XLMRobertaConfig,
+)
 
-from .modeling_bert import BertModel, BertForMaskedLM, BertForSequenceClassification, BertForQuestionAnswering, \
-    BertForTokenClassification, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_bert import (
+    BertModel,
+    BertForMaskedLM,
+    BertForSequenceClassification,
+    BertForQuestionAnswering,
+    BertForTokenClassification,
+    BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
 from .modeling_openai import OpenAIGPTModel, OpenAIGPTLMHeadModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
 from .modeling_gpt2 import GPT2Model, GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
 from .modeling_ctrl import CTRLModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
 from .modeling_transfo_xl import TransfoXLModel, TransfoXLLMHeadModel, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_xlnet import XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification, XLNetForQuestionAnswering, \
-    XLNetForTokenClassification, XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_xlm import XLMModel, XLMWithLMHeadModel, XLMForSequenceClassification, XLMForQuestionAnswering, \
-    XLM_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification, \
-    RobertaForTokenClassification, ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_distilbert import DistilBertModel, DistilBertForQuestionAnswering, DistilBertForMaskedLM, \
-    DistilBertForSequenceClassification, DistilBertForTokenClassification, DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_camembert import CamembertModel, CamembertForMaskedLM, CamembertForSequenceClassification, \
-    CamembertForMultipleChoice, CamembertForTokenClassification, CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_albert import AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification, \
-    AlbertForQuestionAnswering, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_xlnet import (
+    XLNetModel,
+    XLNetLMHeadModel,
+    XLNetForSequenceClassification,
+    XLNetForQuestionAnswering,
+    XLNetForTokenClassification,
+    XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_xlm import (
+    XLMModel,
+    XLMWithLMHeadModel,
+    XLMForSequenceClassification,
+    XLMForQuestionAnswering,
+    XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_roberta import (
+    RobertaModel,
+    RobertaForMaskedLM,
+    RobertaForSequenceClassification,
+    RobertaForTokenClassification,
+    ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_distilbert import (
+    DistilBertModel,
+    DistilBertForQuestionAnswering,
+    DistilBertForMaskedLM,
+    DistilBertForSequenceClassification,
+    DistilBertForTokenClassification,
+    DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_camembert import (
+    CamembertModel,
+    CamembertForMaskedLM,
+    CamembertForSequenceClassification,
+    CamembertForMultipleChoice,
+    CamembertForTokenClassification,
+    CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
+from .modeling_albert import (
+    AlbertModel,
+    AlbertForMaskedLM,
+    AlbertForSequenceClassification,
+    AlbertForQuestionAnswering,
+    ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
 from .modeling_t5 import T5Model, T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_xlm_roberta import XLMRobertaModel, XLMRobertaForMaskedLM, XLMRobertaForSequenceClassification, \
-    XLMRobertaForMultipleChoice, XLMRobertaForTokenClassification, XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_xlm_roberta import (
+    XLMRobertaModel,
+    XLMRobertaForMaskedLM,
+    XLMRobertaForSequenceClassification,
+    XLMRobertaForMultipleChoice,
+    XLMRobertaForTokenClassification,
+    XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+)
 
 from .modeling_utils import PreTrainedModel, SequenceSummary
 
@@ -51,7 +107,8 @@ from .file_utils import add_start_docstrings
 logger = logging.getLogger(__name__)
 
 
-ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict((key, value)
+ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
+    (key, value)
     for pretrained_map in [
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -66,8 +123,9 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict((key, value)
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        ]
-    for key, value, in pretrained_map.items())
+    ]
+    for key, value, in pretrained_map.items()
+)
 
 
 class AutoModel(object):
@@ -98,10 +156,13 @@ class AutoModel(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoModel is designed to be instantiated "
+        raise EnvironmentError(
+            "AutoModel is designed to be instantiated "
             "using the `AutoModel.from_pretrained(pretrained_model_name_or_path)` or "
-            "`AutoModel.from_config(config)` methods.")
+            "`AutoModel.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -232,35 +293,39 @@ class AutoModel(object):
             model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 't5' in pretrained_model_name_or_path:
+        if "t5" in pretrained_model_name_or_path:
             return T5Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
+        elif "distilbert" in pretrained_model_name_or_path:
             return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return AlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
+        elif "camembert" in pretrained_model_name_or_path:
             return CamembertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm-roberta' in pretrained_model_name_or_path:
+        elif "xlm-roberta" in pretrained_model_name_or_path:
             return XLMRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        elif "roberta" in pretrained_model_name_or_path:
             return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return BertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
+        elif "openai-gpt" in pretrained_model_name_or_path:
             return OpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
+        elif "gpt2" in pretrained_model_name_or_path:
             return GPT2Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
+        elif "transfo-xl" in pretrained_model_name_or_path:
             return TransfoXLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
+        elif "ctrl" in pretrained_model_name_or_path:
             return CTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm-roberta', 'xlm', 'roberta, 'ctrl', 'distilbert', 'camembert', 'albert'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm-roberta', 'xlm', 'roberta, 'ctrl', 'distilbert', 'camembert', 'albert'".format(
+                pretrained_model_name_or_path
+            )
+        )
 
 
 class AutoModelWithLMHead(object):
@@ -291,10 +356,13 @@ class AutoModelWithLMHead(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoModelWithLMHead is designed to be instantiated "
+        raise EnvironmentError(
+            "AutoModelWithLMHead is designed to be instantiated "
             "using the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` or "
-            "`AutoModelWithLMHead.from_config(config)` methods.")
+            "`AutoModelWithLMHead.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -423,35 +491,39 @@ class AutoModelWithLMHead(object):
             model = AutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 't5' in pretrained_model_name_or_path:
+        if "t5" in pretrained_model_name_or_path:
             return T5WithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
+        elif "distilbert" in pretrained_model_name_or_path:
             return DistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return AlbertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
+        elif "camembert" in pretrained_model_name_or_path:
             return CamembertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm-roberta' in pretrained_model_name_or_path:
+        elif "xlm-roberta" in pretrained_model_name_or_path:
             return XLMRobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        elif "roberta" in pretrained_model_name_or_path:
             return RobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return BertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
+        elif "openai-gpt" in pretrained_model_name_or_path:
             return OpenAIGPTLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
+        elif "gpt2" in pretrained_model_name_or_path:
             return GPT2LMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
+        elif "transfo-xl" in pretrained_model_name_or_path:
             return TransfoXLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return XLMWithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
+        elif "ctrl" in pretrained_model_name_or_path:
             return CTRLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm-roberta', 'xlm', 'roberta','ctrl', 'distilbert', 'camembert', 'albert'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm-roberta', 'xlm', 'roberta','ctrl', 'distilbert', 'camembert', 'albert'".format(
+                pretrained_model_name_or_path
+            )
+        )
 
 
 class AutoModelForSequenceClassification(object):
@@ -477,10 +549,13 @@ class AutoModelForSequenceClassification(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoModelForSequenceClassification is designed to be instantiated "
+        raise EnvironmentError(
+            "AutoModelForSequenceClassification is designed to be instantiated "
             "using the `AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)` or "
-            "`AutoModelForSequenceClassification.from_config(config)` methods.")
+            "`AutoModelForSequenceClassification.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -597,25 +672,39 @@ class AutoModelForSequenceClassification(object):
             model = AutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
-            return DistilBertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
-            return AlbertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
-            return CamembertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm-roberta' in pretrained_model_name_or_path:
-            return XLMRobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
-            return RobertaForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        if "distilbert" in pretrained_model_name_or_path:
+            return DistilBertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "albert" in pretrained_model_name_or_path:
+            return AlbertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "camembert" in pretrained_model_name_or_path:
+            return CamembertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "xlm-roberta" in pretrained_model_name_or_path:
+            return XLMRobertaForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "roberta" in pretrained_model_name_or_path:
+            return RobertaForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "bert" in pretrained_model_name_or_path:
             return BertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return XLMForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'xlm-roberta', 'xlm', 'roberta', 'distilbert', 'camembert', 'albert'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'xlnet', 'xlm-roberta', 'xlm', 'roberta', 'distilbert', 'camembert', 'albert'".format(
+                pretrained_model_name_or_path
+            )
+        )
 
 
 class AutoModelForQuestionAnswering(object):
@@ -638,10 +727,13 @@ class AutoModelForQuestionAnswering(object):
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoModelForQuestionAnswering is designed to be instantiated "
+        raise EnvironmentError(
+            "AutoModelForQuestionAnswering is designed to be instantiated "
             "using the `AutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)` or "
-            "`AutoModelForQuestionAnswering.from_config(config)` methods.")
+            "`AutoModelForQuestionAnswering.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -745,26 +837,30 @@ class AutoModelForQuestionAnswering(object):
             model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'distilbert' in pretrained_model_name_or_path:
+        if "distilbert" in pretrained_model_name_or_path:
             return DistilBertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return AlbertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return BertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return XLMForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'xlm', 'distilbert', 'albert'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'xlnet', 'xlm', 'distilbert', 'albert'".format(pretrained_model_name_or_path)
+        )
 
 
 class AutoModelForTokenClassification:
     def __init__(self):
-        raise EnvironmentError("AutoModelForTokenClassification is designed to be instantiated "
-                               "using the `AutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)` or "
-                               "`AutoModelForTokenClassification.from_config(config)` methods.")
+        raise EnvironmentError(
+            "AutoModelForTokenClassification is designed to be instantiated "
+            "using the `AutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForTokenClassification.from_config(config)` methods."
+        )
 
     @classmethod
     def from_config(cls, config):
@@ -797,7 +893,7 @@ class AutoModelForTokenClassification:
         elif isinstance(config, XLMRobertaConfig):
             return XLMRobertaForTokenClassification(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
-    
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r""" Instantiates one of the question answering model classes of the library
@@ -870,18 +966,28 @@ class AutoModelForTokenClassification:
             model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if 'camembert' in pretrained_model_name_or_path:
-            return CamembertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
-            return DistilBertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlm-roberta' in pretrained_model_name_or_path:
-            return XLMRobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        if "camembert" in pretrained_model_name_or_path:
+            return CamembertForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "distilbert" in pretrained_model_name_or_path:
+            return DistilBertForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "xlm-roberta" in pretrained_model_name_or_path:
+            return XLMRobertaForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+        elif "roberta" in pretrained_model_name_or_path:
             return RobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return BertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'xlnet', 'camembert', 'distilbert', 'xlm-roberta', 'roberta'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'xlnet', 'camembert', 'distilbert', 'xlm-roberta', 'roberta'".format(
+                pretrained_model_name_or_path
+            )
+        )

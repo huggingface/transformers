@@ -35,7 +35,8 @@ from .configuration_xlm_roberta import XLMRobertaConfig, XLM_ROBERTA_PRETRAINED_
 logger = logging.getLogger(__name__)
 
 
-ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict((key, value)
+ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
+    (key, value)
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -50,8 +51,9 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict((key, value)
         CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ]
-    for key, value, in pretrained_map.items())
+    ]
+    for key, value, in pretrained_map.items()
+)
 
 
 class AutoConfig(object):
@@ -79,37 +81,42 @@ class AutoConfig(object):
             - contains `ctrl` : CTRLConfig (CTRL model)
         This class cannot be instantiated using `__init__()` (throw an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoConfig is designed to be instantiated "
-            "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method.")
+        raise EnvironmentError(
+            "AutoConfig is designed to be instantiated "
+            "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
+        )
 
     @classmethod
     def for_model(cls, model_type, *args, **kwargs):
-        if 'distilbert' in model_type:
+        if "distilbert" in model_type:
             return DistilBertConfig(*args, **kwargs)
-        elif 'roberta' in model_type:
+        elif "roberta" in model_type:
             return RobertaConfig(*args, **kwargs)
-        elif 'bert' in model_type:
+        elif "bert" in model_type:
             return BertConfig(*args, **kwargs)
-        elif 'openai-gpt' in model_type:
+        elif "openai-gpt" in model_type:
             return OpenAIGPTConfig(*args, **kwargs)
-        elif 'gpt2' in model_type:
+        elif "gpt2" in model_type:
             return GPT2Config(*args, **kwargs)
-        elif 'transfo-xl' in model_type:
+        elif "transfo-xl" in model_type:
             return TransfoXLConfig(*args, **kwargs)
-        elif 'xlnet' in model_type:
+        elif "xlnet" in model_type:
             return XLNetConfig(*args, **kwargs)
-        elif 'xlm' in model_type:
+        elif "xlm" in model_type:
             return XLMConfig(*args, **kwargs)
-        elif 'ctrl' in model_type:
+        elif "ctrl" in model_type:
             return CTRLConfig(*args, **kwargs)
-        elif 'albert' in model_type:
+        elif "albert" in model_type:
             return AlbertConfig(*args, **kwargs)
-        elif 'camembert' in model_type:
+        elif "camembert" in model_type:
             return CamembertConfig(*args, **kwargs)
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm', 'roberta', 'ctrl', 'camembert', 'albert'".format(model_type))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm', 'roberta', 'ctrl', 'camembert', 'albert'".format(model_type)
+        )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -176,32 +183,36 @@ class AutoConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        if 't5' in pretrained_model_name_or_path:
+        if "t5" in pretrained_model_name_or_path:
             return T5Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
+        elif "distilbert" in pretrained_model_name_or_path:
             return DistilBertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return AlbertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
+        elif "camembert" in pretrained_model_name_or_path:
             return CamembertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'xlm-roberta' in pretrained_model_name_or_path:
+        elif "xlm-roberta" in pretrained_model_name_or_path:
             return XLMRobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        elif "roberta" in pretrained_model_name_or_path:
             return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return BertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
+        elif "openai-gpt" in pretrained_model_name_or_path:
             return OpenAIGPTConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
+        elif "gpt2" in pretrained_model_name_or_path:
             return GPT2Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
+        elif "transfo-xl" in pretrained_model_name_or_path:
             return TransfoXLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return XLMConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
+        elif "ctrl" in pretrained_model_name_or_path:
             return CTRLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm-roberta', 'xlm', 'roberta', 'distilbert', 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm-roberta', 'xlm', 'roberta', 'distilbert', 'camembert', 'ctrl', 'albert'".format(
+                pretrained_model_name_or_path
+            )
+        )

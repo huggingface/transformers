@@ -19,7 +19,7 @@ from __future__ import print_function
 import unittest
 import sys
 
-from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
+from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
 from .configuration_common_test import ConfigTester
 from .utils import CACHE_DIR, require_tf, slow
 
@@ -27,8 +27,7 @@ from transformers import CTRLConfig, is_tf_available
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers.modeling_tf_ctrl import (TFCTRLModel, TFCTRLLMHeadModel,
-                                                TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
+    from transformers.modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel, TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @require_tf
@@ -37,32 +36,32 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel) if is_tf_available() else ()
 
     class TFCTRLModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_token_type_ids=True,
-                     use_input_mask=True,
-                     use_labels=True,
-                     use_mc_token_ids=True,
-                     vocab_size=99,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     intermediate_size=37,
-                     hidden_act="gelu",
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
-                     scope=None,
-                     ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_token_type_ids=True,
+            use_input_mask=True,
+            use_labels=True,
+            use_mc_token_ids=True,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            intermediate_size=37,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            max_position_embeddings=512,
+            type_vocab_size=16,
+            type_sequence_label_size=2,
+            initializer_range=0.02,
+            num_labels=3,
+            num_choices=4,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -127,13 +126,21 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
 
-            return config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, token_labels, choice_labels
+            return (
+                config,
+                input_ids,
+                input_mask,
+                head_mask,
+                token_type_ids,
+                mc_token_ids,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            )
 
         def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = TFCTRLModel(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             sequence_output = model(inputs)[0]
 
             inputs = [input_ids, None, input_mask]  # None is the input for 'past'
@@ -145,30 +152,36 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
                 "sequence_output": sequence_output.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape),
-                [self.batch_size, self.seq_length, self.hidden_size])
-
+                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            )
 
         def create_and_check_ctrl_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = TFCTRLLMHeadModel(config=config)
-            inputs = {'input_ids': input_ids,
-                      'attention_mask': input_mask,
-                      'token_type_ids': token_type_ids}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             prediction_scores = model(inputs)[0]
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].shape),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
 
-            (config, input_ids, input_mask, head_mask, token_type_ids,
-             mc_token_ids, sequence_labels, token_labels, choice_labels) = config_and_inputs
+            (
+                config,
+                input_ids,
+                input_mask,
+                head_mask,
+                token_type_ids,
+                mc_token_ids,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = config_and_inputs
 
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
             return config, inputs_dict
 
     def setUp(self):
@@ -192,6 +205,6 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
             model = TFCTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
+
 if __name__ == "__main__":
     unittest.main()
-
