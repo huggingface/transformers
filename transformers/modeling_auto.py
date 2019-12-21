@@ -50,7 +50,6 @@ from .modeling_bert import (
 from .modeling_camembert import (
     CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     CamembertForMaskedLM,
-    CamembertForMultipleChoice,
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
@@ -85,7 +84,6 @@ from .modeling_xlm import (
 from .modeling_xlm_roberta import (
     XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMRobertaForMaskedLM,
-    XLMRobertaForMultipleChoice,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
     XLMRobertaModel,

@@ -30,7 +30,6 @@ if is_tf_available():
         TFXxxForSequenceClassification,
         TFXxxForTokenClassification,
         TFXxxForQuestionAnswering,
-        TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
 

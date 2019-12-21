@@ -47,7 +47,6 @@ from transformers import (
     TFCTRLLMHeadModel,
     TFDistilBertForMaskedLM,
     TFDistilBertForQuestionAnswering,
-    TFDistilBertForSequenceClassification,
     TFGPT2LMHeadModel,
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
