@@ -16,15 +16,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import copy
 import os
-import shutil
 import json
-import random
-import uuid
+import tempfile
 
 import unittest
-import logging
+from .tokenization_tests_commons import TemporaryDirectory
 
 
 class ConfigTester(object):
@@ -48,16 +45,28 @@ class ConfigTester(object):
 
     def create_and_test_config_to_json_file(self):
         config_first = self.config_class(**self.inputs_dict)
-        json_file_path = os.path.join(os.getcwd(), "config_" + str(uuid.uuid4()) + ".json")
-        config_first.to_json_file(json_file_path)
-        config_second = self.config_class.from_json_file(json_file_path)
-        os.remove(json_file_path)
+
+        with TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "config.json")
+            config_first.to_json_file(json_file_path)
+            config_second = self.config_class.from_json_file(json_file_path)
+
+        self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
+
+    def create_and_test_config_from_and_save_pretrained(self):
+        config_first = self.config_class(**self.inputs_dict)
+
+        with TemporaryDirectory() as tmpdirname:
+            config_first.save_pretrained(tmpdirname)
+            config_second = self.config_class.from_pretrained(tmpdirname)
+
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
     def run_common_tests(self):
         self.create_and_test_config_common_properties()
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
+        self.create_and_test_config_from_and_save_pretrained()
 
 if __name__ == "__main__":
     unittest.main()

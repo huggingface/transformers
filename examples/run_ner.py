@@ -38,11 +38,13 @@ from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, B
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
 from transformers import DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer
 from transformers import CamembertConfig, CamembertForTokenClassification, CamembertTokenizer
+from transformers import XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer
 
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, DistilBertConfig)),
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, DistilBertConfig,
+                                                                   CamembertConfig, XLMRobertaConfig)),
     ())
 
 MODEL_CLASSES = {
@@ -50,6 +52,7 @@ MODEL_CLASSES = {
     "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
     "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
     "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
+    "xlmroberta": (XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer),
 }
 
 

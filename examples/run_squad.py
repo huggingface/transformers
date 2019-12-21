@@ -62,7 +62,6 @@ MODEL_CLASSES = {
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
     'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer),
     'albert': (AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer),
-    'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer)
 }
 
 
@@ -200,8 +199,10 @@ def train(args, train_dataset, model, tokenizer):
                 inputs['token_type_ids'] = None if args.model_type == 'xlm' else batch[2]
 
             if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[5], 'p_mask': batch[6]})
-
+                inputs.update({'cls_index': batch[5],
+                               'p_mask':       batch[6]})
+                if args.version_2_with_negative:
+                    inputs.update({'is_impossible': batch[7]})
             outputs = model(**inputs)
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
@@ -296,7 +297,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu evaluate
-    if args.n_gpu > 1:
+    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
         model = torch.nn.DataParallel(model)
 
     # Eval!
@@ -420,7 +421,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     else:
         logger.info("Creating features from dataset file at %s", input_dir)
 
-        if not args.data_dir:
+        if not args.data_dir and ((evaluate and not args.predict_file) or (not evaluate and not args.train_file)):
             try:
                 import tensorflow_datasets as tfds
             except ImportError:
@@ -436,8 +437,10 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                 tfds_examples, evaluate=evaluate)
         else:
             processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
-            examples = processor.get_dev_examples(
-                args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
+            if evaluate:
+                examples = processor.get_dev_examples(args.data_dir, filename=args.predict_file)
+            else:
+                examples = processor.get_train_examples(args.data_dir, filename=args.train_file)
 
         features, dataset = squad_convert_examples_to_features(
             examples=examples,
@@ -477,7 +480,14 @@ def main():
 
     # Other parameters
     parser.add_argument("--data_dir", default=None, type=str,
-                        help="The input data dir. Should contain the .json files for the task. If not specified, will run with tensorflow_datasets.")
+                        help="The input data dir. Should contain the .json files for the task." +
+                             "If no data dir or train/predict files are specified, will run with tensorflow_datasets.")
+    parser.add_argument("--train_file", default=None, type=str,
+                        help="The input training file. If a data dir is specified, will look for the file there" +
+                             "If no data dir or train/predict files are specified, will run with tensorflow_datasets.")
+    parser.add_argument("--predict_file", default=None, type=str,
+                        help="The input evaluation file. If a data dir is specified, will look for the file there" +
+                             "If no data dir or train/predict files are specified, will run with tensorflow_datasets.")
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -563,11 +573,6 @@ def main():
     parser.add_argument('--server_port', type=str, default='',
                         help="Can be used for distant debugging.")
     args = parser.parse_args()
-
-    args.predict_file = os.path.join(args.output_dir, 'predictions_{}_{}.txt'.format(
-        list(filter(None, args.model_name_or_path.split('/'))).pop(),
-        str(args.max_seq_length))
-    )
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train and not args.overwrite_output_dir:
         raise ValueError(
@@ -676,12 +681,15 @@ def main():
     # Evaluation - we can ask to evaluate all the checkpoints (sub-directories) in a directory
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        checkpoints = [args.output_dir]
-        if args.eval_all_checkpoints:
-            checkpoints = list(os.path.dirname(c) for c in sorted(
-                glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
-            logging.getLogger("transformers.modeling_utils").setLevel(
-                logging.WARN)  # Reduce model loading logs
+        if args.do_train:
+            logger.info("Loading checkpoints saved during training for evaluation")
+            checkpoints = [args.output_dir]
+            if args.eval_all_checkpoints:
+                checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+                logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
+        else:
+            logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
+            checkpoints = [args.model_name_or_path]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 

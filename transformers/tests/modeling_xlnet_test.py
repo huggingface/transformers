@@ -20,7 +20,6 @@ import os
 import unittest
 import json
 import random
-import shutil
 
 from transformers import is_torch_available
 
@@ -33,7 +32,7 @@ if is_torch_available():
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 @require_torch
@@ -60,7 +59,6 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                      num_attention_heads=4,
                      d_inner=128,
                      num_hidden_layers=5,
-                     max_position_embeddings=10,
                      type_sequence_label_size=2,
                      untie_r=True,
                      bi_data=False,
@@ -84,7 +82,6 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
             self.num_attention_heads = num_attention_heads
             self.d_inner = d_inner
             self.num_hidden_layers = num_hidden_layers
-            self.max_position_embeddings = max_position_embeddings
             self.bi_data = bi_data
             self.untie_r = untie_r
             self.same_length = same_length
@@ -116,13 +113,12 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
             config = XLNetConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 d_model=self.hidden_size,
                 n_head=self.num_attention_heads,
                 d_inner=self.d_inner,
                 n_layer=self.num_hidden_layers,
                 untie_r=self.untie_r,
-                max_position_embeddings=self.max_position_embeddings,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 same_length=self.same_length,
@@ -388,10 +384,8 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = XLNetModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = XLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

@@ -17,7 +17,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
 
 from transformers import is_torch_available
 
@@ -25,11 +24,12 @@ if is_torch_available():
     import torch
     from transformers import (RobertaConfig, RobertaModel, RobertaForMaskedLM,
                               RobertaForSequenceClassification, RobertaForTokenClassification)
+    from transformers.modeling_roberta import RobertaEmbeddings
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 @require_torch
@@ -106,7 +106,7 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = RobertaConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
                 num_attention_heads=self.num_attention_heads,
@@ -199,12 +199,61 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = RobertaModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = RobertaModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
+    def test_create_position_ids_respects_padding_index(self):
+        """ Ensure that the default position ids only assign a sequential . This is a regression
+        test for https://github.com/huggingface/transformers/issues/1761
+
+        The position ids should be masked with the embedding object's padding index. Therefore, the
+        first available non-padding position index is RobertaEmbeddings.padding_idx + 1
+        """
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        model = RobertaEmbeddings(config=config)
+
+        input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
+        expected_positions = torch.as_tensor([[
+            0 + model.padding_idx + 1,
+            1 + model.padding_idx + 1,
+            2 + model.padding_idx + 1,
+            model.padding_idx
+        ]])
+
+        position_ids = model.create_position_ids_from_input_ids(input_ids)
+        self.assertEqual(
+            position_ids.shape,
+            expected_positions.shape
+        )
+        self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    def test_create_position_ids_from_inputs_embeds(self):
+        """ Ensure that the default position ids only assign a sequential . This is a regression
+        test for https://github.com/huggingface/transformers/issues/1761
+
+        The position ids should be masked with the embedding object's padding index. Therefore, the
+        first available non-padding position index is RobertaEmbeddings.padding_idx + 1
+        """
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        embeddings = RobertaEmbeddings(config=config)
+
+        inputs_embeds = torch.Tensor(2, 4, 30)
+        expected_single_positions = [
+            0 + embeddings.padding_idx + 1,
+            1 + embeddings.padding_idx + 1,
+            2 + embeddings.padding_idx + 1,
+            3 + embeddings.padding_idx + 1,
+        ]
+        expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
+        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
+        self.assertEqual(
+            position_ids.shape,
+            expected_positions.shape
+        )
+        self.assertTrue(
+            torch.all(torch.eq(position_ids, expected_positions))
+        )
 
 
 class RobertaModelIntegrationTest(unittest.TestCase):

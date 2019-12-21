@@ -36,7 +36,7 @@ from torch.nn.parameter import Parameter
 
 from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_transfo_xl import TransfoXLConfig
-from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits
+from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits, LogUniformSampler
 from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
@@ -582,7 +582,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states, mems = outputs[:2]
 
@@ -592,14 +592,14 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.n_token = config.n_token
+        self.n_token = config.vocab_size
 
         self.d_embed = config.d_embed
         self.d_model = config.d_model
         self.n_head = config.n_head
         self.d_head = config.d_head
 
-        self.word_emb = AdaptiveEmbedding(config.n_token, config.d_embed, config.d_model, config.cutoffs,
+        self.word_emb = AdaptiveEmbedding(config.vocab_size, config.d_embed, config.d_model, config.cutoffs,
                                           div_val=config.div_val)
 
         self.drop = nn.Dropout(config.dropout)
@@ -825,7 +825,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         prediction_scores, mems = outputs[:2]
 
@@ -836,11 +836,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self.sample_softmax = config.sample_softmax
         # use sampled softmax
         if config.sample_softmax > 0:
-            self.out_layer = nn.Linear(config.d_model, config.n_token)
-            self.sampler = LogUniformSampler(config.n_token, config.sample_softmax)
+            self.out_layer = nn.Linear(config.d_model, config.vocab_size)
+            self.sampler = LogUniformSampler(config.vocab_size, config.sample_softmax)
         # use adaptive softmax (including standard softmax)
         else:
-            self.crit = ProjectedAdaptiveLogSoftmax(config.n_token, config.d_embed, config.d_model,
+            self.crit = ProjectedAdaptiveLogSoftmax(config.vocab_size, config.d_embed, config.d_model,
                                                     config.cutoffs, div_val=config.div_val)
         self.init_weights()
 
@@ -908,3 +908,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
                 outputs = [softmax_output, None] + outputs
 
         return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
+
+    def get_output_embeddings(self):
+        """ Double-check if you are using adaptive softmax.
+        """
+        if self.sample_softmax > 0:
+            return self.out_layer
+        else:
+            return self.crit.out_layers[-1]

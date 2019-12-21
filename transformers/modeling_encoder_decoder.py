@@ -18,9 +18,11 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
+import warnings
 
 import torch
 from torch import nn
+from tqdm import trange
 
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 
@@ -59,12 +61,14 @@ class PreTrainedEncoderDecoder(nn.Module):
             encoder_pretrained_model_name_or_path: information necessary to initiate the encoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/encoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path: information necessary to initiate the decoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/decoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
@@ -117,8 +121,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         kwargs_common = {
             argument: value
             for argument, value in kwargs.items()
-            if not argument.startswith("encoder_")
-            and not argument.startswith("decoder_")
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
         }
         kwargs_decoder = kwargs_common.copy()
         kwargs_encoder = kwargs_common.copy()
@@ -164,7 +167,39 @@ class PreTrainedEncoderDecoder(nn.Module):
 
         We save the encoder' and decoder's parameters in two separate directories.
         """
+
+        # If the root output directory does not exist, create it 
+        if not os.path.exists(save_directory):
+            os.mkdir(save_directory)
+
+        # Check whether the output directory is empty or not
+        sub_directories = [directory for directory in os.listdir(save_directory)
+            if os.path.isdir(os.path.join(save_directory, directory))]
+
+        if len(sub_directories) > 0:
+            if "encoder" in sub_directories and "decoder" in sub_directories:
+                print("WARNING: there is an older version of encoder-decoder saved in" +\
+                    " the output directory. The default behaviour is to overwrite them.")
+
+            # Empty the output directory
+            for directory_to_remove in sub_directories:
+                # Remove all files into the subdirectory
+                files_to_remove = os.listdir(os.path.join(save_directory, directory_to_remove))
+                for file_to_remove in files_to_remove:
+                    os.remove(os.path.join(save_directory, directory_to_remove, file_to_remove))
+                # Remove the subdirectory itself
+                os.rmdir(os.path.join(save_directory, directory_to_remove))
+
+            assert(len(os.listdir(save_directory)) == 0) # sanity check
+
+        # Create the "encoder" directory inside the output directory and save the encoder into it
+        if not os.path.exists(os.path.join(save_directory, "encoder")):
+            os.mkdir(os.path.join(save_directory, "encoder"))
         self.encoder.save_pretrained(os.path.join(save_directory, "encoder"))
+
+        # Create the "encoder" directory inside the output directory and save the decoder into it
+        if not os.path.exists(os.path.join(save_directory, "decoder")):
+            os.mkdir(os.path.join(save_directory, "decoder"))
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
     def forward(self, encoder_input_ids, decoder_input_ids, **kwargs):
@@ -186,51 +221,56 @@ class PreTrainedEncoderDecoder(nn.Module):
                 Indices of decoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
-        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
-        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
-        # that apply to the model as whole.
-        # We let the specific kwargs override the common ones in case of conflict.
+        kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
+
+        # Encode if needed (training, first prediction pass)
+        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
+        if encoder_hidden_states is None:
+            encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
+            encoder_hidden_states = encoder_outputs[0]
+        else:
+            encoder_outputs = ()
+
+        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
+        decoder_outputs = self.decoder(decoder_input_ids, encoder_hidden_states, **kwargs_decoder)
+
+        return decoder_outputs + encoder_outputs
+
+    @staticmethod
+    def prepare_model_kwargs(**kwargs):
+        """ Prepare the encoder and decoder's keyword arguments.
+
+        Keyword arguments come in 3 flavors:
+        - encoder-specific (prefixed by `encoder_`)
+        - decoder-specific (prefixed by `decoder_`)
+        - those that apply to the model as whole.
+
+        We let the specific kwargs override the common ones in case of
+        conflict.
+        """
         kwargs_common = {
             argument: value
             for argument, value in kwargs.items()
-            if not argument.startswith("encoder_")
-            and not argument.startswith("decoder_")
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
         }
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_encoder.update(
+        decoder_kwargs = kwargs_common.copy()
+        encoder_kwargs = kwargs_common.copy()
+        encoder_kwargs.update(
             {
                 argument[len("encoder_") :]: value
                 for argument, value in kwargs.items()
                 if argument.startswith("encoder_")
             }
         )
-        kwargs_decoder.update(
+        decoder_kwargs.update(
             {
                 argument[len("decoder_") :]: value
                 for argument, value in kwargs.items()
                 if argument.startswith("decoder_")
             }
         )
-
-        # Encode if needed (training, first prediction pass)
-        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-        if encoder_hidden_states is None:
-            encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[
-                0
-            ]  # output the last layer hidden state
-        else:
-            encoder_outputs = ()
-
-        # Decode
-        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get(
-            "attention_mask", None
-        )
-        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
-
-        return decoder_outputs + encoder_outputs
+        decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)
+        return encoder_kwargs, decoder_kwargs
 
 
 class Model2Model(PreTrainedEncoderDecoder):
