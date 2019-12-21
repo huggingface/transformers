@@ -725,10 +725,10 @@ class XLMTokenizer(PreTrainedTokenizer):
             make && make install
             pip install kytea
             ```
-        - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer *
+        - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
             - Install with `pip install jieba`
 
-        \* The original XLM used [Stanford Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip).
+        (*) The original XLM used [Stanford Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip).
         However, the wrapper (`nltk.tokenize.stanford_segmenter`) is slow due to JVM overhead, and it will be deprecated.
         Jieba is a lot faster and pip-installable. Note there is some mismatch with the Stanford Segmenter. It should be fine
         if you fine-tune the model with Chinese supervisionself. If you want the same exact behaviour, use the original XLM
