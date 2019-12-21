@@ -62,7 +62,7 @@ from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_trans
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except:
+except ImportError:
     from tensorboardX import SummaryWriter
 
 

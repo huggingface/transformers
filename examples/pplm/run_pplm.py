@@ -697,8 +697,8 @@ def run_pplm_example(
             print("= Perturbed generated text {} =".format(i + 1))
             print(pert_gen_text)
             print()
-        except:
-            pass
+        except Exception as exc:
+            print("Ignoring error while generating perturbed text:", exc)
 
         # keep the prefix, perturbed seq, original seq for each index
         generated_texts.append((tokenized_cond_text, pert_gen_tok_text, unpert_gen_tok_text))

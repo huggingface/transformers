@@ -439,7 +439,7 @@ class PreTrainedModel(nn.Module):
         if state_dict is None and not from_tf:
             try:
                 state_dict = torch.load(resolved_archive_file, map_location="cpu")
-            except:
+            except Exception:
                 raise OSError(
                     "Unable to load weights from pytorch checkpoint file. "
                     "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "

@@ -333,13 +333,13 @@ class TFCommonTestCases:
             # We used to fall back to just synthetically creating a dummy tensor of ones:
             try:
                 x = wte(input_ids, mode="embedding")
-            except:
+            except Exception:
                 try:
                     x = wte([input_ids], mode="embedding")
-                except:
+                except Exception:
                     try:
                         x = wte([input_ids, None, None, None], mode="embedding")
-                    except:
+                    except Exception:
                         if hasattr(self.model_tester, "embedding_size"):
                             x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
                         else:

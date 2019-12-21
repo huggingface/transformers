@@ -67,7 +67,7 @@ from ..utils_squad_evaluate import main as evaluate_on_squad
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except:
+except ImportError:
     from tensorboardX import SummaryWriter
 
 

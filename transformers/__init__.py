@@ -6,12 +6,12 @@ __version__ = "2.3.0"
 # and: https://github.com/tensorflow/tensorflow/issues/26691#issuecomment-500369493
 try:
     import absl.logging
-
+except ImportError:
+    pass
+else:
     absl.logging.set_verbosity("info")
     absl.logging.set_stderrthreshold("info")
     absl.logging._warn_preinit_stderr = False
-except:
-    pass
 
 import logging
 
