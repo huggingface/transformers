@@ -242,7 +242,7 @@ def prune_heads(args, model, eval_dataloader, head_mask):
 
 def main():
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--data_dir",
         default=None,
@@ -272,7 +272,7 @@ def main():
         help="The output directory where the model predictions and checkpoints will be written.",
     )
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument(
         "--config_name",
         default="",

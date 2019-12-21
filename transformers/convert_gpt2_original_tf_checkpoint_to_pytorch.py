@@ -51,7 +51,7 @@ def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--gpt2_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
     )

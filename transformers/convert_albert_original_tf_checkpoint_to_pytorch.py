@@ -43,7 +43,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, albert_config_file, pyt
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
     )

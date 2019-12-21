@@ -430,7 +430,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--train_file", default=None, type=str, required=True, help="SQuAD json for training. E.g., train-v1.1.json"
     )
@@ -486,7 +486,7 @@ def main():
         "--temperature", default=2.0, type=float, help="Distillation temperature. Only for distillation."
     )
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument(
         "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
     )

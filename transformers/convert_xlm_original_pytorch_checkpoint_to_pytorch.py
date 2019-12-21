@@ -70,7 +70,7 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--xlm_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
     )

@@ -42,7 +42,7 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-### UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE ###
+# UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 def gelu(x):
     """ Gaussian Error Linear Unit.
     Original Implementation of the gelu activation function in Google Bert repo when initially created.
@@ -463,7 +463,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
 
 
-### INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL ###
+# INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pretrained models.

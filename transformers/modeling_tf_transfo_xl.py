@@ -79,23 +79,23 @@ class TFPositionwiseFF(tf.keras.layers.Layer):
 
     def call(self, inp, training=False):
         if self.pre_lnorm:
-            ##### layer normalization + positionwise feed-forward
+            # layer normalization + positionwise feed-forward
             core_out = self.layer_norm(inp)
             core_out = self.layer_1(core_out)
             core_out = self.drop_1(core_out, training=training)
             core_out = self.layer_2(core_out)
             core_out = self.drop_2(core_out, training=training)
 
-            ##### residual connection
+            # residual connection
             output = core_out + inp
         else:
-            ##### positionwise feed-forward
+            # positionwise feed-forward
             core_out = self.layer_1(inp)
             core_out = self.drop_1(core_out, training=training)
             core_out = self.layer_2(core_out)
             core_out = self.drop_2(core_out, training=training)
 
-            ##### residual connection + layer normalization
+            # residual connection + layer normalization
             output = self.layer_norm(inp + core_out)
 
         return output
@@ -206,7 +206,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
         r_head_k = tf.reshape(r_head_k, (rlen, self.n_head, self.d_head))  # qlen x n_head x d_head
 
-        #### compute attention score
+        # compute attention score
         rw_head_q = w_head_q + self.r_w_bias  # qlen x bsz x n_head x d_head
         AC = tf.einsum("ibnd,jbnd->ijbn", rw_head_q, w_head_k)  # qlen x klen x bsz x n_head
 
@@ -218,7 +218,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         attn_score = AC + BD
         attn_score = attn_score * self.scale
 
-        #### compute attention probability
+        # compute attention probability
         if attn_mask is not None:
             attn_mask_t = attn_mask[:, :, None, None]
             attn_score = attn_score * (1 - attn_mask_t) - 1e30 * attn_mask_t
@@ -231,22 +231,22 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         if head_mask is not None:
             attn_prob = attn_prob * head_mask
 
-        #### compute attention vector
+        # compute attention vector
         attn_vec = tf.einsum("ijbn,jbnd->ibnd", attn_prob, w_head_v)
 
         # [qlen x bsz x n_head x d_head]
         attn_vec_sizes = shape_list(attn_vec)
         attn_vec = tf.reshape(attn_vec, (attn_vec_sizes[0], attn_vec_sizes[1], self.n_head * self.d_head))
 
-        ##### linear projection
+        # linear projection
         attn_out = self.o_net(attn_vec)
         attn_out = self.drop(attn_out, training=training)
 
         if self.pre_lnorm:
-            ##### residual connection
+            # residual connection
             outputs = [w + attn_out]
         else:
-            ##### residual connection + layer normalization
+            # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
         if self.output_attentions:

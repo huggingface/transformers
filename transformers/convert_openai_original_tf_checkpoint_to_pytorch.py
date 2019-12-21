@@ -51,7 +51,7 @@ def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_c
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--openai_checkpoint_folder_path",
         default=None,
