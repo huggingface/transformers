@@ -77,7 +77,6 @@ class PreTrainedModel(nn.Module):
     """
     config_class = None
     pretrained_model_archive_map = {}
-    load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
 
     @property

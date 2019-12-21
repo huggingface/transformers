@@ -15,7 +15,10 @@ try:
     _serve_dependancies_installed = True
 except (ImportError, AttributeError):
     BaseModel = object
-    Body = lambda *x, **y: None
+
+    def Body(*x, **y):
+        pass
+
     _serve_dependancies_installed = False
 
 
