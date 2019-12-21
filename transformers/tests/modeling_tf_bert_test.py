@@ -34,7 +34,6 @@ if is_tf_available():
         TFBertForMultipleChoice,
         TFBertForTokenClassification,
         TFBertForQuestionAnswering,
-        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
 

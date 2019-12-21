@@ -41,9 +41,6 @@ if is_torch_available():
         BertModel,
         BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        GPT2LMHeadModel,
-        GPT2Config,
-        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
 if sys.version_info[0] == 2:

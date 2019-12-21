@@ -31,18 +31,6 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 from run_glue import ALL_MODELS, MODEL_CLASSES, load_and_cache_examples, set_seed
-from transformers import (
-    WEIGHTS_NAME,
-    BertConfig,
-    BertForSequenceClassification,
-    BertTokenizer,
-    XLMConfig,
-    XLMForSequenceClassification,
-    XLMTokenizer,
-    XLNetConfig,
-    XLNetForSequenceClassification,
-    XLNetTokenizer,
-)
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors

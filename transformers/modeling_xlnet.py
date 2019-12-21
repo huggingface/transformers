@@ -28,14 +28,7 @@ from torch.nn import functional as F
 
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings
-from .modeling_utils import (
-    PoolerAnswerClass,
-    PoolerEndLogits,
-    PoolerStartLogits,
-    PreTrainedModel,
-    SequenceSummary,
-    prune_linear_layer,
-)
+from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
 
 
 logger = logging.getLogger(__name__)

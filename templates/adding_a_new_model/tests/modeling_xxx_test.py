@@ -28,12 +28,9 @@ if is_torch_available():
         XxxConfig,
         XxxModel,
         XxxForMaskedLM,
-        XxxForNextSentencePrediction,
-        XxxForPreTraining,
         XxxForQuestionAnswering,
         XxxForSequenceClassification,
         XxxForTokenClassification,
-        XxxForMultipleChoice,
     )
     from transformers.modeling_xxx import XXX_PRETRAINED_MODEL_ARCHIVE_MAP
 
