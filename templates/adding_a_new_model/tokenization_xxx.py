@@ -24,6 +24,7 @@ from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
 
+
 logger = logging.getLogger(__name__)
 
 ####################################################

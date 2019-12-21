@@ -17,8 +17,8 @@
 import bisect
 import copy
 from collections import defaultdict
-import numpy as np
 
+import numpy as np
 from torch.utils.data.sampler import BatchSampler, Sampler
 
 from utils import logger

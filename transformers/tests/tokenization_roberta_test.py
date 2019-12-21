@@ -14,12 +14,13 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
 import json
+import os
 import unittest
 from io import open
 
-from transformers.tokenization_roberta import RobertaTokenizer, VOCAB_FILES_NAMES
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
+
 from .tokenization_tests_commons import CommonTestCases
 from .utils import slow
 

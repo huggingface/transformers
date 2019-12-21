@@ -17,7 +17,9 @@ import logging
 import unittest
 
 from transformers import is_torch_available
+
 from .utils import require_torch, slow
+
 
 if is_torch_available():
     from transformers import BertModel, BertForMaskedLM, Model2Model

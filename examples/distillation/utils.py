@@ -15,14 +15,16 @@
 """ Utils to train DistilBERT
     adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
-import git
 import json
+import logging
 import os
 import socket
-import torch
-import numpy as np
 
-import logging
+import numpy as np
+import torch
+
+import git
+
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - PID: %(process)d -  %(message)s",

@@ -14,13 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import csv
-import sys
 import copy
+import csv
 import json
 import logging
+import sys
 
 from ...file_utils import is_tf_available, is_torch_available
+
 
 logger = logging.getLogger(__name__)
 

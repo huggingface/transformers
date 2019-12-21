@@ -14,11 +14,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
 import json
+import os
 import unittest
 
 from transformers.modelcard import ModelCard
+
 from .tokenization_tests_commons import TemporaryDirectory
 
 

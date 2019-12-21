@@ -21,15 +21,23 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import argparse
 import logging
 
-import torch
 import numpy as np
+import torch
 
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
-from transformers import OpenAIGPTLMHeadModel, OpenAIGPTTokenizer
-from transformers import XLNetLMHeadModel, XLNetTokenizer
-from transformers import TransfoXLLMHeadModel, TransfoXLTokenizer
-from transformers import CTRLLMHeadModel, CTRLTokenizer
-from transformers import XLMWithLMHeadModel, XLMTokenizer
+from transformers import (
+    CTRLLMHeadModel,
+    CTRLTokenizer,
+    GPT2LMHeadModel,
+    GPT2Tokenizer,
+    OpenAIGPTLMHeadModel,
+    OpenAIGPTTokenizer,
+    TransfoXLLMHeadModel,
+    TransfoXLTokenizer,
+    XLMTokenizer,
+    XLMWithLMHeadModel,
+    XLNetLMHeadModel,
+    XLNetTokenizer,
+)
 
 
 logging.basicConfig(

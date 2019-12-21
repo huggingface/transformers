@@ -15,11 +15,13 @@
 
 """Convert Huggingface Pytorch checkpoint to Tensorflow checkpoint."""
 
-import os
 import argparse
-import torch
+import os
+
 import numpy as np
 import tensorflow as tf
+import torch
+
 from transformers import BertModel
 
 

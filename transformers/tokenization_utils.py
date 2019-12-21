@@ -15,16 +15,18 @@
 """Tokenization classes for OpenAI GPT."""
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import logging
-import os
-import json
-import six
 import copy
 import itertools
+import json
+import logging
+import os
 import re
 from io import open
 
-from .file_utils import cached_path, is_remote_url, hf_bucket_url, is_tf_available, is_torch_available
+import six
+
+from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
+
 
 if is_tf_available():
     import tensorflow as tf

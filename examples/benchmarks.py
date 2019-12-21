@@ -18,12 +18,14 @@
 # If checking the tensors placement
 # tf.debugging.set_log_device_placement(True)
 
-from typing import List
-import timeit
-from transformers import is_tf_available, is_torch_available
-from time import time
 import argparse
 import csv
+import timeit
+from time import time
+from typing import List
+
+from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
+
 
 if is_tf_available():
     import tensorflow as tf
@@ -33,7 +35,6 @@ if is_torch_available():
     import torch
     from transformers import AutoModel
 
-from transformers import AutoConfig, AutoTokenizer
 
 input_text = """Bent over their instruments, three hundred Fertilizers were plunged, as 
 the Director of Hatcheries and Conditioning entered the room, in the 

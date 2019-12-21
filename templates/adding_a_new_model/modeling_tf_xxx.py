@@ -21,21 +21,22 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
+import itertools
 import json
 import logging
 import math
 import os
 import sys
-import copy
-import itertools
 from io import open
 
 import numpy as np
 import tensorflow as tf
 
 from .configuration_xxx import XxxConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+
 
 logger = logging.getLogger(__name__)
 

@@ -27,9 +27,8 @@ import torch
 from torch import nn
 from torch.nn.init import xavier_uniform_
 
-from transformers import BertModel, BertConfig, PreTrainedModel
-
 from configuration_bertabs import BertAbsConfig
+from transformers import BertConfig, BertModel, PreTrainedModel
 
 
 MAX_SIZE = 5000

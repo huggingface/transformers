@@ -2,13 +2,10 @@ import os
 from argparse import ArgumentParser, Namespace
 from logging import getLogger
 
+from transformers import SingleSentenceClassificationProcessor as Processor
+from transformers import TextClassificationPipeline, is_tf_available, is_torch_available
 from transformers.commands import BaseTransformersCLICommand
-from transformers import (
-    is_tf_available,
-    is_torch_available,
-    TextClassificationPipeline,
-    SingleSentenceClassificationProcessor as Processor,
-)
+
 
 if not is_tf_available() and not is_torch_available():
     raise ImportError("At least one of PyTorch or TensorFlow 2.0+ should be installed to use CLI training")

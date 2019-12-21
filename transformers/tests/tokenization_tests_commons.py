@@ -15,11 +15,12 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import sys
-from io import open
-import tempfile
 import shutil
+import sys
+import tempfile
 import unittest
+from io import open
+
 
 if sys.version_info[0] == 2:
     import cPickle as pickle

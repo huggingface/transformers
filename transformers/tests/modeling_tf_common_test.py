@@ -14,22 +14,22 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
-import os
 import copy
+import importlib
 import json
 import logging
-import importlib
+import os
 import random
 import shutil
+import sys
+import tempfile
 import unittest
 import uuid
-import tempfile
-
-import sys
 
 from transformers import is_tf_available, is_torch_available
 
 from .utils import require_tf, slow
+
 
 if is_tf_available():
     import tensorflow as tf

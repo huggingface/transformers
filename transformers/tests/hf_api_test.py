@@ -23,6 +23,7 @@ import six
 
 from transformers.hf_api import HfApi, HfFolder, HTTPError, PresignedUrl, S3Obj
 
+
 USER = "__DUMMY_TRANSFORMERS_USER__"
 PASS = "__DUMMY_TRANSFORMERS_PASS__"
 FILES = [

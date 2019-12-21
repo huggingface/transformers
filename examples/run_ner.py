@@ -25,20 +25,35 @@ import random
 
 import numpy as np
 import torch
-from seqeval.metrics import precision_score, recall_score, f1_score
 from tensorboardX import SummaryWriter
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
+
+from seqeval.metrics import f1_score, precision_score, recall_score
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    BertConfig,
+    BertForTokenClassification,
+    BertTokenizer,
+    CamembertConfig,
+    CamembertForTokenClassification,
+    CamembertTokenizer,
+    DistilBertConfig,
+    DistilBertForTokenClassification,
+    DistilBertTokenizer,
+    RobertaConfig,
+    RobertaForTokenClassification,
+    RobertaTokenizer,
+    XLMRobertaConfig,
+    XLMRobertaForTokenClassification,
+    XLMRobertaTokenizer,
+    get_linear_schedule_with_warmup,
+)
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
-from transformers import AdamW, get_linear_schedule_with_warmup
-from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
-from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
-from transformers import DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer
-from transformers import CamembertConfig, CamembertForTokenClassification, CamembertTokenizer
-from transformers import XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer
 
 logger = logging.getLogger(__name__)
 

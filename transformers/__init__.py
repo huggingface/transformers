@@ -15,86 +15,114 @@ except:
 
 import logging
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
+from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_mmbt import MMBTConfig
+from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+
+# Configurations
+from .configuration_utils import PretrainedConfig
+from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
+from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
+from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+from .data import (
+    DataProcessor,
+    InputExample,
+    InputFeatures,
+    SingleSentenceClassificationProcessor,
+    SquadExample,
+    SquadFeatures,
+    SquadV1Processor,
+    SquadV2Processor,
+    glue_convert_examples_to_features,
+    glue_output_modes,
+    glue_processors,
+    glue_tasks_num_labels,
+    is_sklearn_available,
+    squad_convert_examples_to_features,
+    xnli_output_modes,
+    xnli_processors,
+    xnli_tasks_num_labels,
+)
 
 # Files and general utilities
 from .file_utils import (
-    TRANSFORMERS_CACHE,
-    PYTORCH_TRANSFORMERS_CACHE,
-    PYTORCH_PRETRAINED_BERT_CACHE,
-    cached_path,
-    add_start_docstrings,
-    add_end_docstrings,
-    WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    TF_WEIGHTS_NAME,
     CONFIG_NAME,
     MODEL_CARD_NAME,
+    PYTORCH_PRETRAINED_BERT_CACHE,
+    PYTORCH_TRANSFORMERS_CACHE,
+    TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
+    TRANSFORMERS_CACHE,
+    WEIGHTS_NAME,
+    add_end_docstrings,
+    add_start_docstrings,
+    cached_path,
     is_tf_available,
     is_torch_available,
 )
 
-from .data import (
-    is_sklearn_available,
-    InputExample,
-    InputFeatures,
-    DataProcessor,
-    SingleSentenceClassificationProcessor,
-    glue_output_modes,
-    glue_convert_examples_to_features,
-    glue_processors,
-    glue_tasks_num_labels,
-    xnli_output_modes,
-    xnli_processors,
-    xnli_tasks_num_labels,
-    squad_convert_examples_to_features,
-    SquadFeatures,
-    SquadExample,
-    SquadV1Processor,
-    SquadV2Processor,
+# Model Cards
+from .modelcard import ModelCard
+
+# TF 2.0 <=> PyTorch conversion utilities
+from .modeling_tf_pytorch_utils import (
+    convert_tf_weight_name_to_pt_weight_name,
+    load_pytorch_checkpoint_in_tf2_model,
+    load_pytorch_model_in_tf2_model,
+    load_pytorch_weights_in_tf2_model,
+    load_tf2_checkpoint_in_pytorch_model,
+    load_tf2_model_in_pytorch_model,
+    load_tf2_weights_in_pytorch_model,
 )
+
+# Pipelines
+from .pipelines import (
+    CsvPipelineDataFormat,
+    FeatureExtractionPipeline,
+    JsonPipelineDataFormat,
+    NerPipeline,
+    PipedPipelineDataFormat,
+    Pipeline,
+    PipelineDataFormat,
+    QuestionAnsweringPipeline,
+    TextClassificationPipeline,
+    pipeline,
+)
+from .tokenization_albert import AlbertTokenizer
+from .tokenization_auto import AutoTokenizer
+from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
+from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+from .tokenization_camembert import CamembertTokenizer
+from .tokenization_ctrl import CTRLTokenizer
+from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_openai import OpenAIGPTTokenizer
+from .tokenization_roberta import RobertaTokenizer
+from .tokenization_t5 import T5Tokenizer
+from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
+
+# Tokenizers
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_xlm import XLMTokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
 
 if is_sklearn_available():
     from .data import glue_compute_metrics, xnli_compute_metrics
 
-# Model Cards
-from .modelcard import ModelCard
-
-# Tokenizers
-from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer
-from .tokenization_bert_japanese import BertJapaneseTokenizer, MecabTokenizer, CharacterTokenizer
-from .tokenization_openai import OpenAIGPTTokenizer
-from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLCorpus
-from .tokenization_gpt2 import GPT2Tokenizer
-from .tokenization_ctrl import CTRLTokenizer
-from .tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
-from .tokenization_xlm import XLMTokenizer
-from .tokenization_roberta import RobertaTokenizer
-from .tokenization_distilbert import DistilBertTokenizer
-from .tokenization_albert import AlbertTokenizer
-from .tokenization_camembert import CamembertTokenizer
-from .tokenization_t5 import T5Tokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
-
-# Configurations
-from .configuration_utils import PretrainedConfig
-from .configuration_auto import AutoConfig, ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_bert import BertConfig, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_openai import OpenAIGPTConfig, OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_transfo_xl import TransfoXLConfig, TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_gpt2 import GPT2Config, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_ctrl import CTRLConfig, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_xlnet import XLNetConfig, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_xlm import XLMConfig, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_roberta import RobertaConfig, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_xlm_roberta import XLMRobertaConfig, XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
-from .configuration_mmbt import MMBTConfig
 
 # Modeling
 if is_torch_available():
@@ -345,30 +373,6 @@ if is_tf_available():
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
 
-# TF 2.0 <=> PyTorch conversion utilities
-from .modeling_tf_pytorch_utils import (
-    convert_tf_weight_name_to_pt_weight_name,
-    load_pytorch_checkpoint_in_tf2_model,
-    load_pytorch_weights_in_tf2_model,
-    load_pytorch_model_in_tf2_model,
-    load_tf2_checkpoint_in_pytorch_model,
-    load_tf2_weights_in_pytorch_model,
-    load_tf2_model_in_pytorch_model,
-)
-
-# Pipelines
-from .pipelines import (
-    pipeline,
-    PipelineDataFormat,
-    CsvPipelineDataFormat,
-    JsonPipelineDataFormat,
-    PipedPipelineDataFormat,
-    Pipeline,
-    FeatureExtractionPipeline,
-    QuestionAnsweringPipeline,
-    NerPipeline,
-    TextClassificationPipeline,
-)
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(

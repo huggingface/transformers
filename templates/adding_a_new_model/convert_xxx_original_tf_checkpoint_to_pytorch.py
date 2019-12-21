@@ -14,16 +14,15 @@
 # limitations under the License.
 """Convert XXX checkpoint."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import argparse
+import logging
+
 import torch
 
 from transformers import XxxConfig, XxxForPreTraining, load_tf_weights_in_xxx
 
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

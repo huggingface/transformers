@@ -29,80 +29,78 @@ from .configuration_auto import (
     RobertaConfig,
     TransfoXLConfig,
     XLMConfig,
-    XLNetConfig,
     XLMRobertaConfig,
+    XLNetConfig,
 )
-
+from .file_utils import add_start_docstrings
+from .modeling_albert import (
+    ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    AlbertForMaskedLM,
+    AlbertForQuestionAnswering,
+    AlbertForSequenceClassification,
+    AlbertModel,
+)
 from .modeling_bert import (
-    BertModel,
-    BertForMaskedLM,
-    BertForSequenceClassification,
-    BertForQuestionAnswering,
-    BertForTokenClassification,
     BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    BertForMaskedLM,
+    BertForQuestionAnswering,
+    BertForSequenceClassification,
+    BertForTokenClassification,
+    BertModel,
 )
-from .modeling_openai import OpenAIGPTModel, OpenAIGPTLMHeadModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_gpt2 import GPT2Model, GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_ctrl import CTRLModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_transfo_xl import TransfoXLModel, TransfoXLLMHeadModel, TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_xlnet import (
-    XLNetModel,
-    XLNetLMHeadModel,
-    XLNetForSequenceClassification,
-    XLNetForQuestionAnswering,
-    XLNetForTokenClassification,
-    XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+from .modeling_camembert import (
+    CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    CamembertForMaskedLM,
+    CamembertForMultipleChoice,
+    CamembertForSequenceClassification,
+    CamembertForTokenClassification,
+    CamembertModel,
 )
-from .modeling_xlm import (
-    XLMModel,
-    XLMWithLMHeadModel,
-    XLMForSequenceClassification,
-    XLMForQuestionAnswering,
-    XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+from .modeling_ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel, CTRLModel
+from .modeling_distilbert import (
+    DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    DistilBertForMaskedLM,
+    DistilBertForQuestionAnswering,
+    DistilBertForSequenceClassification,
+    DistilBertForTokenClassification,
+    DistilBertModel,
 )
+from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
+from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_roberta import (
-    RobertaModel,
+    ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     RobertaForMaskedLM,
     RobertaForSequenceClassification,
     RobertaForTokenClassification,
-    ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    RobertaModel,
 )
-from .modeling_distilbert import (
-    DistilBertModel,
-    DistilBertForQuestionAnswering,
-    DistilBertForMaskedLM,
-    DistilBertForSequenceClassification,
-    DistilBertForTokenClassification,
-    DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-)
-from .modeling_camembert import (
-    CamembertModel,
-    CamembertForMaskedLM,
-    CamembertForSequenceClassification,
-    CamembertForMultipleChoice,
-    CamembertForTokenClassification,
-    CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-)
-from .modeling_albert import (
-    AlbertModel,
-    AlbertForMaskedLM,
-    AlbertForSequenceClassification,
-    AlbertForQuestionAnswering,
-    ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-)
-from .modeling_t5 import T5Model, T5WithLMHeadModel, T5_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_xlm_roberta import (
-    XLMRobertaModel,
-    XLMRobertaForMaskedLM,
-    XLMRobertaForSequenceClassification,
-    XLMRobertaForMultipleChoice,
-    XLMRobertaForTokenClassification,
-    XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-)
-
+from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadModel
+from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_utils import PreTrainedModel, SequenceSummary
+from .modeling_xlm import (
+    XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+    XLMForQuestionAnswering,
+    XLMForSequenceClassification,
+    XLMModel,
+    XLMWithLMHeadModel,
+)
+from .modeling_xlm_roberta import (
+    XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    XLMRobertaForMaskedLM,
+    XLMRobertaForMultipleChoice,
+    XLMRobertaForSequenceClassification,
+    XLMRobertaForTokenClassification,
+    XLMRobertaModel,
+)
+from .modeling_xlnet import (
+    XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+    XLNetForQuestionAnswering,
+    XLNetForSequenceClassification,
+    XLNetForTokenClassification,
+    XLNetLMHeadModel,
+    XLNetModel,
+)
 
-from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 

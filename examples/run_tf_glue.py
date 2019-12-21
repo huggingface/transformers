@@ -1,14 +1,17 @@
 import os
+
 import tensorflow as tf
+
 import tensorflow_datasets
 from transformers import (
+    BertConfig,
+    BertForSequenceClassification,
     BertTokenizer,
     TFBertForSequenceClassification,
-    BertConfig,
     glue_convert_examples_to_features,
-    BertForSequenceClassification,
     glue_processors,
 )
+
 
 # script parameters
 BATCH_SIZE = 32

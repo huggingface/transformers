@@ -31,14 +31,15 @@ from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
+    DUMMY_INPUTS,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_NAME,
-    DUMMY_INPUTS,
     cached_path,
     hf_bucket_url,
     is_remote_url,
 )
+
 
 logger = logging.getLogger(__name__)
 

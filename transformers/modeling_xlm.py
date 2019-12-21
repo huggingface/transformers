@@ -16,20 +16,20 @@
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import itertools
 import logging
 import math
 
-import itertools
 import numpy as np
-
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import functional as F
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer, SequenceSummary, SQuADHead
 from .configuration_xlm import XLMConfig
 from .file_utils import add_start_docstrings
+from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_linear_layer
+
 
 logger = logging.getLogger(__name__)
 

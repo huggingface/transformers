@@ -13,12 +13,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import os
 import unittest
-import json
 from io import open
 
-from transformers.tokenization_ctrl import CTRLTokenizer, VOCAB_FILES_NAMES
+from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 

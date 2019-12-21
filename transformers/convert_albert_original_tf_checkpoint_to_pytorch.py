@@ -14,16 +14,15 @@
 # limitations under the License.
 """Convert ALBERT checkpoint."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import argparse
+import logging
+
 import torch
 
 from transformers import AlbertConfig, AlbertForMaskedLM, load_tf_weights_in_albert
 
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

@@ -1,7 +1,11 @@
-from argparse import ArgumentParser, Namespace
-from typing import List, Optional, Union, Any
-
 import logging
+from argparse import ArgumentParser, Namespace
+from typing import Any, List, Optional, Union
+
+from transformers import Pipeline
+from transformers.commands import BaseTransformersCLICommand
+from transformers.pipelines import SUPPORTED_TASKS, pipeline
+
 
 try:
     from uvicorn import run
@@ -14,9 +18,6 @@ except (ImportError, AttributeError):
     Body = lambda *x, **y: None
     _serve_dependancies_installed = False
 
-from transformers import Pipeline
-from transformers.commands import BaseTransformersCLICommand
-from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
 logger = logging.getLogger("transformers-cli/serving")
 

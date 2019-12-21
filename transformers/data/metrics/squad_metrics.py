@@ -8,16 +8,18 @@ that a question is unanswerable.
 """
 
 
+import collections
 import json
 import logging
 import math
-import collections
-from io import open
-from tqdm import tqdm
-import string
 import re
+import string
+from io import open
+
+from tqdm import tqdm
 
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
+
 
 logger = logging.getLogger(__name__)
 

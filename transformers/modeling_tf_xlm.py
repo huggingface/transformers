@@ -16,24 +16,25 @@
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import itertools
 import logging
 import math
 import os
 
-import itertools
 import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFSequenceSummary,
-    shape_list,
-    get_initializer,
-    DUMMY_INPUTS,
-)
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import (
+    DUMMY_INPUTS,
+    TFPreTrainedModel,
+    TFSequenceSummary,
+    TFSharedEmbeddings,
+    get_initializer,
+    shape_list,
+)
+
 
 logger = logging.getLogger(__name__)
 

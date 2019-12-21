@@ -15,14 +15,16 @@
 """Tokenization classes for RoBERTa."""
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
 import json
 import logging
 import os
-import regex as re
+import sys
 from io import open
 
+import regex as re
+
 from .tokenization_gpt2 import GPT2Tokenizer
+
 
 try:
     from functools import lru_cache

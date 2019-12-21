@@ -21,8 +21,9 @@ import os
 import re
 from io import open
 
-from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_bert import BasicTokenizer
+from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 

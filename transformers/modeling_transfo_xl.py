@@ -20,11 +20,11 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
-import json
-import math
-import logging
 import collections
+import json
+import logging
+import math
+import os
 import sys
 from io import open
 
@@ -34,10 +34,11 @@ import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_transfo_xl import TransfoXLConfig
-from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax, sample_logits, LogUniformSampler
 from .file_utils import add_start_docstrings
+from .modeling_transfo_xl_utilities import LogUniformSampler, ProjectedAdaptiveLogSoftmax, sample_logits
+from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+
 
 logger = logging.getLogger(__name__)
 

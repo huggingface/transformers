@@ -28,8 +28,9 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+
 
 logger = logging.getLogger(__name__)
 

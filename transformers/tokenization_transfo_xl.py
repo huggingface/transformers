@@ -30,6 +30,7 @@ import numpy as np
 from .file_utils import cached_path
 from .tokenization_utils import PreTrainedTokenizer
 
+
 try:
     import torch
 except ImportError:

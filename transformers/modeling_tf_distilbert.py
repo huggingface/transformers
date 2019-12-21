@@ -16,21 +16,21 @@
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
+import itertools
 import json
 import logging
 import math
-import copy
 import sys
 from io import open
-
-import itertools
 
 import numpy as np
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, get_initializer
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
+
 
 logger = logging.getLogger(__name__)
 

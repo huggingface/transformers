@@ -17,13 +17,15 @@
 import json
 import os
 from collections import Counter
-from PIL import Image
 
 import torch
 import torch.nn as nn
+from torch.utils.data import Dataset
+
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset
+from PIL import Image
+
 
 POOLING_BREAKDOWN = {1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (2, 2), 5: (5, 1), 6: (3, 2), 7: (7, 1), 8: (4, 2), 9: (3, 3)}
 

@@ -20,14 +20,14 @@ from io import open
 
 from transformers.tokenization_bert import WordpieceTokenizer
 from transformers.tokenization_bert_japanese import (
-    BertJapaneseTokenizer,
-    MecabTokenizer,
-    CharacterTokenizer,
     VOCAB_FILES_NAMES,
+    BertJapaneseTokenizer,
+    CharacterTokenizer,
+    MecabTokenizer,
 )
 
 from .tokenization_tests_commons import CommonTestCases
-from .utils import slow, custom_tokenizers
+from .utils import custom_tokenizers, slow
 
 
 @custom_tokenizers

@@ -24,6 +24,7 @@ from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
 
+
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}

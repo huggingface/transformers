@@ -20,10 +20,10 @@
 from collections import defaultdict
 
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 # CUDA_MAJOR = int(torch.version.cuda.split('.')[0])
 # CUDA_MINOR = int(torch.version.cuda.split('.')[1])

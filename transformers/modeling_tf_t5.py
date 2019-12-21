@@ -17,16 +17,17 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import logging
-import math
 import copy
 import itertools
+import logging
+import math
 
 import tensorflow as tf
 
 from .configuration_t5 import T5Config
+from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
-from .file_utils import add_start_docstrings, DUMMY_INPUTS, DUMMY_MASK
+
 
 logger = logging.getLogger(__name__)
 

@@ -32,23 +32,22 @@ import shutil
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except:
-    from tensorboardX import SummaryWriter
-
 from tqdm import tqdm, trange
 
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
-    get_linear_schedule_with_warmup,
     BertConfig,
     BertForMaskedLM,
     BertTokenizer,
+    CamembertConfig,
+    CamembertForMaskedLM,
+    CamembertTokenizer,
+    DistilBertConfig,
+    DistilBertForMaskedLM,
+    DistilBertTokenizer,
     GPT2Config,
     GPT2LMHeadModel,
     GPT2Tokenizer,
@@ -58,13 +57,14 @@ from transformers import (
     RobertaConfig,
     RobertaForMaskedLM,
     RobertaTokenizer,
-    DistilBertConfig,
-    DistilBertForMaskedLM,
-    DistilBertTokenizer,
-    CamembertConfig,
-    CamembertForMaskedLM,
-    CamembertTokenizer,
+    get_linear_schedule_with_warmup,
 )
+
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
 
 
 logger = logging.getLogger(__name__)

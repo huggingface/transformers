@@ -15,30 +15,30 @@
 """ The distiller to distil the student.
     Adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
-import os
 import math
-import psutil
+import os
 import time
-from tqdm import trange, tqdm
-import numpy as np
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
+from torch.utils.data import BatchSampler, DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import RandomSampler, BatchSampler, DataLoader
+from tqdm import tqdm, trange
+
+import psutil
+from grouped_batch_sampler import GroupedBatchSampler, create_lengths_groups
+from lm_seqs_dataset import LmSeqsDataset
+from transformers import get_linear_schedule_with_warmup
+from utils import logger
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
     from tensorboardX import SummaryWriter
-
-from transformers import get_linear_schedule_with_warmup
-
-from utils import logger
-from lm_seqs_dataset import LmSeqsDataset
-from grouped_batch_sampler import GroupedBatchSampler, create_lengths_groups
 
 
 class Distiller:

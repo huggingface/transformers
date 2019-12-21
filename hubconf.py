@@ -1,12 +1,13 @@
 from transformers import (
-    AutoTokenizer,
     AutoConfig,
     AutoModel,
-    AutoModelWithLMHead,
-    AutoModelForSequenceClassification,
     AutoModelForQuestionAnswering,
+    AutoModelForSequenceClassification,
+    AutoModelWithLMHead,
+    AutoTokenizer,
 )
 from transformers.file_utils import add_start_docstrings
+
 
 dependencies = ["torch", "tqdm", "boto3", "requests", "regex", "sentencepiece", "sacremoses"]
 

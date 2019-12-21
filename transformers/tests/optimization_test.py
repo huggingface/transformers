@@ -12,14 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import unittest
 import os
+import unittest
 
 from transformers import is_torch_available
+
+from .tokenization_tests_commons import TemporaryDirectory
+from .utils import require_torch
+
 
 if is_torch_available():
     import torch
@@ -32,9 +34,6 @@ if is_torch_available():
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
     )
-
-from .tokenization_tests_commons import TemporaryDirectory
-from .utils import require_torch
 
 
 def unwrap_schedule(scheduler, num_steps=10):

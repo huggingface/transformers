@@ -12,25 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import copy
-import sys
-import os.path
-import shutil
-import tempfile
 import json
-import random
-import uuid
-
-import unittest
 import logging
+import os.path
+import random
+import shutil
+import sys
+import tempfile
+import unittest
+import uuid
 
 from transformers import is_torch_available
 
 from .utils import CACHE_DIR, require_torch, slow, torch_device
+
 
 if is_torch_available():
     import torch

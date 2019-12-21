@@ -21,6 +21,7 @@ import logging
 
 from .configuration_bert import BertConfig
 
+
 logger = logging.getLogger(__name__)
 
 ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {

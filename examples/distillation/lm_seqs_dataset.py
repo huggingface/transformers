@@ -15,10 +15,10 @@
 """ Dataset to distilled models
     adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-import numpy as np
 from utils import logger
 
 

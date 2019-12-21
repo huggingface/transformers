@@ -14,23 +14,24 @@
 # limitations under the License.
 """Convert BERT checkpoint."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import os
 import argparse
+import logging
+import os
+
 import torch
 
 from transformers import (
     CONFIG_NAME,
     WEIGHTS_NAME,
     XLNetConfig,
-    XLNetLMHeadModel,
     XLNetForQuestionAnswering,
     XLNetForSequenceClassification,
+    XLNetLMHeadModel,
     load_tf_weights_in_xlnet,
 )
+
 
 GLUE_TASKS_NUM_LABELS = {
     "cola": 2,
@@ -44,7 +45,6 @@ GLUE_TASKS_NUM_LABELS = {
     "wnli": 2,
 }
 
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

@@ -16,9 +16,12 @@
 Preprocessing script before training DistilBERT.
 Specific to BERT -> DistilBERT.
 """
-from transformers import BertForMaskedLM, RobertaForMaskedLM
-import torch
 import argparse
+
+import torch
+
+from transformers import BertForMaskedLM, RobertaForMaskedLM
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

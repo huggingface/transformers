@@ -14,16 +14,20 @@
 # limitations under the License.
 """PyTorch ALBERT model. """
 
-import os
-import math
 import logging
+import math
+import os
+
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
-from transformers.modeling_utils import PreTrainedModel
+
 from transformers.configuration_albert import AlbertConfig
-from transformers.modeling_bert import BertEmbeddings, BertSelfAttention, prune_linear_layer, ACT2FN
+from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
+from transformers.modeling_utils import PreTrainedModel
+
 from .file_utils import add_start_docstrings
+
 
 logger = logging.getLogger(__name__)
 

@@ -18,15 +18,15 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import json
+import logging
 from io import open
 
-import torch
 import numpy
+import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

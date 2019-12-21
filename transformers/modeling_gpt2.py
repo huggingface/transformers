@@ -30,9 +30,10 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings
+from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+
 
 logger = logging.getLogger(__name__)
 

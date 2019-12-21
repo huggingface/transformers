@@ -19,32 +19,33 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob
+import json
 import logging
 import os
 import random
-import json
-from sklearn.metrics import f1_score
 
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except:
-    from tensorboardX import SummaryWriter
-
 from tqdm import tqdm, trange
-
-from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_mmimdb_labels, get_image_transforms
 
 from transformers import (
     WEIGHTS_NAME,
+    AdamW,
+    AlbertConfig,
+    AlbertModel,
+    AlbertTokenizer,
     BertConfig,
     BertModel,
     BertTokenizer,
+    DistilBertConfig,
+    DistilBertModel,
+    DistilBertTokenizer,
+    MMBTConfig,
+    MMBTForClassification,
     RobertaConfig,
     RobertaModel,
     RobertaTokenizer,
@@ -54,17 +55,16 @@ from transformers import (
     XLNetConfig,
     XLNetModel,
     XLNetTokenizer,
-    DistilBertConfig,
-    DistilBertModel,
-    DistilBertTokenizer,
-    AlbertConfig,
-    AlbertModel,
-    AlbertTokenizer,
-    MMBTForClassification,
-    MMBTConfig,
+    get_linear_schedule_with_warmup,
 )
+from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
 
-from transformers import AdamW, get_linear_schedule_with_warmup
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
 
 logger = logging.getLogger(__name__)
 

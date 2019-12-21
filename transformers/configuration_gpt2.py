@@ -24,6 +24,7 @@ from io import open
 
 from .configuration_utils import PretrainedConfig
 
+
 logger = logging.getLogger(__name__)
 
 GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {

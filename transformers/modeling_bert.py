@@ -26,9 +26,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings
+from .modeling_utils import PreTrainedModel, prune_linear_layer
+
 
 logger = logging.getLogger(__name__)
 

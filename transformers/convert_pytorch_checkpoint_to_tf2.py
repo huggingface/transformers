@@ -14,57 +14,58 @@
 # limitations under the License.
 """ Convert pytorch checkpoints to TensorFlow """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import os
 import argparse
+import logging
+import os
+
 import tensorflow as tf
 
-from transformers import is_torch_available, cached_path
-
 from transformers import (
-    load_pytorch_checkpoint_in_tf2_model,
+    ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    AlbertConfig,
     BertConfig,
+    CTRLConfig,
+    DistilBertConfig,
+    GPT2Config,
+    OpenAIGPTConfig,
+    RobertaConfig,
+    T5Config,
+    TFAlbertForMaskedLM,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
-    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    GPT2Config,
-    TFGPT2LMHeadModel,
-    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLNetConfig,
-    TFXLNetLMHeadModel,
-    XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLMConfig,
-    TFXLMWithLMHeadModel,
-    XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    TransfoXLConfig,
-    TFTransfoXLLMHeadModel,
-    TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    OpenAIGPTConfig,
-    TFOpenAIGPTLMHeadModel,
-    OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    RobertaConfig,
-    TFRobertaForMaskedLM,
-    TFRobertaForSequenceClassification,
-    ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    DistilBertConfig,
+    TFCTRLLMHeadModel,
     TFDistilBertForMaskedLM,
     TFDistilBertForQuestionAnswering,
     TFDistilBertForSequenceClassification,
-    DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CTRLConfig,
-    TFCTRLLMHeadModel,
-    CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    AlbertConfig,
-    TFAlbertForMaskedLM,
-    ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    T5Config,
+    TFGPT2LMHeadModel,
+    TFOpenAIGPTLMHeadModel,
+    TFRobertaForMaskedLM,
+    TFRobertaForSequenceClassification,
     TFT5WithLMHeadModel,
-    T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    TFTransfoXLLMHeadModel,
+    TFXLMWithLMHeadModel,
+    TFXLNetLMHeadModel,
+    TransfoXLConfig,
+    XLMConfig,
+    XLNetConfig,
+    cached_path,
+    is_torch_available,
+    load_pytorch_checkpoint_in_tf2_model,
 )
+
 
 if is_torch_available():
     import torch
@@ -157,8 +158,6 @@ else:
         None,
     )
 
-
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

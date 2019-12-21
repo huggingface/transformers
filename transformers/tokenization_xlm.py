@@ -25,8 +25,9 @@ from io import open
 
 import sacremoses as sm
 
-from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_bert import BasicTokenizer
+from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 
