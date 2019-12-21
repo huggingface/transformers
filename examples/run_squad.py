@@ -148,8 +148,10 @@ def train(args, train_dataset, model, tokenizer):
                 inputs['token_type_ids'] = None if args.model_type == 'xlm' else batch[2]
 
             if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[5], 'p_mask': batch[6]})
-
+                inputs.update({'cls_index': batch[5],
+                               'p_mask':       batch[6]})
+                if args.version_2_with_negative:
+                    inputs.update({'is_impossible': batch[7]})
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
