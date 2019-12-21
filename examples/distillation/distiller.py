@@ -19,14 +19,13 @@ import math
 import os
 import time
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
+from tqdm import tqdm
 
 import psutil
 from grouped_batch_sampler import GroupedBatchSampler, create_lengths_groups

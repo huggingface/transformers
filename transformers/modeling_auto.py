@@ -32,7 +32,6 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
-from .file_utils import add_start_docstrings
 from .modeling_albert import (
     ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     AlbertForMaskedLM,
@@ -76,7 +75,6 @@ from .modeling_roberta import (
 )
 from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadModel
 from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
-from .modeling_utils import PreTrainedModel, SequenceSummary
 from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMForQuestionAnswering,

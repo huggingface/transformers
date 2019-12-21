@@ -24,7 +24,6 @@ import os
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.nn.parameter import Parameter
 
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings
@@ -47,7 +46,6 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     """
     try:
         import re
-        import numpy as np
         import tensorflow as tf
     except ImportError:
         logger.error(

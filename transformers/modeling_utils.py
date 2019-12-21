@@ -20,7 +20,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import logging
 import os
 
-import six
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss

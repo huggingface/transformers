@@ -20,8 +20,6 @@ import argparse
 import logging
 import os
 
-import tensorflow as tf
-
 from transformers import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,

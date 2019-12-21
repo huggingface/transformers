@@ -20,11 +20,10 @@ from transformers import DistilBertConfig, is_tf_available
 
 from .configuration_common_test import ConfigTester
 from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf
 
 
 if is_tf_available():
-    import tensorflow as tf
     from transformers.modeling_tf_distilbert import (
         TFDistilBertModel,
         TFDistilBertForMaskedLM,

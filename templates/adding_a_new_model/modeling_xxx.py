@@ -20,7 +20,6 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import itertools
 import logging
 import os
 
@@ -30,7 +29,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_xxx import XxxConfig
 from .file_utils import add_start_docstrings
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)

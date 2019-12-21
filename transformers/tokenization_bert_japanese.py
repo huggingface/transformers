@@ -24,7 +24,6 @@ import unicodedata
 import six
 
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
-from .tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)

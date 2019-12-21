@@ -25,7 +25,6 @@ from io import open
 
 import sacremoses as sm
 
-from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 
 

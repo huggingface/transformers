@@ -22,7 +22,6 @@ import pickle
 import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from itertools import groupby
 from os.path import abspath, exists
 from typing import Dict, List, Optional, Tuple, Union
 

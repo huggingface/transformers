@@ -35,10 +35,6 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFBertForQuestionAnswering,
     )
-    from transformers.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-
-    from .modeling_common_test import CommonTestCases, ids_tensor
-    from .configuration_common_test import ConfigTester
 
 
 @require_tf

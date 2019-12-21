@@ -17,7 +17,6 @@
 """
 
 
-import numpy as np
 import tensorflow as tf
 
 from .modeling_tf_utils import shape_list

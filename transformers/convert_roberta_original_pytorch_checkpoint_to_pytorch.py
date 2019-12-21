@@ -20,7 +20,6 @@ import argparse
 import logging
 import pathlib
 
-import numpy as np
 import torch
 from packaging import version
 

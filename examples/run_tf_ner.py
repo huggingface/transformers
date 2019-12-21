@@ -1,5 +1,4 @@
 # coding=utf-8
-import _pickle as pickle
 import collections
 import datetime
 import glob

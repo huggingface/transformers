@@ -75,8 +75,8 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
     """ Load pytorch checkpoints in a TF 2.0 model
     """
     try:
-        import tensorflow as tf
-        import torch
+        import tensorflow as tf  # noqa: F401
+        import torch  # noqa: F401
     except ImportError as e:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -109,8 +109,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     """ Load pytorch state_dict in a TF 2.0 model.
     """
     try:
-        import torch
-        import tensorflow as tf
+        import torch  # noqa: F401
+        import tensorflow as tf  # noqa: F401
         from tensorflow.python.keras import backend as K
     except ImportError as e:
         logger.error(
@@ -208,8 +208,8 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
         (see https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
     """
     try:
-        import tensorflow as tf
-        import torch
+        import tensorflow as tf  # noqa: F401
+        import torch  # noqa: F401
     except ImportError as e:
         logger.error(
             "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -250,8 +250,8 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     """ Load TF2.0 symbolic weights in a PyTorch model
     """
     try:
-        import tensorflow as tf
-        import torch
+        import tensorflow as tf  # noqa: F401
+        import torch  # noqa: F401
     except ImportError as e:
         logger.error(
             "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
