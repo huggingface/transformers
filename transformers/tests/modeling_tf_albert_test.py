@@ -216,8 +216,7 @@ class TFAlbertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        # for model_name in list(TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        for model_name in ['albert-base-uncased']:
+        for model_name in list(TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFAlbertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
