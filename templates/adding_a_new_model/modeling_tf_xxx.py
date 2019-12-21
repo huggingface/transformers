@@ -49,6 +49,7 @@ TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-tf_model.h5",
 }
 
+
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
 # - tf.keras.layers.Layer for the layers and
