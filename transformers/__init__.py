@@ -71,6 +71,7 @@ from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE
 from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlm_roberta import XLMRobertaConfig, XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_mmbt import MMBTConfig
 
 # Modeling
 if is_torch_available():
@@ -120,13 +121,12 @@ if is_torch_available():
     from .modeling_t5 import (T5PreTrainedModel, T5Model, T5WithLMHeadModel,
                               load_tf_weights_in_t5,
                               T5_PRETRAINED_MODEL_ARCHIVE_MAP)
-
     from .modeling_albert import (AlbertPreTrainedModel, AlbertModel, AlbertForMaskedLM, AlbertForSequenceClassification,
                                 AlbertForQuestionAnswering,
                                 load_tf_weights_in_albert, ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-
     from .modeling_xlm_roberta import (XLMRobertaForMaskedLM, XLMRobertaModel, XLMRobertaForMultipleChoice,
                                        XLMRobertaForSequenceClassification, XLMRobertaForTokenClassification)
+    from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
 
     # Optimization
     from .optimization import (AdamW, get_constant_schedule, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup,
