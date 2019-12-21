@@ -898,7 +898,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
             Indices are selected in ``[-1, 0, ..., config.vocab_size]``
-            All labels set to ``-1`` are ignored (masked), the loss is only
+            All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -989,7 +989,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         if labels is not None:
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, logits.size(-1)),
                             labels.view(-1))
             outputs = (loss,) + outputs

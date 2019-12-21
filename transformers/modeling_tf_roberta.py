@@ -250,12 +250,6 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
     ROBERTA_START_DOCSTRING, ROBERTA_INPUTS_DOCSTRING)
 class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
     r"""
-        **masked_lm_labels**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``masked_lm_labels`` is provided) ``tf.Tensor`` of shape ``(1,)``:
             Masked language modeling loss.

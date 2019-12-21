@@ -112,7 +112,7 @@ class Distiller:
         self.last_log = 0
 
         self.ce_loss_fct = nn.KLDivLoss(reduction='batchmean')
-        self.lm_loss_fct = nn.CrossEntropyLoss(ignore_index=-1)
+        self.lm_loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
         if self.alpha_mse > 0.:
             self.mse_loss_fct = nn.MSELoss(reduction='sum')
         if self.alpha_cos > 0.:
@@ -186,7 +186,7 @@ class Distiller:
         -------
             token_ids: `torch.tensor(bs, seq_length)` - The token ids after the modifications for MLM.
             attn_mask: `torch.tensor(bs, seq_length)` - The attention mask for the self-attention.
-            mlm_labels: `torch.tensor(bs, seq_length)` - The masked languge modeling labels. There is a -1 where there is nothing to predict.
+            mlm_labels: `torch.tensor(bs, seq_length)` - The masked languge modeling labels. There is a -100 where there is nothing to predict.
         """
         token_ids, lengths = batch
         token_ids, lengths = self.round_batch(x=token_ids, lengths=lengths)
@@ -224,7 +224,7 @@ class Distiller:
         _token_ids = _token_ids_mask * (probs == 0).long() + _token_ids_real * (probs == 1).long() + _token_ids_rand * (probs == 2).long()
         token_ids = token_ids.masked_scatter(pred_mask, _token_ids)
 
-        mlm_labels[~pred_mask] = -1 # previously `mlm_labels[1-pred_mask] = -1`, cf pytorch 1.2.0 compatibility
+        mlm_labels[~pred_mask] = -100 # previously `mlm_labels[1-pred_mask] = -1`, cf pytorch 1.2.0 compatibility
 
         # sanity checks
         assert 0 <= token_ids.min() <= token_ids.max() < self.vocab_size
@@ -246,7 +246,7 @@ class Distiller:
         -------
             token_ids: `torch.tensor(bs, seq_length)` - The token ids after the modifications for MLM.
             attn_mask: `torch.tensor(bs, seq_length)` - The attention mask for the self-attention.
-            clm_labels: `torch.tensor(bs, seq_length)` - The causal languge modeling labels. There is a -1 where there is nothing to predict.
+            clm_labels: `torch.tensor(bs, seq_length)` - The causal languge modeling labels. There is a -100 where there is nothing to predict.
         """
         token_ids, lengths = batch
         token_ids, lengths = self.round_batch(x=token_ids, lengths=lengths)
@@ -254,7 +254,7 @@ class Distiller:
 
         attn_mask = (torch.arange(token_ids.size(1), dtype=torch.long, device=lengths.device) < lengths[:, None])
         clm_labels = token_ids.new(token_ids.size()).copy_(token_ids)
-        clm_labels[~attn_mask] = -1 # previously `clm_labels[1-attn_mask] = -1`, cf pytorch 1.2.0 compatibility
+        clm_labels[~attn_mask] = -100 # previously `clm_labels[1-attn_mask] = -1`, cf pytorch 1.2.0 compatibility
 
         # sanity checks
         assert 0 <= token_ids.min() <= token_ids.max() < self.vocab_size
