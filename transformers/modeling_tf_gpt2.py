@@ -454,7 +454,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
 
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = TFGPT2Model.from_pretrained('gpt2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -495,7 +495,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = TFGPT2LMHeadModel.from_pretrained('gpt2')
 
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
 
@@ -574,6 +574,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
     """
     def __init__(self, config, *inputs, **kwargs):
         super(TFGPT2DoubleHeadsModel, self).__init__(config, *inputs, **kwargs)
+        config.num_labels = 1
         self.transformer = TFGPT2MainLayer(config, name='transformer')
         self.multiple_choice_head = TFSequenceSummary(config, initializer_range=config.initializer_range, name='multiple_choice_head')
 

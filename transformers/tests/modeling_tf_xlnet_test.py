@@ -20,7 +20,6 @@ import os
 import unittest
 import json
 import random
-import shutil
 
 from transformers import XLNetConfig, is_tf_available
 
@@ -35,7 +34,7 @@ if is_tf_available():
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_tf, slow
+from .utils import CACHE_DIR, require_tf, slow
 
 
 @require_tf
@@ -64,7 +63,6 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                      num_attention_heads=4,
                      d_inner=128,
                      num_hidden_layers=5,
-                     max_position_embeddings=10,
                      type_sequence_label_size=2,
                      untie_r=True,
                      bi_data=False,
@@ -88,7 +86,6 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
             self.num_attention_heads = num_attention_heads
             self.d_inner = d_inner
             self.num_hidden_layers = num_hidden_layers
-            self.max_position_embeddings = max_position_embeddings
             self.bi_data = bi_data
             self.untie_r = untie_r
             self.same_length = same_length
@@ -122,13 +119,12 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
             config = XLNetConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 d_model=self.hidden_size,
                 n_head=self.num_attention_heads,
                 d_inner=self.d_inner,
                 n_layer=self.num_hidden_layers,
                 untie_r=self.untie_r,
-                max_position_embeddings=self.max_position_embeddings,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 same_length=self.same_length,
@@ -322,10 +318,8 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFXLNetModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFXLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 
