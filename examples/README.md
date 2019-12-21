@@ -737,7 +737,7 @@ acc = 0.7093812375249501
 
 ## MM-IMDb
 
-Based on the script [`run_mmimdb.py`](https://github.com/huggingface/transformers/blob/master/examples/run_mmimdb.py).
+Based on the script [`run_mmimdb.py`](https://github.com/huggingface/transformers/blob/master/examples/mm-imdb/run_mmimdb.py).
 
 [MM-IMDb](http://lisi1.unal.edu.co/mmimdb/) is a Multimodal dataset with around 26,000 movies including images, plots and other metadata.
 
