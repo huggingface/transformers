@@ -303,7 +303,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if not head_mask is None:
+        if head_mask is not None:
             raise NotImplementedError
         else:
             head_mask = [None] * self.num_hidden_layers
