@@ -43,7 +43,7 @@ Quick benchmarks from the script (no other modifications):
 | Titan V | AMP | 26s | 0.8281/0.8568/0.8411 |
 | V100    | FP32 | 35s | 0.8646/0.8359/0.8464 |
 | V100    | AMP | 22s | 0.8646/0.8385/0.8411 |
-| 1080 Ti | FP32 | 55s | - | 
+| 1080 Ti | FP32 | 55s | - |
 
 Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
 
@@ -357,15 +357,21 @@ eval_loss = 0.44457291918821606
 
 Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py).
 
-#### Fine-tuning on SQuAD
+#### Fine-tuning BERT on SQuAD1.0
 
-This example code fine-tunes BERT on the SQuAD dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) 
+This example code fine-tunes BERT on the SQuAD1.0 dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large) 
 on a single tesla V100 16GB. The data for SQuAD can be downloaded with the following links and should be saved in a 
 $SQUAD_DIR directory.
 
 * [train-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v1.1.json)
 * [dev-v1.1.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json)
 * [evaluate-v1.1.py](https://github.com/allenai/bi-att-flow/blob/master/squad/evaluate-v1.1.py)
+
+And for SQuAD2.0, you need to download:
+
+- [train-v2.0.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json)
+- [dev-v2.0.json](https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json)
+- [evaluate-v2.0.py](https://worksheets.codalab.org/rest/bundles/0x6b567e1cf2e041ec80d7098f031c5c9e/contents/blob/)
 
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
@@ -396,7 +402,7 @@ exact_match = 81.22
 #### Distributed training
 
 
-Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
+Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.0:
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
@@ -428,7 +434,9 @@ This fine-tuned model is available as a checkpoint under the reference
 
 #### Fine-tuning XLNet on SQuAD
 
-This example code fine-tunes XLNet on the SQuAD dataset. See above to download the data for SQuAD .
+This example code fine-tunes XLNet on both SQuAD1.0 and SQuAD2.0 dataset. See above to download the data for SQuAD .
+
+##### Command for SQuAD1.0:
 
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
@@ -451,7 +459,32 @@ python /data/home/hlu/transformers/examples/run_squad.py \
     --save_steps 5000
 ```
 
-Training with the previously defined hyper-parameters yields the following results:
+##### Command for SQuAD2.0:
+
+```bash
+export SQUAD_DIR=/path/to/SQUAD
+
+python run_squad.py \
+    --model_type xlnet \
+    --model_name_or_path xlnet-large-cased \
+    --do_train \
+    --do_eval \
+    --version_2_with_negative \
+    --train_file $SQUAD_DIR/train-v2.0.json \
+    --predict_file $SQUAD_DIR/dev-v2.0.json \
+    --learning_rate 3e-5 \
+    --num_train_epochs 4 \
+    --max_seq_length 384 \
+    --doc_stride 128 \
+    --output_dir ./wwm_cased_finetuned_squad/ \
+    --per_gpu_eval_batch_size=2  \
+    --per_gpu_train_batch_size=2   \
+    --save_steps 5000
+```
+
+Larger batch size may improve the performance while costing more memory.
+
+##### Results for SQuAD1.0 with the previously defined hyper-parameters:
 
 ```python
 {
@@ -463,6 +496,24 @@ Training with the previously defined hyper-parameters yields the following resul
 "HasAns_total": 10570
 }
 ```
+
+##### Results for SQuAD2.0 with the previously defined hyper-parameters:
+
+```python
+{
+"exact": 80.4177545691906,
+"f1": 84.07154997729623,
+"total": 11873,
+"HasAns_exact": 76.73751686909581,
+"HasAns_f1": 84.05558584352873,
+"HasAns_total": 5928,
+"NoAns_exact": 84.0874684608915,
+"NoAns_f1": 84.0874684608915,
+"NoAns_total": 5945
+}
+```
+
+
 
 ## Named Entity Recognition
 
