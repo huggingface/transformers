@@ -188,7 +188,7 @@ class RobertaModel(BertModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaModel.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -236,7 +236,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForMaskedLM.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
@@ -327,7 +327,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForSequenceClassification.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, logits = outputs[:2]
