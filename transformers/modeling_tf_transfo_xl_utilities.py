@@ -16,7 +16,6 @@
 """ A TF 2.0 Adaptive Softmax for Transformer XL model.
 """
 
-from collections import defaultdict
 
 import numpy as np
 import tensorflow as tf

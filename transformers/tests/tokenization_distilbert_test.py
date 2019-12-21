@@ -14,9 +14,7 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
 import unittest
-from io import open
 
 from transformers.tokenization_distilbert import DistilBertTokenizer
 

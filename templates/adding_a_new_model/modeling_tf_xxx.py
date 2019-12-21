@@ -21,14 +21,8 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import copy
 import itertools
-import json
 import logging
-import math
-import os
-import sys
-from io import open
 
 import numpy as np
 import tensorflow as tf

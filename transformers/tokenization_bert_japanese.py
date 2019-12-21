@@ -20,7 +20,6 @@ import collections
 import logging
 import os
 import unicodedata
-from io import open
 
 import six
 

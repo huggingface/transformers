@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-import shutil
 import unittest
 
 from transformers import is_tf_available

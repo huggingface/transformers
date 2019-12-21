@@ -17,7 +17,6 @@
     Directly adapted from https://github.com/kimiyoung/transformer-xl.
 """
 
-from collections import defaultdict
 
 import numpy as np
 import torch

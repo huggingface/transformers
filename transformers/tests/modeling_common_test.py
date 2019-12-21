@@ -47,7 +47,6 @@ if is_torch_available():
     )
 
 if sys.version_info[0] == 2:
-    import cPickle as pickle
 
     class TemporaryDirectory(object):
         """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
@@ -61,8 +60,6 @@ if sys.version_info[0] == 2:
 
 
 else:
-    import pickle
-
     TemporaryDirectory = tempfile.TemporaryDirectory
     unicode = str
 

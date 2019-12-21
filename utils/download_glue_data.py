@@ -20,9 +20,7 @@ rm MSRParaphraseCorpus.msi
 
 import argparse
 import os
-import shutil
 import sys
-import tempfile
 import urllib.request
 import zipfile
 
