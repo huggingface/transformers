@@ -29,7 +29,6 @@ from .configuration_auto import (
     XLMConfig,
     XLNetConfig,
 )
-from .file_utils import add_start_docstrings
 from .modeling_tf_albert import (
     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,

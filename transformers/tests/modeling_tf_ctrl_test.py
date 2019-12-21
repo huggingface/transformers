@@ -24,7 +24,6 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     from transformers.modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel, TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
 
 

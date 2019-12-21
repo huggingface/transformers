@@ -16,9 +16,7 @@ import re
 import string
 from io import open
 
-from tqdm import tqdm
-
-from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
+from transformers.tokenization_bert import BasicTokenizer
 
 
 logger = logging.getLogger(__name__)

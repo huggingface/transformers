@@ -1,7 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from logging import getLogger
 
-from transformers import AutoModel, AutoTokenizer
 from transformers.commands import BaseTransformersCLICommand
 
 

@@ -17,8 +17,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-import regex as re
-
 from .tokenization_gpt2 import GPT2Tokenizer
 
 

@@ -26,7 +26,6 @@ from io import open
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.nn.parameter import Parameter
 
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings

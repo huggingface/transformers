@@ -24,8 +24,7 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
-    from transformers.modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel
 
 
 @require_tf

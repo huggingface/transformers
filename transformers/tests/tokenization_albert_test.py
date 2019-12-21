@@ -17,7 +17,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 
-from transformers.tokenization_albert import SPIECE_UNDERLINE, AlbertTokenizer
+from transformers.tokenization_albert import AlbertTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 

@@ -25,13 +25,11 @@ import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
-from torch.nn.parameter import Parameter
 
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings
 from .modeling_transfo_xl_utilities import LogUniformSampler, ProjectedAdaptiveLogSoftmax, sample_logits
-from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)

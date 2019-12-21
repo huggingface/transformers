@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .configuration_common_test import ConfigTester
 from .modeling_common_test import CommonTestCases, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, torch_device
 
 
 if is_torch_available():

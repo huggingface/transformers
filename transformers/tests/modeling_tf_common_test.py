@@ -24,13 +24,12 @@ import unittest
 
 from transformers import is_tf_available, is_torch_available
 
-from .utils import require_tf, slow
+from .utils import require_tf
 
 
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
-    from transformers import TFPreTrainedModel
 
     # from transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 

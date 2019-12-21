@@ -19,8 +19,8 @@ import unittest
 from transformers import is_torch_available
 
 from .configuration_common_test import ConfigTester
-from .modeling_common_test import CommonTestCases, floats_tensor, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .modeling_common_test import CommonTestCases, ids_tensor
+from .utils import CACHE_DIR, require_torch, slow
 
 
 if is_torch_available():

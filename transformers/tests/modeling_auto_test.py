@@ -37,9 +37,6 @@ if is_torch_available():
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-    from .modeling_common_test import CommonTestCases, ids_tensor
-    from .configuration_common_test import ConfigTester
-
 
 @require_torch
 class AutoModelTest(unittest.TestCase):
