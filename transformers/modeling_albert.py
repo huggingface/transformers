@@ -396,7 +396,7 @@ ALBERT_START_DOCSTRING = r"""    The ALBERT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.AlbertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.AlbertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -410,13 +410,13 @@ ALBERT_INPUTS_DOCSTRING = r"""
             (a) For sequence pairs:
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-                
+
                 ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
 
             (b) For single sequences:
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
-                
+
                 ``token_type_ids:   0   0   0   0  0     0   0``
 
             Albert is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -796,9 +796,9 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         input_text = "[CLS] " + question + " [SEP] " + text + " [SEP]"
         input_ids = tokenizer.encode(input_text)
-        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))] 
+        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))]
         start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)  
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
         print(' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1]))
         # a nice puppet
 

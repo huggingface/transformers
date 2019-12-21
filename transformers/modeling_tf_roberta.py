@@ -111,11 +111,11 @@ ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
     `RoBERTa: A Robustly Optimized BERT Pretraining Approach`_
     by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer,
     Veselin Stoyanov. It is based on Google's BERT model released in 2018.
-    
+
     It builds on BERT and modifies key hyperparameters, removing the next-sentence pretraining
     objective and training with much larger mini-batches and learning rates.
-    
-    This implementation is the same as BertModel with a tiny embeddings tweak as well as a setup for Roberta pretrained 
+
+    This implementation is the same as BertModel with a tiny embeddings tweak as well as a setup for Roberta pretrained
     models.
 
     This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
@@ -144,7 +144,7 @@ ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
             `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
-        config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the 
+        config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -163,7 +163,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
                 ``tokens:         <s> the dog is hairy . </s>``
 
-            Fully encoded sequences or sequence pairs can be obtained using the RobertaTokenizer.encode function with 
+            Fully encoded sequences or sequence pairs can be obtained using the RobertaTokenizer.encode function with
             the ``add_special_tokens`` parameter set to ``True``.
 
             RoBERTa is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -351,7 +351,7 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer 
+    """RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
     ROBERTA_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,

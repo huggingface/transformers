@@ -2,7 +2,7 @@
 Original source: https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e
 
 Note: for legal reasons, we are unable to host MRPC.
-You can either use the version hosted by the SentEval team, which is already tokenized, 
+You can either use the version hosted by the SentEval team, which is already tokenized,
 or you can download the original data from (https://download.microsoft.com/download/D/4/6/D46FF87A-F6B9-4252-AA8B-3604ED519838/MSRParaphraseCorpus.msi) and extract the data from it manually.
 For Windows users, you can run the .msi file. For Mac and Linux users, consider an external library such as 'cabextract' (see below for an example).
 You should then rename and place specific files in a folder (see below for an example).

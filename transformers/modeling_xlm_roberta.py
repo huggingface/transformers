@@ -45,7 +45,7 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
 XLM_ROBERTA_START_DOCSTRING = r"""    The XLM-RoBERTa model was proposed in
     `Unsupervised Cross-lingual Representation Learning at Scale`_
     by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov. It is based on Facebook's RoBERTa model released in 2019.
-    
+
     It is a large multi-lingual language model, trained on 2.5TB of filtered CommonCrawl data.
 
     This implementation is the same as RoBERTa.
@@ -60,7 +60,7 @@ XLM_ROBERTA_START_DOCSTRING = r"""    The XLM-RoBERTa model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the 
+        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -79,7 +79,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
 
                 ``tokens:         <s> the dog is hairy . </s>``
 
-            Fully encoded sequences or sequence pairs can be obtained using the XLMRobertaTokenizer.encode function with 
+            Fully encoded sequences or sequence pairs can be obtained using the XLMRobertaTokenizer.encode function with
             the ``add_special_tokens`` parameter set to ``True``.
 
             XLM-RoBERTa is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -204,7 +204,7 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer 
+    """XLM-RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
     XLM_ROBERTA_START_DOCSTRING,
     XLM_ROBERTA_INPUTS_DOCSTRING,

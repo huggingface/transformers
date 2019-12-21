@@ -75,10 +75,10 @@ class ModalEmbeddings(nn.Module):
         return embeddings
 
 
-MMBT_START_DOCSTRING = r"""    MMBT model was proposed in 
+MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
     `Supervised Multimodal Bitransformers for Classifying Images and Text`_
     by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
-    It's a supervised multimodal bitransformer model that fuses information from text and other image encoders, 
+    It's a supervised multimodal bitransformer model that fuses information from text and other image encoders,
     and obtain state-of-the-art performance on various multimodal classification benchmark tasks.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
@@ -93,15 +93,15 @@ MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
     Parameters:
         config (:class:`~transformers.MMBTConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
-        transformer (:class: `~nn.Module`): A text transformer that is used by MMBT. 
+        transformer (:class: `~nn.Module`): A text transformer that is used by MMBT.
             It should have embeddings, encoder, and pooler attributes.
-        encoder (:class: `~nn.Module`): Encoder for the second modality. 
+        encoder (:class: `~nn.Module`): Encoder for the second modality.
             It should take in a batch of modal inputs and return k, n dimension embeddings.
 """
 
 MMBT_INPUTS_DOCSTRING = r"""    Inputs:
         **input_modal**: ``torch.FloatTensor`` of shape ``(batch_size, ***)``:
-            The other modality data. It will be the shape that the encoder for that type expects. 
+            The other modality data. It will be the shape that the encoder for that type expects.
             e.g. With an Image Encoder, the shape would be (batch_size, channels, height, width)
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
@@ -119,7 +119,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Segment token indices to indicate different portions of the inputs.
         **modal_token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
-            Segment token indices to indicate different portions of the non-text modality. 
+            Segment token indices to indicate different portions of the non-text modality.
             The embeddings from these tokens will be summed with the respective token embeddings for the non-text modality.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.

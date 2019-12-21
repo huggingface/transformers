@@ -553,7 +553,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
 
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
-        
+
         # Add a [CLS] to the vocabulary (we should train it also!)
         # This option is currently not implemented in TF 2.0
         raise NotImplementedError

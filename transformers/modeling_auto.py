@@ -864,7 +864,7 @@ class AutoModelForTokenClassification:
     def from_config(cls, config):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
-    
+
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
@@ -874,7 +874,7 @@ class AutoModelForTokenClassification:
                     - isInstance of `roberta` configuration class: RobertaModel (Roberta model)
 
         Examples::
-    
+
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             model = AutoModelForTokenClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
