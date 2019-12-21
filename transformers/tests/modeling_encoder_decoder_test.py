@@ -15,19 +15,18 @@
 
 import logging
 import unittest
-import pytest
 
 from transformers import is_torch_available
+from .utils import require_torch, slow
 
 if is_torch_available():
     from transformers import BertModel, BertForMaskedLM, Model2Model
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 
+@require_torch
 class EncoderDecoderModelTest(unittest.TestCase):
-    @pytest.mark.slow
+    @slow
     def test_model2model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:

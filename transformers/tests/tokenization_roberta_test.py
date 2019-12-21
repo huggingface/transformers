@@ -17,11 +17,11 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import json
 import unittest
-import pytest
 from io import open
 
 from transformers.tokenization_roberta import RobertaTokenizer, VOCAB_FILES_NAMES
 from .tokenization_tests_commons import CommonTestCases
+from .utils import slow
 
 
 class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
@@ -79,7 +79,7 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
             [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
         )
 
-    @pytest.mark.slow
+    @slow
     def test_sequence_builders(self):
         tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 

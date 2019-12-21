@@ -16,6 +16,8 @@
 """ Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
 
 from __future__ import absolute_import, division, print_function
+from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor, SquadResult
+from transformers.data.metrics.squad_metrics import compute_predictions_logits, compute_predictions_log_probs, squad_evaluate
 
 import argparse
 import logging
@@ -23,11 +25,9 @@ import os
 import random
 import glob
 import timeit
-
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
 
 try:
@@ -43,18 +43,12 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   XLMTokenizer, XLNetConfig,
                                   XLNetForQuestionAnswering,
                                   XLNetTokenizer,
-                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+                                  DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer,
+                                  AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer,
+                                  XLMConfig, XLMForQuestionAnswering, XLMTokenizer,
+                                  )
 
-from transformers import AdamW, get_linear_schedule_with_warmup
-
-from utils_squad import (read_squad_examples, convert_examples_to_features,
-                         RawResult, write_predictions,
-                         RawResultExtended, write_predictions_extended)
-
-# The follwing import is the official SQuAD evaluation script (2.0).
-# You can remove it from the dependencies if you are using this script outside of the library
-# We've added it here for automated tests (see examples/test_examples.py file)
-from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
+from transformers import AdamW, get_linear_schedule_with_warmup, squad_convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +59,8 @@ MODEL_CLASSES = {
     'bert': (BertConfig, BertForQuestionAnswering, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     'xlm': (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
-    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer)
+    'distilbert': (DistilBertConfig, DistilBertForQuestionAnswering, DistilBertTokenizer),
+    'albert': (AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer),
 }
 
 def set_seed(args):
@@ -98,14 +93,16 @@ def train(args, train_dataset, model, tokenizer):
     optimizer_grouped_parameters = [
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
+    ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+
     if args.fp16:
         try:
             from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
@@ -128,22 +125,28 @@ def train(args, train_dataset, model, tokenizer):
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
 
-    global_step = 0
+    global_step = 1
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+    
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {'input_ids':       batch[0],
-                      'attention_mask':  batch[1],
-                      'start_positions': batch[3],
-                      'end_positions':   batch[4]}
+
+            inputs = {
+                'input_ids':       batch[0],
+                'attention_mask':  batch[1],
+                'start_positions': batch[3],
+                'end_positions':   batch[4]
+            }
+
             if args.model_type != 'distilbert':
                 inputs['token_type_ids'] = None if args.model_type == 'xlm' else batch[2]
+
             if args.model_type in ['xlnet', 'xlm']:
                 inputs.update({'cls_index': batch[5],
                                'p_mask':       batch[6]})
@@ -175,8 +178,8 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
+                # Log metrics
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    # Log metrics
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
@@ -185,8 +188,8 @@ def train(args, train_dataset, model, tokenizer):
                     tb_writer.add_scalar('loss', (tr_loss - logging_loss)/args.logging_steps, global_step)
                     logging_loss = tr_loss
 
+                # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
@@ -215,50 +218,72 @@ def evaluate(args, model, tokenizer, prefix=""):
         os.makedirs(args.output_dir)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
+    eval_sampler = SequentialSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu evaluate
-    if args.n_gpu > 1:
+    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
         model = torch.nn.DataParallel(model)
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
     logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
+
     all_results = []
     start_time = timeit.default_timer()
+
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
+
         with torch.no_grad():
-            inputs = {'input_ids':      batch[0],
-                      'attention_mask': batch[1]
-                      }
+            inputs = {
+                'input_ids':      batch[0],
+                'attention_mask': batch[1]
+            }
+            
             if args.model_type != 'distilbert':
                 inputs['token_type_ids'] = None if args.model_type == 'xlm' else batch[2]  # XLM don't use segment_ids
+
             example_indices = batch[3]
+            
+            # XLNet and XLM use more arguments for their predictions
             if args.model_type in ['xlnet', 'xlm']:
-                inputs.update({'cls_index': batch[4],
-                               'p_mask':    batch[5]})
+                inputs.update({'cls_index': batch[4], 'p_mask': batch[5]})
+
             outputs = model(**inputs)
 
         for i, example_index in enumerate(example_indices):
             eval_feature = features[example_index.item()]
             unique_id = int(eval_feature.unique_id)
-            if args.model_type in ['xlnet', 'xlm']:
-                # XLNet uses a more complex post-processing procedure
-                result = RawResultExtended(unique_id            = unique_id,
-                                           start_top_log_probs  = to_list(outputs[0][i]),
-                                           start_top_index      = to_list(outputs[1][i]),
-                                           end_top_log_probs    = to_list(outputs[2][i]),
-                                           end_top_index        = to_list(outputs[3][i]),
-                                           cls_logits           = to_list(outputs[4][i]))
+
+            output = [to_list(output[i]) for output in outputs]
+
+            # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
+            # models only use two.
+            if len(output) >= 5:
+                start_logits = output[0]
+                start_top_index = output[1]
+                end_logits = output[2]
+                end_top_index = output[3]
+                cls_logits = output[4]
+
+                result = SquadResult(
+                    unique_id, start_logits, end_logits, 
+                    start_top_index=start_top_index, 
+                    end_top_index=end_top_index, 
+                    cls_logits=cls_logits
+                )
+
             else:
-                result = RawResult(unique_id    = unique_id,
-                                   start_logits = to_list(outputs[0][i]),
-                                   end_logits   = to_list(outputs[1][i]))
+                start_logits, end_logits = output
+                result = SquadResult(
+                    unique_id, start_logits, end_logits
+                )
+
             all_results.append(result)
 
     evalTime = timeit.default_timer() - start_time
@@ -267,63 +292,84 @@ def evaluate(args, model, tokenizer, prefix=""):
     # Compute predictions
     output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
     output_nbest_file = os.path.join(args.output_dir, "nbest_predictions_{}.json".format(prefix))
+
     if args.version_2_with_negative:
         output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
     else:
         output_null_log_odds_file = None
 
+    # XLNet and XLM use a more complex post-processing procedure
     if args.model_type in ['xlnet', 'xlm']:
-        # XLNet uses a more complex post-processing procedure
-        write_predictions_extended(examples, features, all_results, args.n_best_size,
+        start_n_top = model.config.start_n_top if hasattr(model, "config") else model.module.config.start_n_top
+        end_n_top = model.config.end_n_top if hasattr(model, "config") else model.module.config.end_n_top
+
+        predictions = compute_predictions_log_probs(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, output_prediction_file,
-                        output_nbest_file, output_null_log_odds_file, args.predict_file,
-                        model.config.start_n_top, model.config.end_n_top,
+                        output_nbest_file, output_null_log_odds_file,
+                        start_n_top, end_n_top,
                         args.version_2_with_negative, tokenizer, args.verbose_logging)
     else:
-        write_predictions(examples, features, all_results, args.n_best_size,
+        predictions = compute_predictions_logits(examples, features, all_results, args.n_best_size,
                         args.max_answer_length, args.do_lower_case, output_prediction_file,
                         output_nbest_file, output_null_log_odds_file, args.verbose_logging,
                         args.version_2_with_negative, args.null_score_diff_threshold)
 
-    # Evaluate with the official SQuAD script
-    evaluate_options = EVAL_OPTS(data_file=args.predict_file,
-                                 pred_file=output_prediction_file,
-                                 na_prob_file=output_null_log_odds_file)
-    results = evaluate_on_squad(evaluate_options)
+    # Compute the F1 and exact scores.
+    results = squad_evaluate(examples, predictions)
     return results
-
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
     if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
-    input_file = args.predict_file if evaluate else args.train_file
-    cached_features_file = os.path.join(os.path.dirname(input_file), 'cached_{}_{}_{}'.format(
+    input_dir = args.data_dir if args.data_dir else "."
+    cached_features_file = os.path.join(input_dir, 'cached_{}_{}_{}'.format(
         'dev' if evaluate else 'train',
         list(filter(None, args.model_name_or_path.split('/'))).pop(),
-        str(args.max_seq_length)))
+        str(args.max_seq_length))
+    )
+
+    # Init features and dataset from cache if it exists
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features_and_dataset = torch.load(cached_features_file)
+        features, dataset = features_and_dataset["features"], features_and_dataset["dataset"]
     else:
-        logger.info("Creating features from dataset file at %s", input_file)
-        examples = read_squad_examples(input_file=input_file,
-                                                is_training=not evaluate,
-                                                version_2_with_negative=args.version_2_with_negative)
-        features = convert_examples_to_features(examples=examples,
-                                                tokenizer=tokenizer,
-                                                max_seq_length=args.max_seq_length,
-                                                doc_stride=args.doc_stride,
-                                                max_query_length=args.max_query_length,
-                                                is_training=not evaluate,
-                                                cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
-                                                pad_token_segment_id=3 if args.model_type in ['xlnet'] else 0,
-                                                cls_token_at_end=True if args.model_type in ['xlnet'] else False,
-                                                sequence_a_is_doc=True if args.model_type in ['xlnet'] else False)
+        logger.info("Creating features from dataset file at %s", input_dir)
+
+        if not args.data_dir and ((evaluate and not args.predict_file) or (not evaluate and not args.train_file)):
+            try:
+                import tensorflow_datasets as tfds
+            except ImportError:
+                raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
+
+            if args.version_2_with_negative:
+                logger.warn("tensorflow_datasets does not handle version 2 of SQuAD.")
+
+            tfds_examples = tfds.load("squad")
+            examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=evaluate)
+        else:
+            processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
+
+            if evaluate:
+                examples = processor.get_dev_examples(args.data_dir, filename=args.predict_file)
+            else:
+                examples = processor.get_train_examples(args.data_dir, filename=args.train_file)
+
+        features, dataset = squad_convert_examples_to_features( 
+            examples=examples,
+            tokenizer=tokenizer,
+            max_seq_length=args.max_seq_length,
+            doc_stride=args.doc_stride,
+            max_query_length=args.max_query_length,
+            is_training=not evaluate,
+            return_dataset='pt'
+        )
+
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
+            torch.save({"features": features, "dataset": dataset}, cached_features_file)
 
     if args.local_rank == 0 and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
@@ -355,10 +401,6 @@ def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--train_file", default=None, type=str, required=True,
-                        help="SQuAD json for training. E.g., train-v1.1.json")
-    parser.add_argument("--predict_file", default=None, type=str, required=True,
-                        help="SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
@@ -367,6 +409,15 @@ def main():
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     ## Other parameters
+    parser.add_argument("--data_dir", default=None, type=str,
+                        help="The input data dir. Should contain the .json files for the task." +
+                             "If no data dir or train/predict files are specified, will run with tensorflow_datasets.")
+    parser.add_argument("--train_file", default=None, type=str,
+                        help="The input training file. If a data dir is specified, will look for the file there" +
+                             "If no data dir or train/predict files are specified, will run with tensorflow_datasets.")
+    parser.add_argument("--predict_file", default=None, type=str,
+                        help="The input evaluation file. If a data dir is specified, will look for the file there" +
+                             "If no data dir or train/predict files are specified, will run with tensorflow_datasets.")
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -405,7 +456,7 @@ def main():
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--weight_decay", default=0.0, type=float,
-                        help="Weight deay if we apply some.")
+                        help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
@@ -540,7 +591,7 @@ def main():
         torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(args.output_dir)
+        model = model_class.from_pretrained(args.output_dir, force_download=True)
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         model.to(args.device)
 
@@ -548,17 +599,23 @@ def main():
     # Evaluation - we can ask to evaluate all the checkpoints (sub-directories) in a directory
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        checkpoints = [args.output_dir]
-        if args.eval_all_checkpoints:
-            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
-            logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
+
+        if args.do_train:
+            logger.info("Loading checkpoints saved during training for evaluation")
+            checkpoints = [args.output_dir]
+            if args.eval_all_checkpoints:
+                checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+                logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce model loading logs
+        else:
+            logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
+            checkpoints = [args.model_name_or_path]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
         for checkpoint in checkpoints:
             # Reload the model
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
-            model = model_class.from_pretrained(checkpoint)
+            model = model_class.from_pretrained(checkpoint, force_download=True)
             model.to(args.device)
 
             # Evaluate

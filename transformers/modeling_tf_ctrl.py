@@ -95,7 +95,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False):
         v, k, q, mask, layer_past, attention_mask, head_mask = inputs
-        batch_size = q.shape[0]
+        batch_size = shape_list(q)[0]
 
         q = self.Wq(q)
         k = self.Wk(k)
@@ -400,7 +400,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **past**:
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -418,7 +418,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
 
         tokenizer = CTRLTokenizer.from_pretrained('ctrl')
         model = TFCTRLModel.from_pretrained('ctrl')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -462,7 +462,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **past**:
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``tf.Tensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
@@ -481,7 +481,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         tokenizer = CTRLTokenizer.from_pretrained('ctrl')
         model = TFCTRLLMHeadModel.from_pretrained('ctrl')
 
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=input_ids)
         loss, logits = outputs[:2]
 

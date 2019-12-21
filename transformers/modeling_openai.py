@@ -50,8 +50,10 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
 
     logger.info("Loading weights from {}".format(openai_checkpoint_folder_path))
 
-    names = json.load(open(openai_checkpoint_folder_path + '/parameters_names.json', "r", encoding='utf-8'))
-    shapes = json.load(open(openai_checkpoint_folder_path + '/params_shapes.json', "r", encoding='utf-8'))
+    with open(openai_checkpoint_folder_path + '/parameters_names.json', "r", encoding='utf-8') as names_handle:
+        names = json.load(names_handle)
+    with open(openai_checkpoint_folder_path + '/params_shapes.json', "r", encoding='utf-8') as shapes_handle:
+        shapes = json.load(shapes_handle)
     offsets = np.cumsum([np.prod(shape) for shape in shapes])
     init_params = [np.load(openai_checkpoint_folder_path + '/params_{}.npy'.format(n)) for n in range(10)]
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
@@ -347,7 +349,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = OpenAIGPTModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -489,7 +491,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=input_ids)
         loss, logits = outputs[:2]
 
@@ -588,6 +590,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
         super(OpenAIGPTDoubleHeadsModel, self).__init__(config)
 
+        config.num_labels = 1
         self.transformer = OpenAIGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)

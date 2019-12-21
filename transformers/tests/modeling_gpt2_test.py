@@ -17,21 +17,19 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
-import shutil
 
 from transformers import is_torch_available
 
 if is_torch_available():
     from transformers import (GPT2Config, GPT2Model, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     GPT2LMHeadModel, GPT2DoubleHeadsModel)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
+@require_torch
 class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
@@ -111,7 +109,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = GPT2Config(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 n_embd=self.hidden_size,
                 n_layer=self.num_hidden_layers,
                 n_head=self.num_attention_heads,
@@ -136,6 +134,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2Model(config=config)
+            model.to(torch_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -153,6 +152,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2LMHeadModel(config)
+            model.to(torch_device)
             model.eval()
 
             loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -171,6 +171,7 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_double_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args):
             model = GPT2DoubleHeadsModel(config)
+            model.to(torch_device)
             model.eval()
 
 
@@ -235,12 +236,10 @@ class GPT2ModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = GPT2Model.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = GPT2Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

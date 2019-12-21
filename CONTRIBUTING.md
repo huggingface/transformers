@@ -106,7 +106,7 @@ Follow these steps to start contributing:
    ```bash
    $ git clone git@github.com:<your Github handle>/transformers.git
    $ cd transformers
-   $ git remote add upstream git@github.com:huggingface/transformers.git
+   $ git remote add upstream https://github.com/huggingface/transformers.git
    ```
 
 3. Create a new branch to hold your development changes:
@@ -168,7 +168,7 @@ Follow these steps to start contributing:
    to be merged;
 4. Make sure pre-existing tests still pass;
 5. Add high-coverage tests. No quality test, no merge;
-6. All public methods must have informative doctrings;
+6. All public methods must have informative docstrings;
 
 
 ### Style guide

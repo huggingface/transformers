@@ -5,7 +5,7 @@ boto3
 # Used for downloading models over HTTP
 requests
 # For OpenAI GPT
-regex
+regex != 2019.12.17
 # For XLNet
 sentencepiece
 # For XLM

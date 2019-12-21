@@ -42,7 +42,7 @@ class XLMConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `XLMModel`.
 
     Args:
-        vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `XLMModel`.
+        vocab_size: Vocabulary size of `inputs_ids` in `XLMModel`.
         d_model: Size of the encoder layers and the pooler layer.
         n_layer: Number of hidden layers in the Transformer encoder.
         n_head: Number of attention heads for each attention layer in
@@ -81,7 +81,7 @@ class XLMConfig(PretrainedConfig):
     pretrained_config_archive_map = XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file=30145,
+                 vocab_size=30145,
                  emb_dim=2048,
                  n_layers=12,
                  n_heads=16,
@@ -103,9 +103,6 @@ class XLMConfig(PretrainedConfig):
                  unk_index=3,
                  mask_index=5,
                  is_encoder=True,
-
-                 finetuning_task=None,
-                 num_labels=2,
                  summary_type='first',
                  summary_use_proj=True,
                  summary_activation=None,
@@ -117,56 +114,46 @@ class XLMConfig(PretrainedConfig):
         """Constructs XLMConfig.
         """
         super(XLMConfig, self).__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.emb_dim = emb_dim
+        self.n_layers = n_layers
+        self.n_heads = n_heads
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.gelu_activation = gelu_activation
+        self.sinusoidal_embeddings = sinusoidal_embeddings
+        self.causal = causal
+        self.asm = asm
+        self.n_langs = n_langs
+        self.use_lang_emb = use_lang_emb
+        self.layer_norm_eps = layer_norm_eps
+        self.bos_index = bos_index
+        self.eos_index = eos_index
+        self.pad_index = pad_index
+        self.unk_index = unk_index
+        self.mask_index = mask_index
+        self.is_encoder = is_encoder
+        self.max_position_embeddings = max_position_embeddings
+        self.embed_init_std = embed_init_std
+        self.init_std = init_std
+        self.summary_type = summary_type
+        self.summary_use_proj = summary_use_proj
+        self.summary_activation = summary_activation
+        self.summary_proj_to_labels = summary_proj_to_labels
+        self.summary_first_dropout = summary_first_dropout
+        self.start_n_top = start_n_top
+        self.end_n_top = end_n_top
 
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.n_words = vocab_size_or_config_json_file
-            self.emb_dim = emb_dim
-            self.n_layers = n_layers
-            self.n_heads = n_heads
-            self.dropout = dropout
-            self.attention_dropout = attention_dropout
-            self.gelu_activation = gelu_activation
-            self.sinusoidal_embeddings = sinusoidal_embeddings
-            self.causal = causal
-            self.asm = asm
-            self.n_langs = n_langs
-            self.use_lang_emb = use_lang_emb
-            self.layer_norm_eps = layer_norm_eps
-            self.bos_index = bos_index
-            self.eos_index = eos_index
-            self.pad_index = pad_index
-            self.unk_index = unk_index
-            self.mask_index = mask_index
-            self.is_encoder = is_encoder
-            self.max_position_embeddings = max_position_embeddings
-            self.embed_init_std = embed_init_std
-            self.init_std = init_std
-            self.finetuning_task = finetuning_task
-            self.num_labels = num_labels
-            self.summary_type = summary_type
-            self.summary_use_proj = summary_use_proj
-            self.summary_activation = summary_activation
-            self.summary_proj_to_labels = summary_proj_to_labels
-            self.summary_first_dropout = summary_first_dropout
-            self.start_n_top = start_n_top
-            self.end_n_top = end_n_top
-        else:
-            raise ValueError("First argument must be either a vocabulary size (int)"
-                             " or the path to a pretrained model config file (str)")
+        if "n_words" in kwargs:
+            self.n_words = kwargs["n_words"]
 
     @property
-    def vocab_size(self):
-        return self.n_words
+    def n_words(self):  # For backward compatibility
+        return self.vocab_size
 
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self.n_words = value
+    @n_words.setter
+    def n_words(self, value):  # For backward compatibility
+        self.vocab_size = value
 
     @property
     def hidden_size(self):

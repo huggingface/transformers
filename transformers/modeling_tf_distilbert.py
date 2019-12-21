@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-tf_model.h5",
-    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-tf_model.h5"
+    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-tf_model.h5",
+    'distilbert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-tf_model.h5",
 }
 
 
@@ -137,9 +138,9 @@ class TFEmbeddings(tf.keras.layers.Layer):
             input_ids, position_ids = inputs
 
         if input_ids is not None:
-            seq_length = tf.shape(input_ids)[1]
+            seq_length = shape_list(input_ids)[1]
         else:
-            seq_length = tf.shape(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[1]
 
         if position_ids is None:
             position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
@@ -160,8 +161,8 @@ class TFEmbeddings(tf.keras.layers.Layer):
             Returns:
                 float32 tensor with shape [batch_size, length, vocab_size].
         """
-        batch_size = tf.shape(inputs)[0]
-        length = tf.shape(inputs)[1]
+        batch_size = shape_list(inputs)[0]
+        length = shape_list(inputs)[1]
 
         x = tf.reshape(inputs, [-1, self.dim])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
@@ -701,6 +702,53 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
 
         outputs = (logits,) + distilbert_output[1:]
         return outputs  # logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""DistilBert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    DISTILBERT_START_DOCSTRING, DISTILBERT_INPUTS_DOCSTRING)
+class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
+    r"""
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
+            Classification scores (before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+    Examples::
+        import tensorflow as tf
+        from transformers import DistilBertTokenizer, TFDistilBertForTokenClassification
+        tokenizer = DistilBertTokenizer.from_pretrained('bert-base-uncased')
+        model = TFDistilBertForTokenClassification.from_pretrained('bert-base-uncased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+    """
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFDistilBertForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.distilbert = TFDistilBertMainLayer(config, name='distilbert')
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.classifier = tf.keras.layers.Dense(config.num_labels,
+                                                kernel_initializer=get_initializer(config.initializer_range),
+                                                name='classifier')
+
+    def call(self, inputs, **kwargs):
+        outputs = self.distilbert(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=kwargs.get('training', False))
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # scores, (hidden_states), (attentions)
 
 
 @add_start_docstrings("""DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of

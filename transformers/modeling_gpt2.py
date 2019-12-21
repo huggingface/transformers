@@ -329,7 +329,7 @@ class GPT2Model(GPT2PreTrainedModel):
         **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
             Sequence of hidden-states at the last layer of the model.
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
             should not be passed as input ids as they have already been computed.
@@ -345,7 +345,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2Model.from_pretrained('gpt2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -503,7 +503,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
             should not be passed as input ids as they have already been computed.
@@ -523,7 +523,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2LMHeadModel.from_pretrained('gpt2')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=input_ids)
         loss, logits = outputs[:2]
 
@@ -596,7 +596,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         **mc_prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, num_choices)``
             Prediction scores of the multiplechoice classification head (scores for each choice before SoftMax).
         **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
             should not be passed as input ids as they have already been computed.
@@ -634,6 +634,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """
     def __init__(self, config):
         super(GPT2DoubleHeadsModel, self).__init__(config)
+        config.num_labels = 1
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)

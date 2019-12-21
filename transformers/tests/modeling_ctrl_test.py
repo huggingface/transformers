@@ -16,8 +16,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import pytest
-import shutil
 import pdb
 
 from transformers import is_torch_available
@@ -25,13 +23,13 @@ from transformers import is_torch_available
 if is_torch_available():
     from transformers import (CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
                                     CTRLLMHeadModel)
-else:
-    pytestmark = pytest.mark.skip("Require Torch")
 
 from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
+@require_torch
 class CTRLModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()
@@ -115,7 +113,7 @@ class CTRLModelTest(CommonTestCases.CommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = CTRLConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 n_embd=self.hidden_size,
                 n_layer=self.num_hidden_layers,
                 n_head=self.num_attention_heads,
@@ -140,6 +138,7 @@ class CTRLModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = CTRLModel(config=config)
+            model.to(torch_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -157,6 +156,7 @@ class CTRLModelTest(CommonTestCases.CommonModelTester):
 
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = CTRLLMHeadModel(config)
+            model.to(torch_device)
             model.eval()
 
             loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -202,12 +202,10 @@ class CTRLModelTest(CommonTestCases.CommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = CTRLModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = CTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

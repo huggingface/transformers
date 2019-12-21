@@ -59,12 +59,14 @@ class PreTrainedEncoderDecoder(nn.Module):
             encoder_pretrained_model_name_or_path: information necessary to initiate the encoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/encoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path: information necessary to initiate the decoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/decoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
@@ -164,7 +166,39 @@ class PreTrainedEncoderDecoder(nn.Module):
 
         We save the encoder' and decoder's parameters in two separate directories.
         """
+
+        # If the root output directory does not exist, create it 
+        if not os.path.exists(save_directory):
+            os.mkdir(save_directory)
+
+        # Check whether the output directory is empty or not
+        sub_directories = [directory for directory in os.listdir(save_directory)
+            if os.path.isdir(os.path.join(save_directory, directory))]
+
+        if len(sub_directories) > 0:
+            if "encoder" in sub_directories and "decoder" in sub_directories:
+                print("WARNING: there is an older version of encoder-decoder saved in" +\
+                    " the output directory. The default behaviour is to overwrite them.")
+
+            # Empty the output directory
+            for directory_to_remove in sub_directories:
+                # Remove all files into the subdirectory
+                files_to_remove = os.listdir(os.path.join(save_directory, directory_to_remove))
+                for file_to_remove in files_to_remove:
+                    os.remove(os.path.join(save_directory, directory_to_remove, file_to_remove))
+                # Remove the subdirectory itself
+                os.rmdir(os.path.join(save_directory, directory_to_remove))
+
+            assert(len(os.listdir(save_directory)) == 0) # sanity check
+
+        # Create the "encoder" directory inside the output directory and save the encoder into it
+        if not os.path.exists(os.path.join(save_directory, "encoder")):
+            os.mkdir(os.path.join(save_directory, "encoder"))
         self.encoder.save_pretrained(os.path.join(save_directory, "encoder"))
+
+        # Create the "encoder" directory inside the output directory and save the decoder into it
+        if not os.path.exists(os.path.join(save_directory, "decoder")):
+            os.mkdir(os.path.join(save_directory, "decoder"))
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
     def forward(self, encoder_input_ids, decoder_input_ids, **kwargs):
@@ -217,9 +251,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
         if encoder_hidden_states is None:
             encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[
-                0
-            ]  # output the last layer hidden state
+            encoder_hidden_states = encoder_outputs[0]
         else:
             encoder_outputs = ()
 

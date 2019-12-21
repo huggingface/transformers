@@ -226,7 +226,7 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
 
         args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        eval_sampler = SequentialSampler(eval_dataset)
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         # multi-gpu evaluate

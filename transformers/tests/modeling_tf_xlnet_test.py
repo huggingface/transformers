@@ -20,8 +20,6 @@ import os
 import unittest
 import json
 import random
-import shutil
-import pytest
 
 from transformers import XLNetConfig, is_tf_available
 
@@ -30,18 +28,21 @@ if is_tf_available():
 
     from transformers.modeling_tf_xlnet import (TFXLNetModel, TFXLNetLMHeadModel,
                                                         TFXLNetForSequenceClassification,
+                                                        TFXLNetForTokenClassification,
                                                         TFXLNetForQuestionAnsweringSimple,
                                                         TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import CACHE_DIR, require_tf, slow
 
+
+@require_tf
 class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes=(TFXLNetModel, TFXLNetLMHeadModel,
                        TFXLNetForSequenceClassification,
+                       TFXLNetForTokenClassification,
                        TFXLNetForQuestionAnsweringSimple) if is_tf_available() else ()
     test_pruning = False
 
@@ -62,7 +63,6 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                      num_attention_heads=4,
                      d_inner=128,
                      num_hidden_layers=5,
-                     max_position_embeddings=10,
                      type_sequence_label_size=2,
                      untie_r=True,
                      bi_data=False,
@@ -86,7 +86,6 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
             self.num_attention_heads = num_attention_heads
             self.d_inner = d_inner
             self.num_hidden_layers = num_hidden_layers
-            self.max_position_embeddings = max_position_embeddings
             self.bi_data = bi_data
             self.untie_r = untie_r
             self.same_length = same_length
@@ -120,13 +119,12 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
             config = XLNetConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 d_model=self.hidden_size,
                 n_head=self.num_attention_heads,
                 d_inner=self.d_inner,
                 n_layer=self.num_hidden_layers,
                 untie_r=self.untie_r,
-                max_position_embeddings=self.max_position_embeddings,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 same_length=self.same_length,
@@ -258,6 +256,26 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 list(list(mem.shape) for mem in result["mems_1"]),
                 [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
 
+        def create_and_check_xlnet_for_token_classification(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
+                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+            config.num_labels = input_ids_1.shape[1]
+            model = TFXLNetForTokenClassification(config)
+            inputs = {'input_ids': input_ids_1,
+                      'attention_mask': input_mask,
+                      # 'token_type_ids': token_type_ids
+                      }
+            logits, mems_1 = model(inputs)
+            result = {
+                "mems_1": [mem.numpy() for mem in mems_1],
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].shape),
+                [self.batch_size, self.seq_length, config.num_labels])
+            self.parent.assertListEqual(
+                list(list(mem.shape) for mem in result["mems_1"]),
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
@@ -282,24 +300,26 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
     def test_xlnet_lm_head(self):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlnet_lm_head(*config_and_inputs) 
+        self.model_tester.create_and_check_xlnet_lm_head(*config_and_inputs)
 
     def test_xlnet_sequence_classif(self):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_sequence_classif(*config_and_inputs)
 
+    def test_xlnet_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlnet_for_token_classification(*config_and_inputs)
+
     def test_xlnet_qa(self):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_qa(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFXLNetModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFXLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

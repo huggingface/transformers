@@ -17,11 +17,10 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
-import pytest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import CACHE_DIR, require_tf, slow
 
 from transformers import RobertaConfig, is_tf_available
 
@@ -32,10 +31,9 @@ if is_tf_available():
                                                           TFRobertaForSequenceClassification,
                                                           TFRobertaForTokenClassification,
                                                           TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFRobertaModel,TFRobertaForMaskedLM,
@@ -110,7 +108,7 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = RobertaConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
                 num_attention_heads=self.num_attention_heads,
@@ -191,22 +189,20 @@ class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFRobertaModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFRobertaModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 
 
 class TFRobertaModelIntegrationTest(unittest.TestCase):
 
-    @pytest.mark.slow
+    @slow
     def test_inference_masked_lm(self):
         model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = [1, 11, 50265]
@@ -224,10 +220,10 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
             numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_no_head(self):
         model = TFRobertaModel.from_pretrained('roberta-base')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
@@ -240,10 +236,10 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
             numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-3)
         )
 
-    @pytest.mark.slow
+    @slow
     def test_inference_classification_head(self):
         model = TFRobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        
+
         input_ids = tf.constant([[    0, 31414,   232,   328,   740,  1140, 12695,    69, 46078,  1588,   2]])
         output = model(input_ids)[0]
         expected_shape = [1, 3]

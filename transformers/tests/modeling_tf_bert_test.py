@@ -17,12 +17,11 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
-import pytest
 import sys
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import CACHE_DIR, require_tf, slow
 
 from transformers import BertConfig, is_tf_available
 
@@ -36,10 +35,9 @@ if is_tf_available():
                                                        TFBertForTokenClassification,
                                                        TFBertForQuestionAnswering,
                                                        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFBertModel, TFBertForMaskedLM, TFBertForNextSentencePrediction,
@@ -115,7 +113,7 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = BertConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
                 num_attention_heads=self.num_attention_heads,
@@ -309,13 +307,11 @@ class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
         for model_name in ['bert-base-uncased']:
-            model = TFBertModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFBertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 if __name__ == "__main__":

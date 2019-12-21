@@ -17,12 +17,11 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
-import pytest
 import sys
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .utils import CACHE_DIR, require_tf, slow
 
 from transformers import CTRLConfig, is_tf_available
 
@@ -30,10 +29,9 @@ if is_tf_available():
     import tensorflow as tf
     from transformers.modeling_tf_ctrl import (TFCTRLModel, TFCTRLLMHeadModel,
                                                 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP)
-else:
-    pytestmark = pytest.mark.skip("Require TensorFlow")
 
 
+@require_tf
 class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel) if is_tf_available() else ()
@@ -113,7 +111,7 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
             config = CTRLConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 n_embd=self.hidden_size,
                 n_layer=self.num_hidden_layers,
                 n_head=self.num_attention_heads,
@@ -188,12 +186,10 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_ctrl_lm_head(*config_and_inputs)
 
-    @pytest.mark.slow
+    @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFCTRLModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFCTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 if __name__ == "__main__":

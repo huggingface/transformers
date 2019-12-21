@@ -33,12 +33,16 @@ PRETRAINED_VOCAB_FILES_MAP = {
     {
         'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
         'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        'distilbert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-vocab.txt",
+        'distilbert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     'distilbert-base-uncased': 512,
     'distilbert-base-uncased-distilled-squad': 512,
+    'distilbert-base-german-cased': 512,
+    'distilbert-base-multilingual-cased': 512,
 }
 
 
@@ -49,12 +53,12 @@ class DistilBertTokenizer(BertTokenizer):
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
-        do_lower_case: Whether to lower case the input. Only has an effect when do_wordpiece_only=False
+        do_lower_case: Whether to lower case the input. Only has an effect when do_basic_tokenize=True
         do_basic_tokenize: Whether to do basic tokenization before wordpiece.
         max_len: An artificial maximum length to truncate tokenized sequences to; Effective maximum length is always the
             minimum of this value (if specified) and the underlying BERT model's sequence length.
         never_split: List of tokens which will never be split during tokenization. Only has an effect when
-            do_wordpiece_only=False
+            do_basic_tokenize=True
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
