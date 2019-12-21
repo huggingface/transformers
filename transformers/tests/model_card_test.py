@@ -34,14 +34,14 @@ class ModelCardTester(unittest.TestCase):
             },
             "metrics": "BLEU and ROUGE-1",
             "evaluation_data": {
-                "Datasets": {"BLEU": "My-great-dataset-v1", "ROUGE-1": "My-short-dataset-v2.1",},
+                "Datasets": {"BLEU": "My-great-dataset-v1", "ROUGE-1": "My-short-dataset-v2.1"},
                 "Preprocessing": "See details on https://arxiv.org/pdf/1810.03993.pdf",
             },
             "training_data": {
                 "Dataset": "English Wikipedia dump dated 2018-12-01",
                 "Preprocessing": "Using SentencePiece vocabulary of size 52k tokens. See details on https://arxiv.org/pdf/1810.03993.pdf",
             },
-            "quantitative_analyses": {"BLEU": 55.1, "ROUGE-1": 76,},
+            "quantitative_analyses": {"BLEU": 55.1, "ROUGE-1": 76},
         }
 
     def test_model_card_common_properties(self):
