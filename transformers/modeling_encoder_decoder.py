@@ -18,9 +18,11 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
+import warnings
 
 import torch
 from torch import nn
+from tqdm import trange
 
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 
@@ -119,8 +121,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         kwargs_common = {
             argument: value
             for argument, value in kwargs.items()
-            if not argument.startswith("encoder_")
-            and not argument.startswith("decoder_")
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
         }
         kwargs_decoder = kwargs_common.copy()
         kwargs_encoder = kwargs_common.copy()
@@ -220,32 +221,7 @@ class PreTrainedEncoderDecoder(nn.Module):
                 Indices of decoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
-        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
-        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
-        # that apply to the model as whole.
-        # We let the specific kwargs override the common ones in case of conflict.
-        kwargs_common = {
-            argument: value
-            for argument, value in kwargs.items()
-            if not argument.startswith("encoder_")
-            and not argument.startswith("decoder_")
-        }
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_encoder.update(
-            {
-                argument[len("encoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("encoder_")
-            }
-        )
-        kwargs_decoder.update(
-            {
-                argument[len("decoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("decoder_")
-            }
-        )
+        kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
 
         # Encode if needed (training, first prediction pass)
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
@@ -255,14 +231,46 @@ class PreTrainedEncoderDecoder(nn.Module):
         else:
             encoder_outputs = ()
 
-        # Decode
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get(
-            "attention_mask", None
-        )
-        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
+        decoder_outputs = self.decoder(decoder_input_ids, encoder_hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
+
+    @staticmethod
+    def prepare_model_kwargs(**kwargs):
+        """ Prepare the encoder and decoder's keyword arguments.
+
+        Keyword arguments come in 3 flavors:
+        - encoder-specific (prefixed by `encoder_`)
+        - decoder-specific (prefixed by `decoder_`)
+        - those that apply to the model as whole.
+
+        We let the specific kwargs override the common ones in case of
+        conflict.
+        """
+        kwargs_common = {
+            argument: value
+            for argument, value in kwargs.items()
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
+        }
+        decoder_kwargs = kwargs_common.copy()
+        encoder_kwargs = kwargs_common.copy()
+        encoder_kwargs.update(
+            {
+                argument[len("encoder_") :]: value
+                for argument, value in kwargs.items()
+                if argument.startswith("encoder_")
+            }
+        )
+        decoder_kwargs.update(
+            {
+                argument[len("decoder_") :]: value
+                for argument, value in kwargs.items()
+                if argument.startswith("decoder_")
+            }
+        )
+        decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)
+        return encoder_kwargs, decoder_kwargs
 
 
 class Model2Model(PreTrainedEncoderDecoder):

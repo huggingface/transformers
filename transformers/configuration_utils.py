@@ -56,7 +56,23 @@ class PretrainedConfig(object):
         self.torchscript = kwargs.pop('torchscript', False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop('use_bfloat16', False)
         self.pruned_heads = kwargs.pop('pruned_heads', {})
+
+        # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_decoder = kwargs.pop('is_decoder', False)
+
+        # Parameters for sequence generation
+        self.max_length = kwargs.pop('max_length', 20)
+        self.do_sample = kwargs.pop('do_sample', False)
+        self.num_beams = kwargs.pop('num_beams', 1)
+        self.temperature = kwargs.pop('temperature', 1.0)
+        self.top_k = kwargs.pop('top_k', 50)
+        self.top_p = kwargs.pop('top_p', 1.0)
+        self.repetition_penalty = kwargs.pop('repetition_penalty', 1.0)
+        self.bos_token_id = kwargs.pop('bos_token_id', 0)
+        self.pad_token_id = kwargs.pop('pad_token_id', 0)
+        self.eos_token_ids = kwargs.pop('eos_token_ids', 0)
+        self.length_penalty = kwargs.pop('length_penalty', 1.)
+        self.num_return_sequences = kwargs.pop('num_return_sequences', 1)
 
         # Fine-tuning task arguments
         self.finetuning_task = kwargs.pop('finetuning_task', None)
