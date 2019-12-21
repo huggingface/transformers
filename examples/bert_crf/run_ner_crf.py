@@ -30,7 +30,6 @@ import numpy as np
 import torch
 from seqeval.metrics import precision_score, recall_score, f1_score
 from tensorboardX import SummaryWriter
-from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
@@ -39,6 +38,7 @@ import sys
 sys.path.append("./")
 from examples.bert_crf.utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 from examples.bert_crf.bert_lstm_crf import BertLstmCrf
+
 from transformers import AdamW, get_linear_schedule_with_warmup, BertModel
 from transformers import WEIGHTS_NAME, BertConfig, BertForTokenClassification, BertTokenizer
 from transformers import RobertaConfig, RobertaForTokenClassification, RobertaTokenizer
