@@ -94,7 +94,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         layer: BertLayer = model.roberta.encoder.layer[i]
         roberta_layer: TransformerSentenceEncoderLayer = roberta_sent_encoder.layers[i]
 
-        ### self attention
+        # self attention
         self_attn: BertSelfAttention = layer.attention.self
         assert (
             roberta_layer.self_attn.k_proj.weight.data.shape
@@ -110,7 +110,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         self_attn.value.weight.data = roberta_layer.self_attn.v_proj.weight
         self_attn.value.bias.data = roberta_layer.self_attn.v_proj.bias
 
-        ### self-attention output
+        # self-attention output
         self_output: BertSelfOutput = layer.attention.output
         assert self_output.dense.weight.shape == roberta_layer.self_attn.out_proj.weight.shape
         self_output.dense.weight = roberta_layer.self_attn.out_proj.weight
@@ -118,20 +118,20 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         self_output.LayerNorm.weight = roberta_layer.self_attn_layer_norm.weight
         self_output.LayerNorm.bias = roberta_layer.self_attn_layer_norm.bias
 
-        ### intermediate
+        # intermediate
         intermediate: BertIntermediate = layer.intermediate
         assert intermediate.dense.weight.shape == roberta_layer.fc1.weight.shape
         intermediate.dense.weight = roberta_layer.fc1.weight
         intermediate.dense.bias = roberta_layer.fc1.bias
 
-        ### output
+        # output
         bert_output: BertOutput = layer.output
         assert bert_output.dense.weight.shape == roberta_layer.fc2.weight.shape
         bert_output.dense.weight = roberta_layer.fc2.weight
         bert_output.dense.bias = roberta_layer.fc2.bias
         bert_output.LayerNorm.weight = roberta_layer.final_layer_norm.weight
         bert_output.LayerNorm.bias = roberta_layer.final_layer_norm.bias
-        #### end of layer
+        # end of layer
 
     if classification_head:
         model.classifier.dense.weight = roberta.model.classification_heads["mnli"].dense.weight
@@ -170,7 +170,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--roberta_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
     )

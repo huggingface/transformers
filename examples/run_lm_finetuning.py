@@ -422,7 +422,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--train_data_file", default=None, type=str, required=True, help="The input training data file (a text file)."
     )
@@ -434,7 +434,7 @@ def main():
         help="The output directory where the model predictions and checkpoints will be written.",
     )
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument(
         "--eval_data_file",
         default=None,

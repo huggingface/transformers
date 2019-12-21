@@ -330,7 +330,7 @@ class XLNetRelativeAttention(nn.Module):
 
     def forward(self, h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems=None, target_mapping=None, head_mask=None):
         if g is not None:
-            ###### Two-stream attention with relative positional encoding.
+            # Two-stream attention with relative positional encoding.
             # content based attention score
             if mems is not None and mems.dim() > 1:
                 cat = torch.cat([mems, h], dim=0)
@@ -346,7 +346,7 @@ class XLNetRelativeAttention(nn.Module):
             # position-based key head
             k_head_r = torch.einsum("ibh,hnd->ibnd", r, self.r)
 
-            ##### h-stream
+            # h-stream
             # content-stream query head
             q_head_h = torch.einsum("ibh,hnd->ibnd", h, self.q)
 
@@ -361,7 +361,7 @@ class XLNetRelativeAttention(nn.Module):
             # post processing
             output_h = self.post_attention(h, attn_vec_h)
 
-            ##### g-stream
+            # g-stream
             # query-stream query head
             q_head_g = torch.einsum("ibh,hnd->ibnd", g, self.q)
 
@@ -391,7 +391,7 @@ class XLNetRelativeAttention(nn.Module):
                 attn_prob = attn_prob_h, attn_prob_g
 
         else:
-            ###### Multi-head attention with relative positional encoding
+            # Multi-head attention with relative positional encoding
             if mems is not None and mems.dim() > 1:
                 cat = torch.cat([mems, h], dim=0)
             else:
@@ -804,7 +804,7 @@ class XLNetModel(XLNetPreTrainedModel):
         dtype_float = next(self.parameters()).dtype
         device = next(self.parameters()).device
 
-        ##### Attention mask
+        # Attention mask
         # causal attention mask
         if self.attn_type == "uni":
             attn_mask = self.create_mask(qlen, mlen)
@@ -849,7 +849,7 @@ class XLNetModel(XLNetPreTrainedModel):
         else:
             non_tgt_mask = None
 
-        ##### Word embeddings and prepare h & g hidden states
+        # Word embeddings and prepare h & g hidden states
         if inputs_embeds is not None:
             word_emb_k = inputs_embeds
         else:
@@ -864,7 +864,7 @@ class XLNetModel(XLNetPreTrainedModel):
         else:
             output_g = None
 
-        ##### Segment embedding
+        # Segment embedding
         if token_type_ids is not None:
             # Convert `token_type_ids` to one-hot `seg_mat`
             if mlen > 0:
@@ -879,7 +879,7 @@ class XLNetModel(XLNetPreTrainedModel):
         else:
             seg_mat = None
 
-        ##### Positional encoding
+        # Positional encoding
         pos_emb = self.relative_positional_encoding(qlen, klen, bsz=bsz)
         pos_emb = self.dropout(pos_emb)
 

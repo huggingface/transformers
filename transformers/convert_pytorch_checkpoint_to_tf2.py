@@ -410,7 +410,7 @@ def convert_all_pt_checkpoints_to_tf(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--tf_dump_path", default=None, type=str, required=True, help="Path to the output Tensorflow dump file."
     )

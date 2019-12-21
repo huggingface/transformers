@@ -213,16 +213,16 @@ class PositionwiseFF(nn.Module):
 
     def forward(self, inp):
         if self.pre_lnorm:
-            ##### layer normalization + positionwise feed-forward
+            # layer normalization + positionwise feed-forward
             core_out = self.CoreNet(self.layer_norm(inp))
 
-            ##### residual connection
+            # residual connection
             output = core_out + inp
         else:
-            ##### positionwise feed-forward
+            # positionwise feed-forward
             core_out = self.CoreNet(inp)
 
-            ##### residual connection + layer normalization
+            # residual connection + layer normalization
             output = self.layer_norm(inp + core_out)
 
         return output
@@ -316,7 +316,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         r_head_k = r_head_k.view(rlen, self.n_head, self.d_head)  # qlen x n_head x d_head
 
-        #### compute attention score
+        # compute attention score
         rw_head_q = w_head_q + self.r_w_bias  # qlen x bsz x n_head x d_head
         AC = torch.einsum("ibnd,jbnd->ijbn", (rw_head_q, w_head_k))  # qlen x klen x bsz x n_head
 
@@ -328,7 +328,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         attn_score = AC + BD
         attn_score.mul_(self.scale)
 
-        #### compute attention probability
+        # compute attention probability
         if attn_mask is not None and torch.sum(attn_mask).item():
             attn_mask = attn_mask == 1  # Switch to bool
             if attn_mask.dim() == 2:
@@ -352,21 +352,21 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         if head_mask is not None:
             attn_prob = attn_prob * head_mask
 
-        #### compute attention vector
+        # compute attention vector
         attn_vec = torch.einsum("ijbn,jbnd->ibnd", (attn_prob, w_head_v))
 
         # [qlen x bsz x n_head x d_head]
         attn_vec = attn_vec.contiguous().view(attn_vec.size(0), attn_vec.size(1), self.n_head * self.d_head)
 
-        ##### linear projection
+        # linear projection
         attn_out = self.o_net(attn_vec)
         attn_out = self.drop(attn_out)
 
         if self.pre_lnorm:
-            ##### residual connection
+            # residual connection
             outputs = [w + attn_out]
         else:
-            ##### residual connection + layer normalization
+            # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
         if self.output_attentions:

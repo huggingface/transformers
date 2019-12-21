@@ -487,7 +487,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--train_file", default=None, type=str, required=True, help="SWAG csv for training. E.g., train.csv"
     )
@@ -520,7 +520,7 @@ def main():
         help="The output directory where the model checkpoints and predictions will be written.",
     )
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument(
         "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
     )

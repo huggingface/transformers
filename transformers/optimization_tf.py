@@ -178,7 +178,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         return True
 
 
-## Inspired from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
+# Inspired from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
 class GradientAccumulator(object):
     """Distribution strategies-aware gradient accumulation utility."""
 

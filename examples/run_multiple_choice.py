@@ -385,7 +385,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--data_dir",
         default=None,
@@ -422,7 +422,7 @@ def main():
         help="The output directory where the model predictions and checkpoints will be written.",
     )
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument(
         "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
     )

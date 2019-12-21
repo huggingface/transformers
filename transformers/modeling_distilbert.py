@@ -47,7 +47,7 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-### UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE ###
+# UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 def gelu(x):
     return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
@@ -327,7 +327,7 @@ class Transformer(nn.Module):
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
-### INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL ###
+# INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class DistilBertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pretrained models.
