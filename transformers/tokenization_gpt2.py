@@ -80,7 +80,7 @@ def bytes_to_unicode():
     This is a signficant percentage of your normal, say, 32K bpe vocab.
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     """
-    _chr = unichr if sys.version_info[0] == 2 else chr
+    _chr = unichr if sys.version_info[0] == 2 else chr  # noqa: F821
     bs = (
         list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     )

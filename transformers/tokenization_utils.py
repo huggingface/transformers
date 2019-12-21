@@ -252,10 +252,10 @@ class PreTrainedTokenizer(object):
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)) and all(
-                        isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value
+                        isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value  # noqa: F821
                     )
                 else:
-                    assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))
+                    assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))  # noqa: F821
                 setattr(self, key, value)
 
     @classmethod
@@ -567,7 +567,7 @@ class PreTrainedTokenizer(object):
 
         to_add_tokens = []
         for token in new_tokens:
-            assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))
+            assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))  # noqa: F821
             if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
                 token = token.lower()
             if (
@@ -650,11 +650,11 @@ class PreTrainedTokenizer(object):
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES
             if key == "additional_special_tokens":
                 assert isinstance(value, (list, tuple)) and all(
-                    isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value
+                    isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value  # noqa: F821
                 )
                 added_tokens += self.add_tokens(value)
             else:
-                assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))
+                assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))  # noqa: F821
                 added_tokens += self.add_tokens([value])
             logger.info("Assigning %s to the %s key of the tokenizer", value, key)
             setattr(self, key, value)
@@ -746,7 +746,7 @@ class PreTrainedTokenizer(object):
         if tokens is None:
             return None
 
-        if isinstance(tokens, str) or (six.PY2 and isinstance(tokens, unicode)):
+        if isinstance(tokens, str) or (six.PY2 and isinstance(tokens, unicode)):  # noqa: F821
             return self._convert_token_to_id_with_added_voc(tokens)
 
         ids = []

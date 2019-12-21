@@ -184,7 +184,7 @@ class SwagProcessor(DataProcessor):
             lines = []
             for line in reader:
                 if sys.version_info[0] == 2:
-                    line = list(unicode(cell, "utf-8") for cell in line)
+                    line = list(unicode(cell, "utf-8") for cell in line)  # noqa: F821
                 lines.append(line)
             return lines
 

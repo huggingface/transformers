@@ -315,7 +315,9 @@ class TFBertIntermediate(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(
             config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
+        if isinstance(config.hidden_act, str) or (
+            sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)  # noqa: F821
+        ):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
@@ -420,7 +422,9 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
+        if isinstance(config.hidden_act, str) or (
+            sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)  # noqa: F821
+        ):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act

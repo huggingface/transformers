@@ -135,6 +135,14 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
 #
 # See the conversion methods in modeling_tf_pytorch_utils.py for more details
 ####################################################
+
+XxxAttention = nn.Module
+
+XxxIntermediate = nn.Module
+
+XxxOutput = nn.Module
+
+
 class XxxLayer(nn.Module):
     def __init__(self, config):
         super(XxxLayer, self).__init__()
@@ -160,6 +168,16 @@ class XxxLayer(nn.Module):
 # pointers for your model and the weights initialization
 # method if its not fully covered by PreTrainedModel's default method
 ####################################################
+
+XxxLayerNorm = torch.nn.LayerNorm
+
+XxxEmbeddings = nn.Module
+
+XxxEncoder = nn.Module
+
+XxxPooler = nn.Module
+
+
 class XxxPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.

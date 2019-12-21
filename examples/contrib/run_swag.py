@@ -108,7 +108,7 @@ def read_swag_examples(input_file, is_training=True):
         lines = []
         for line in reader:
             if sys.version_info[0] == 2:
-                line = list(unicode(cell, "utf-8") for cell in line)
+                line = list(unicode(cell, "utf-8") for cell in line)  # noqa: F821
             lines.append(line)
 
     if is_training and lines[0][-1] != "label":

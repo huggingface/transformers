@@ -14,8 +14,10 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
+import io
 import os
 from os.path import expanduser
+from typing import List
 
 import requests
 import six
@@ -93,7 +95,7 @@ class HfApi:
         return d["user"]
 
     def logout(self, token):
-        # type: (...) -> void
+        # type: (...) -> None
         """
         Call HF API to log out.
         """
@@ -135,8 +137,7 @@ class HfApi:
             pf.close()
         return urls.access
 
-    def list_objs(self, token):
-        # type: (...) -> List[S3Obj]
+    def list_objs(self, token) -> List[S3Obj]:
         """
         Call HF API to list all stored files for user.
         """
@@ -156,9 +157,7 @@ class TqdmProgressFileReader:
     for implementation details.
     """
 
-    def __init__(
-        self, f  # type: io.BufferedReader
-    ):
+    def __init__(self, f: io.BufferedReader):
         self.f = f
         self.total_size = os.fstat(f.fileno()).st_size  # type: int
         self.pbar = tqdm(total=self.total_size, leave=False)
