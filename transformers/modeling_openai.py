@@ -90,19 +90,19 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
         pointer = model
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-                l = re.split(r"(\d+)", m_name)
+                scope_names = re.split(r"(\d+)", m_name)
             else:
-                l = [m_name]
-            if l[0] == "g":
+                scope_names = [m_name]
+            if scope_names[0] == "g":
                 pointer = getattr(pointer, "weight")
-            elif l[0] == "b":
+            elif scope_names[0] == "b":
                 pointer = getattr(pointer, "bias")
-            elif l[0] == "w":
+            elif scope_names[0] == "w":
                 pointer = getattr(pointer, "weight")
             else:
-                pointer = getattr(pointer, l[0])
-            if len(l) >= 2:
-                num = int(l[1])
+                pointer = getattr(pointer, scope_names[0])
+            if len(scope_names) >= 2:
+                num = int(scope_names[1])
                 pointer = pointer[num]
         try:
             assert pointer.shape == array.shape

@@ -76,7 +76,7 @@ class SwagExample(object):
         return self.__repr__()
 
     def __repr__(self):
-        l = [
+        attributes = [
             "swag_id: {}".format(self.swag_id),
             "context_sentence: {}".format(self.context_sentence),
             "start_ending: {}".format(self.start_ending),
@@ -87,9 +87,9 @@ class SwagExample(object):
         ]
 
         if self.label is not None:
-            l.append("label: {}".format(self.label))
+            attributes.append("label: {}".format(self.label))
 
-        return ", ".join(l)
+        return ", ".join(attributes)
 
 
 class InputFeatures(object):
