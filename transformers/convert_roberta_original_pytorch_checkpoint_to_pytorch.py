@@ -18,16 +18,13 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import numpy as np
-import torch
 import pathlib
 
-import fairseq
+import numpy as np
+import torch
 from packaging import version
 
-if version.parse(fairseq.__version__) < version.parse("0.9.0"):
-    raise Exception("requires fairseq >= 0.9.0")
-
+import fairseq
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
 from transformers.modeling_bert import (
@@ -46,6 +43,11 @@ from transformers.modeling_roberta import (
     RobertaForSequenceClassification,
     RobertaModel,
 )
+
+
+if version.parse(fairseq.__version__) < version.parse("0.9.0"):
+    raise Exception("requires fairseq >= 0.9.0")
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

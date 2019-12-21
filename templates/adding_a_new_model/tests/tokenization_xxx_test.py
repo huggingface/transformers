@@ -18,7 +18,7 @@ import os
 import unittest
 from io import open
 
-from transformers.tokenization_bert import XxxTokenizer, VOCAB_FILES_NAMES
+from transformers.tokenization_bert import VOCAB_FILES_NAMES, XxxTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 

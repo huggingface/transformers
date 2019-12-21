@@ -16,57 +16,57 @@
 """ Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
 
 from __future__ import absolute_import, division, print_function
-from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor, SquadResult
-from transformers.data.metrics.squad_metrics import (
-    compute_predictions_logits,
-    compute_predictions_log_probs,
-    squad_evaluate,
-)
 
 import argparse
+import glob
 import logging
 import os
 import random
-import glob
 import timeit
+
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except:
-    from tensorboardX import SummaryWriter
-
 from tqdm import tqdm, trange
 
 from transformers import (
     WEIGHTS_NAME,
+    AdamW,
+    AlbertConfig,
+    AlbertForQuestionAnswering,
+    AlbertTokenizer,
     BertConfig,
     BertForQuestionAnswering,
     BertTokenizer,
+    DistilBertConfig,
+    DistilBertForQuestionAnswering,
+    DistilBertTokenizer,
+    RobertaConfig,
     RobertaForQuestionAnswering,
     RobertaTokenizer,
-    RobertaConfig,
     XLMConfig,
     XLMForQuestionAnswering,
     XLMTokenizer,
     XLNetConfig,
     XLNetForQuestionAnswering,
     XLNetTokenizer,
-    DistilBertConfig,
-    DistilBertForQuestionAnswering,
-    DistilBertTokenizer,
-    AlbertConfig,
-    AlbertForQuestionAnswering,
-    AlbertTokenizer,
-    XLMConfig,
-    XLMForQuestionAnswering,
-    XLMTokenizer,
+    get_linear_schedule_with_warmup,
+    squad_convert_examples_to_features,
 )
+from transformers.data.metrics.squad_metrics import (
+    compute_predictions_log_probs,
+    compute_predictions_logits,
+    squad_evaluate,
+)
+from transformers.data.processors.squad import SquadResult, SquadV1Processor, SquadV2Processor
 
-from transformers import AdamW, get_linear_schedule_with_warmup, squad_convert_examples_to_features
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
 
 logger = logging.getLogger(__name__)
 

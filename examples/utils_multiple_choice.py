@@ -17,16 +17,17 @@
 
 from __future__ import absolute_import, division, print_function
 
-
+import csv
+import glob
+import json
 import logging
 import os
 import sys
 from io import open
-import json
-import csv
-import glob
-import tqdm
 from typing import List
+
+import tqdm
+
 from transformers import PreTrainedTokenizer
 
 

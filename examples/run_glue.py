@@ -19,54 +19,54 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob
+import json
 import logging
 import os
 import random
-import json
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
+
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    AlbertConfig,
+    AlbertForSequenceClassification,
+    AlbertTokenizer,
+    BertConfig,
+    BertForSequenceClassification,
+    BertTokenizer,
+    DistilBertConfig,
+    DistilBertForSequenceClassification,
+    DistilBertTokenizer,
+    RobertaConfig,
+    RobertaForSequenceClassification,
+    RobertaTokenizer,
+    XLMConfig,
+    XLMForSequenceClassification,
+    XLMRobertaConfig,
+    XLMRobertaForSequenceClassification,
+    XLMRobertaTokenizer,
+    XLMTokenizer,
+    XLNetConfig,
+    XLNetForSequenceClassification,
+    XLNetTokenizer,
+    get_linear_schedule_with_warmup,
+)
+from transformers import glue_compute_metrics as compute_metrics
+from transformers import glue_convert_examples_to_features as convert_examples_to_features
+from transformers import glue_output_modes as output_modes
+from transformers import glue_processors as processors
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
     from tensorboardX import SummaryWriter
 
-from tqdm import tqdm, trange
-
-from transformers import (
-    WEIGHTS_NAME,
-    BertConfig,
-    BertForSequenceClassification,
-    BertTokenizer,
-    RobertaConfig,
-    RobertaForSequenceClassification,
-    RobertaTokenizer,
-    XLMConfig,
-    XLMForSequenceClassification,
-    XLMTokenizer,
-    XLNetConfig,
-    XLNetForSequenceClassification,
-    XLNetTokenizer,
-    DistilBertConfig,
-    DistilBertForSequenceClassification,
-    DistilBertTokenizer,
-    AlbertConfig,
-    AlbertForSequenceClassification,
-    AlbertTokenizer,
-    XLMRobertaConfig,
-    XLMRobertaForSequenceClassification,
-    XLMRobertaTokenizer,
-)
-
-from transformers import AdamW, get_linear_schedule_with_warmup
-
-from transformers import glue_compute_metrics as compute_metrics
-from transformers import glue_output_modes as output_modes
-from transformers import glue_processors as processors
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 

@@ -21,6 +21,7 @@ import logging
 
 from .configuration_roberta import RobertaConfig
 
+
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {

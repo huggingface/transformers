@@ -1,6 +1,6 @@
+import os
 from argparse import ArgumentParser
 from getpass import getpass
-import os
 
 from transformers.commands import BaseTransformersCLICommand
 from transformers.hf_api import HfApi, HfFolder, HTTPError

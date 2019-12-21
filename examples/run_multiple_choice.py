@@ -23,35 +23,34 @@ import logging
 import os
 import random
 
-
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
+
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    BertConfig,
+    BertForMultipleChoice,
+    BertTokenizer,
+    RobertaConfig,
+    RobertaForMultipleChoice,
+    RobertaTokenizer,
+    XLNetConfig,
+    XLNetForMultipleChoice,
+    XLNetTokenizer,
+    get_linear_schedule_with_warmup,
+)
+from utils_multiple_choice import convert_examples_to_features, processors
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
     from tensorboardX import SummaryWriter
 
-from tqdm import tqdm, trange
-
-from transformers import (
-    WEIGHTS_NAME,
-    BertConfig,
-    BertForMultipleChoice,
-    BertTokenizer,
-    XLNetConfig,
-    XLNetForMultipleChoice,
-    XLNetTokenizer,
-    RobertaConfig,
-    RobertaForMultipleChoice,
-    RobertaTokenizer,
-)
-
-from transformers import AdamW, get_linear_schedule_with_warmup
-
-from utils_multiple_choice import convert_examples_to_features, processors
 
 logger = logging.getLogger(__name__)
 

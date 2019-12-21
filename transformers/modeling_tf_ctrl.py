@@ -21,12 +21,14 @@ import logging
 import os
 import sys
 from io import open
+
 import numpy as np
 import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, TFSharedEmbeddings
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
+
 
 logger = logging.getLogger(__name__)
 

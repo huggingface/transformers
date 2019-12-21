@@ -22,6 +22,7 @@ import six
 from requests.exceptions import HTTPError
 from tqdm import tqdm
 
+
 ENDPOINT = "https://huggingface.co"
 
 

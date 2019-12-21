@@ -14,16 +14,15 @@
 # limitations under the License.
 """Convert T5 checkpoint."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import argparse
+import logging
+
 import torch
 
 from transformers import T5Config, T5Model, load_tf_weights_in_t5
 
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

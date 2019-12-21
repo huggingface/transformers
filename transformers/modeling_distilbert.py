@@ -18,25 +18,23 @@
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
+import itertools
 import json
 import logging
 import math
-import copy
 import sys
 from io import open
 
-import itertools
 import numpy as np
-
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings
+from .modeling_utils import PreTrainedModel, prune_linear_layer
 
-import logging
 
 logger = logging.getLogger(__name__)
 

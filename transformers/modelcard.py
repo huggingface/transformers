@@ -23,15 +23,14 @@ import os
 from io import open
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
-
 from .file_utils import (
     CONFIG_NAME,
     MODEL_CARD_NAME,
-    WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
+    WEIGHTS_NAME,
     cached_path,
-    is_remote_url,
     hf_bucket_url,
+    is_remote_url,
 )
 
 

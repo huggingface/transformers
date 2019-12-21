@@ -24,16 +24,16 @@ import time
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.optim
 import torch.optim as optim
 import torch.utils.data as data
-from nltk.tokenize.treebank import TreebankWordDetokenizer
-from torchtext import data as torchtext_data
-from torchtext import datasets
 from tqdm import tqdm, trange
 
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from nltk.tokenize.treebank import TreebankWordDetokenizer
 from pplm_classification_head import ClassificationHead
+from torchtext import data as torchtext_data
+from torchtext import datasets
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
 
 torch.manual_seed(0)
 np.random.seed(0)

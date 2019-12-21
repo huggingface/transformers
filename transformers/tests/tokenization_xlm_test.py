@@ -14,11 +14,11 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import os
 import unittest
-import json
 
-from transformers.tokenization_xlm import XLMTokenizer, VOCAB_FILES_NAMES
+from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 from .utils import slow

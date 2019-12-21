@@ -19,10 +19,12 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import json
 import logging
 import sys
-import six
 from io import open
 
+import six
+
 from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 

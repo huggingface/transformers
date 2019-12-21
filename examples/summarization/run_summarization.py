@@ -1,25 +1,24 @@
 #! /usr/bin/python3
 import argparse
-from collections import namedtuple
 import logging
 import os
 import sys
+from collections import namedtuple
 
 import torch
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
-from transformers import BertTokenizer
-
 from modeling_bertabs import BertAbs, build_predictor
-
+from transformers import BertTokenizer
 from utils_summarization import (
     SummarizationDataset,
-    encode_for_summarization,
     build_mask,
-    fit_to_block_size,
     compute_token_type_ids,
+    encode_for_summarization,
+    fit_to_block_size,
 )
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)

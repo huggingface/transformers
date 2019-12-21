@@ -28,8 +28,8 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlnet import XLNetConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list, get_initializer
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, get_initializer, shape_list
 
 
 logger = logging.getLogger(__name__)

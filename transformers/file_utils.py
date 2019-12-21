@@ -5,26 +5,27 @@ Copyright by the AllenNLP authors.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
+import fnmatch
 import json
 import logging
 import os
-import six
+import sys
 import tempfile
-import fnmatch
+from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
 from io import open
 
 import boto3
+import requests
+import six
 from botocore.config import Config
 from botocore.exceptions import ClientError
-import requests
+from filelock import FileLock
 from tqdm.auto import tqdm
-from contextlib import contextmanager
+
 from . import __version__
 
-from filelock import FileLock
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

@@ -26,19 +26,19 @@ from io import open
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import functional as F
 
+from .configuration_xlnet import XLNetConfig
+from .file_utils import add_start_docstrings
 from .modeling_utils import (
-    PreTrainedModel,
-    prune_linear_layer,
-    SequenceSummary,
     PoolerAnswerClass,
     PoolerEndLogits,
     PoolerStartLogits,
+    PreTrainedModel,
+    SequenceSummary,
+    prune_linear_layer,
 )
-from .configuration_xlnet import XLNetConfig
-from .file_utils import add_start_docstrings
 
 
 logger = logging.getLogger(__name__)

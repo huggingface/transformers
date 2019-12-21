@@ -28,34 +28,33 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
+
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    BertConfig,
+    BertForSequenceClassification,
+    BertTokenizer,
+    DistilBertConfig,
+    DistilBertForSequenceClassification,
+    DistilBertTokenizer,
+    XLMConfig,
+    XLMForSequenceClassification,
+    XLMTokenizer,
+    get_linear_schedule_with_warmup,
+)
+from transformers import glue_convert_examples_to_features as convert_examples_to_features
+from transformers import xnli_compute_metrics as compute_metrics
+from transformers import xnli_output_modes as output_modes
+from transformers import xnli_processors as processors
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
     from tensorboardX import SummaryWriter
 
-from tqdm import tqdm, trange
-
-from transformers import (
-    WEIGHTS_NAME,
-    BertConfig,
-    BertForSequenceClassification,
-    BertTokenizer,
-    XLMConfig,
-    XLMForSequenceClassification,
-    XLMTokenizer,
-    DistilBertConfig,
-    DistilBertForSequenceClassification,
-    DistilBertTokenizer,
-)
-
-from transformers import AdamW, get_linear_schedule_with_warmup
-
-from transformers import xnli_compute_metrics as compute_metrics
-from transformers import xnli_output_modes as output_modes
-from transformers import xnli_processors as processors
-
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
 
 logger = logging.getLogger(__name__)
 

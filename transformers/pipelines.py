@@ -14,35 +14,35 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
 import csv
 import json
+import logging
 import os
 import pickle
-import logging
-import six
-
+import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import groupby
 from os.path import abspath, exists
-from typing import Union, Optional, Tuple, List, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import six
 
 from transformers import (
+    ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AutoConfig,
     AutoTokenizer,
-    PreTrainedTokenizer,
-    PretrainedConfig,
+    BasicTokenizer,
     ModelCard,
+    PretrainedConfig,
+    PreTrainedTokenizer,
     SquadExample,
-    squad_convert_examples_to_features,
     is_tf_available,
     is_torch_available,
-    BasicTokenizer,
-    ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    squad_convert_examples_to_features,
 )
+
 
 if is_tf_available():
     import tensorflow as tf

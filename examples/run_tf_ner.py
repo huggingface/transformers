@@ -1,23 +1,33 @@
 # coding=utf-8
-import datetime
-import os
-import math
-import glob
-import re
-import tensorflow as tf
-import collections
-import numpy as np
-from seqeval import metrics
 import _pickle as pickle
-from absl import logging
-from transformers import TF2_WEIGHTS_NAME, BertConfig, BertTokenizer, TFBertForTokenClassification
-from transformers import RobertaConfig, RobertaTokenizer, TFRobertaForTokenClassification
-from transformers import DistilBertConfig, DistilBertTokenizer, TFDistilBertForTokenClassification
-from transformers import create_optimizer, GradientAccumulator
-from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
+import collections
+import datetime
+import glob
+import math
+import os
+import re
+
+import numpy as np
+import tensorflow as tf
+from absl import app, flags, logging
+
 from fastprogress import master_bar, progress_bar
-from absl import flags
-from absl import app
+from seqeval import metrics
+from transformers import (
+    TF2_WEIGHTS_NAME,
+    BertConfig,
+    BertTokenizer,
+    DistilBertConfig,
+    DistilBertTokenizer,
+    GradientAccumulator,
+    RobertaConfig,
+    RobertaTokenizer,
+    TFBertForTokenClassification,
+    TFDistilBertForTokenClassification,
+    TFRobertaForTokenClassification,
+    create_optimizer,
+)
+from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 
 ALL_MODELS = sum(

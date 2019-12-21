@@ -20,13 +20,13 @@ the model within the original codebase to be able to only save its `state_dict`.
 """
 
 import argparse
-from collections import namedtuple
 import logging
+from collections import namedtuple
+
 import torch
 
-from models.model_builder import AbsSummarizer  # The authors' implementation
 from model_bertabs import BertAbsSummarizer
-
+from models.model_builder import AbsSummarizer  # The authors' implementation
 from transformers import BertTokenizer
 
 

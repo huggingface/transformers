@@ -16,9 +16,12 @@
 Preprocessing script before training the distilled model.
 Specific to RoBERTa -> DistilRoBERTa and GPT2 -> DistilGPT2.
 """
-from transformers import BertForMaskedLM, RobertaForMaskedLM, GPT2LMHeadModel
-import torch
 import argparse
+
+import torch
+
+from transformers import BertForMaskedLM, GPT2LMHeadModel, RobertaForMaskedLM
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

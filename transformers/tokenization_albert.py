@@ -15,12 +15,15 @@
 """ Tokenization classes for ALBERT model."""
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from .tokenization_utils import PreTrainedTokenizer
 import logging
-import unicodedata
-import six
 import os
+import unicodedata
 from shutil import copyfile
+
+import six
+
+from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}

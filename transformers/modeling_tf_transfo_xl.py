@@ -18,11 +18,11 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import os
-import json
-import math
-import logging
 import collections
+import json
+import logging
+import math
+import os
 import sys
 from io import open
 
@@ -30,9 +30,10 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFConv1D, TFSequenceSummary, shape_list, get_initializer
-from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .file_utils import add_start_docstrings
+from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
+from .modeling_tf_utils import TFConv1D, TFPreTrainedModel, TFSequenceSummary, get_initializer, shape_list
+
 
 logger = logging.getLogger(__name__)
 

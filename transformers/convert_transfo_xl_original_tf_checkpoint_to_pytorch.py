@@ -17,6 +17,7 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
+import logging
 import os
 import sys
 from io import open
@@ -24,17 +25,21 @@ from io import open
 import torch
 
 import transformers.tokenization_transfo_xl as data_utils
-
-from transformers import CONFIG_NAME, WEIGHTS_NAME
-from transformers import TransfoXLConfig, TransfoXLLMHeadModel, load_tf_weights_in_transfo_xl
+from transformers import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    TransfoXLConfig,
+    TransfoXLLMHeadModel,
+    load_tf_weights_in_transfo_xl,
+)
 from transformers.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
+
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
     import pickle
 
-import logging
 
 logging.basicConfig(level=logging.INFO)
 

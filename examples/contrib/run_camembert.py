@@ -1,11 +1,11 @@
-from pathlib import Path
 import tarfile
 import urllib.request
+from pathlib import Path
 
 import torch
 
-from transformers.tokenization_camembert import CamembertTokenizer
 from transformers.modeling_camembert import CamembertForMaskedLM
+from transformers.tokenization_camembert import CamembertTokenizer
 
 
 def fill_mask(masked_input, model, tokenizer, topk=5):

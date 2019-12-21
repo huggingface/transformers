@@ -29,62 +29,61 @@ from .configuration_auto import (
     XLMConfig,
     XLNetConfig,
 )
-
+from .file_utils import add_start_docstrings
+from .modeling_tf_albert import (
+    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFAlbertForMaskedLM,
+    TFAlbertForSequenceClassification,
+    TFAlbertModel,
+)
 from .modeling_tf_bert import (
-    TFBertModel,
-    TFBertForMaskedLM,
-    TFBertForSequenceClassification,
-    TFBertForQuestionAnswering,
-    TFBertForTokenClassification,
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFBertForMaskedLM,
+    TFBertForQuestionAnswering,
+    TFBertForSequenceClassification,
+    TFBertForTokenClassification,
+    TFBertModel,
 )
-from .modeling_tf_openai import TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_gpt2 import TFGPT2Model, TFGPT2LMHeadModel, TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_transfo_xl import (
-    TFTransfoXLModel,
-    TFTransfoXLLMHeadModel,
-    TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+from .modeling_tf_ctrl import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, TFCTRLLMHeadModel, TFCTRLModel
+from .modeling_tf_distilbert import (
+    TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFDistilBertForMaskedLM,
+    TFDistilBertForQuestionAnswering,
+    TFDistilBertForSequenceClassification,
+    TFDistilBertForTokenClassification,
+    TFDistilBertModel,
 )
-from .modeling_tf_xlnet import (
-    TFXLNetModel,
-    TFXLNetLMHeadModel,
-    TFXLNetForSequenceClassification,
-    TFXLNetForQuestionAnsweringSimple,
-    TFXLNetForTokenClassification,
-    TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
-)
-from .modeling_tf_xlm import (
-    TFXLMModel,
-    TFXLMWithLMHeadModel,
-    TFXLMForSequenceClassification,
-    TFXLMForQuestionAnsweringSimple,
-    TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-)
+from .modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from .modeling_tf_roberta import (
-    TFRobertaModel,
+    TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
-    TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFRobertaModel,
 )
-from .modeling_tf_distilbert import (
-    TFDistilBertModel,
-    TFDistilBertForQuestionAnswering,
-    TFDistilBertForMaskedLM,
-    TFDistilBertForSequenceClassification,
-    TFDistilBertForTokenClassification,
-    TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+from .modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP, TFT5Model, TFT5WithLMHeadModel
+from .modeling_tf_transfo_xl import (
+    TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFTransfoXLLMHeadModel,
+    TFTransfoXLModel,
 )
-from .modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel, TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
-from .modeling_tf_albert import (
-    TFAlbertModel,
-    TFAlbertForMaskedLM,
-    TFAlbertForSequenceClassification,
-    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+from .modeling_tf_xlm import (
+    TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFXLMForQuestionAnsweringSimple,
+    TFXLMForSequenceClassification,
+    TFXLMModel,
+    TFXLMWithLMHeadModel,
 )
-from .modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
+from .modeling_tf_xlnet import (
+    TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFXLNetForQuestionAnsweringSimple,
+    TFXLNetForSequenceClassification,
+    TFXLNetForTokenClassification,
+    TFXLNetLMHeadModel,
+    TFXLNetModel,
+)
 
-from .file_utils import add_start_docstrings
 
 logger = logging.getLogger(__name__)
 

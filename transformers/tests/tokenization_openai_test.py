@@ -14,11 +14,11 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import os
 import unittest
-import json
 
-from transformers.tokenization_openai import OpenAIGPTTokenizer, VOCAB_FILES_NAMES
+from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 

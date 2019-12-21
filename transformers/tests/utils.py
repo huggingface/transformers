@@ -1,7 +1,6 @@
 import os
-import unittest
 import tempfile
-
+import unittest
 from distutils.util import strtobool
 
 from transformers.file_utils import _tf_available, _torch_available

@@ -17,54 +17,55 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
+import glob
 import logging
 import os
 import random
-import glob
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except:
-    from tensorboardX import SummaryWriter
-
 from tqdm import tqdm, trange
 
 from transformers import (
     WEIGHTS_NAME,
+    AdamW,
     BertConfig,
     BertForQuestionAnswering,
     BertTokenizer,
+    DistilBertConfig,
+    DistilBertForQuestionAnswering,
+    DistilBertTokenizer,
     XLMConfig,
     XLMForQuestionAnswering,
     XLMTokenizer,
     XLNetConfig,
     XLNetForQuestionAnswering,
     XLNetTokenizer,
-    DistilBertConfig,
-    DistilBertForQuestionAnswering,
-    DistilBertTokenizer,
+    get_linear_schedule_with_warmup,
 )
-
-from transformers import AdamW, get_linear_schedule_with_warmup
-
 from utils_squad import (
-    read_squad_examples,
-    convert_examples_to_features,
     RawResult,
-    write_predictions,
     RawResultExtended,
+    convert_examples_to_features,
+    read_squad_examples,
+    write_predictions,
     write_predictions_extended,
 )
 
 # The follwing import is the official SQuAD evaluation script (2.0).
 # You can remove it from the dependencies if you are using this script outside of the library
 # We've added it here for automated tests (see examples/test_examples.py file)
-from utils_squad_evaluate import EVAL_OPTS, main as evaluate_on_squad
+from utils_squad_evaluate import EVAL_OPTS
+from utils_squad_evaluate import main as evaluate_on_squad
+
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except:
+    from tensorboardX import SummaryWriter
+
 
 logger = logging.getLogger(__name__)
 

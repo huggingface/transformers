@@ -19,12 +19,14 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import collections
 import logging
 import os
-import six
 import unicodedata
 from io import open
 
-from .tokenization_bert import BertTokenizer, BasicTokenizer, WordpieceTokenizer, load_vocab
+import six
+
+from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 

@@ -15,12 +15,13 @@
 """ DistilBERT model configuration """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
 import json
 import logging
+import sys
 from io import open
 
 from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 

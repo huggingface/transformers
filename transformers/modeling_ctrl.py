@@ -24,15 +24,17 @@ import math
 import os
 import sys
 from io import open
+
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.nn.parameter import Parameter
 
-from .modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_start_docstrings
+from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+
 
 logger = logging.getLogger(__name__)
 

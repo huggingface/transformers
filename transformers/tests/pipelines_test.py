@@ -1,9 +1,9 @@
 import unittest
-
 from typing import Iterable
 
 from transformers import pipeline
 from transformers.tests.utils import require_tf, require_torch
+
 
 QA_FINETUNED_MODELS = {
     ("bert-base-uncased", "bert-large-uncased-whole-word-masking-finetuned-squad", None),

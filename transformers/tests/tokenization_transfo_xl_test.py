@@ -20,12 +20,13 @@ from io import open
 
 from transformers import is_torch_available
 
+from .tokenization_tests_commons import CommonTestCases
+from .utils import require_torch
+
+
 if is_torch_available():
     import torch
     from transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
-
-from .tokenization_tests_commons import CommonTestCases
-from .utils import require_torch
 
 
 @require_torch

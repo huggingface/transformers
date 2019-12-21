@@ -15,12 +15,16 @@
 """Tokenization classes for OpenAI GPT."""
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
 import json
 import logging
 import os
-import regex as re
+import sys
 from io import open
+
+import regex as re
+
+from .tokenization_utils import PreTrainedTokenizer
+
 
 try:
     from functools import lru_cache
@@ -30,8 +34,6 @@ except ImportError:
     def lru_cache():
         return lambda func: func
 
-
-from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 

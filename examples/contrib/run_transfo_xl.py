@@ -23,12 +23,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import argparse
 import logging
-import time
 import math
+import time
 
 import torch
 
-from transformers import TransfoXLLMHeadModel, TransfoXLCorpus, TransfoXLTokenizer
+from transformers import TransfoXLCorpus, TransfoXLLMHeadModel, TransfoXLTokenizer
+
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO

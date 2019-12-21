@@ -1,5 +1,5 @@
-from collections import deque
 import os
+from collections import deque
 
 import torch
 from torch.utils.data import Dataset

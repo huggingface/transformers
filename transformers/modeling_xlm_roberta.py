@@ -19,15 +19,16 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
-from .modeling_roberta import (
-    RobertaModel,
-    RobertaForMaskedLM,
-    RobertaForSequenceClassification,
-    RobertaForMultipleChoice,
-    RobertaForTokenClassification,
-)
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
+from .modeling_roberta import (
+    RobertaForMaskedLM,
+    RobertaForMultipleChoice,
+    RobertaForSequenceClassification,
+    RobertaForTokenClassification,
+    RobertaModel,
+)
+
 
 logger = logging.getLogger(__name__)
 

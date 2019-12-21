@@ -20,8 +20,8 @@ from io import open
 
 from transformers.tokenization_distilbert import DistilBertTokenizer
 
-from .tokenization_tests_commons import CommonTestCases
 from .tokenization_bert_test import BertTokenizationTest
+from .tokenization_tests_commons import CommonTestCases
 from .utils import slow
 
 

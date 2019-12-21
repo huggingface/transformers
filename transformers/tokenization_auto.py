@@ -18,20 +18,21 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
+from .tokenization_albert import AlbertTokenizer
 from .tokenization_bert import BertTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
-from .tokenization_openai import OpenAIGPTTokenizer
-from .tokenization_gpt2 import GPT2Tokenizer
-from .tokenization_ctrl import CTRLTokenizer
-from .tokenization_transfo_xl import TransfoXLTokenizer
-from .tokenization_xlnet import XLNetTokenizer
-from .tokenization_xlm import XLMTokenizer
-from .tokenization_roberta import RobertaTokenizer
-from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_camembert import CamembertTokenizer
-from .tokenization_albert import AlbertTokenizer
+from .tokenization_ctrl import CTRLTokenizer
+from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_openai import OpenAIGPTTokenizer
+from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .tokenization_transfo_xl import TransfoXLTokenizer
+from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .tokenization_xlnet import XLNetTokenizer
+
 
 logger = logging.getLogger(__name__)
 

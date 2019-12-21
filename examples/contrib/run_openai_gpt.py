@@ -28,25 +28,26 @@
           --train_batch_size 16 \
 """
 import argparse
-import os
 import csv
-import random
 import logging
-from tqdm import tqdm, trange
+import os
+import random
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from tqdm import tqdm, trange
 
 from transformers import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    AdamW,
     OpenAIGPTDoubleHeadsModel,
     OpenAIGPTTokenizer,
-    AdamW,
     cached_path,
-    WEIGHTS_NAME,
-    CONFIG_NAME,
     get_linear_schedule_with_warmup,
 )
+
 
 ROCSTORIES_URL = "https://s3.amazonaws.com/datasets.huggingface.co/ROCStories.tar.gz"
 

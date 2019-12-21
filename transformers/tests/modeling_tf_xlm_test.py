@@ -12,13 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import unittest
 
 from transformers import is_tf_available
+
+from .configuration_common_test import ConfigTester
+from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
+from .utils import CACHE_DIR, require_tf, slow
+
 
 if is_tf_available():
     import tensorflow as tf
@@ -30,10 +33,6 @@ if is_tf_available():
         TFXLMForQuestionAnsweringSimple,
         TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-
-from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
-from .configuration_common_test import ConfigTester
-from .utils import CACHE_DIR, require_tf, slow
 
 
 @require_tf

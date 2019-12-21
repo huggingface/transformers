@@ -22,11 +22,10 @@ import sys
 import tensorflow as tf
 
 from .configuration_albert import AlbertConfig
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
-from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .file_utils import add_start_docstrings
+from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 
-import logging
 
 logger = logging.getLogger(__name__)
 

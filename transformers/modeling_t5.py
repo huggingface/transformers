@@ -16,23 +16,24 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
+import itertools
 import json
 import logging
 import math
 import os
 import sys
-import copy
-import itertools
 from io import open
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .configuration_t5 import T5Config
-from .file_utils import add_start_docstrings, DUMMY_INPUTS, DUMMY_MASK
+from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings
+from .modeling_utils import PreTrainedModel, prune_linear_layer
+
 
 logger = logging.getLogger(__name__)
 

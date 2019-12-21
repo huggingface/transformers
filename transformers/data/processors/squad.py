@@ -1,16 +1,17 @@
-from tqdm import tqdm
 import collections
+import json
 import logging
 import os
-import json
-import numpy as np
-from multiprocessing import Pool
-from multiprocessing import cpu_count
 from functools import partial
+from multiprocessing import Pool, cpu_count
 
+import numpy as np
+from tqdm import tqdm
+
+from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import BasicTokenizer, whitespace_tokenize
 from .utils import DataProcessor, InputExample, InputFeatures
-from ...file_utils import is_tf_available, is_torch_available
+
 
 if is_torch_available():
     import torch

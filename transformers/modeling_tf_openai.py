@@ -28,16 +28,17 @@ from io import open
 import numpy as np
 import tensorflow as tf
 
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    TFConv1D,
-    TFSharedEmbeddings,
-    TFSequenceSummary,
-    shape_list,
-    get_initializer,
-)
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import (
+    TFConv1D,
+    TFPreTrainedModel,
+    TFSequenceSummary,
+    TFSharedEmbeddings,
+    get_initializer,
+    shape_list,
+)
+
 
 logger = logging.getLogger(__name__)
 

@@ -17,10 +17,11 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 
-from transformers.tokenization_xlnet import XLNetTokenizer, SPIECE_UNDERLINE
+from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 from .utils import slow
+
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 

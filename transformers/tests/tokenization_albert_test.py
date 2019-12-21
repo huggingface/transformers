@@ -17,9 +17,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 
-from transformers.tokenization_albert import AlbertTokenizer, SPIECE_UNDERLINE
+from transformers.tokenization_albert import SPIECE_UNDERLINE, AlbertTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
+
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/spiece.model")
 

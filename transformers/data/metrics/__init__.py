@@ -15,8 +15,9 @@
 # limitations under the License.
 
 import csv
-import sys
 import logging
+import sys
+
 
 logger = logging.getLogger(__name__)
 

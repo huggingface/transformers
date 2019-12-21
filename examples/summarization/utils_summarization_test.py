@@ -17,12 +17,7 @@ import unittest
 import numpy as np
 import torch
 
-from utils_summarization import (
-    compute_token_type_ids,
-    fit_to_block_size,
-    build_mask,
-    process_story,
-)
+from utils_summarization import build_mask, compute_token_type_ids, fit_to_block_size, process_story
 
 
 class SummarizationDataProcessingTest(unittest.TestCase):

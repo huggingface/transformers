@@ -16,22 +16,32 @@
 Training the distilled model.
 Supported architectures include: BERT -> DistilBERT, RoBERTa -> DistilRoBERTa, GPT2 -> DistilGPT2.
 """
-import os
 import argparse
-import pickle
 import json
+import os
+import pickle
 import shutil
+
 import numpy as np
 import torch
 
-from transformers import BertConfig, BertForMaskedLM, BertTokenizer
-from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
-from transformers import DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer
-from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
-
 from distiller import Distiller
-from utils import git_log, logger, init_gpu_params, set_seed
 from lm_seqs_dataset import LmSeqsDataset
+from transformers import (
+    BertConfig,
+    BertForMaskedLM,
+    BertTokenizer,
+    DistilBertConfig,
+    DistilBertForMaskedLM,
+    DistilBertTokenizer,
+    GPT2Config,
+    GPT2LMHeadModel,
+    GPT2Tokenizer,
+    RobertaConfig,
+    RobertaForMaskedLM,
+    RobertaTokenizer,
+)
+from utils import git_log, init_gpu_params, logger, set_seed
 
 
 MODEL_CLASSES = {

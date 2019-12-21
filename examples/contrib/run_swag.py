@@ -19,28 +19,34 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
-import logging
 import csv
+import glob
+import logging
 import os
 import random
 import sys
-import glob
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
+
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    BertConfig,
+    BertForMultipleChoice,
+    BertTokenizer,
+    get_linear_schedule_with_warmup,
+)
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
 except:
     from tensorboardX import SummaryWriter
 
-from tqdm import tqdm, trange
-
-from transformers import WEIGHTS_NAME, BertConfig, BertForMultipleChoice, BertTokenizer
-
-from transformers import AdamW, get_linear_schedule_with_warmup
 
 logger = logging.getLogger(__name__)
 

@@ -18,13 +18,14 @@ rm MSRParaphraseCorpus.msi
 2/11/19: It looks like SentEval actually *is* hosting the extracted data. Hooray!
 """
 
-import os
-import sys
-import shutil
 import argparse
+import os
+import shutil
+import sys
 import tempfile
 import urllib.request
 import zipfile
+
 
 TASKS = ["CoLA", "SST", "MRPC", "QQP", "STS", "MNLI", "SNLI", "QNLI", "RTE", "WNLI", "diagnostic"]
 TASK2PATH = {
