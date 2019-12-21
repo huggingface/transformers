@@ -3,6 +3,7 @@ Pretrained models
 
 Here is the full list of the currently provided pretrained models together with a short presentation of each model.
 
+For a list that includes community-uploaded models, refer to `https://huggingface.co/models <https://huggingface.co/models>`__.
 
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Architecture      | Shortcut name                                              | Details of the model                                                                                                                  |
@@ -154,6 +155,10 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | | ``roberta-large`` fine-tuned on `MNLI <http://www.nyu.edu/projects/bowman/multinli/>`__.                                            |
 |                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`__)                                                   |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``distilroberta-base``                                     | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
+|                   |                                                            | | The DistilRoBERTa model distilled from the RoBERTa model `roberta-base` checkpoint.                                                 |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``roberta-base-openai-detector``                           | | 12-layer, 768-hidden, 12-heads, 125M parameters                                                                                     |
 |                   |                                                            | | ``roberta-base`` fine-tuned by OpenAI on the outputs of the 1.5B-parameter GPT-2 model.                                             |
 |                   |                                                            | (see `details <https://github.com/openai/gpt-2-output-dataset/tree/master/detector>`__)                                               |
@@ -172,10 +177,6 @@ Here is the full list of the currently provided pretrained models together with 
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``distilgpt2``                                             | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
 |                   |                                                            | | The DistilGPT2 model distilled from the GPT2 model `gpt2` checkpoint.                                                               |
-|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
-|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-|                   | ``distilroberta-base``                                     | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
-|                   |                                                            | | The DistilRoBERTa model distilled from the RoBERTa model `roberta-base` checkpoint.                                                 |
 |                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``distilbert-base-german-cased``                           | | 6-layer, 768-hidden, 12-heads, 66M parameters                                                                                       |
