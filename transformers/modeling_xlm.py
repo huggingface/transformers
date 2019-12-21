@@ -639,9 +639,9 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     def get_output_embeddings(self):
         return self.pred_layer.proj
 
-    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
-        mask_token_id = model_kwargs['mask_token_id'] if 'mask_token_id' in model_kwargs else self.config.mask_token_id
-        lang_id = model_kwargs['lang_id'] if 'lang_id' in model_kwargs else self.config.lang_id
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        mask_token_id = self.config.mask_token_id
+        lang_id = self.config.lang_id
 
         mask_token = torch.full((1, 1), mask_token_id, dtype=torch.long, device=input_ids.device)
         input_ids = torch.cat([input_ids, mask_token], dim=1)

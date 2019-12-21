@@ -113,8 +113,8 @@ class XLMConfig(PretrainedConfig):
                  summary_first_dropout=0.1,
                  start_n_top=5,
                  end_n_top=5,
-                 mask_token_id = 0,
-                 lang_id = 0,
+                 mask_token_id=0,
+                 lang_id=0,
                  **kwargs):
         """Constructs XLMConfig.
         """
