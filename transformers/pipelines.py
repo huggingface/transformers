@@ -29,24 +29,19 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import six
 
-from transformers import (
-    ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    AutoConfig,
-    AutoTokenizer,
-    BasicTokenizer,
-    ModelCard,
-    PretrainedConfig,
-    PreTrainedTokenizer,
-    SquadExample,
-    is_tf_available,
-    is_torch_available,
-    squad_convert_examples_to_features,
-)
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_utils import PretrainedConfig
+from .data import SquadExample, squad_convert_examples_to_features
+from .file_utils import is_tf_available, is_torch_available
+from .modelcard import ModelCard
+from .tokenization_auto import AutoTokenizer
+from .tokenization_bert import BasicTokenizer
+from .tokenization_utils import PreTrainedTokenizer
 
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import (
+    from .modeling_tf_auto import (
         TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFAutoModelForQuestionAnswering,
@@ -55,7 +50,7 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
-    from transformers import (
+    from .modeling_auto import (
         AutoModel,
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
