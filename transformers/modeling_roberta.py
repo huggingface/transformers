@@ -52,7 +52,6 @@ class RobertaEmbeddings(BertEmbeddings):
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if position_ids is None:
-
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
                 position_ids = self.create_position_ids_from_input_ids(input_ids).to(input_ids.device)
@@ -88,7 +87,7 @@ class RobertaEmbeddings(BertEmbeddings):
 
         position_ids = torch.arange(self.padding_idx+1, sequence_length+self.padding_idx+1, dtype=torch.long,
                                     device=inputs_embeds.device)
-        return position_ids.unsqueeze(0)
+        return position_ids.unsqueeze(0).expand(input_shape)
 
 
 ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
