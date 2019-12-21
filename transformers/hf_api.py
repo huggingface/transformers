@@ -130,7 +130,7 @@ class HfApi:
             pf = TqdmProgressFileReader(f)
             data = f if pf.total_size > 0 else ""
 
-            r = requests.put(urls.write, data=data, headers={"content-type": urls.type,})
+            r = requests.put(urls.write, data=data, headers={"content-type": urls.type})
             r.raise_for_status()
             pf.close()
         return urls.access

@@ -836,7 +836,7 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModel if is_tf_available() else None,
         "pt": AutoModel if is_torch_available() else None,
         "default": {
-            "model": {"pt": "distilbert-base-uncased", "tf": "distilbert-base-uncased",},
+            "model": {"pt": "distilbert-base-uncased", "tf": "distilbert-base-uncased"},
             "config": None,
             "tokenizer": "distilbert-base-uncased",
         },

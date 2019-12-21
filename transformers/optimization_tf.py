@@ -158,9 +158,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
 
     def get_config(self):
         config = super(AdamWeightDecay, self).get_config()
-        config.update(
-            {"weight_decay_rate": self.weight_decay_rate,}
-        )
+        config.update({"weight_decay_rate": self.weight_decay_rate})
         return config
 
     def _do_use_weight_decay(self, param_name):
