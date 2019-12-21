@@ -334,7 +334,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
         cached_mode = "test"
     else:
         cached_mode = "train"
-    assert (evaluate == True and test == True) == False
+    assert not (evaluate and test)
     cached_features_file = os.path.join(
         args.data_dir,
         "cached_{}_{}_{}_{}".format(
