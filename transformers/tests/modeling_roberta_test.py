@@ -225,6 +225,10 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         ]])
 
         position_ids = model.create_position_ids_from_input_ids(input_ids)
+        self.assertEqual(
+            position_ids.shape,
+            expected_positions.shape
+        )
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
@@ -235,17 +239,24 @@ class RobertaModelTest(CommonTestCases.CommonModelTester):
         first available non-padding position index is RobertaEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = RobertaEmbeddings(config=config)
+        embeddings = RobertaEmbeddings(config=config)
 
-        input_ids = torch.Tensor(1, 4, 30)
-        expected_positions = torch.as_tensor([[
-            0 + model.padding_idx + 1,
-            1 + model.padding_idx + 1,
-            2 + model.padding_idx + 1,
-            3 + model.padding_idx + 1,
-        ]])
-        position_ids = model.create_position_ids_from_inputs_embeds(input_ids)
-        self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+        inputs_embeds = torch.Tensor(2, 4, 30)
+        expected_single_positions = [
+            0 + embeddings.padding_idx + 1,
+            1 + embeddings.padding_idx + 1,
+            2 + embeddings.padding_idx + 1,
+            3 + embeddings.padding_idx + 1,
+        ]
+        expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
+        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
+        self.assertEqual(
+            position_ids.shape,
+            expected_positions.shape
+        )
+        self.assertTrue(
+            torch.all(torch.eq(position_ids, expected_positions))
+        )
 
 
 class RobertaModelIntegrationTest(unittest.TestCase):
