@@ -673,7 +673,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TFTransfoXLModel.from_pretrained('transfo-xl-wt103')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states, mems = outputs[:2]
 
@@ -715,7 +715,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TFTransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores, mems = outputs[:2]
 
