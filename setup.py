@@ -38,13 +38,15 @@ from setuptools import find_packages, setup
 
 
 extras = {
-    'serving': ['uvicorn', 'fastapi']
+    'serving': ['pydantic', 'uvicorn', 'fastapi'],
+    'serving-tf': ['pydantic', 'uvicorn', 'fastapi', 'tensorflow'],
+    'serving-torch': ['pydantic', 'uvicorn', 'fastapi', 'torch']
 }
 extras['all'] = [package for package in extras.values()]
 
 setup(
     name="transformers",
-    version="2.2.1",
+    version="2.3.0",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
@@ -57,16 +59,12 @@ setup(
                                     "tests.*", "tests"]),
     install_requires=['numpy',
                       'boto3',
+                      'filelock',
                       'requests',
                       'tqdm',
-                      'regex',
+                      'regex != 2019.12.17',
                       'sentencepiece',
                       'sacremoses'],
-    entry_points={
-      'console_scripts': [
-        "transformers=transformers.__main__:main",
-      ]
-    },
     extras_require=extras,
     scripts=[
         'transformers-cli'

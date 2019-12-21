@@ -168,7 +168,7 @@ Follow these steps to start contributing:
    to be merged;
 4. Make sure pre-existing tests still pass;
 5. Add high-coverage tests. No quality test, no merge;
-6. All public methods must have informative doctrings;
+6. All public methods must have informative docstrings;
 
 
 ### Style guide

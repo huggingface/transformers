@@ -15,18 +15,30 @@
 from __future__ import absolute_import, division, print_function
 
 import os
-import six
 import time
 import unittest
 
-from transformers.hf_api import HfApi, S3Obj, PresignedUrl, HfFolder, HTTPError
+import requests
+import six
+
+from transformers.hf_api import HfApi, HfFolder, HTTPError, PresignedUrl, S3Obj
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
 PASS = "__DUMMY_TRANSFORMERS_PASS__"
-FILE_KEY = "Test-{}.txt".format(int(time.time()))
-FILE_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "fixtures/input.txt"
-)
+FILES = [
+    (
+        "Test-{}.txt".format(int(time.time())),
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "fixtures/input.txt"
+        )
+    ),
+    (
+        "yoyo {}.txt".format(int(time.time())), # space is intentional
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"
+        )
+    ),
+]
 
 
 
@@ -57,15 +69,21 @@ class HfApiEndpointsTest(HfApiCommonTest):
         self.assertEqual(user, USER)
 
     def test_presign(self):
-        urls = self._api.presign(token=self._token, filename=FILE_KEY)
-        self.assertIsInstance(urls, PresignedUrl)
-        self.assertEqual(urls.type, "text/plain")
+        for FILE_KEY, FILE_PATH in FILES:
+            urls = self._api.presign(token=self._token, filename=FILE_KEY)
+            self.assertIsInstance(urls, PresignedUrl)
+            self.assertEqual(urls.type, "text/plain")
 
     def test_presign_and_upload(self):
-        access_url = self._api.presign_and_upload(
-            token=self._token, filename=FILE_KEY, filepath=FILE_PATH
-        )
-        self.assertIsInstance(access_url, six.string_types)
+        for FILE_KEY, FILE_PATH in FILES:
+            access_url = self._api.presign_and_upload(
+                token=self._token, filename=FILE_KEY, filepath=FILE_PATH
+            )
+            self.assertIsInstance(access_url, six.string_types)
+            with open(FILE_PATH, 'r') as f:
+                body = f.read()
+            r = requests.get(access_url)
+            self.assertEqual(r.text, body)
 
     def test_list_objs(self):
         objs = self._api.list_objs(token=self._token)

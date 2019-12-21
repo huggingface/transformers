@@ -34,7 +34,7 @@ class TransfoXLConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `TransfoXLModel`.
 
         Args:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `TransfoXLModel` or a configuration json file.
+            vocab_size: Vocabulary size of `inputs_ids` in `TransfoXLModel` or a configuration json file.
             cutoffs: cutoffs for the adaptive softmax
             d_model: Dimensionality of the model's hidden states.
             d_embed: Dimensionality of the embeddings
@@ -68,7 +68,7 @@ class TransfoXLConfig(PretrainedConfig):
     pretrained_config_archive_map = TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file=267735,
+                 vocab_size=267735,
                  cutoffs=[20000, 40000, 200000],
                  d_model=1024,
                  d_embed=1024,
@@ -100,7 +100,7 @@ class TransfoXLConfig(PretrainedConfig):
         """Constructs TransfoXLConfig.
         """
         super(TransfoXLConfig, self).__init__(**kwargs)
-        self.n_token = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, int) else -1
+        self.vocab_size = vocab_size
         self.cutoffs = []
         self.cutoffs.extend(cutoffs)
         self.tie_weight = tie_weight
@@ -133,27 +133,17 @@ class TransfoXLConfig(PretrainedConfig):
         self.init_std = init_std
         self.layer_norm_epsilon = layer_norm_epsilon
 
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif not isinstance(vocab_size_or_config_json_file, int):
-            raise ValueError("First argument must be either a vocabulary size (int)"
-                             " or the path to a pretrained model config file (str)")
-
     @property
     def max_position_embeddings(self):
         return self.tgt_len + self.ext_len + self.mem_len
 
     @property
-    def vocab_size(self):
-        return self.n_token
+    def n_token(self):  # Backward compatibility
+        return self.vocab_size
 
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self.n_token = value
+    @n_token.setter
+    def n_token(self, value):  # Backward compatibility
+        self.vocab_size = value
 
     @property
     def hidden_size(self):

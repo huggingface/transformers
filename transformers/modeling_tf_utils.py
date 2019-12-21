@@ -22,14 +22,15 @@ import logging
 import os
 
 import tensorflow as tf
+from tensorflow.python.keras.saving import hdf5_format
+import h5py
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import cached_path, WEIGHTS_NAME, TF_WEIGHTS_NAME, TF2_WEIGHTS_NAME
+from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
+                         cached_path, hf_bucket_url, is_remote_url)
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 logger = logging.getLogger(__name__)
-
-DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 
 class TFPreTrainedModel(tf.keras.Model):
     r""" Base class for all TF models.
@@ -59,7 +60,7 @@ class TFPreTrainedModel(tf.keras.Model):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return tf.constant(DUMMY_INPUTS)
+        return {'input_ids': tf.constant(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
@@ -176,13 +177,16 @@ class TFPreTrainedModel(tf.keras.Model):
             pretrained_model_name_or_path: either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch state_dict save file` (e.g. `./pt_model/pytorch_model.bin`). In this case, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in a TensorFlow model using the provided conversion scripts and loading the TensorFlow model afterwards.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+            config: (`optional`) one of:
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
                 - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
@@ -205,6 +209,9 @@ class TFPreTrainedModel(tf.keras.Model):
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
@@ -229,11 +236,13 @@ class TFPreTrainedModel(tf.keras.Model):
         force_download = kwargs.pop('force_download', False)
         resume_download = kwargs.pop('resume_download', False)
         proxies = kwargs.pop('proxies', None)
+        output_loading_info = kwargs.pop('output_loading_info', False)
 
-        # Load config
-        if config is None:
+        # Load config if we don't provide a configuration
+        if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args,
+                config_path, *model_args,
                 cache_dir=cache_dir, return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
@@ -257,10 +266,14 @@ class TFPreTrainedModel(tf.keras.Model):
                     raise EnvironmentError("Error no file named {} found in directory {} or `from_pt` set to False".format(
                         [WEIGHTS_NAME, TF2_WEIGHTS_NAME],
                         pretrained_model_name_or_path))
-            elif os.path.isfile(pretrained_model_name_or_path):
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
+            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
+                archive_file = pretrained_model_name_or_path + ".index"
             else:
-                raise EnvironmentError("Error file {} not found".format(pretrained_model_name_or_path))
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=TF2_WEIGHTS_NAME)
+                if from_pt:
+                    raise EnvironmentError("Loading a TF model from a PyTorch checkpoint is not supported when using a model identifier name.")
 
             # redirect to the cache, if necessary
             try:
@@ -293,16 +306,45 @@ class TFPreTrainedModel(tf.keras.Model):
 
         if from_pt:
             # Load from a PyTorch checkpoint
-            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file)
+            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
         ret = model(model.dummy_inputs, training=False)  # build the network with dummy inputs
 
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
-        model.load_weights(resolved_archive_file, by_name=True)
+        try:
+            model.load_weights(resolved_archive_file, by_name=True)
+        except OSError:
+            raise OSError("Unable to load weights from h5 file. "
+                          "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. ")
 
         ret = model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+
+        # Check if the models are the same to output loading informations
+        with h5py.File(resolved_archive_file, 'r') as f:
+            if 'layer_names' not in f.attrs and 'model_weights' in f:
+                f = f['model_weights']
+            hdf5_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, 'layer_names'))
+        model_layer_names = set(layer.name for layer in model.layers)
+        missing_keys = list(model_layer_names - hdf5_layer_names)
+        unexpected_keys = list(hdf5_layer_names - model_layer_names)
+        error_msgs = []
+
+        if len(missing_keys) > 0:
+            logger.info("Layers of {} not initialized from pretrained model: {}".format(
+                model.__class__.__name__, missing_keys))
+        if len(unexpected_keys) > 0:
+            logger.info("Layers from pretrained model not used in {}: {}".format(
+                model.__class__.__name__, unexpected_keys))
+        if len(error_msgs) > 0:
+            raise RuntimeError('Error(s) in loading weights for {}:\n\t{}'.format(
+                            model.__class__.__name__, "\n\t".join(error_msgs)))
+        if output_loading_info:
+            loading_info = {"missing_keys": missing_keys,
+                            "unexpected_keys": unexpected_keys,
+                            "error_msgs": error_msgs}
+            return model, loading_info
 
         return model
 
