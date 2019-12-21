@@ -281,7 +281,7 @@ def squad_convert_examples_to_features(
         processor = SquadV2Processor()
         examples = processor.get_dev_examples(data_dir)
 
-        features = squad_convert_examples_to_features( 
+        features = squad_convert_examples_to_features(
             examples=examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
@@ -640,8 +640,8 @@ class SquadFeatures(object):
             has more information related to that token and should be prioritized over this feature for that token.
         tokens: list of tokens corresponding to the input ids
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
-        start_position: start of the answer token index 
-        end_position: end of the answer token index 
+        start_position: start of the answer token index
+        end_position: end of the answer token index
     """
 
     def __init__(

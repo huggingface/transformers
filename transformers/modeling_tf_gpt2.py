@@ -584,14 +584,14 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = TFGPT2DoubleHeadsModel.from_pretrained('gpt2')
-        
+
         # Add a [CLS] to the vocabulary (we should train it also!)
         # This option is currently not implemented in TF 2.0
         raise NotImplementedError
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})
         model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
         print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
-        
+
         choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         encoded_choices = [tokenizer.encode(s) for s in choices]
         cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]

@@ -366,12 +366,12 @@ DISTILBERT_START_DOCSTRING = r"""
 
     For more information on DistilBERT, please refer to our
     `detailed blog post`_
-    
+
     .. _`detailed blog post`:
         https://medium.com/huggingface/distilbert-8cf3380435b5
 
     Parameters:
-        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -381,7 +381,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         **input_ids** ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             The input sequences should start with `[CLS]` and end with `[SEP]` tokens.
-            
+
             For now, ONLY BertTokenizer(`bert-base-uncased`) is supported and you should use this tokenizer when using DistilBERT.
         **attention_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.

@@ -139,7 +139,7 @@ class TFPreTrainedModel(tf.keras.Model):
         Arguments:
 
             new_num_tokens: (`optional`) int:
-                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end. 
+                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end.
                 If not provided or None: does nothing and just returns a pointer to the input tokens ``tf.Variable`` Module of the model.
 
         Return: ``tf.Variable``
@@ -431,7 +431,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
                 linear tensor, float32 with shape [batch_size, length, vocab_size].
         Raises:
             ValueError: if mode is not valid.
-        
+
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """

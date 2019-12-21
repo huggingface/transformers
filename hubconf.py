@@ -14,7 +14,7 @@ dependencies = ["torch", "tqdm", "boto3", "requests", "regex", "sentencepiece", 
 
 @add_start_docstrings(AutoConfig.__doc__)
 def config(*args, **kwargs):
-    r""" 
+    r"""
                 # Using torch.hub !
                 import torch
 
@@ -34,7 +34,7 @@ def config(*args, **kwargs):
 
 @add_start_docstrings(AutoTokenizer.__doc__)
 def tokenizer(*args, **kwargs):
-    r""" 
+    r"""
         # Using torch.hub !
         import torch
 

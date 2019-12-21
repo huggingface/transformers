@@ -192,7 +192,7 @@ class CTRLPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-CTRL_START_DOCSTRING = r"""    CTRL model was proposed in 
+CTRL_START_DOCSTRING = r"""    CTRL model was proposed in
     `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
     by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
     It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
@@ -224,7 +224,7 @@ CTRL_INPUTS_DOCSTRING = r"""    Inputs:
         **past**:
             list of ``torch.FloatTensor`` (one for each layer):
             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see `past` output below). Can be used to speed up sequential decoding. The token ids which have their past given to this model 
+            (see `past` output below). Can be used to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
@@ -261,7 +261,7 @@ class CTRLModel(CTRLPreTrainedModel):
         **past**:
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
@@ -464,7 +464,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         **past**:
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
             that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model 
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)

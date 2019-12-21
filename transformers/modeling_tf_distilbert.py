@@ -109,7 +109,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
                 linear tensor, float32 with shape [batch_size, length, vocab_size].
         Raises:
             ValueError: if mode is not valid.
-        
+
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
@@ -487,7 +487,7 @@ DISTILBERT_START_DOCSTRING = r"""
 
     For more information on DistilBERT, please refer to our
     `detailed blog post`_
-    
+
     This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
@@ -514,7 +514,7 @@ DISTILBERT_START_DOCSTRING = r"""
             `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
-        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -524,7 +524,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         **input_ids** ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             The input sequences should start with `[CLS]` and end with `[SEP]` tokens.
-            
+
             For now, ONLY BertTokenizer(`bert-base-uncased`) is supported and you should use this tokenizer when using DistilBERT.
         **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.

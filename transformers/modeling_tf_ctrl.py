@@ -356,7 +356,7 @@ class TFCTRLPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "transformer"
 
 
-CTRL_START_DOCSTRING = r"""    CTRL model was proposed in 
+CTRL_START_DOCSTRING = r"""    CTRL model was proposed in
     `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
     by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
     It's a causal (unidirectional) transformer pre-trained using language modeling on a very large

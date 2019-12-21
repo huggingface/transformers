@@ -825,7 +825,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         **cls_index**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
         **p_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...) 
+            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...)
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
@@ -942,7 +942,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         **cls_index**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
             Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
         **p_mask**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...) 
+            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...)
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:

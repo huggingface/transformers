@@ -40,9 +40,9 @@ CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 CAMEMBERT_START_DOCSTRING = r"""    The CamemBERT model was proposed in
     `CamemBERT: a Tasty French Language Model`_
     by Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suárez, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah, and Benoît Sagot. It is based on Facebook's RoBERTa model released in 2019.
-    
+
     It is a model trained on 138GB of French text.
-    
+
     This implementation is the same as RoBERTa.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
@@ -55,7 +55,7 @@ CAMEMBERT_START_DOCSTRING = r"""    The CamemBERT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.CamembertConfig`): Model configuration class with all the parameters of the 
+        config (:class:`~transformers.CamembertConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -74,7 +74,7 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
 
                 ``tokens:         <s> the dog is hairy . </s>``
 
-            Fully encoded sequences or sequence pairs can be obtained using the CamembertTokenizer.encode function with 
+            Fully encoded sequences or sequence pairs can be obtained using the CamembertTokenizer.encode function with
             the ``add_special_tokens`` parameter set to ``True``.
 
             CamemBERT is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -199,7 +199,7 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
 
 
 @add_start_docstrings(
-    """CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer 
+    """CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
     CAMEMBERT_START_DOCSTRING,
     CAMEMBERT_INPUTS_DOCSTRING,
