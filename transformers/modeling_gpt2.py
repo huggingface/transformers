@@ -17,13 +17,9 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import collections
-import json
 import logging
 import math
 import os
-import sys
-from io import open
 
 import torch
 import torch.nn as nn

@@ -15,16 +15,12 @@
 from __future__ import absolute_import, division, print_function
 
 import copy
-import importlib
-import json
-import logging
 import os
 import random
 import shutil
 import sys
 import tempfile
 import unittest
-import uuid
 
 from transformers import is_tf_available, is_torch_available
 
@@ -39,7 +35,6 @@ if is_tf_available():
     # from transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 if sys.version_info[0] == 2:
-    import cPickle as pickle
 
     class TemporaryDirectory(object):
         """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
@@ -53,8 +48,6 @@ if sys.version_info[0] == 2:
 
 
 else:
-    import pickle
-
     TemporaryDirectory = tempfile.TemporaryDirectory
     unicode = str
 

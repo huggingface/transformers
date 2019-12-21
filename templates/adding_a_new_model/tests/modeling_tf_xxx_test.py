@@ -14,7 +14,6 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
-import sys
 import unittest
 
 from transformers import XxxConfig, is_tf_available
