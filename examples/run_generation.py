@@ -212,9 +212,10 @@ def main():
         repetition_penalty=args.repetition_penalty,
     )
 
-    generated_sequence = output_sequences.tolist()
-    text = [tokenizer.decode(seq, clean_up_tokenization_spaces=True) for seq in generated_sequence]
-    # text = text[: text.find(args.stop_token) if args.stop_token else None]
+    # Batch size == 1. to add more examples please use num_return_sequences > 1 
+    generated_sequence = output_sequences[0].tolist()
+    text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
+    text = text[: t.find(args.stop_token) if args.stop_token else None]
 
     print(text)
 

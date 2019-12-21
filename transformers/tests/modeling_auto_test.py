@@ -22,7 +22,7 @@ import logging
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow
+from .utils import require_torch, slow, SMALL_MODEL_IDENTIFIER
 
 if is_torch_available():
     from transformers import (AutoConfig, BertConfig,
@@ -91,6 +91,11 @@ class AutoModelTest(unittest.TestCase):
             model, loading_info = AutoModelForQuestionAnswering.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForQuestionAnswering)
+
+    def test_from_pretrained_identifier(self):
+        logging.basicConfig(level=logging.INFO)
+        model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
+        self.assertIsInstance(model, BertForMaskedLM)
 
 
 if __name__ == "__main__":
