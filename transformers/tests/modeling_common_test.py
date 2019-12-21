@@ -18,7 +18,7 @@ from __future__ import print_function
 
 import copy
 import sys
-import os
+import os.path
 import shutil
 import tempfile
 import json
@@ -30,7 +30,7 @@ import logging
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
@@ -218,21 +218,22 @@ class CommonTestCases:
                 inputs = inputs_dict['input_ids']  # Let's keep only input_ids
 
                 try:
-                    torch.jit.trace(model, inputs)
+                    traced_gpt2 = torch.jit.trace(model, inputs)
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
 
-                try:
-                    traced_gpt2 = torch.jit.trace(model, inputs)
-                    torch.jit.save(traced_gpt2, "traced_model.pt")
-                except RuntimeError:
-                    self.fail("Couldn't save module.")
+                with TemporaryDirectory() as tmp_dir_name:
+                    pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
-                try:
-                    loaded_model = torch.jit.load("traced_model.pt")
-                    os.remove("traced_model.pt")
-                except ValueError:
-                    self.fail("Couldn't load module.")
+                    try:
+                        torch.jit.save(traced_gpt2, pt_file_name)
+                    except Exception:
+                        self.fail("Couldn't save module.")
+
+                    try:
+                        loaded_model = torch.jit.load(pt_file_name)
+                    except Exception:
+                        self.fail("Couldn't load module.")
 
                 model.to(torch_device)
                 model.eval()
@@ -352,12 +353,11 @@ class CommonTestCases:
                 heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)),
                                 -1: [0]}
                 model.prune_heads(heads_to_prune)
-                directory = "pruned_model"
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-                model.save_pretrained(directory)
-                model = model_class.from_pretrained(directory)
-                model.to(torch_device)
+
+                with TemporaryDirectory() as temp_dir_name:
+                    model.save_pretrained(temp_dir_name)
+                    model = model_class.from_pretrained(temp_dir_name)
+                    model.to(torch_device)
 
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
@@ -366,7 +366,6 @@ class CommonTestCases:
                 self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
                 self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
-                shutil.rmtree(directory)
 
         def test_head_pruning_save_load_from_config_init(self):
             if not self.test_pruning:
@@ -426,14 +425,10 @@ class CommonTestCases:
                 self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads)
                 self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
-                directory = "pruned_model"
-
-                if not os.path.exists(directory):
-                    os.makedirs(directory)
-                model.save_pretrained(directory)
-                model = model_class.from_pretrained(directory)
-                model.to(torch_device)
-                shutil.rmtree(directory)
+                with TemporaryDirectory() as temp_dir_name:
+                    model.save_pretrained(temp_dir_name)
+                    model = model_class.from_pretrained(temp_dir_name)
+                    model.to(torch_device)
 
                 with torch.no_grad():
                     outputs = model(**inputs_dict)
@@ -758,10 +753,8 @@ class CommonTestCases:
                 [[], []])
 
         def create_and_check_model_from_pretrained(self):
-            cache_dir = "/tmp/transformers_test/"
             for model_name in list(self.base_model_class.pretrained_model_archive_map.keys())[:1]:
-                model = self.base_model_class.from_pretrained(model_name, cache_dir=cache_dir)
-                shutil.rmtree(cache_dir)
+                model = self.base_model_class.from_pretrained(model_name, cache_dir=CACHE_DIR)
                 self.parent.assertIsNotNone(model)
 
         def prepare_config_and_inputs_for_common(self):

@@ -46,11 +46,11 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
         for model_name in ['bert-base-uncased']:
-            config = AutoConfig.from_pretrained(model_name, force_download=True)
+            config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModel.from_pretrained(model_name, force_download=True)
+            model = TFAutoModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertModel)
 
@@ -59,11 +59,11 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
         for model_name in ['bert-base-uncased']:
-            config = AutoConfig.from_pretrained(model_name, force_download=True)
+            config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelWithLMHead.from_pretrained(model_name, force_download=True)
+            model = TFAutoModelWithLMHead.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForMaskedLM)
 
@@ -72,11 +72,11 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
         for model_name in ['bert-base-uncased']:
-            config = AutoConfig.from_pretrained(model_name, force_download=True)
+            config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelForSequenceClassification.from_pretrained(model_name, force_download=True)
+            model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForSequenceClassification)
 
@@ -85,17 +85,17 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
         for model_name in ['bert-base-uncased']:
-            config = AutoConfig.from_pretrained(model_name, force_download=True)
+            config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
 
-            model = TFAutoModelForQuestionAnswering.from_pretrained(model_name, force_download=True)
+            model = TFAutoModelForQuestionAnswering.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertForQuestionAnswering)
 
     def test_from_pretrained_identifier(self):
         logging.basicConfig(level=logging.INFO)
-        model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER, force_download=True)
+        model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
 
 

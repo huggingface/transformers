@@ -20,7 +20,7 @@ import unittest
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_tf, slow
+from .utils import CACHE_DIR, require_tf, slow
 
 from transformers import DistilBertConfig, is_tf_available
 
@@ -211,10 +211,8 @@ class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     # @slow
     # def test_model_from_pretrained(self):
-    #     cache_dir = "/tmp/transformers_test/"
     #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-    #         model = DistilBertModel.from_pretrained(model_name, cache_dir=cache_dir)
-    #         shutil.rmtree(cache_dir)
+    #         model = DistilBertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
     #         self.assertIsNotNone(model)
 
 if __name__ == "__main__":
