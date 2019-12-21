@@ -51,23 +51,43 @@ class RobertaEmbeddings(BertEmbeddings):
                                                 padding_idx=self.padding_idx)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
-        if input_ids is not None:
-            input_shape = input_ids.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-
-        seq_length = input_shape[1]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         if position_ids is None:
-            # Position numbers begin at padding_idx+1. Padding symbols are ignored.
-            # cf. fairseq's `utils.make_positions`
-            position_ids = torch.arange(self.padding_idx+1, seq_length+self.padding_idx+1, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(input_shape)
+            if input_ids is not None:
+                # Create the position ids from the input token ids. Any padded tokens remain padded.
+                position_ids = self.create_position_ids_from_input_ids(input_ids).to(input_ids.device)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+
         return super(RobertaEmbeddings, self).forward(input_ids,
                                                       token_type_ids=token_type_ids,
                                                       position_ids=position_ids,
                                                       inputs_embeds=inputs_embeds)
+
+    def create_position_ids_from_input_ids(self, x):
+        """ Replace non-padding symbols with their position numbers. Position numbers begin at
+        padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
+        `utils.make_positions`.
+
+        :param torch.Tensor x:
+        :return torch.Tensor:
+        """
+        mask = x.ne(self.padding_idx).long()
+        incremental_indicies = torch.cumsum(mask, dim=1) * mask
+        return incremental_indicies + self.padding_idx
+
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """ We are provided embeddings directly. We cannot infer which are padded so just generate
+        sequential position ids.
+
+        :param torch.Tensor inputs_embeds:
+        :return torch.Tensor:
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(self.padding_idx+1, sequence_length+self.padding_idx+1, dtype=torch.long,
+                                    device=inputs_embeds.device)
+        return position_ids.unsqueeze(0).expand(input_shape)
 
 
 ROBERTA_START_DOCSTRING = r"""    The RoBERTa model was proposed in
