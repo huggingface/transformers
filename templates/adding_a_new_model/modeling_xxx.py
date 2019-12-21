@@ -49,6 +49,7 @@ XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-pytorch_model.bin",
 }
 
+
 ####################################################
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
