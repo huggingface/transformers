@@ -69,6 +69,7 @@ class TFCommonTestCases:
         test_torchscript = True
         test_pruning = True
         test_resize_embeddings = True
+        is_encoder_decoder = False
 
         def test_initialization(self):
             pass
@@ -129,8 +130,12 @@ class TFCommonTestCases:
                                       for name, key in inputs_dict.items())
                 with torch.no_grad():
                     pto = pt_model(**pt_inputs_dict)
-                tfo = tf_model(inputs_dict)
-                max_diff = np.amax(np.abs(tfo[0].numpy() - pto[0].numpy()))
+                tfo = tf_model(inputs_dict, training=False)
+                tf_hidden_states = tfo[0].numpy()
+                pt_hidden_states = pto[0].numpy()
+                tf_hidden_states[np.isnan(tf_hidden_states)] = 0
+                pt_hidden_states[np.isnan(pt_hidden_states)] = 0
+                max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
                 self.assertLessEqual(max_diff, 2e-2)
 
                 # Check we can load pt model in tf and vice-versa with checkpoint => model functions
@@ -150,13 +155,21 @@ class TFCommonTestCases:
                 with torch.no_grad():
                     pto = pt_model(**pt_inputs_dict)
                 tfo = tf_model(inputs_dict)
-                max_diff = np.amax(np.abs(tfo[0].numpy() - pto[0].numpy()))
+                tfo = tfo[0].numpy()
+                pto = pto[0].numpy()
+                tfo[np.isnan(tfo)] = 0
+                pto[np.isnan(pto)] = 0
+                max_diff = np.amax(np.abs(tfo - pto))
                 self.assertLessEqual(max_diff, 2e-2)
 
         def test_compile_tf_model(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-            input_ids = tf.keras.Input(batch_shape=(2, 2000), name='input_ids', dtype='int32')
+            if self.is_encoder_decoder:
+                input_ids = {'decoder_input_ids': tf.keras.Input(batch_shape=(2, 2000), name='decoder_input_ids', dtype='int32'),
+                             'encoder_input_ids': tf.keras.Input(batch_shape=(2, 2000), name='encoder_input_ids', dtype='int32')}
+            else:
+                input_ids = tf.keras.Input(batch_shape=(2, 2000), name='input_ids', dtype='int32')
             optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
             loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
             metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
@@ -189,7 +202,7 @@ class TFCommonTestCases:
                 outputs_dict = model(inputs_dict)
 
                 inputs_keywords = copy.deepcopy(inputs_dict)
-                input_ids = inputs_keywords.pop('input_ids')
+                input_ids = inputs_keywords.pop('input_ids' if not self.is_encoder_decoder else 'decoder_input_ids', None)
                 outputs_keywords = model(input_ids, **inputs_keywords)
 
                 output_dict = outputs_dict[0].numpy()
@@ -199,6 +212,11 @@ class TFCommonTestCases:
 
         def test_attention_outputs(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            decoder_seq_length = self.model_tester.decoder_seq_length if hasattr(self.model_tester, 'decoder_seq_length') else self.model_tester.seq_length
+            encoder_seq_length = self.model_tester.encoder_seq_length if hasattr(self.model_tester, 'encoder_seq_length') else self.model_tester.seq_length
+            decoder_key_length = self.model_tester.key_length if hasattr(self.model_tester, 'key_length') else decoder_seq_length
+            encoder_key_length = self.model_tester.key_length if hasattr(self.model_tester, 'key_length') else encoder_seq_length
 
             for model_class in self.all_model_classes:
                 config.output_attentions = True
@@ -212,16 +230,28 @@ class TFCommonTestCases:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
-                    self.model_tester.seq_length,
-                    self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                    encoder_seq_length,
+                    encoder_key_length])
                 out_len = len(outputs)
+
+                if self.is_encoder_decoder:
+                    self.assertEqual(out_len % 2, 0)
+                    decoder_attentions = outputs[(out_len // 2)-1]
+                    self.assertEqual(model.config.output_attentions, True)
+                    self.assertEqual(model.config.output_hidden_states, False)
+                    self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                    self.assertListEqual(
+                        list(decoder_attentions[0].shape[-3:]),
+                        [self.model_tester.num_attention_heads,
+                         decoder_seq_length,
+                         decoder_key_length])
 
                 # Check attention is always last and order is fine
                 config.output_attentions = True
                 config.output_hidden_states = True
                 model = model_class(config)
                 outputs = model(inputs_dict)
-                self.assertEqual(out_len+1, len(outputs))
+                self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
                 self.assertEqual(model.config.output_attentions, True)
                 self.assertEqual(model.config.output_hidden_states, True)
 
@@ -230,8 +260,8 @@ class TFCommonTestCases:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads,
-                    self.model_tester.seq_length,
-                    self.model_tester.key_len if hasattr(self.model_tester, 'key_len') else self.model_tester.seq_length])
+                    encoder_seq_length,
+                    encoder_key_length])
 
         def test_hidden_states_output(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -264,35 +294,53 @@ class TFCommonTestCases:
             for model_class in self.all_model_classes:
                 model = model_class(config)
                 first, second = model(inputs_dict, training=False)[0], model(inputs_dict, training=False)[0]
-                self.assertTrue(tf.math.equal(first, second).numpy().all())
+                out_1 = first.numpy()
+                out_2 = second.numpy()
+                out_1 = out_1[~np.isnan(out_1)]
+                out_2 = out_2[~np.isnan(out_2)]
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
+
+        def _get_embeds(self, wte, input_ids):
+            # ^^ In our TF models, the input_embeddings can take slightly different forms,
+            # so we try a few of them.
+            # We used to fall back to just synthetically creating a dummy tensor of ones:
+            try:
+                x = wte(input_ids, mode="embedding")
+            except:
+                try:
+                    x = wte([input_ids], mode="embedding")
+                except:
+                    try:
+                        x = wte([input_ids, None, None, None], mode="embedding")
+                    except:
+                        if hasattr(self.model_tester, "embedding_size"):
+                            x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
+                        else:
+                            x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
+            return x
 
         def test_inputs_embeds(self):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            input_ids = inputs_dict["input_ids"]
-            del inputs_dict["input_ids"]
+            if not self.is_encoder_decoder:
+                input_ids = inputs_dict["input_ids"]
+                del inputs_dict["input_ids"]
+            else:
+                encoder_input_ids = inputs_dict["encoder_input_ids"]
+                decoder_input_ids = inputs_dict["decoder_input_ids"]
+                del inputs_dict["encoder_input_ids"]
+                del inputs_dict["decoder_input_ids"]
 
             for model_class in self.all_model_classes:
                 model = model_class(config)
 
                 wte = model.get_input_embeddings()
-                try:
-                    x = wte(input_ids, mode="embedding")
-                except:
-                    try:
-                        x = wte([input_ids], mode="embedding")
-                    except:
-                        try:
-                            x = wte([input_ids, None, None, None], mode="embedding")
-                        except:
-                            if hasattr(self.model_tester, "embedding_size"):
-                                x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
-                            else:
-                                x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
-                # ^^ In our TF models, the input_embeddings can take slightly different forms,
-                # so we try a few of them.
-                # We used to fall back to just synthetically creating a dummy tensor of ones:
-                #
-                inputs_dict["inputs_embeds"] = x
+                if not self.is_encoder_decoder:
+                    inputs_dict["inputs_embeds"] = self._get_embeds(wte, input_ids)
+                else:
+                    inputs_dict["encoder_inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
+                    inputs_dict["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
+
                 outputs = model(inputs_dict)
 
 

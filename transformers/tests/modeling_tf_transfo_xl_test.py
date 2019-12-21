@@ -18,11 +18,10 @@ from __future__ import print_function
 
 import unittest
 import random
-import shutil
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_tf, slow
+from .utils import CACHE_DIR, require_tf, slow
 
 from transformers import TransfoXLConfig, is_tf_available
 
@@ -67,7 +66,7 @@ class TFTransfoXLModelTest(TFCommonTestCases.TFCommonModelTester):
             self.batch_size = batch_size
             self.seq_length = seq_length
             self.mem_len = mem_len
-            self.key_len = seq_length + mem_len
+            self.key_length = seq_length + mem_len
             self.clamp_len = clamp_len
             self.is_training = is_training
             self.use_labels = use_labels
@@ -92,7 +91,7 @@ class TFTransfoXLModelTest(TFCommonTestCases.TFCommonModelTester):
                 lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = TransfoXLConfig(
-                vocab_size_or_config_json_file=self.vocab_size,
+                vocab_size=self.vocab_size,
                 mem_len=self.mem_len,
                 clamp_len=self.clamp_len,
                 cutoffs=self.cutoffs,
@@ -205,10 +204,8 @@ class TFTransfoXLModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFTransfoXLModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFTransfoXLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

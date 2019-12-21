@@ -17,7 +17,6 @@ from __future__ import division
 from __future__ import print_function
 
 import unittest
-import shutil
 
 from transformers import is_tf_available
 
@@ -31,7 +30,7 @@ if is_tf_available():
 
 from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
-from .utils import require_tf, slow
+from .utils import CACHE_DIR, require_tf, slow
 
 
 @require_tf
@@ -125,7 +124,7 @@ class TFXLMModelTest(TFCommonTestCases.TFCommonModelTester):
                 is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
             config = XLMConfig(
-                 vocab_size_or_config_json_file=self.vocab_size,
+                 vocab_size=self.vocab_size,
                  n_special=self.n_special,
                  emb_dim=self.hidden_size,
                  n_layers=self.num_hidden_layers,
@@ -252,10 +251,8 @@ class TFXLMModelTest(TFCommonTestCases.TFCommonModelTester):
 
     @slow
     def test_model_from_pretrained(self):
-        cache_dir = "/tmp/transformers_test/"
         for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = XLMModel.from_pretrained(model_name, cache_dir=cache_dir)
-            shutil.rmtree(cache_dir)
+            model = TFXLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

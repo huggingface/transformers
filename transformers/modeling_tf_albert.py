@@ -587,8 +587,8 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         import tensorflow as tf
         from transformers import AlbertTokenizer, TFAlbertModel
 
-        tokenizer = AlbertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFAlbertModel.from_pretrained('bert-base-uncased')
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v1')
+        model = TFAlbertModel.from_pretrained('albert-base-v1')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
