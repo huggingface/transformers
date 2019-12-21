@@ -133,7 +133,7 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 
 ## Model architectures
 
-🤗 Transformers currently provides 10 NLU/NLG architectures:
+🤗 Transformers currently provides the following NLU/NLG architectures:
 
 1. **[BERT](https://github.com/google-research/bert)** (from Google) released with the paper [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova.
 2. **[GPT](https://github.com/openai/finetune-transformer-lm)** (from OpenAI) released with the paper [Improving Language Understanding by Generative Pre-Training](https://blog.openai.com/language-unsupervised/) by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever.
