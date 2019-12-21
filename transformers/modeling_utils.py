@@ -529,6 +529,16 @@ class PreTrainedModel(nn.Module):
                 The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
             **repetition_penalty**: (`optional`) float
                 The parameter for repetition penalty. Between 1.0 and + infinity. 1.0 means no penalty. Default to 1.
+            **bos_token_id**: (`optional`) int
+                Beginning of sentence token if no prompt is provided. Default to 0.
+            **eos_token_ids**: (`optional`) int or list of int
+                End of sequence token or list of tokens to stop the generation. Default to 0.
+            **length_penalty**: (`optional`) int
+                Exponential penalty to the length. Default to 0.
+            **length_penalty**: (`optional`) float
+                Exponential penalty to the length. Default to 1.
+            **num_return_sequences**: (`optional`) int
+                The number of independantly computed returned sequences for each element in the batch. Default to 1.
         """
 
         # We cannot generate if the model does not have a LM head
