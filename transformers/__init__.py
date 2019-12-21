@@ -106,7 +106,7 @@ if is_torch_available():
                             XLM_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_roberta import (RobertaForMaskedLM, RobertaModel,
                                 RobertaForSequenceClassification, RobertaForMultipleChoice,
-                                RobertaForTokenClassification,
+                                RobertaForTokenClassification, RobertaForQuestionAnswering,
                                 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP)
     from .modeling_distilbert import (DistilBertPreTrainedModel, DistilBertForMaskedLM, DistilBertModel,
                                 DistilBertForSequenceClassification, DistilBertForQuestionAnswering,
