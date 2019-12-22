@@ -64,7 +64,7 @@ Choose the right framework for every part of a model's lifetime
 
 ## Installation
 
-This repo is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+), PyTorch 1.0.0+ and TensorFlow 2.0.0-rc1
+This repo is tested on Python 3.5+, PyTorch 1.0.0+ and TensorFlow 2.0.0-rc1
 
 ### With pip
 

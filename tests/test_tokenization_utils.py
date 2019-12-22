@@ -12,11 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import, division, print_function
+
 
 import unittest
-
-import six
 
 from transformers import PreTrainedTokenizer
 from transformers.tokenization_gpt2 import GPT2Tokenizer
@@ -34,10 +32,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assertIsInstance(tokenizer, PreTrainedTokenizer)
 
             for special_tok in tokenizer.all_special_tokens:
-                if six.PY2:
-                    self.assertIsInstance(special_tok, unicode)  # noqa: F821
-                else:
-                    self.assertIsInstance(special_tok, str)
+                self.assertIsInstance(special_tok, str)
                 special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
                 self.assertIsInstance(special_tok_id, int)
 

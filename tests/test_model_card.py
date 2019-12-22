@@ -12,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import json
 import os
+import tempfile
 import unittest
 
 from transformers.modelcard import ModelCard
-
-from .test_tokenization_common import TemporaryDirectory
 
 
 class ModelCardTester(unittest.TestCase):
@@ -65,7 +64,7 @@ class ModelCardTester(unittest.TestCase):
     def test_model_card_to_json_file(self):
         model_card_first = ModelCard.from_dict(self.inputs_dict)
 
-        with TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory() as tmpdirname:
             filename = os.path.join(tmpdirname, "modelcard.json")
             model_card_first.to_json_file(filename)
             model_card_second = ModelCard.from_json_file(filename)
@@ -75,7 +74,7 @@ class ModelCardTester(unittest.TestCase):
     def test_model_card_from_and_save_pretrained(self):
         model_card_first = ModelCard.from_dict(self.inputs_dict)
 
-        with TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory() as tmpdirname:
             model_card_first.save_pretrained(tmpdirname)
             model_card_second = ModelCard.from_pretrained(tmpdirname)
 

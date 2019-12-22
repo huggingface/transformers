@@ -15,13 +15,11 @@
 # limitations under the License.
 """ Configuration base class and utilities."""
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
 import json
 import logging
 import os
-from io import open
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 

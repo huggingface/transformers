@@ -14,13 +14,11 @@
 # limitations under the License.
 """Tokenization classes."""
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import collections
 import logging
 import os
 import unicodedata
-from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
 
@@ -203,11 +201,11 @@ class BertTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        """Converts an index (integer) in a token (str) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):

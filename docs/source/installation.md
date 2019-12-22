@@ -1,6 +1,6 @@
 # Installation
 
-Transformers is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 1.1.0
+Transformers is tested on Python 3.5+ and PyTorch 1.1.0
 
 ## With pip
 
@@ -44,7 +44,7 @@ By default, slow tests are skipped. Set the `RUN_SLOW` environment variable to `
 
 ## OpenAI GPT original tokenization workflow
 
-If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install `ftfy` (use version 4.4.3 if you are using Python 2) and `SpaCy`:
+If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install `ftfy` and `SpaCy`:
 
 ``` bash
 pip install spacy ftfy==4.4.3

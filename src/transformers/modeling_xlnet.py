@@ -15,11 +15,10 @@
 # limitations under the License.
 """ PyTorch XLNet model.
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import logging
 import math
-import sys
 
 import torch
 from torch import nn
@@ -420,9 +419,7 @@ class XLNetFeedForward(nn.Module):
         self.layer_1 = nn.Linear(config.d_model, config.d_inner)
         self.layer_2 = nn.Linear(config.d_inner, config.d_model)
         self.dropout = nn.Dropout(config.dropout)
-        if isinstance(config.ff_activation, str) or (
-            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)  # noqa: F821
-        ):
+        if isinstance(config.ff_activation, str):
             self.activation_function = ACT2FN[config.ff_activation]
         else:
             self.activation_function = config.ff_activation

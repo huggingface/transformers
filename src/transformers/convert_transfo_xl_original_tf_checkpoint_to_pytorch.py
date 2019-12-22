@@ -14,13 +14,12 @@
 # limitations under the License.
 """Convert Transformer XL checkpoint and datasets."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
 import os
+import pickle
 import sys
-from io import open
 
 import torch
 
@@ -33,12 +32,6 @@ from transformers import (
     load_tf_weights_in_transfo_xl,
 )
 from transformers.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
-
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
 
 
 logging.basicConfig(level=logging.INFO)

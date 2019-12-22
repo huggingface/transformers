@@ -19,7 +19,7 @@
 
     This script with default values evaluates a pretrained Transformer-XL on WikiText 103
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import argparse
 import logging

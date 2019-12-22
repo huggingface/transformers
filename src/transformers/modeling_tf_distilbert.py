@@ -14,7 +14,7 @@
 # limitations under the License.
 """ TF 2.0 DistilBERT model
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import logging
 import math

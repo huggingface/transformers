@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import json
 import logging
 import os
 import re
-from io import open
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
@@ -177,7 +176,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):

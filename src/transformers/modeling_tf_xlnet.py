@@ -15,10 +15,9 @@
 # limitations under the License.
 """ TF 2.0 XLNet model.
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import logging
-import sys
 
 import numpy as np
 import tensorflow as tf
@@ -290,9 +289,7 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
             config.d_model, kernel_initializer=get_initializer(config.initializer_range), name="layer_2"
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        if isinstance(config.ff_activation, str) or (
-            sys.version_info[0] == 2 and isinstance(config.ff_activation, unicode)  # noqa: F821
-        ):
+        if isinstance(config.ff_activation, str):
             self.activation_function = ACT2FN[config.ff_activation]
         else:
             self.activation_function = config.ff_activation
