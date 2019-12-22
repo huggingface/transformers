@@ -15,7 +15,6 @@
 # limitations under the License.
 """ This is the exact same script as `examples/run_squad.py` (as of 2019, October 4th) with an additional and optional step of distillation."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

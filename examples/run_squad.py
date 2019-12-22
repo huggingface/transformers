@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

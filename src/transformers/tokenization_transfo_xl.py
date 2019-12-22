@@ -16,7 +16,7 @@
 """ Tokenization classes for Transformer XL model.
     Adapted from https://github.com/kimiyoung/transformer-xl.
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import glob
 import logging

@@ -15,7 +15,6 @@
 # limitations under the License.
 """ TF 2.0 T5 model. """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
 import itertools

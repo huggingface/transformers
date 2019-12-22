@@ -19,7 +19,6 @@ GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while B
 using a masked language modeling (MLM) loss.
 """
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

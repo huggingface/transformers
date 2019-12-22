@@ -15,7 +15,6 @@
 # limitations under the License.
 """ XNLI utils (dataset loading and evaluation) """
 
-from __future__ import absolute_import, division, print_function
 
 import logging
 import os

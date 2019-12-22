@@ -16,7 +16,6 @@
 """ Finetuning multi-lingual models on XNLI (Bert, DistilBERT, XLM).
     Adapted from `examples/run_glue.py`"""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

@@ -16,7 +16,7 @@
 """BERT finetuning runner.
    Finetuning the library models for multiple choice on SWAG (Bert).
 """
-from __future__ import absolute_import, division, print_function
+
 
 import argparse
 import csv

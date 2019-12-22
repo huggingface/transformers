@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert or Roberta). """
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

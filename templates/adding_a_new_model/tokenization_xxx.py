@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Tokenization class for model XXX."""
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import collections
 import logging

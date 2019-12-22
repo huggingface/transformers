@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Multiple choice fine-tuning: utilities to work with multiple choice tasks of reading comprehension  """
 
-from __future__ import absolute_import, division, print_function
 
 import csv
 import glob

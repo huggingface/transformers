@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Classes to support Encoder-Decoder architectures """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 import os

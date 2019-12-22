@@ -16,7 +16,7 @@
     adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
     and in part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import copy
 import logging
