@@ -19,7 +19,7 @@ from io import open
 
 from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 
-from .tokenization_tests_commons import CommonTestCases
+from .test_tokenization_commo import CommonTestCases
 
 
 class CTRLTokenizationTest(CommonTestCases.CommonTokenizerTester):

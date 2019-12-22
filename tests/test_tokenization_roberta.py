@@ -20,7 +20,7 @@ from io import open
 
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
 
-from .tokenization_tests_commons import CommonTestCases
+from .test_tokenization_commo import CommonTestCases
 from .utils import slow
 
 
