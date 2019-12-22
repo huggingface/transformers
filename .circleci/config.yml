@@ -15,7 +15,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_py3_torch:
         working_directory: ~/transformers
@@ -31,7 +31,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_py3_tf:
         working_directory: ~/transformers
@@ -47,7 +47,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest codecov pytest-cov pytest-xdist
             - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./transformers/tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_py3_custom_tokenizers:
         working_directory: ~/transformers
@@ -58,7 +58,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest pytest-xdist
             - run: sudo pip install mecab-python3
-            - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./transformers/tests/tokenization_bert_japanese_test.py
+            - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
     run_examples_py3_torch:
         working_directory: ~/transformers
         docker:
@@ -97,9 +97,9 @@ jobs:
             - run: sudo pip install --editable .
             - run: sudo pip install torch tensorflow
             - run: sudo pip install black git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort flake8
-            - run: black --check --line-length 119 examples templates transformers utils
-            - run: isort --check-only --recursive examples templates transformers utils
-            - run: flake8 examples templates transformers utils
+            - run: black --check --line-length 119 examples templates tests src utils
+            - run: isort --check-only --recursive examples templates tests src utils
+            - run: flake8 examples templates tests src utils
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
