@@ -19,7 +19,7 @@ import os
 from transformers.tokenization_t5 import T5Tokenizer
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
-from .tokenization_tests_commons import CommonTestCases
+from .test_tokenization_commo import CommonTestCases
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")

@@ -18,7 +18,7 @@ import os
 
 from transformers.tokenization_albert import AlbertTokenizer
 
-from .tokenization_tests_commons import CommonTestCases
+from .test_tokenization_commo import CommonTestCases
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/spiece.model")

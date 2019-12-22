@@ -19,7 +19,7 @@ import os
 
 from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 
-from .tokenization_tests_commons import CommonTestCases
+from .test_tokenization_commo import CommonTestCases
 
 
 class OpenAIGPTTokenizationTest(CommonTestCases.CommonTokenizerTester):

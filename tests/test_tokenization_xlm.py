@@ -19,7 +19,7 @@ import os
 
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
-from .tokenization_tests_commons import CommonTestCases
+from .test_tokenization_commo import CommonTestCases
 from .utils import slow
 
 
