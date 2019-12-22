@@ -86,6 +86,20 @@ jobs:
             - run: sudo pip install --progress-bar off -r docs/requirements.txt
             - run: sudo pip install --progress-bar off -r requirements.txt
             - run: ./.circleci/deploy.sh
+    check_code_quality:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: medium
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install --editable .
+            - run: sudo pip install torch tensorflow
+            - run: sudo pip install black git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort flake8
+            - run: black --check --line-length 119 examples templates transformers utils
+            - run: isort --check-only --recursive examples templates transformers utils
+            - run: flake8 examples templates transformers utils
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
@@ -105,6 +119,7 @@ workflows:
     version: 2
     build_and_test:
         jobs:
+            - check_code_quality
             - check_repository_consistency
             - run_examples_py3_torch
             - run_tests_py3_custom_tokenizers

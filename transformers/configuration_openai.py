@@ -17,18 +17,17 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import json
 import logging
-import sys
-from io import open
 
 from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 
 OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-config.json"
 }
+
 
 class OpenAIGPTConfig(PretrainedConfig):
     """
@@ -54,6 +53,7 @@ class OpenAIGPTConfig(PretrainedConfig):
             initializing all weight matrices.
         predict_special_tokens: should we predict special tokens (when the model has a LM head)
     """
+
     pretrained_config_archive_map = OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
@@ -71,7 +71,7 @@ class OpenAIGPTConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         predict_special_tokens=True,
-        summary_type='cls_index',
+        summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,

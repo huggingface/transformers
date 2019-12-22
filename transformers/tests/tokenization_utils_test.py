@@ -12,11 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import unittest
+
 import six
 
 from transformers import PreTrainedTokenizer
@@ -24,8 +23,8 @@ from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 from .utils import slow
 
-class TokenizerUtilsTest(unittest.TestCase):
 
+class TokenizerUtilsTest(unittest.TestCase):
     def check_tokenizer_from_pretrained(self, tokenizer_class):
         s3_models = list(tokenizer_class.max_model_input_sizes.keys())
         for model_name in s3_models[:1]:
@@ -36,7 +35,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
             for special_tok in tokenizer.all_special_tokens:
                 if six.PY2:
-                    self.assertIsInstance(special_tok, unicode)
+                    self.assertIsInstance(special_tok, unicode)  # noqa: F821
                 else:
                     self.assertIsInstance(special_tok, str)
                 special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
@@ -45,6 +44,7 @@ class TokenizerUtilsTest(unittest.TestCase):
     @slow
     def test_pretrained_tokenizers(self):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
+
 
 if __name__ == "__main__":
     unittest.main()

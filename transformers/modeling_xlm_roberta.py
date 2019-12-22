@@ -15,31 +15,37 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model. """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 
-from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification, RobertaForMultipleChoice, RobertaForTokenClassification
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
+from .modeling_roberta import (
+    RobertaForMaskedLM,
+    RobertaForMultipleChoice,
+    RobertaForSequenceClassification,
+    RobertaForTokenClassification,
+    RobertaModel,
+)
+
 
 logger = logging.getLogger(__name__)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'xlm-roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-base-pytorch_model.bin",
-    'xlm-roberta-large': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-pytorch_model.bin",
-    'xlm-roberta-large-finetuned-conll02-dutch': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-dutch-pytorch_model.bin",
-    'xlm-roberta-large-finetuned-conll02-spanish': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-spanish-pytorch_model.bin",
-    'xlm-roberta-large-finetuned-conll03-english': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-english-pytorch_model.bin",
-    'xlm-roberta-large-finetuned-conll03-german': "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-german-pytorch_model.bin",
+    "xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-base-pytorch_model.bin",
+    "xlm-roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-pytorch_model.bin",
+    "xlm-roberta-large-finetuned-conll02-dutch": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-dutch-pytorch_model.bin",
+    "xlm-roberta-large-finetuned-conll02-spanish": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-spanish-pytorch_model.bin",
+    "xlm-roberta-large-finetuned-conll03-english": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-english-pytorch_model.bin",
+    "xlm-roberta-large-finetuned-conll03-german": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-german-pytorch_model.bin",
 }
 
 
 XLM_ROBERTA_START_DOCSTRING = r"""    The XLM-RoBERTa model was proposed in
     `Unsupervised Cross-lingual Representation Learning at Scale`_
     by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov. It is based on Facebook's RoBERTa model released in 2019.
-    
+
     It is a large multi-lingual language model, trained on 2.5TB of filtered CommonCrawl data.
 
     This implementation is the same as RoBERTa.
@@ -54,7 +60,7 @@ XLM_ROBERTA_START_DOCSTRING = r"""    The XLM-RoBERTa model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the 
+        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -73,7 +79,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
 
                 ``tokens:         <s> the dog is hairy . </s>``
 
-            Fully encoded sequences or sequence pairs can be obtained using the XLMRobertaTokenizer.encode function with 
+            Fully encoded sequences or sequence pairs can be obtained using the XLMRobertaTokenizer.encode function with
             the ``add_special_tokens`` parameter set to ``True``.
 
             XLM-RoBERTa is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -105,8 +111,12 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare XLM-RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-                      XLM_ROBERTA_START_DOCSTRING, XLM_ROBERTA_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare XLM-RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
+    XLM_ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_INPUTS_DOCSTRING,
+)
 class XLMRobertaModel(RobertaModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -154,8 +164,11 @@ class XLMRobertaModel(RobertaModel):
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""XLM-RoBERTa Model with a `language modeling` head on top. """,
-    XLM_ROBERTA_START_DOCSTRING, XLM_ROBERTA_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    XLM_ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_INPUTS_DOCSTRING,
+)
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -190,9 +203,12 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""XLM-RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer 
+@add_start_docstrings(
+    """XLM-RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
-    XLM_ROBERTA_START_DOCSTRING, XLM_ROBERTA_INPUTS_DOCSTRING)
+    XLM_ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_INPUTS_DOCSTRING,
+)
 class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -228,9 +244,12 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""XLM-RoBERTa Model with a multiple choice classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    XLM_ROBERTA_START_DOCSTRING, XLM_ROBERTA_INPUTS_DOCSTRING)
+    XLM_ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_INPUTS_DOCSTRING,
+)
 class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -262,9 +281,12 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""XLM-RoBERTa Model with a token classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    XLM_ROBERTA_START_DOCSTRING, XLM_ROBERTA_INPUTS_DOCSTRING)
+    XLM_ROBERTA_START_DOCSTRING,
+    XLM_ROBERTA_INPUTS_DOCSTRING,
+)
 class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:

@@ -15,8 +15,7 @@
 # limitations under the License.
 """PyTorch MMBT model. """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 
@@ -26,12 +25,14 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import add_start_docstrings
 
+
 logger = logging.getLogger(__name__)
 
 
 class ModalEmbeddings(nn.Module):
     """Generic Modal Embeddings which takes in an encoder, and a transformer embedding.
     """
+
     def __init__(self, config, encoder, embeddings):
         super(ModalEmbeddings, self).__init__()
         self.config = config
@@ -62,7 +63,9 @@ class ModalEmbeddings(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(input_modal.size(0), seq_length)
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros((input_modal.size(0), seq_length), dtype=torch.long, device=input_modal.device)
+            token_type_ids = torch.zeros(
+                (input_modal.size(0), seq_length), dtype=torch.long, device=input_modal.device
+            )
 
         position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -72,10 +75,10 @@ class ModalEmbeddings(nn.Module):
         return embeddings
 
 
-MMBT_START_DOCSTRING = r"""    MMBT model was proposed in 
+MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
     `Supervised Multimodal Bitransformers for Classifying Images and Text`_
     by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
-    It's a supervised multimodal bitransformer model that fuses information from text and other image encoders, 
+    It's a supervised multimodal bitransformer model that fuses information from text and other image encoders,
     and obtain state-of-the-art performance on various multimodal classification benchmark tasks.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
@@ -90,15 +93,15 @@ MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
     Parameters:
         config (:class:`~transformers.MMBTConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
-        transformer (:class: `~nn.Module`): A text transformer that is used by MMBT. 
+        transformer (:class: `~nn.Module`): A text transformer that is used by MMBT.
             It should have embeddings, encoder, and pooler attributes.
-        encoder (:class: `~nn.Module`): Encoder for the second modality. 
+        encoder (:class: `~nn.Module`): Encoder for the second modality.
             It should take in a batch of modal inputs and return k, n dimension embeddings.
 """
 
 MMBT_INPUTS_DOCSTRING = r"""    Inputs:
         **input_modal**: ``torch.FloatTensor`` of shape ``(batch_size, ***)``:
-            The other modality data. It will be the shape that the encoder for that type expects. 
+            The other modality data. It will be the shape that the encoder for that type expects.
             e.g. With an Image Encoder, the shape would be (batch_size, channels, height, width)
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
@@ -116,7 +119,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
         **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Segment token indices to indicate different portions of the inputs.
         **modal_token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
-            Segment token indices to indicate different portions of the non-text modality. 
+            Segment token indices to indicate different portions of the non-text modality.
             The embeddings from these tokens will be summed with the respective token embeddings for the non-text modality.
         **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of positions of each input sequence tokens in the position embeddings.
@@ -140,8 +143,12 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 """
 
-@add_start_docstrings("The bare MMBT Model outputting raw hidden-states without any specific head on top.",
-                      MMBT_START_DOCSTRING, MMBT_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare MMBT Model outputting raw hidden-states without any specific head on top.",
+    MMBT_START_DOCSTRING,
+    MMBT_INPUTS_DOCSTRING,
+)
 class MMBTModel(nn.Module):
     r"""
         Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -167,19 +174,29 @@ class MMBTModel(nn.Module):
             encoder = ImageEncoder(args)
             mmbt = MMBTModel(config, transformer, encoder)
         """
+
     def __init__(self, config, transformer, encoder):
         super(MMBTModel, self).__init__()
         self.config = config
         self.transformer = transformer
         self.modal_encoder = ModalEmbeddings(config, encoder, transformer.embeddings)
 
-    def forward(self, input_modal, input_ids=None, modal_start_tokens=None,
-                modal_end_tokens=None, attention_mask=None,
-                token_type_ids=None, modal_token_type_ids=None,
-                position_ids=None, modal_position_ids=None, head_mask=None,
-                inputs_embeds=None, encoder_hidden_states=None,
-                encoder_attention_mask=None):
-
+    def forward(
+        self,
+        input_modal,
+        input_ids=None,
+        modal_start_tokens=None,
+        modal_end_tokens=None,
+        attention_mask=None,
+        token_type_ids=None,
+        modal_token_type_ids=None,
+        position_ids=None,
+        modal_position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+    ):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -192,21 +209,22 @@ class MMBTModel(nn.Module):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        modal_embeddings = self.modal_encoder(input_modal,
-                                              start_token=modal_start_tokens,
-                                              end_token=modal_end_tokens,
-                                              position_ids=modal_position_ids,
-                                              token_type_ids=modal_token_type_ids)
+        modal_embeddings = self.modal_encoder(
+            input_modal,
+            start_token=modal_start_tokens,
+            end_token=modal_end_tokens,
+            position_ids=modal_position_ids,
+            token_type_ids=modal_token_type_ids,
+        )
 
         input_modal_shape = modal_embeddings.size()[:-1]
 
         if token_type_ids is None:
             token_type_ids = torch.ones(input_txt_shape, dtype=torch.long, device=device)
 
-        txt_embeddings = self.transformer.embeddings(input_ids=input_ids,
-                                                     position_ids=position_ids,
-                                                     token_type_ids=token_type_ids,
-                                                     inputs_embeds=inputs_embeds)
+        txt_embeddings = self.transformer.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
 
         embedding_output = torch.cat([modal_embeddings, txt_embeddings], 1)
 
@@ -215,12 +233,16 @@ class MMBTModel(nn.Module):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
         else:
-            attention_mask = torch.cat([torch.ones(input_modal_shape, device=device, dtype=torch.long),  attention_mask], dim=1)
+            attention_mask = torch.cat(
+                [torch.ones(input_modal_shape, device=device, dtype=torch.long), attention_mask], dim=1
+            )
 
         if encoder_attention_mask is None:
             encoder_attention_mask = torch.ones(input_shape, device=device)
         else:
-            encoder_attention_mask = torch.cat([torch.ones(input_modal_shape, device=device),  encoder_attention_mask], dim=1)
+            encoder_attention_mask = torch.cat(
+                [torch.ones(input_modal_shape, device=device), encoder_attention_mask], dim=1
+            )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -254,7 +276,9 @@ class MMBTModel(nn.Module):
         if encoder_attention_mask.dim() == 2:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
 
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        encoder_extended_attention_mask = encoder_extended_attention_mask.to(
+            dtype=next(self.parameters()).dtype
+        )  # fp16 compatibility
         encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
 
         # Prepare head mask if needed
@@ -267,24 +291,30 @@ class MMBTModel(nn.Module):
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
                 head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype)  # switch to fload if need + fp16 compatibility
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-
-        encoder_outputs = self.transformer.encoder(embedding_output,
-                                                   attention_mask=extended_attention_mask,
-                                                   head_mask=head_mask,
-                                                   encoder_hidden_states=encoder_hidden_states,
-                                                   encoder_attention_mask=encoder_extended_attention_mask)
+        encoder_outputs = self.transformer.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_extended_attention_mask,
+        )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.transformer.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        outputs = (sequence_output, pooled_output,) + encoder_outputs[
+            1:
+        ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
-
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -293,8 +323,12 @@ class MMBTModel(nn.Module):
         self.embeddings.word_embeddings = value
 
 
-@add_start_docstrings("""MMBT Model with a sequence classification/regression head on top (a linear layer on top of
-                      the pooled output)""", MMBT_START_DOCSTRING, MMBT_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """MMBT Model with a sequence classification/regression head on top (a linear layer on top of
+                      the pooled output)""",
+    MMBT_START_DOCSTRING,
+    MMBT_INPUTS_DOCSTRING,
+)
 class MMBTForClassification(nn.Module):
     r"""
             **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -333,20 +367,35 @@ class MMBTForClassification(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, input_modal, input_ids=None, modal_start_tokens=None, modal_end_tokens=None,
-                attention_mask=None, token_type_ids=None, modal_token_type_ids=None, position_ids=None,
-                modal_position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self,
+        input_modal,
+        input_ids=None,
+        modal_start_tokens=None,
+        modal_end_tokens=None,
+        attention_mask=None,
+        token_type_ids=None,
+        modal_token_type_ids=None,
+        position_ids=None,
+        modal_position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
 
-        outputs = self.mmbt(input_modal=input_modal, input_ids=input_ids,
-                            modal_start_tokens=modal_start_tokens,
-                            modal_end_tokens=modal_end_tokens,
-                            attention_mask=attention_mask,
-                            token_type_ids=token_type_ids,
-                            modal_token_type_ids=modal_token_type_ids,
-                            position_ids=position_ids,
-                            modal_position_ids=modal_position_ids,
-                            head_mask=head_mask,
-                            inputs_embeds=inputs_embeds)
+        outputs = self.mmbt(
+            input_modal=input_modal,
+            input_ids=input_ids,
+            modal_start_tokens=modal_start_tokens,
+            modal_end_tokens=modal_end_tokens,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            modal_token_type_ids=modal_token_type_ids,
+            position_ids=position_ids,
+            modal_position_ids=modal_position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
 
         pooled_output = outputs[1]
 

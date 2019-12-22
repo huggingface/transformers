@@ -17,7 +17,9 @@ import logging
 import unittest
 
 from transformers import is_torch_available
+
 from .utils import require_torch, slow
+
 
 if is_torch_available():
     from transformers import BertModel, BertForMaskedLM, Model2Model
@@ -39,13 +41,13 @@ class EncoderDecoderModelTest(unittest.TestCase):
     def test_model2model_from_pretrained_not_bert(self):
         logging.basicConfig(level=logging.INFO)
         with self.assertRaises(ValueError):
-            _ = Model2Model.from_pretrained('roberta')
+            _ = Model2Model.from_pretrained("roberta")
 
         with self.assertRaises(ValueError):
-            _ = Model2Model.from_pretrained('distilbert')
+            _ = Model2Model.from_pretrained("distilbert")
 
         with self.assertRaises(ValueError):
-            _ = Model2Model.from_pretrained('does-not-exist')
+            _ = Model2Model.from_pretrained("does-not-exist")
 
 
 if __name__ == "__main__":

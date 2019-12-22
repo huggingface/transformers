@@ -12,65 +12,72 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import os
-import unittest
-import json
 import random
+import unittest
 
 from transformers import XLNetConfig, is_tf_available
+
+from .configuration_common_test import ConfigTester
+from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
+from .utils import CACHE_DIR, require_tf, slow
+
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_xlnet import (TFXLNetModel, TFXLNetLMHeadModel,
-                                                        TFXLNetForSequenceClassification,
-                                                        TFXLNetForTokenClassification,
-                                                        TFXLNetForQuestionAnsweringSimple,
-                                                        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP)
-
-from .modeling_tf_common_test import (TFCommonTestCases, ids_tensor)
-from .configuration_common_test import ConfigTester
-from .utils import CACHE_DIR, require_tf, slow
+    from transformers.modeling_tf_xlnet import (
+        TFXLNetModel,
+        TFXLNetLMHeadModel,
+        TFXLNetForSequenceClassification,
+        TFXLNetForTokenClassification,
+        TFXLNetForQuestionAnsweringSimple,
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
 
 @require_tf
 class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
 
-    all_model_classes=(TFXLNetModel, TFXLNetLMHeadModel,
-                       TFXLNetForSequenceClassification,
-                       TFXLNetForTokenClassification,
-                       TFXLNetForQuestionAnsweringSimple) if is_tf_available() else ()
+    all_model_classes = (
+        (
+            TFXLNetModel,
+            TFXLNetLMHeadModel,
+            TFXLNetForSequenceClassification,
+            TFXLNetForTokenClassification,
+            TFXLNetForQuestionAnsweringSimple,
+        )
+        if is_tf_available()
+        else ()
+    )
     test_pruning = False
 
     class TFXLNetModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     mem_len=10,
-                     clamp_len=-1,
-                     reuse_len=15,
-                     is_training=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     cutoffs=[10, 50, 80],
-                     hidden_size=32,
-                     num_attention_heads=4,
-                     d_inner=128,
-                     num_hidden_layers=5,
-                     type_sequence_label_size=2,
-                     untie_r=True,
-                     bi_data=False,
-                     same_length=False,
-                     initializer_range=0.05,
-                     seed=1,
-                     type_vocab_size=2,
-            ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            mem_len=10,
+            clamp_len=-1,
+            reuse_len=15,
+            is_training=True,
+            use_labels=True,
+            vocab_size=99,
+            cutoffs=[10, 50, 80],
+            hidden_size=32,
+            num_attention_heads=4,
+            d_inner=128,
+            num_hidden_layers=5,
+            type_sequence_label_size=2,
+            untie_r=True,
+            bi_data=False,
+            same_length=False,
+            initializer_range=0.05,
+            seed=1,
+            type_vocab_size=2,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -131,22 +138,44 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 reuse_len=self.reuse_len,
                 bi_data=self.bi_data,
                 initializer_range=self.initializer_range,
-                num_labels=self.type_sequence_label_size)
+                num_labels=self.type_sequence_label_size,
+            )
 
-            return (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                    target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels)
+            return (
+                config,
+                input_ids_1,
+                input_ids_2,
+                input_ids_q,
+                perm_mask,
+                input_mask,
+                target_mapping,
+                segment_ids,
+                lm_labels,
+                sequence_labels,
+                is_impossible_labels,
+            )
 
         def set_seed(self):
             random.seed(self.seed)
             tf.random.set_seed(self.seed)
 
-        def create_and_check_xlnet_base_model(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+        def create_and_check_xlnet_base_model(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+        ):
             model = TFXLNetModel(config)
 
-            inputs = {'input_ids': input_ids_1,
-                      'input_mask': input_mask,
-                      'token_type_ids': segment_ids}
+            inputs = {"input_ids": input_ids_1, "input_mask": input_mask, "token_type_ids": segment_ids}
 
             _, _ = model(inputs)
 
@@ -165,30 +194,38 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
             self.parent.assertEqual(len(no_mems_outputs), 1)
 
             self.parent.assertListEqual(
-                list(result["outputs"].shape),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["outputs"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.shape) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+        def create_and_check_xlnet_lm_head(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+        ):
             model = TFXLNetLMHeadModel(config)
 
-            inputs_1 = {'input_ids': input_ids_1,
-                      'token_type_ids': segment_ids}
+            inputs_1 = {"input_ids": input_ids_1, "token_type_ids": segment_ids}
 
             all_logits_1, mems_1 = model(inputs_1)
 
-            inputs_2 = {'input_ids': input_ids_2,
-                        'mems': mems_1,
-                        'token_type_ids': segment_ids}
+            inputs_2 = {"input_ids": input_ids_2, "mems": mems_1, "token_type_ids": segment_ids}
 
             all_logits_2, mems_2 = model(inputs_2)
 
-            inputs_3 = {'input_ids': input_ids_q,
-                        'perm_mask': perm_mask,
-                        'target_mapping': target_mapping}
+            inputs_3 = {"input_ids": input_ids_q, "perm_mask": perm_mask, "target_mapping": target_mapping}
 
             logits, _ = model(inputs_3)
 
@@ -200,26 +237,38 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
             }
 
             self.parent.assertListEqual(
-                list(result["all_logits_1"].shape),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["all_logits_1"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.shape) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
             self.parent.assertListEqual(
-                list(result["all_logits_2"].shape),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["all_logits_2"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.shape) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_qa(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+        def create_and_check_xlnet_qa(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+        ):
             model = TFXLNetForQuestionAnsweringSimple(config)
 
-            inputs = {'input_ids': input_ids_1,
-                      'attention_mask': input_mask,
-                      'token_type_ids': segment_ids}
+            inputs = {"input_ids": input_ids_1, "attention_mask": input_mask, "token_type_ids": segment_ids}
             start_logits, end_logits, mems = model(inputs)
 
             result = {
@@ -228,18 +277,27 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 "mems": [m.numpy() for m in mems],
             }
 
-            self.parent.assertListEqual(
-                list(result["start_logits"].shape),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["end_logits"].shape),
-                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
                 list(list(mem.shape) for mem in result["mems"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_sequence_classif(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+        def create_and_check_xlnet_sequence_classif(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+        ):
             model = TFXLNetForSequenceClassification(config)
 
             logits, mems_1 = model(input_ids_1)
@@ -249,41 +307,63 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
                 "logits": logits.numpy(),
             }
 
-            self.parent.assertListEqual(
-                list(result["logits"].shape),
-                [self.batch_size, self.type_sequence_label_size])
+            self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
             self.parent.assertListEqual(
                 list(list(mem.shape) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_for_token_classification(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels):
+        def create_and_check_xlnet_for_token_classification(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+        ):
             config.num_labels = input_ids_1.shape[1]
             model = TFXLNetForTokenClassification(config)
-            inputs = {'input_ids': input_ids_1,
-                      'attention_mask': input_mask,
-                      # 'token_type_ids': token_type_ids
-                      }
+            inputs = {
+                "input_ids": input_ids_1,
+                "attention_mask": input_mask,
+                # 'token_type_ids': token_type_ids
+            }
             logits, mems_1 = model(inputs)
             result = {
                 "mems_1": [mem.numpy() for mem in mems_1],
                 "logits": logits.numpy(),
             }
             self.parent.assertListEqual(
-                list(result["logits"].shape),
-                [self.batch_size, self.seq_length, config.num_labels])
+                list(result["logits"].shape), [self.batch_size, self.seq_length, config.num_labels]
+            )
             self.parent.assertListEqual(
                 list(list(mem.shape) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels,
-                sequence_labels, is_impossible_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids_1}
+            (
+                config,
+                input_ids_1,
+                input_ids_2,
+                input_ids_q,
+                perm_mask,
+                input_mask,
+                target_mapping,
+                segment_ids,
+                lm_labels,
+                sequence_labels,
+                is_impossible_labels,
+            ) = config_and_inputs
+            inputs_dict = {"input_ids": input_ids_1}
             return config, inputs_dict
-
 
     def setUp(self):
         self.model_tester = TFXLNetModelTest.TFXLNetModelTester(self)

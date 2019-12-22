@@ -14,40 +14,51 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
 import csv
 import json
+import logging
 import os
 import pickle
-import logging
-import six
-
+import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from itertools import groupby
 from os.path import abspath, exists
-from typing import Union, Optional, Tuple, List, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import six
 
-from transformers import (AutoConfig, AutoTokenizer, PreTrainedTokenizer,
-                          PretrainedConfig, ModelCard, SquadExample,
-                          squad_convert_examples_to_features, is_tf_available,
-                          is_torch_available, BasicTokenizer,
-                          ALL_PRETRAINED_CONFIG_ARCHIVE_MAP)
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_utils import PretrainedConfig
+from .data import SquadExample, squad_convert_examples_to_features
+from .file_utils import is_tf_available, is_torch_available
+from .modelcard import ModelCard
+from .tokenization_auto import AutoTokenizer
+from .tokenization_bert import BasicTokenizer
+from .tokenization_utils import PreTrainedTokenizer
+
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFAutoModel, TFAutoModelForSequenceClassification, \
-        TFAutoModelForQuestionAnswering, TFAutoModelForTokenClassification
+    from .modeling_tf_auto import (
+        TFAutoModel,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForTokenClassification,
+    )
 
 if is_torch_available():
     import torch
-    from transformers import AutoModel, AutoModelForSequenceClassification, \
-        AutoModelForQuestionAnswering, AutoModelForTokenClassification
+    from .modeling_auto import (
+        AutoModel,
+        AutoModelForSequenceClassification,
+        AutoModelForQuestionAnswering,
+        AutoModelForTokenClassification,
+    )
 
 
 logger = logging.getLogger(__name__)
+
 
 def get_framework(model=None):
     """ Select framework (TensorFlow/PyTorch) to use.
@@ -56,20 +67,24 @@ def get_framework(model=None):
     if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
         # Both framework are available but the use supplied a model class instance.
         # Try to guess which framework to use from the model classname
-        framework = 'tf' if model.__class__.__name__.startswith('TF') else 'pt'
+        framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     elif not is_tf_available() and not is_torch_available():
-        raise ImportError("At least one of TensorFlow 2.0 or PyTorch should be installed. "
-                          "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
-                          "To install PyTorch, read the instructions at https://pytorch.org/.")
+        raise ImportError(
+            "At least one of TensorFlow 2.0 or PyTorch should be installed. "
+            "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
+            "To install PyTorch, read the instructions at https://pytorch.org/."
+        )
     else:
         # framework = 'tf' if is_tf_available() else 'pt'
-        framework = 'pt' if is_torch_available() else 'tf'
+        framework = "pt" if is_torch_available() else "tf"
     return framework
+
 
 class ArgumentHandler(ABC):
     """
     Base interface for handling varargs for each Pipeline
     """
+
     @abstractmethod
     def __call__(self, *args, **kwargs):
         raise NotImplementedError()
@@ -79,11 +94,12 @@ class DefaultArgumentHandler(ArgumentHandler):
     """
     Default varargs argument parser handling parameters for each Pipeline
     """
+
     def __call__(self, *args, **kwargs):
-        if 'X' in kwargs:
-            return kwargs['X']
-        elif 'data' in kwargs:
-            return kwargs['data']
+        if "X" in kwargs:
+            return kwargs["X"]
+        elif "data" in kwargs:
+            return kwargs["data"]
         elif len(args) == 1:
             if isinstance(args[0], list):
                 return args[0]
@@ -91,7 +107,7 @@ class DefaultArgumentHandler(ArgumentHandler):
                 return [args[0]]
         elif len(args) > 1:
             return list(args)
-        raise ValueError('Unable to infer the format of the provided data (X=, data=, ...)')
+        raise ValueError("Unable to infer the format of the provided data (X=, data=, ...)")
 
 
 class PipelineDataFormat:
@@ -105,24 +121,25 @@ class PipelineDataFormat:
     PipelineDataFormat also includes some utilities to work with multi-columns like mapping from datasets columns
     to pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
     """
-    SUPPORTED_FORMATS = ['json', 'csv', 'pipe']
+
+    SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
     def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
         self.output_path = output_path
         self.input_path = input_path
-        self.column = column.split(',') if column is not None else ['']
+        self.column = column.split(",") if column is not None else [""]
         self.is_multi_columns = len(self.column) > 1
 
         if self.is_multi_columns:
-            self.column = [tuple(c.split('=')) if '=' in c else (c, c) for c in self.column]
+            self.column = [tuple(c.split("=")) if "=" in c else (c, c) for c in self.column]
 
         if output_path is not None and not overwrite:
             if exists(abspath(self.output_path)):
-                raise OSError('{} already exists on disk'.format(self.output_path))
+                raise OSError("{} already exists on disk".format(self.output_path))
 
         if input_path is not None:
             if not exists(abspath(self.input_path)):
-                raise OSError('{} doesnt exist on disk'.format(self.input_path))
+                raise OSError("{} doesnt exist on disk".format(self.input_path))
 
     @abstractmethod
     def __iter__(self):
@@ -144,23 +161,25 @@ class PipelineDataFormat:
         :return: (str) Path where the data has been saved
         """
         path, _ = os.path.splitext(self.output_path)
-        binary_path = os.path.extsep.join((path, 'pickle'))
+        binary_path = os.path.extsep.join((path, "pickle"))
 
-        with open(binary_path, 'wb+') as f_output:
+        with open(binary_path, "wb+") as f_output:
             pickle.dump(data, f_output)
 
         return binary_path
 
     @staticmethod
-    def from_str(format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
-        if format == 'json':
+    def from_str(
+        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False
+    ):
+        if format == "json":
             return JsonPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
-        elif format == 'csv':
+        elif format == "csv":
             return CsvPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
-        elif format == 'pipe':
+        elif format == "pipe":
             return PipedPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
         else:
-            raise KeyError('Unknown reader {} (Available reader are json/csv/pipe)'.format(format))
+            raise KeyError("Unknown reader {} (Available reader are json/csv/pipe)".format(format))
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
@@ -168,7 +187,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
     def __iter__(self):
-        with open(self.input_path, 'r') as f:
+        with open(self.input_path, "r") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if self.is_multi_columns:
@@ -177,7 +196,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
                     yield row[self.column[0]]
 
     def save(self, data: List[dict]):
-        with open(self.output_path, 'w') as f:
+        with open(self.output_path, "w") as f:
             if len(data) > 0:
                 writer = csv.DictWriter(f, list(data[0].keys()))
                 writer.writeheader()
@@ -188,7 +207,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
-        with open(input_path, 'r') as f:
+        with open(input_path, "r") as f:
             self._entries = json.load(f)
 
     def __iter__(self):
@@ -199,7 +218,7 @@ class JsonPipelineDataFormat(PipelineDataFormat):
                 yield entry[self.column[0]]
 
     def save(self, data: dict):
-        with open(self.output_path, 'w') as f:
+        with open(self.output_path, "w") as f:
             json.dump(data, f)
 
 
@@ -210,12 +229,13 @@ class PipedPipelineDataFormat(PipelineDataFormat):
 
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
     """
+
     def __iter__(self):
         for line in sys.stdin:
             # Split for multi-columns
-            if '\t' in line:
+            if "\t" in line:
 
-                line = line.split('\t')
+                line = line.split("\t")
                 if self.column:
                     # Dictionary to map arguments
                     yield {kwargs: l for (kwargs, _), l in zip(self.column, line)}
@@ -232,8 +252,8 @@ class PipedPipelineDataFormat(PipelineDataFormat):
     def save_binary(self, data: Union[dict, List[dict]]) -> str:
         if self.output_path is None:
             raise KeyError(
-                'When using piped input on pipeline outputting large object requires an output file path. '
-                'Please provide such output path through --output argument.'
+                "When using piped input on pipeline outputting large object requires an output file path. "
+                "Please provide such output path through --output argument."
             )
 
         return super().save_binary(data)
@@ -298,10 +318,16 @@ class Pipeline(_ScikitCompat):
 
     default_input_names = None
 
-    def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
-                 modelcard: ModelCard = None, framework: Optional[str] = None,
-                 args_parser: ArgumentHandler = None, device: int = -1,
-                 binary_output: bool = False):
+    def __init__(
+        self,
+        model,
+        tokenizer: PreTrainedTokenizer = None,
+        modelcard: ModelCard = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        binary_output: bool = False,
+    ):
 
         if framework is None:
             framework = get_framework()
@@ -315,8 +341,8 @@ class Pipeline(_ScikitCompat):
         self._args_parser = args_parser or DefaultArgumentHandler()
 
         # Special handling
-        if self.device >= 0 and self.framework == 'pt':
-            self.model = self.model.to('cuda:{}'.format(self.device))
+        if self.device >= 0 and self.framework == "pt":
+            self.model = self.model.to("cuda:{}".format(self.device))
 
     def save_pretrained(self, save_directory):
         """
@@ -356,8 +382,8 @@ class Pipeline(_ScikitCompat):
         Returns:
             Context manager
         """
-        if self.framework == 'tf':
-            with tf.device('/CPU:0' if self.device == -1 else '/device:GPU:{}'.format(self.device)):
+        if self.framework == "tf":
+            with tf.device("/CPU:0" if self.device == -1 else "/device:GPU:{}".format(self.device)):
                 yield
         else:
             if self.device >= 0:
@@ -372,11 +398,11 @@ class Pipeline(_ScikitCompat):
         Returns:
             dict holding all the required parameters for model's forward
         """
-        args = ['input_ids', 'attention_mask']
+        args = ["input_ids", "attention_mask"]
         model_type = type(self.model).__name__.lower()
 
-        if 'distilbert' not in model_type and 'xlm' not in model_type:
-            args += ['token_type_ids']
+        if "distilbert" not in model_type and "xlm" not in model_type:
+            args += ["token_type_ids"]
 
         # PR #1548 (CLI) There is an issue with attention_mask
         # if 'xlnet' in model_type or 'xlm' in model_type:
@@ -394,9 +420,7 @@ class Pipeline(_ScikitCompat):
         # Encode for forward
         with self.device_placement():
             inputs = self.tokenizer.batch_encode_plus(
-                inputs, add_special_tokens=True,
-                return_tensors=self.framework,
-                max_length=self.tokenizer.max_len
+                inputs, add_special_tokens=True, return_tensors=self.framework, max_length=self.tokenizer.max_len
             )
 
             # Filter out features not available on specific models
@@ -411,7 +435,7 @@ class Pipeline(_ScikitCompat):
         Returns:
             Numpy array
         """
-        if self.framework == 'tf':
+        if self.framework == "tf":
             # TODO trace model
             predictions = self.model(inputs, training=False)[0]
         else:
@@ -426,19 +450,24 @@ class FeatureExtractionPipeline(Pipeline):
     Feature extraction pipeline using Model head.
     """
 
-    def __init__(self, model,
-                 tokenizer: PreTrainedTokenizer = None,
-                 modelcard: ModelCard = None,
-                 framework: Optional[str] = None,
-                 args_parser: ArgumentHandler = None,
-                 device: int = -1):
-        super().__init__(model=model,
-                         tokenizer=tokenizer,
-                         modelcard=modelcard,
-                         framework=framework,
-                         args_parser=args_parser,
-                         device=device,
-                         binary_output=True)
+    def __init__(
+        self,
+        model,
+        tokenizer: PreTrainedTokenizer = None,
+        modelcard: ModelCard = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+    ):
+        super().__init__(
+            model=model,
+            tokenizer=tokenizer,
+            modelcard=modelcard,
+            framework=framework,
+            args_parser=args_parser,
+            device=device,
+            binary_output=True,
+        )
 
     def __call__(self, *args, **kwargs):
         return super().__call__(*args, **kwargs).tolist()
@@ -452,7 +481,7 @@ class TextClassificationPipeline(Pipeline):
     def __call__(self, *args, **kwargs):
         outputs = super().__call__(*args, **kwargs)
         scores = np.exp(outputs) / np.exp(outputs).sum(-1)
-        return [{'label': self.model.config.id2label[item.argmax()], 'score': item.max()} for item in scores]
+        return [{"label": self.model.config.id2label[item.argmax()], "score": item.max()} for item in scores]
 
 
 class NerPipeline(Pipeline):
@@ -460,19 +489,28 @@ class NerPipeline(Pipeline):
     Named Entity Recognition pipeline using ModelForTokenClassification head.
     """
 
-    default_input_names = 'sequences'
+    default_input_names = "sequences"
 
-    def __init__(self, model, tokenizer: PreTrainedTokenizer = None,
-                 modelcard: ModelCard = None, framework: Optional[str] = None,
-                 args_parser: ArgumentHandler = None, device: int = -1,
-                 binary_output: bool = False, ignore_labels=['O']):
-        super().__init__(model=model,
-                         tokenizer=tokenizer,
-                         modelcard=modelcard,
-                         framework=framework,
-                         args_parser=args_parser,
-                         device=device,
-                         binary_output=binary_output)
+    def __init__(
+        self,
+        model,
+        tokenizer: PreTrainedTokenizer = None,
+        modelcard: ModelCard = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        binary_output: bool = False,
+        ignore_labels=["O"],
+    ):
+        super().__init__(
+            model=model,
+            tokenizer=tokenizer,
+            modelcard=modelcard,
+            framework=framework,
+            args_parser=args_parser,
+            device=device,
+            binary_output=binary_output,
+        )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
@@ -485,19 +523,20 @@ class NerPipeline(Pipeline):
             with self.device_placement():
 
                 tokens = self.tokenizer.encode_plus(
-                    sentence, return_attention_mask=False,
+                    sentence,
+                    return_attention_mask=False,
                     return_tensors=self.framework,
-                    max_length=self.tokenizer.max_len
+                    max_length=self.tokenizer.max_len,
                 )
 
                 # Forward
-                if self.framework == 'tf':
+                if self.framework == "tf":
                     entities = self.model(tokens)[0][0].numpy()
-                    input_ids = tokens['input_ids'].numpy()[0]
+                    input_ids = tokens["input_ids"].numpy()[0]
                 else:
                     with torch.no_grad():
                         entities = self.model(**tokens)[0][0].cpu().numpy()
-                        input_ids = tokens['input_ids'].cpu().numpy()[0]
+                        input_ids = tokens["input_ids"].cpu().numpy()[0]
 
             score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
             labels_idx = score.argmax(axis=-1)
@@ -505,11 +544,13 @@ class NerPipeline(Pipeline):
             answer = []
             for idx, label_idx in enumerate(labels_idx):
                 if self.model.config.id2label[label_idx] not in self.ignore_labels:
-                    answer += [{
-                        'word': self.tokenizer.decode([int(input_ids[idx])]),
-                        'score': score[idx][label_idx].item(),
-                        'entity': self.model.config.id2label[label_idx]
-                    }]
+                    answer += [
+                        {
+                            "word": self.tokenizer.decode([int(input_ids[idx])]),
+                            "score": score[idx][label_idx].item(),
+                            "entity": self.model.config.id2label[label_idx],
+                        }
+                    ]
 
             # Append
             answers += [answer]
@@ -526,18 +567,19 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
     QuestionAnsweringArgumentHandler manages all the possible to create SquadExample from the command-line supplied
     arguments.
     """
+
     def __call__(self, *args, **kwargs):
         # Position args, handling is sensibly the same as X and data, so forwarding to avoid duplicating
         if args is not None and len(args) > 0:
             if len(args) == 1:
-                kwargs['X'] = args[0]
+                kwargs["X"] = args[0]
             else:
-                kwargs['X'] = list(args)
+                kwargs["X"] = list(args)
 
         # Generic compatibility with sklearn and Keras
         # Batched data
-        if 'X' in kwargs or 'data' in kwargs:
-            inputs = kwargs['X'] if 'X' in kwargs else kwargs['data']
+        if "X" in kwargs or "data" in kwargs:
+            inputs = kwargs["X"] if "X" in kwargs else kwargs["data"]
 
             if isinstance(inputs, dict):
                 inputs = [inputs]
@@ -547,28 +589,31 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
 
             for i, item in enumerate(inputs):
                 if isinstance(item, dict):
-                    if any(k not in item for k in ['question', 'context']):
-                        raise KeyError('You need to provide a dictionary with keys {question:..., context:...}')
+                    if any(k not in item for k in ["question", "context"]):
+                        raise KeyError("You need to provide a dictionary with keys {question:..., context:...}")
 
                     inputs[i] = QuestionAnsweringPipeline.create_sample(**item)
 
                 elif not isinstance(item, SquadExample):
                     raise ValueError(
-                        '{} argument needs to be of type (list[SquadExample | dict], SquadExample, dict)'
-                            .format('X' if 'X' in kwargs else 'data')
+                        "{} argument needs to be of type (list[SquadExample | dict], SquadExample, dict)".format(
+                            "X" if "X" in kwargs else "data"
+                        )
                     )
 
             # Tabular input
-        elif 'question' in kwargs and 'context' in kwargs:
-            if isinstance(kwargs['question'], str):
-                kwargs['question'] = [kwargs['question']]
+        elif "question" in kwargs and "context" in kwargs:
+            if isinstance(kwargs["question"], str):
+                kwargs["question"] = [kwargs["question"]]
 
-            if isinstance(kwargs['context'], str):
-                kwargs['context'] = [kwargs['context']]
+            if isinstance(kwargs["context"], str):
+                kwargs["context"] = [kwargs["context"]]
 
-            inputs = [QuestionAnsweringPipeline.create_sample(q, c) for q, c in zip(kwargs['question'], kwargs['context'])]
+            inputs = [
+                QuestionAnsweringPipeline.create_sample(q, c) for q, c in zip(kwargs["question"], kwargs["context"])
+            ]
         else:
-            raise ValueError('Unknown arguments {}'.format(kwargs))
+            raise ValueError("Unknown arguments {}".format(kwargs))
 
         if not isinstance(inputs, list):
             inputs = [inputs]
@@ -581,22 +626,31 @@ class QuestionAnsweringPipeline(Pipeline):
     Question Answering pipeline using ModelForQuestionAnswering head.
     """
 
-    default_input_names = 'question,context'
+    default_input_names = "question,context"
 
-    def __init__(self, model,
-                 tokenizer: Optional[PreTrainedTokenizer],
-                 modelcard: Optional[ModelCard],
-                 framework: Optional[str] = None,
-                 device: int = -1, **kwargs):
-        super().__init__(model=model,
-                         tokenizer=tokenizer,
-                         modelcard=modelcard,
-                         framework=framework,
-                         args_parser=QuestionAnsweringArgumentHandler(),
-                         device=device, **kwargs)
+    def __init__(
+        self,
+        model,
+        tokenizer: Optional[PreTrainedTokenizer],
+        modelcard: Optional[ModelCard],
+        framework: Optional[str] = None,
+        device: int = -1,
+        **kwargs
+    ):
+        super().__init__(
+            model=model,
+            tokenizer=tokenizer,
+            modelcard=modelcard,
+            framework=framework,
+            args_parser=QuestionAnsweringArgumentHandler(),
+            device=device,
+            **kwargs
+        )
 
     @staticmethod
-    def create_sample(question: Union[str, List[str]], context: Union[str, List[str]]) -> Union[SquadExample, List[SquadExample]]:
+    def create_sample(
+        question: Union[str, List[str]], context: Union[str, List[str]]
+    ) -> Union[SquadExample, List[SquadExample]]:
         """
         QuestionAnsweringPipeline leverages the SquadExample/SquadFeatures internally.
         This helper method encapsulate all the logic for converting question(s) and context(s) to SquadExample(s).
@@ -629,26 +683,28 @@ class QuestionAnsweringPipeline(Pipeline):
             end: the character index in the original string corresponding to the ending of the answer' span
         """
         # Set defaults values
-        kwargs.setdefault('topk', 1)
-        kwargs.setdefault('doc_stride', 128)
-        kwargs.setdefault('max_answer_len', 15)
-        kwargs.setdefault('max_seq_len', 384)
-        kwargs.setdefault('max_question_len', 64)
+        kwargs.setdefault("topk", 1)
+        kwargs.setdefault("doc_stride", 128)
+        kwargs.setdefault("max_answer_len", 15)
+        kwargs.setdefault("max_seq_len", 384)
+        kwargs.setdefault("max_question_len", 64)
 
-        if kwargs['topk'] < 1:
-            raise ValueError('topk parameter should be >= 1 (got {})'.format(kwargs['topk']))
+        if kwargs["topk"] < 1:
+            raise ValueError("topk parameter should be >= 1 (got {})".format(kwargs["topk"]))
 
-        if kwargs['max_answer_len'] < 1:
-            raise ValueError('max_answer_len parameter should be >= 1 (got {})'.format(kwargs['max_answer_len']))
+        if kwargs["max_answer_len"] < 1:
+            raise ValueError("max_answer_len parameter should be >= 1 (got {})".format(kwargs["max_answer_len"]))
 
         # Convert inputs to features
         examples = self._args_parser(*texts, **kwargs)
-        features = squad_convert_examples_to_features(examples, self.tokenizer, kwargs['max_seq_len'], kwargs['doc_stride'], kwargs['max_question_len'], False)
+        features = squad_convert_examples_to_features(
+            examples, self.tokenizer, kwargs["max_seq_len"], kwargs["doc_stride"], kwargs["max_question_len"], False
+        )
         fw_args = self.inputs_for_model([f.__dict__ for f in features])
 
         # Manage tensor allocation on correct device
         with self.device_placement():
-            if self.framework == 'tf':
+            if self.framework == "tf":
                 fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
                 start, end = self.model(fw_args)
                 start, end = start.numpy(), end.numpy()
@@ -672,16 +728,18 @@ class QuestionAnsweringPipeline(Pipeline):
             # Mask CLS
             start_[0] = end_[0] = 0
 
-            starts, ends, scores = self.decode(start_, end_, kwargs['topk'], kwargs['max_answer_len'])
+            starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
             char_to_word = np.array(example.char_to_word_offset)
 
             # Convert the answer (tokens) back to the original text
             answers += [
                 {
-                    'score': score.item(),
-                    'start': np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                    'end': np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                    'answer': ' '.join(example.doc_tokens[feature.token_to_orig_map[s]:feature.token_to_orig_map[e] + 1])
+                    "score": score.item(),
+                    "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                    "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                    "answer": " ".join(
+                        example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                    ),
                 }
                 for s, e, score in zip(starts, ends, scores)
             ]
@@ -767,71 +825,71 @@ class QuestionAnsweringPipeline(Pipeline):
             chars_idx += len(word) + 1
 
         # Join text with spaces
-        return {'answer': ' '.join(words), 'start': max(0, char_start_idx), 'end': min(len(text), char_end_idx)}
+        return {"answer": " ".join(words), "start": max(0, char_start_idx), "end": min(len(text), char_end_idx)}
 
 
 # Register all the supported task here
 SUPPORTED_TASKS = {
-    'feature-extraction': {
-        'impl': FeatureExtractionPipeline,
-        'tf': TFAutoModel if is_tf_available() else None,
-        'pt': AutoModel if is_torch_available() else None,
-        'default': {
-            'model': {
-                'pt': 'distilbert-base-uncased',
-                'tf': 'distilbert-base-uncased',
-            },
-            'config': None,
-            'tokenizer': 'distilbert-base-uncased'
-        }
+    "feature-extraction": {
+        "impl": FeatureExtractionPipeline,
+        "tf": TFAutoModel if is_tf_available() else None,
+        "pt": AutoModel if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "distilbert-base-uncased", "tf": "distilbert-base-uncased"},
+            "config": None,
+            "tokenizer": "distilbert-base-uncased",
+        },
     },
-    'sentiment-analysis': {
-        'impl': TextClassificationPipeline,
-        'tf': TFAutoModelForSequenceClassification if is_tf_available() else None,
-        'pt': AutoModelForSequenceClassification if is_torch_available() else None,
-        'default': {
-            'model': {
-                'pt': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin',
-                'tf': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5',
+    "sentiment-analysis": {
+        "impl": TextClassificationPipeline,
+        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
+        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "default": {
+            "model": {
+                "pt": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
+                "tf": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
             },
-            'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json',
-            'tokenizer': 'distilbert-base-uncased'
-        }
+            "config": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json",
+            "tokenizer": "distilbert-base-uncased",
+        },
     },
-    'ner': {
-        'impl': NerPipeline,
-        'tf': TFAutoModelForTokenClassification if is_tf_available() else None,
-        'pt': AutoModelForTokenClassification if is_torch_available() else None,
-        'default': {
-            'model': {
-                'pt':'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin',
-                'tf': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-tf_model.h5',
+    "ner": {
+        "impl": NerPipeline,
+        "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
+        "pt": AutoModelForTokenClassification if is_torch_available() else None,
+        "default": {
+            "model": {
+                "pt": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin",
+                "tf": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-tf_model.h5",
             },
-            'config': 'https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json',
-            'tokenizer': 'bert-large-cased'
-        }
+            "config": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json",
+            "tokenizer": "bert-large-cased",
+        },
     },
-    'question-answering': {
-        'impl': QuestionAnsweringPipeline,
-        'tf': TFAutoModelForQuestionAnswering if is_tf_available() else None,
-        'pt': AutoModelForQuestionAnswering if is_torch_available() else None,
-        'default': {
-            'model': {
-                'pt': 'distilbert-base-uncased-distilled-squad',
-                'tf': 'distilbert-base-uncased-distilled-squad',
+    "question-answering": {
+        "impl": QuestionAnsweringPipeline,
+        "tf": TFAutoModelForQuestionAnswering if is_tf_available() else None,
+        "pt": AutoModelForQuestionAnswering if is_torch_available() else None,
+        "default": {
+            "model": {
+                "pt": "distilbert-base-uncased-distilled-squad",
+                "tf": "distilbert-base-uncased-distilled-squad",
             },
-            'config': None,
-            'tokenizer': 'distilbert-base-uncased'
-        }
-    }
+            "config": None,
+            "tokenizer": "distilbert-base-uncased",
+        },
+    },
 }
 
 
-def pipeline(task: str, model: Optional = None,
-             config: Optional[Union[str, PretrainedConfig]] = None,
-             tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-             modelcard: Optional[Union[str, ModelCard]] = None,
-             **kwargs) -> Pipeline:
+def pipeline(
+    task: str,
+    model: Optional = None,
+    config: Optional[Union[str, PretrainedConfig]] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+    modelcard: Optional[Union[str, ModelCard]] = None,
+    **kwargs
+) -> Pipeline:
     """
     Utility factory method to build a pipeline.
     Pipeline are made of:
@@ -852,11 +910,11 @@ def pipeline(task: str, model: Optional = None,
     framework = get_framework(model)
 
     targeted_task = SUPPORTED_TASKS[task]
-    task, model_class = targeted_task['impl'], targeted_task[framework]
+    task, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
-        models, config, tokenizer = tuple(targeted_task['default'].values())
+        models, config, tokenizer = tuple(targeted_task["default"].values())
         model = models[framework]
 
     # Try to infer tokenizer from model or config name (if provided as str)
@@ -867,8 +925,10 @@ def pipeline(task: str, model: Optional = None,
             tokenizer = config
         else:
             # Impossible to guest what is the right tokenizer here
-            raise Exception("Impossible to guess which tokenizer to use. "
-                            "Please provided a PretrainedTokenizer class or a path/url/shortcut name to a pretrained tokenizer.")
+            raise Exception(
+                "Impossible to guess which tokenizer to use. "
+                "Please provided a PretrainedTokenizer class or a path/url/shortcut name to a pretrained tokenizer."
+            )
 
     # Try to infer modelcard from model or config name (if provided as str)
     if modelcard is None:
@@ -894,14 +954,18 @@ def pipeline(task: str, model: Optional = None,
     if isinstance(model, str):
         # Handle transparent TF/PT model conversion
         model_kwargs = {}
-        if framework == 'pt' and model.endswith('.h5'):
-            model_kwargs['from_tf'] = True
-            logger.warning('Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. '
-                           'Trying to load the model with PyTorch.')
-        elif framework == 'tf' and model.endswith('.bin'):
-            model_kwargs['from_pt'] = True
-            logger.warning('Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. '
-                           'Trying to load the model with Tensorflow.')
+        if framework == "pt" and model.endswith(".h5"):
+            model_kwargs["from_tf"] = True
+            logger.warning(
+                "Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. "
+                "Trying to load the model with PyTorch."
+            )
+        elif framework == "tf" and model.endswith(".bin"):
+            model_kwargs["from_pt"] = True
+            logger.warning(
+                "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
+                "Trying to load the model with Tensorflow."
+            )
         model = model_class.from_pretrained(model, config=config, **model_kwargs)
 
     return task(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, **kwargs)

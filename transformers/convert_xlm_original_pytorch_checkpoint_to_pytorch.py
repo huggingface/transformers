@@ -18,41 +18,43 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import json
+import logging
 from io import open
 
-import torch
 import numpy
+import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
-import logging
+
 logging.basicConfig(level=logging.INFO)
+
 
 def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_path):
     # Load checkpoint
-    chkpt = torch.load(xlm_checkpoint_path, map_location='cpu')
+    chkpt = torch.load(xlm_checkpoint_path, map_location="cpu")
 
-    state_dict = chkpt['model']
+    state_dict = chkpt["model"]
 
     # We have the base model one level deeper than the original XLM repository
     two_levels_state_dict = {}
     for k, v in state_dict.items():
-        if 'pred_layer' in k:
+        if "pred_layer" in k:
             two_levels_state_dict[k] = v
         else:
-            two_levels_state_dict['transformer.' + k] = v
+            two_levels_state_dict["transformer." + k] = v
 
-    config = chkpt['params']
+    config = chkpt["params"]
     config = dict((n, v) for n, v in config.items() if not isinstance(v, (torch.FloatTensor, numpy.ndarray)))
 
-    vocab = chkpt['dico_word2id']
-    vocab = dict((s + '</w>' if s.find('@@') == -1 and i > 13 else s.replace('@@', ''), i) for s, i in vocab.items())
+    vocab = chkpt["dico_word2id"]
+    vocab = dict((s + "</w>" if s.find("@@") == -1 and i > 13 else s.replace("@@", ""), i) for s, i in vocab.items())
 
     # Save pytorch-model
-    pytorch_weights_dump_path = pytorch_dump_folder_path + '/' + WEIGHTS_NAME
-    pytorch_config_dump_path = pytorch_dump_folder_path + '/' + CONFIG_NAME
-    pytorch_vocab_dump_path = pytorch_dump_folder_path + '/' +  VOCAB_FILES_NAMES['vocab_file']
+    pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
+    pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
+    pytorch_vocab_dump_path = pytorch_dump_folder_path + "/" + VOCAB_FILES_NAMES["vocab_file"]
 
     print("Save PyTorch model to {}".format(pytorch_weights_dump_path))
     torch.save(two_levels_state_dict, pytorch_weights_dump_path)
@@ -68,16 +70,12 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
-    parser.add_argument("--xlm_checkpoint_path",
-                        default = None,
-                        type = str,
-                        required = True,
-                        help = "Path the official PyTorch dump.")
-    parser.add_argument("--pytorch_dump_folder_path",
-                        default = None,
-                        type = str,
-                        required = True,
-                        help = "Path to the output PyTorch model.")
+    # Required parameters
+    parser.add_argument(
+        "--xlm_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
     convert_xlm_checkpoint_to_pytorch(args.xlm_checkpoint_path, args.pytorch_dump_folder_path)

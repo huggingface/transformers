@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2018 Google AI, Google Brain and the HuggingFace Inc. team.
 #
@@ -15,29 +14,33 @@
 # limitations under the License.
 """PyTorch ALBERT model. """
 
-import os
-import math
 import logging
+import math
+import os
+
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
-from transformers.modeling_utils import PreTrainedModel
+
 from transformers.configuration_albert import AlbertConfig
-from transformers.modeling_bert import BertEmbeddings, BertSelfAttention, prune_linear_layer, ACT2FN
+from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
+from transformers.modeling_utils import PreTrainedModel
+
 from .file_utils import add_start_docstrings
+
 
 logger = logging.getLogger(__name__)
 
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'albert-base-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-pytorch_model.bin",
-    'albert-large-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-pytorch_model.bin",
-    'albert-xlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-pytorch_model.bin",
-    'albert-xxlarge-v1': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-pytorch_model.bin",
-    'albert-base-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-pytorch_model.bin",
-    'albert-large-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-pytorch_model.bin",
-    'albert-xlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-pytorch_model.bin",
-    'albert-xxlarge-v2': "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-pytorch_model.bin",
+    "albert-base-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-pytorch_model.bin",
+    "albert-large-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-pytorch_model.bin",
+    "albert-xlarge-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-pytorch_model.bin",
+    "albert-xxlarge-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-pytorch_model.bin",
+    "albert-base-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-pytorch_model.bin",
+    "albert-large-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-pytorch_model.bin",
+    "albert-xlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-pytorch_model.bin",
+    "albert-xxlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-pytorch_model.bin",
 }
 
 
@@ -48,8 +51,10 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         import numpy as np
         import tensorflow as tf
     except ImportError:
-        logger.error("Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions.")
+        logger.error(
+            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
@@ -65,7 +70,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
 
     for name, array in zip(names, arrays):
         print(name)
-    
+
     for name, array in zip(names, arrays):
         original_name = name
 
@@ -75,10 +80,10 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         # Renaming and simplifying
         name = name.replace("ffn_1", "ffn")
         name = name.replace("bert/", "albert/")
-        name = name.replace("attention_1", "attention")   
+        name = name.replace("attention_1", "attention")
         name = name.replace("transform/", "")
-        name = name.replace("LayerNorm_1", "full_layer_layer_norm")    
-        name = name.replace("LayerNorm", "attention/LayerNorm")   
+        name = name.replace("LayerNorm_1", "full_layer_layer_norm")
+        name = name.replace("LayerNorm", "attention/LayerNorm")
         name = name.replace("transformer/", "")
 
         # The feed forward layer had an 'intermediate' step which has been abstracted away
@@ -97,19 +102,19 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         name = name.replace("predictions/attention", "predictions")
 
         # Naming was changed to be more explicit
-        name = name.replace("embeddings/attention", "embeddings")    
-        name = name.replace("inner_group_", "albert_layers/") 
-        name = name.replace("group_", "albert_layer_groups/")   
+        name = name.replace("embeddings/attention", "embeddings")
+        name = name.replace("inner_group_", "albert_layers/")
+        name = name.replace("group_", "albert_layer_groups/")
 
         # Classifier
         if len(name.split("/")) == 1 and ("output_bias" in name or "output_weights" in name):
             name = "classifier/" + name
 
-        # No ALBERT model currently handles the next sentence prediction task 
+        # No ALBERT model currently handles the next sentence prediction task
         if "seq_relationship" in name:
             continue
 
-        name = name.split('/')
+        name = name.split("/")
 
         # Ignore the gradients applied by the LAMB/ADAM optimizers.
         if "adam_m" in name or "adam_v" in name or "global_step" in name:
@@ -118,32 +123,32 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
 
         pointer = model
         for m_name in name:
-            if re.fullmatch(r'[A-Za-z]+_\d+', m_name):
-                l = re.split(r'_(\d+)', m_name)
+            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
+                scope_names = re.split(r"_(\d+)", m_name)
             else:
-                l = [m_name]
+                scope_names = [m_name]
 
-            if l[0] == 'kernel' or l[0] == 'gamma':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'output_bias' or l[0] == 'beta':
-                pointer = getattr(pointer, 'bias')
-            elif l[0] == 'output_weights':
-                pointer = getattr(pointer, 'weight')
-            elif l[0] == 'squad':
-                pointer = getattr(pointer, 'classifier')
+            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
+                pointer = getattr(pointer, "bias")
+            elif scope_names[0] == "output_weights":
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "squad":
+                pointer = getattr(pointer, "classifier")
             else:
                 try:
-                    pointer = getattr(pointer, l[0])
+                    pointer = getattr(pointer, scope_names[0])
                 except AttributeError:
                     logger.info("Skipping {}".format("/".join(name)))
                     continue
-            if len(l) >= 2:
-                num = int(l[1])
+            if len(scope_names) >= 2:
+                num = int(scope_names[1])
                 pointer = pointer[num]
 
-        if m_name[-11:] == '_embeddings':
-            pointer = getattr(pointer, 'weight')
-        elif m_name == 'kernel':
+        if m_name[-11:] == "_embeddings":
+            pointer = getattr(pointer, "weight")
+        elif m_name == "kernel":
             array = np.transpose(array)
         try:
             assert pointer.shape == array.shape
@@ -160,6 +165,7 @@ class AlbertEmbeddings(BertEmbeddings):
     """
     Construct the embeddings from word, position and token_type embeddings.
     """
+
     def __init__(self, config):
         super(AlbertEmbeddings, self).__init__(config)
 
@@ -175,7 +181,7 @@ class AlbertAttention(BertSelfAttention):
 
         self.output_attentions = config.output_attentions
         self.num_attention_heads = config.num_attention_heads
-        self.hidden_size = config.hidden_size 
+        self.hidden_size = config.hidden_size
         self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -237,10 +243,13 @@ class AlbertAttention(BertSelfAttention):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         reshaped_context_layer = context_layer.view(*new_context_layer_shape)
-        
 
         # Should find a better way to do this
-        w = self.dense.weight.t().view(self.num_attention_heads, self.attention_head_size, self.hidden_size).to(context_layer.dtype)
+        w = (
+            self.dense.weight.t()
+            .view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
+            .to(context_layer.dtype)
+        )
         b = self.dense.bias.to(context_layer.dtype)
 
         projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
@@ -252,11 +261,11 @@ class AlbertAttention(BertSelfAttention):
 class AlbertLayer(nn.Module):
     def __init__(self, config):
         super(AlbertLayer, self).__init__()
-        
+
         self.config = config
         self.full_layer_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = AlbertAttention(config)
-        self.ffn = nn.Linear(config.hidden_size, config.intermediate_size) 
+        self.ffn = nn.Linear(config.hidden_size, config.intermediate_size)
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
 
@@ -273,7 +282,7 @@ class AlbertLayer(nn.Module):
 class AlbertLayerGroup(nn.Module):
     def __init__(self, config):
         super(AlbertLayerGroup, self).__init__()
-        
+
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
@@ -303,7 +312,7 @@ class AlbertLayerGroup(nn.Module):
 class AlbertTransformer(nn.Module):
     def __init__(self, config):
         super(AlbertTransformer, self).__init__()
-        
+
         self.config = config
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -327,8 +336,12 @@ class AlbertTransformer(nn.Module):
 
             # Index of the layer inside the group
             layer_idx = int(i - group_idx * layers_per_group)
-            
-            layer_group_output = self.albert_layer_groups[group_idx](hidden_states, attention_mask, head_mask[group_idx*layers_per_group:(group_idx+1)*layers_per_group])  
+
+            layer_group_output = self.albert_layer_groups[group_idx](
+                hidden_states,
+                attention_mask,
+                head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+            )
             hidden_states = layer_group_output[0]
 
             if self.output_attentions:
@@ -337,7 +350,6 @@ class AlbertTransformer(nn.Module):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-        
         outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
@@ -346,11 +358,11 @@ class AlbertTransformer(nn.Module):
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
-
 class AlbertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for dowloading and loading pretrained models.
     """
+
     config_class = AlbertConfig
     pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "albert"
@@ -384,7 +396,7 @@ ALBERT_START_DOCSTRING = r"""    The ALBERT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.AlbertConfig`): Model configuration class with all the parameters of the model. 
+        config (:class:`~transformers.AlbertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -398,13 +410,13 @@ ALBERT_INPUTS_DOCSTRING = r"""
             (a) For sequence pairs:
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-                
+
                 ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
 
             (b) For single sequences:
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
-                
+
                 ``token_type_ids:   0   0   0   0  0     0   0``
 
             Albert is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -431,8 +443,12 @@ ALBERT_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
 """
 
-@add_start_docstrings("The bare ALBERT Model transformer outputting raw hidden-states without any specific head on top.",
-                      ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare ALBERT Model transformer outputting raw hidden-states without any specific head on top.",
+    ALBERT_START_DOCSTRING,
+    ALBERT_INPUTS_DOCSTRING,
+)
 class AlbertModel(AlbertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -500,8 +516,15 @@ class AlbertModel(AlbertPreTrainedModel):
             inner_group_idx = int(layer - group_idx * self.config.inner_group_num)
             self.encoder.albert_layer_groups[group_idx].albert_layers[inner_group_idx].attention.prune_heads(heads)
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
-                inputs_embeds=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+    ):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -520,30 +543,36 @@ class AlbertModel(AlbertPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
                 head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=next(self.parameters()).dtype) # switch to fload if need + fp16 compatibility
+                head_mask = (
+                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+                )  # We can specify head_mask for each layer
+            head_mask = head_mask.to(
+                dtype=next(self.parameters()).dtype
+            )  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-                                           inputs_embeds=inputs_embeds)
-        encoder_outputs = self.encoder(embedding_output,
-                                       extended_attention_mask,
-                                       head_mask=head_mask)
+        embedding_output = self.embeddings(
+            input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+        encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
 
         sequence_output = encoder_outputs[0]
 
         pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
 
-        outputs = (sequence_output, pooled_output) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        outputs = (sequence_output, pooled_output) + encoder_outputs[
+            1:
+        ]  # add hidden_states and attentions if they are here
         return outputs
+
 
 class AlbertMLMHead(nn.Module):
     def __init__(self, config):
@@ -566,7 +595,9 @@ class AlbertMLMHead(nn.Module):
         return prediction_scores
 
 
-@add_start_docstrings("Bert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    "Bert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING
+)
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -602,21 +633,28 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         """ Make sure we are sharing the input and output embeddings.
             Export to TorchScript can't handle parameter sharing so we are cloning them instead.
         """
-        self._tie_or_clone_weights(self.predictions.decoder,
-                                   self.albert.embeddings.word_embeddings)
+        self._tie_or_clone_weights(self.predictions.decoder, self.albert.embeddings.word_embeddings)
 
     def get_output_embeddings(self):
         return self.predictions.decoder
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, inputs_embeds=None,
-                masked_lm_labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        masked_lm_labels=None,
+    ):
         outputs = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds
+            inputs_embeds=inputs_embeds,
         )
         sequence_outputs = outputs[0]
 
@@ -631,9 +669,12 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         return outputs
 
 
-@add_start_docstrings("""Albert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+@add_start_docstrings(
+    """Albert Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
+    ALBERT_START_DOCSTRING,
+    ALBERT_INPUTS_DOCSTRING,
+)
 class AlbertForSequenceClassification(AlbertPreTrainedModel):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -665,6 +706,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         loss, logits = outputs[:2]
 
     """
+
     def __init__(self, config):
         super(AlbertForSequenceClassification, self).__init__(config)
         self.num_labels = config.num_labels
@@ -675,8 +717,16 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
-                position_ids=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
 
         outputs = self.albert(
             input_ids=input_ids,
@@ -684,7 +734,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds
+            inputs_embeds=inputs_embeds,
         )
 
         pooled_output = outputs[1]
@@ -707,10 +757,12 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
-
-@add_start_docstrings("""Albert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings(
+    """Albert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
-    ALBERT_START_DOCSTRING, ALBERT_INPUTS_DOCSTRING)
+    ALBERT_START_DOCSTRING,
+    ALBERT_INPUTS_DOCSTRING,
+)
 class AlbertForQuestionAnswering(AlbertPreTrainedModel):
     r"""
         **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -744,14 +796,15 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         input_text = "[CLS] " + question + " [SEP] " + text + " [SEP]"
         input_ids = tokenizer.encode(input_text)
-        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))] 
+        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))]
         start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)  
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
         print(' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1]))
         # a nice puppet
 
 
     """
+
     def __init__(self, config):
         super(AlbertForQuestionAnswering, self).__init__(config)
         self.num_labels = config.num_labels
@@ -761,8 +814,17 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
-                inputs_embeds=None, start_positions=None, end_positions=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+    ):
 
         outputs = self.albert(
             input_ids=input_ids,
@@ -770,7 +832,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds
+            inputs_embeds=inputs_embeds,
         )
 
         sequence_output = outputs[0]

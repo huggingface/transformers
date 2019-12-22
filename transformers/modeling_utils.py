@@ -15,24 +15,27 @@
 # limitations under the License.
 """PyTorch BERT model."""
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-import copy
-import json
 import logging
 import os
-from io import open
 
-import six
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import (TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, WEIGHTS_NAME, DUMMY_INPUTS,
-                         cached_path, hf_bucket_url, is_remote_url)
+from .file_utils import (
+    DUMMY_INPUTS,
+    TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +46,13 @@ except ImportError:
     class Identity(nn.Module):
         r"""A placeholder identity operator that is argument-insensitive.
         """
+
         def __init__(self, *args, **kwargs):
             super(Identity, self).__init__()
 
         def forward(self, input):
             return input
+
 
 class PreTrainedModel(nn.Module):
     r""" Base class for all models.
@@ -68,7 +73,6 @@ class PreTrainedModel(nn.Module):
     """
     config_class = None
     pretrained_model_archive_map = {}
-    load_tf_weights = lambda model, config, path: None
     base_model_prefix = ""
 
     @property
@@ -78,7 +82,7 @@ class PreTrainedModel(nn.Module):
         Returns:
             torch.Tensor with dummy inputs
         """
-        return {'input_ids': torch.tensor(DUMMY_INPUTS)}
+        return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
         super(PreTrainedModel, self).__init__()
@@ -88,7 +92,8 @@ class PreTrainedModel(nn.Module):
                 "To create a model from a pretrained model use "
                 "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
                     self.__class__.__name__, self.__class__.__name__
-                ))
+                )
+            )
         # Save config in model
         self.config = config
 
@@ -136,14 +141,14 @@ class PreTrainedModel(nn.Module):
         else:
             output_embeddings.weight = input_embeddings.weight
 
-        if hasattr(output_embeddings, 'bias') and output_embeddings.bias is not None:
+        if hasattr(output_embeddings, "bias") and output_embeddings.bias is not None:
             output_embeddings.bias.data = torch.nn.functional.pad(
                 output_embeddings.bias.data,
                 (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0]),
-                'constant',
-                0
+                "constant",
+                0,
             )
-        if hasattr(output_embeddings, 'out_features') and hasattr(input_embeddings, 'num_embeddings'):
+        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
@@ -244,10 +249,12 @@ class PreTrainedModel(nn.Module):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
         """
-        assert os.path.isdir(save_directory), "Saving path should be a directory where the model and configuration can be saved"
+        assert os.path.isdir(
+            save_directory
+        ), "Saving path should be a directory where the model and configuration can be saved"
 
         # Only save the model itself if we are using distributed training
-        model_to_save = self.module if hasattr(self, 'module') else self
+        model_to_save = self.module if hasattr(self, "module") else self
 
         # Save configuration file
         model_to_save.config.save_pretrained(save_directory)
@@ -329,21 +336,23 @@ class PreTrainedModel(nn.Module):
             model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        config = kwargs.pop('config', None)
-        state_dict = kwargs.pop('state_dict', None)
-        cache_dir = kwargs.pop('cache_dir', None)
-        from_tf = kwargs.pop('from_tf', False)
-        force_download = kwargs.pop('force_download', False)
-        resume_download = kwargs.pop('resume_download', False)
-        proxies = kwargs.pop('proxies', None)
-        output_loading_info = kwargs.pop('output_loading_info', False)
+        config = kwargs.pop("config", None)
+        state_dict = kwargs.pop("state_dict", None)
+        cache_dir = kwargs.pop("cache_dir", None)
+        from_tf = kwargs.pop("from_tf", False)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        output_loading_info = kwargs.pop("output_loading_info", False)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
-                config_path, *model_args,
-                cache_dir=cache_dir, return_unused_kwargs=True,
+                config_path,
+                *model_args,
+                cache_dir=cache_dir,
+                return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
                 proxies=proxies,
@@ -367,43 +376,56 @@ class PreTrainedModel(nn.Module):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
-                    raise EnvironmentError("Error no file named {} found in directory {} or `from_tf` set to False".format(
-                        [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
-                        pretrained_model_name_or_path))
+                    raise EnvironmentError(
+                        "Error no file named {} found in directory {} or `from_tf` set to False".format(
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"], pretrained_model_name_or_path
+                        )
+                    )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert from_tf, "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
-                    pretrained_model_name_or_path + ".index")
+                assert (
+                    from_tf
+                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
+                    pretrained_model_name_or_path + ".index"
+                )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
                 if from_tf:
-                    raise EnvironmentError("Loading a PyTorch model from a TF checkpoint is not supported when using a model identifier name.")
+                    raise EnvironmentError(
+                        "Loading a PyTorch model from a TF checkpoint is not supported when using a model identifier name."
+                    )
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
-                                                    proxies=proxies, resume_download=resume_download)
+                resolved_archive_file = cached_path(
+                    archive_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                )
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(
-                            archive_file)
+                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(archive_file)
                 else:
-                    msg = "Model name '{}' was not found in model name list ({}). " \
-                        "We assumed '{}' was a path or url to model weight files named one of {} but " \
+                    msg = (
+                        "Model name '{}' was not found in model name list ({}). "
+                        "We assumed '{}' was a path or url to model weight files named one of {} but "
                         "couldn't find any such file at this path or url.".format(
                             pretrained_model_name_or_path,
-                            ', '.join(cls.pretrained_model_archive_map.keys()),
+                            ", ".join(cls.pretrained_model_archive_map.keys()),
                             archive_file,
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME])
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME],
+                        )
+                    )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
                 logger.info("loading weights file {}".format(archive_file))
             else:
-                logger.info("loading weights file {} from cache at {}".format(
-                    archive_file, resolved_archive_file))
+                logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
         else:
             resolved_archive_file = None
 
@@ -412,27 +434,32 @@ class PreTrainedModel(nn.Module):
 
         if state_dict is None and not from_tf:
             try:
-                state_dict = torch.load(resolved_archive_file, map_location='cpu')
-            except:
-                raise OSError("Unable to load weights from pytorch checkpoint file. "
-                              "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. ")
+                state_dict = torch.load(resolved_archive_file, map_location="cpu")
+            except Exception:
+                raise OSError(
+                    "Unable to load weights from pytorch checkpoint file. "
+                    "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                )
 
         missing_keys = []
         unexpected_keys = []
         error_msgs = []
 
         if from_tf:
-            if resolved_archive_file.endswith('.index'):
+            if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
                 model = cls.load_tf_weights(model, config, resolved_archive_file[:-6])  # Remove the '.index'
             else:
                 # Load from our TensorFlow 2.0 checkpoints
                 try:
                     from transformers import load_tf2_checkpoint_in_pytorch_model
+
                     model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
                 except ImportError as e:
-                    logger.error("Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
-                        "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions.")
+                    logger.error(
+                        "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
+                        "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+                    )
                     raise e
         else:
             # Convert old format to new format if needed from a PyTorch state_dict
@@ -440,10 +467,10 @@ class PreTrainedModel(nn.Module):
             new_keys = []
             for key in state_dict.keys():
                 new_key = None
-                if 'gamma' in key:
-                    new_key = key.replace('gamma', 'weight')
-                if 'beta' in key:
-                    new_key = key.replace('beta', 'bias')
+                if "gamma" in key:
+                    new_key = key.replace("gamma", "weight")
+                if "beta" in key:
+                    new_key = key.replace("beta", "bias")
                 if new_key:
                     old_keys.append(key)
                     new_keys.append(new_key)
@@ -451,39 +478,53 @@ class PreTrainedModel(nn.Module):
                 state_dict[new_key] = state_dict.pop(old_key)
 
             # copy state_dict so _load_from_state_dict can modify it
-            metadata = getattr(state_dict, '_metadata', None)
+            metadata = getattr(state_dict, "_metadata", None)
             state_dict = state_dict.copy()
             if metadata is not None:
                 state_dict._metadata = metadata
 
             # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
             # so we need to apply the function recursively.
-            def load(module, prefix=''):
+            def load(module, prefix=""):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
                 module._load_from_state_dict(
-                    state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                    state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs
+                )
                 for name, child in module._modules.items():
                     if child is not None:
-                        load(child, prefix + name + '.')
+                        load(child, prefix + name + ".")
 
             # Make sure we are able to load base models as well as derived models (with heads)
-            start_prefix = ''
+            start_prefix = ""
             model_to_load = model
-            if not hasattr(model, cls.base_model_prefix) and any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
-                start_prefix = cls.base_model_prefix + '.'
-            if hasattr(model, cls.base_model_prefix) and not any(s.startswith(cls.base_model_prefix) for s in state_dict.keys()):
+            if not hasattr(model, cls.base_model_prefix) and any(
+                s.startswith(cls.base_model_prefix) for s in state_dict.keys()
+            ):
+                start_prefix = cls.base_model_prefix + "."
+            if hasattr(model, cls.base_model_prefix) and not any(
+                s.startswith(cls.base_model_prefix) for s in state_dict.keys()
+            ):
                 model_to_load = getattr(model, cls.base_model_prefix)
 
             load(model_to_load, prefix=start_prefix)
             if len(missing_keys) > 0:
-                logger.info("Weights of {} not initialized from pretrained model: {}".format(
-                    model.__class__.__name__, missing_keys))
+                logger.info(
+                    "Weights of {} not initialized from pretrained model: {}".format(
+                        model.__class__.__name__, missing_keys
+                    )
+                )
             if len(unexpected_keys) > 0:
-                logger.info("Weights from pretrained model not used in {}: {}".format(
-                    model.__class__.__name__, unexpected_keys))
+                logger.info(
+                    "Weights from pretrained model not used in {}: {}".format(
+                        model.__class__.__name__, unexpected_keys
+                    )
+                )
             if len(error_msgs) > 0:
-                raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                                model.__class__.__name__, "\n\t".join(error_msgs)))
+                raise RuntimeError(
+                    "Error(s) in loading state_dict for {}:\n\t{}".format(
+                        model.__class__.__name__, "\n\t".join(error_msgs)
+                    )
+                )
 
         model.tie_weights()  # make sure word embedding weights are still tied if needed
 
@@ -500,10 +541,22 @@ class PreTrainedModel(nn.Module):
         return {"input_ids": input_ids}
 
     @torch.no_grad()
-    def generate(self, input_ids=None, max_length=None, do_sample=None, num_beams=None,
-                 temperature=None, top_k=None, top_p=None, repetition_penalty=None,
-                 bos_token_id=None, pad_token_id=None, eos_token_ids=None,
-                 length_penalty=None, num_return_sequences=None):
+    def generate(
+        self,
+        input_ids=None,
+        max_length=None,
+        do_sample=None,
+        num_beams=None,
+        temperature=None,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_ids=None,
+        length_penalty=None,
+        num_return_sequences=None,
+    ):
         """ Sequence generator for models with a LM head.
 
         The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
@@ -543,8 +596,10 @@ class PreTrainedModel(nn.Module):
 
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
-            raise AttributeError("You tried to generate sequences with a model that does not have a LM Head."
-                                 "Please use another model class (e.g. `OpenAIGPTLMHeadModel`)")
+            raise AttributeError(
+                "You tried to generate sequences with a model that does not have a LM Head."
+                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`)"
+            )
 
         max_length = max_length if max_length is not None else self.config.max_length
         do_sample = do_sample if do_sample is not None else self.config.do_sample
@@ -557,7 +612,9 @@ class PreTrainedModel(nn.Module):
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
-        num_return_sequences = num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
 
         if input_ids is not None:
             batch_size = input_ids.shape[0]  # overriden by the input batch_size
@@ -575,13 +632,18 @@ class PreTrainedModel(nn.Module):
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
         assert isinstance(bos_token_id, int) and bos_token_id >= 0, "`bos_token_id` should be a positive integer."
         assert isinstance(pad_token_id, int) and pad_token_id >= 0, "`pad_token_id` should be a positive integer."
-        assert isinstance(eos_token_ids, (list, tuple)) and (e >= 0 for e in eos_token_ids), \
-                   "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
+        assert isinstance(eos_token_ids, (list, tuple)) and (
+            e >= 0 for e in eos_token_ids
+        ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
-        assert isinstance(num_return_sequences, int) and num_return_sequences > 0, "`num_return_sequences` should be a strictely positive integer."
+        assert (
+            isinstance(num_return_sequences, int) and num_return_sequences > 0
+        ), "`num_return_sequences` should be a strictely positive integer."
 
         if input_ids is None:
-            input_ids = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device)
+            input_ids = torch.full(
+                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device
+            )
         else:
             assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
@@ -592,28 +654,63 @@ class PreTrainedModel(nn.Module):
         if num_return_sequences != 1:
             # Expand input to num return sequences
             input_ids = input_ids.unsqueeze(1).expand(batch_size, num_return_sequences, cur_len)
-            input_ids = input_ids.contiguous().view(batch_size * num_return_sequences, cur_len)   # (batch_size * num_return_sequences, cur_len)
+            input_ids = input_ids.contiguous().view(
+                batch_size * num_return_sequences, cur_len
+            )  # (batch_size * num_return_sequences, cur_len)
             effective_batch_size = batch_size * num_return_sequences
         else:
             effective_batch_size = batch_size
 
         if num_beams > 1:
-            output = self._generate_beam_search(input_ids, cur_len, max_length, do_sample,
-                                                temperature, top_k, top_p, repetition_penalty,
-                                                pad_token_id, eos_token_ids, effective_batch_size,
-                                                length_penalty, num_beams, vocab_size)
+            output = self._generate_beam_search(
+                input_ids,
+                cur_len,
+                max_length,
+                do_sample,
+                temperature,
+                top_k,
+                top_p,
+                repetition_penalty,
+                pad_token_id,
+                eos_token_ids,
+                effective_batch_size,
+                length_penalty,
+                num_beams,
+                vocab_size,
+            )
         else:
-            output = self._generate_no_beam_search(input_ids, cur_len, max_length, do_sample,
-                                             temperature, top_k, top_p, repetition_penalty,
-                                             pad_token_id, eos_token_ids, effective_batch_size)
+            output = self._generate_no_beam_search(
+                input_ids,
+                cur_len,
+                max_length,
+                do_sample,
+                temperature,
+                top_k,
+                top_p,
+                repetition_penalty,
+                pad_token_id,
+                eos_token_ids,
+                effective_batch_size,
+            )
 
         if num_return_sequences != 1:
             output = output.view(batch_size, num_return_sequences, -1)
         return output
 
-    def _generate_no_beam_search(self, input_ids, cur_len, max_length, do_sample,
-                                 temperature, top_k, top_p, repetition_penalty,
-                                 pad_token_id, eos_token_ids, batch_size):
+    def _generate_no_beam_search(
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        pad_token_id,
+        eos_token_ids,
+        batch_size,
+    ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
         """
@@ -663,23 +760,38 @@ class PreTrainedModel(nn.Module):
 
         return input_ids
 
-    def _generate_beam_search(self, input_ids, cur_len, max_length, do_sample,
-                              temperature, top_k, top_p, repetition_penalty,
-                              pad_token_id, eos_token_ids, batch_size,
-                              length_penalty, num_beams, vocab_size):
+    def _generate_beam_search(
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        pad_token_id,
+        eos_token_ids,
+        batch_size,
+        length_penalty,
+        num_beams,
+        vocab_size,
+    ):
         """ Generate sequences for each example with beam search.
         """
         # Expand input to num beams
         input_ids = input_ids.unsqueeze(1).expand(batch_size, num_beams, cur_len)
-        input_ids = input_ids.contiguous().view(batch_size * num_beams, cur_len)   # (batch_size * num_beams, cur_len)
+        input_ids = input_ids.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
 
         # generated hypotheses
-        generated_hyps = [BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=False) for _ in range(batch_size)]
+        generated_hyps = [
+            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=False) for _ in range(batch_size)
+        ]
 
         # scores for each sentence in the beam
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view(-1)                                      # shape (batch_size * num_beams,)
+        beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
         pasts = None  # self.prepare_pasts()
@@ -689,8 +801,8 @@ class PreTrainedModel(nn.Module):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts)
-            scores = self(**model_inputs)[0]                                    # (batch_size * num_beams, cur_len, vocab_size)
-            scores = scores[:, -1, :]                                           # (batch_size * num_beams, vocab_size)
+            scores = self(**model_inputs)[0]  # (batch_size * num_beams, cur_len, vocab_size)
+            scores = scores[:, -1, :]  # (batch_size * num_beams, vocab_size)
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
@@ -703,25 +815,27 @@ class PreTrainedModel(nn.Module):
                 if temperature > 0 and temperature != 1.0:
                     scores = scores / temperature
                 # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2)  # (batch_size * num_beams, vocab_size)
+                scores = top_k_top_p_filtering(
+                    scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
+                )  # (batch_size * num_beams, vocab_size)
                 # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)    # (batch_size * num_beams, 2)
+                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)  # (batch_size * num_beams, 2)
                 # Compute next scores
-                _scores = F.log_softmax(scores, dim=-1)                                     # (batch_size * num_beams, vocab_size)
-                _scores = torch.gather(_scores, -1, next_words)                             # (batch_size * num_beams, 2)
-                next_scores = _scores + beam_scores[:, None].expand_as(_scores)             # (batch_size * num_beams, 2)
+                _scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
+                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 2)
+                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 2)
                 # Match shape of greedy beam search
-                next_words = next_words.view(batch_size, 2 * num_beams)                     # (batch_size, 2 * num_beams)
-                next_scores = next_scores.view(batch_size, 2 * num_beams)                   # (batch_size, 2 * num_beams)
+                next_words = next_words.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
+                next_scores = next_scores.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
             else:
                 # do greedy beam search
-                scores = F.log_softmax(scores, dim=-1)                          # (batch_size * num_beams, vocab_size)
+                scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
                 assert scores.size() == (batch_size * num_beams, vocab_size)
                 # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
-                _scores = scores + beam_scores[:, None].expand_as(scores)       # (batch_size * num_beams, vocab_size)
+                _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
                 # re-organize to group the beam together (we are keeping top hypothesis accross beams)
-                _scores = _scores.view(batch_size, num_beams * vocab_size)      # (batch_size, num_beams * vocab_size)
-                next_scores, next_words = torch.topk(_scores, 2*num_beams, dim=1, largest=True, sorted=True)
+                _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
+                next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
 
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
@@ -750,7 +864,9 @@ class PreTrainedModel(nn.Module):
 
                     # end of sentence, or next word
                     if word_id.item() in eos_token_ids or cur_len + 1 == max_length:
-                        generated_hyps[batch_ex].add(input_ids[batch_ex * num_beams + beam_id, :cur_len].clone(), score.item())
+                        generated_hyps[batch_ex].add(
+                            input_ids[batch_ex * num_beams + beam_id, :cur_len].clone(), score.item()
+                        )
                     else:
                         next_sent_beam.append((score, word_id, batch_ex * num_beams + beam_id))
 
@@ -807,13 +923,13 @@ class PreTrainedModel(nn.Module):
         # generate target batch
         decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
         for i, hypo in enumerate(best):
-            decoded[i, :tgt_len[i] - 1] = hypo
+            decoded[i, : tgt_len[i] - 1] = hypo
             decoded[i, tgt_len[i] - 1] = eos_token_ids[0]
 
         return decoded
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf'), min_tokens_to_keep=1):
+def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)
@@ -849,7 +965,6 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float('Inf')
 
 
 class BeamHypotheses(object):
-
     def __init__(self, n_hyp, max_length, length_penalty, early_stopping):
         """
         Initialize n-best list of hypotheses.
@@ -915,6 +1030,7 @@ class Conv1D(nn.Module):
 
 class PoolerStartLogits(nn.Module):
     """ Compute SQuAD start_logits from sequence hidden states. """
+
     def __init__(self, config):
         super(PoolerStartLogits, self).__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
@@ -939,6 +1055,7 @@ class PoolerStartLogits(nn.Module):
 class PoolerEndLogits(nn.Module):
     """ Compute SQuAD end_logits from sequence hidden states and start token hidden state.
     """
+
     def __init__(self, config):
         super(PoolerEndLogits, self).__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
@@ -959,12 +1076,14 @@ class PoolerEndLogits(nn.Module):
                 Mask of invalid position such as query and special symbols (PAD, SEP, CLS)
                 1.0 means token should be masked.
         """
-        assert start_states is not None or start_positions is not None, "One of start_states, start_positions should be not None"
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
-            start_positions = start_positions[:, None, None].expand(-1, -1, hsz) # shape (bsz, 1, hsz)
-            start_states = hidden_states.gather(-2, start_positions) # shape (bsz, 1, hsz)
-            start_states = start_states.expand(-1, slen, -1) # shape (bsz, slen, hsz)
+            start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
+            start_states = hidden_states.gather(-2, start_positions)  # shape (bsz, 1, hsz)
+            start_states = start_states.expand(-1, slen, -1)  # shape (bsz, slen, hsz)
 
         x = self.dense_0(torch.cat([hidden_states, start_states], dim=-1))
         x = self.activation(x)
@@ -982,6 +1101,7 @@ class PoolerEndLogits(nn.Module):
 
 class PoolerAnswerClass(nn.Module):
     """ Compute SQuAD 2.0 answer class from classification and start tokens hidden states. """
+
     def __init__(self, config):
         super(PoolerAnswerClass, self).__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
@@ -1006,16 +1126,18 @@ class PoolerAnswerClass(nn.Module):
                 for each sample
         """
         hsz = hidden_states.shape[-1]
-        assert start_states is not None or start_positions is not None, "One of start_states, start_positions should be not None"
+        assert (
+            start_states is not None or start_positions is not None
+        ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
-            start_positions = start_positions[:, None, None].expand(-1, -1, hsz) # shape (bsz, 1, hsz)
-            start_states = hidden_states.gather(-2, start_positions).squeeze(-2) # shape (bsz, hsz)
+            start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
+            start_states = hidden_states.gather(-2, start_positions).squeeze(-2)  # shape (bsz, hsz)
 
         if cls_index is not None:
-            cls_index = cls_index[:, None, None].expand(-1, -1, hsz) # shape (bsz, 1, hsz)
-            cls_token_state = hidden_states.gather(-2, cls_index).squeeze(-2) # shape (bsz, hsz)
+            cls_index = cls_index[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
+            cls_token_state = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, hsz)
         else:
-            cls_token_state = hidden_states[:, -1, :] # shape (bsz, hsz)
+            cls_token_state = hidden_states[:, -1, :]  # shape (bsz, hsz)
 
         x = self.dense_0(torch.cat([start_states, cls_token_state], dim=-1))
         x = self.activation(x)
@@ -1064,6 +1186,7 @@ class SQuADHead(nn.Module):
             ``torch.FloatTensor`` of shape ``(batch_size,)``
             Log probabilities for the ``is_impossible`` label of the answers.
     """
+
     def __init__(self, config):
         super(SQuADHead, self).__init__()
         self.start_n_top = config.start_n_top
@@ -1073,8 +1196,9 @@ class SQuADHead(nn.Module):
         self.end_logits = PoolerEndLogits(config)
         self.answer_class = PoolerAnswerClass(config)
 
-    def forward(self, hidden_states, start_positions=None, end_positions=None,
-                cls_index=None, is_impossible=None, p_mask=None):
+    def forward(
+        self, hidden_states, start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None
+    ):
         outputs = ()
 
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
@@ -1107,19 +1231,25 @@ class SQuADHead(nn.Module):
         else:
             # during inference, compute the end logits based on beam search
             bsz, slen, hsz = hidden_states.size()
-            start_log_probs = F.softmax(start_logits, dim=-1) # shape (bsz, slen)
+            start_log_probs = F.softmax(start_logits, dim=-1)  # shape (bsz, slen)
 
-            start_top_log_probs, start_top_index = torch.topk(start_log_probs, self.start_n_top, dim=-1) # shape (bsz, start_n_top)
-            start_top_index_exp = start_top_index.unsqueeze(-1).expand(-1, -1, hsz) # shape (bsz, start_n_top, hsz)
-            start_states = torch.gather(hidden_states, -2, start_top_index_exp) # shape (bsz, start_n_top, hsz)
-            start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1) # shape (bsz, slen, start_n_top, hsz)
+            start_top_log_probs, start_top_index = torch.topk(
+                start_log_probs, self.start_n_top, dim=-1
+            )  # shape (bsz, start_n_top)
+            start_top_index_exp = start_top_index.unsqueeze(-1).expand(-1, -1, hsz)  # shape (bsz, start_n_top, hsz)
+            start_states = torch.gather(hidden_states, -2, start_top_index_exp)  # shape (bsz, start_n_top, hsz)
+            start_states = start_states.unsqueeze(1).expand(-1, slen, -1, -1)  # shape (bsz, slen, start_n_top, hsz)
 
-            hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(start_states) # shape (bsz, slen, start_n_top, hsz)
+            hidden_states_expanded = hidden_states.unsqueeze(2).expand_as(
+                start_states
+            )  # shape (bsz, slen, start_n_top, hsz)
             p_mask = p_mask.unsqueeze(-1) if p_mask is not None else None
             end_logits = self.end_logits(hidden_states_expanded, start_states=start_states, p_mask=p_mask)
-            end_log_probs = F.softmax(end_logits, dim=1) # shape (bsz, slen, start_n_top)
+            end_log_probs = F.softmax(end_logits, dim=1)  # shape (bsz, slen, start_n_top)
 
-            end_top_log_probs, end_top_index = torch.topk(end_log_probs, self.end_n_top, dim=1) # shape (bsz, end_n_top, start_n_top)
+            end_top_log_probs, end_top_index = torch.topk(
+                end_log_probs, self.end_n_top, dim=1
+            )  # shape (bsz, end_n_top, start_n_top)
             end_top_log_probs = end_top_log_probs.view(-1, self.start_n_top * self.end_n_top)
             end_top_index = end_top_index.view(-1, self.start_n_top * self.end_n_top)
 
@@ -1148,34 +1278,35 @@ class SequenceSummary(nn.Module):
             summary_first_dropout: Add a dropout before the projection and activation
             summary_last_dropout: Add a dropout after the projection and activation
     """
+
     def __init__(self, config):
         super(SequenceSummary, self).__init__()
 
-        self.summary_type = config.summary_type if hasattr(config, 'summary_type') else 'last'
-        if self.summary_type == 'attn':
+        self.summary_type = config.summary_type if hasattr(config, "summary_type") else "last"
+        if self.summary_type == "attn":
             # We should use a standard multi-head attention module with absolute positional embedding for that.
             # Cf. https://github.com/zihangdai/xlnet/blob/master/modeling.py#L253-L276
             # We can probably just use the multi-head attention module of PyTorch >=1.1.0
             raise NotImplementedError
 
         self.summary = Identity()
-        if hasattr(config, 'summary_use_proj') and config.summary_use_proj:
-            if hasattr(config, 'summary_proj_to_labels') and config.summary_proj_to_labels and config.num_labels > 0:
+        if hasattr(config, "summary_use_proj") and config.summary_use_proj:
+            if hasattr(config, "summary_proj_to_labels") and config.summary_proj_to_labels and config.num_labels > 0:
                 num_classes = config.num_labels
             else:
                 num_classes = config.hidden_size
             self.summary = nn.Linear(config.hidden_size, num_classes)
 
         self.activation = Identity()
-        if hasattr(config, 'summary_activation') and config.summary_activation == 'tanh':
+        if hasattr(config, "summary_activation") and config.summary_activation == "tanh":
             self.activation = nn.Tanh()
 
         self.first_dropout = Identity()
-        if hasattr(config, 'summary_first_dropout') and config.summary_first_dropout > 0:
+        if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
             self.first_dropout = nn.Dropout(config.summary_first_dropout)
 
         self.last_dropout = Identity()
-        if hasattr(config, 'summary_last_dropout') and config.summary_last_dropout > 0:
+        if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
     def forward(self, hidden_states, cls_index=None):
@@ -1185,21 +1316,21 @@ class SequenceSummary(nn.Module):
                 if summary_type == 'cls_index' and cls_index is None:
                     we take the last token of the sequence as classification token
         """
-        if self.summary_type == 'last':
+        if self.summary_type == "last":
             output = hidden_states[:, -1]
-        elif self.summary_type == 'first':
+        elif self.summary_type == "first":
             output = hidden_states[:, 0]
-        elif self.summary_type == 'mean':
+        elif self.summary_type == "mean":
             output = hidden_states.mean(dim=1)
-        elif self.summary_type == 'cls_index':
+        elif self.summary_type == "cls_index":
             if cls_index is None:
-                cls_index = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2]-1, dtype=torch.long)
+                cls_index = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2] - 1, dtype=torch.long)
             else:
                 cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
-                cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))
+                cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
             # shape of cls_index: (bsz, XX, 1, hidden_size) where XX are optional leading dim of hidden_states
-            output = hidden_states.gather(-2, cls_index).squeeze(-2) # shape (bsz, XX, hidden_size)
-        elif self.summary_type == 'attn':
+            output = hidden_states.gather(-2, cls_index).squeeze(-2)  # shape (bsz, XX, hidden_size)
+        elif self.summary_type == "attn":
             raise NotImplementedError
 
         output = self.first_dropout(output)

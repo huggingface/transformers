@@ -15,28 +15,34 @@
 # limitations under the License.
 """PyTorch CamemBERT model. """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 
-from .modeling_roberta import RobertaModel, RobertaForMaskedLM, RobertaForSequenceClassification, RobertaForMultipleChoice, RobertaForTokenClassification
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
+from .modeling_roberta import (
+    RobertaForMaskedLM,
+    RobertaForMultipleChoice,
+    RobertaForSequenceClassification,
+    RobertaForTokenClassification,
+    RobertaModel,
+)
+
 
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    'camembert-base': "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
+    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
 }
 
 
 CAMEMBERT_START_DOCSTRING = r"""    The CamemBERT model was proposed in
     `CamemBERT: a Tasty French Language Model`_
     by Louis Martin, Benjamin Muller, Pedro Javier Ortiz Suárez, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah, and Benoît Sagot. It is based on Facebook's RoBERTa model released in 2019.
-    
+
     It is a model trained on 138GB of French text.
-    
+
     This implementation is the same as RoBERTa.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
@@ -49,7 +55,7 @@ CAMEMBERT_START_DOCSTRING = r"""    The CamemBERT model was proposed in
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.CamembertConfig`): Model configuration class with all the parameters of the 
+        config (:class:`~transformers.CamembertConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
@@ -68,7 +74,7 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
 
                 ``tokens:         <s> the dog is hairy . </s>``
 
-            Fully encoded sequences or sequence pairs can be obtained using the CamembertTokenizer.encode function with 
+            Fully encoded sequences or sequence pairs can be obtained using the CamembertTokenizer.encode function with
             the ``add_special_tokens`` parameter set to ``True``.
 
             CamemBERT is a model with absolute position embeddings so it's usually advised to pad the inputs on
@@ -100,8 +106,12 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
 """
 
-@add_start_docstrings("The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
-                      CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+
+@add_start_docstrings(
+    "The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertModel(RobertaModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -149,8 +159,11 @@ class CamembertModel(RobertaModel):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model with a `language modeling` head on top. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top. """,
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForMaskedLM(RobertaForMaskedLM):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -185,9 +198,12 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer 
+@add_start_docstrings(
+    """CamemBERT Model transformer with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForSequenceClassification(RobertaForSequenceClassification):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
@@ -223,9 +239,12 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model with a multiple choice classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """CamemBERT Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForMultipleChoice(RobertaForMultipleChoice):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -257,9 +276,12 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@add_start_docstrings("""CamemBERT Model with a token classification head on top (a linear layer on top of
+@add_start_docstrings(
+    """CamemBERT Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    CAMEMBERT_START_DOCSTRING, CAMEMBERT_INPUTS_DOCSTRING)
+    CAMEMBERT_START_DOCSTRING,
+    CAMEMBERT_INPUTS_DOCSTRING,
+)
 class CamembertForTokenClassification(RobertaForTokenClassification):
     r"""
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:

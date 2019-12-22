@@ -12,53 +12,59 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import unittest
 
 from transformers import is_torch_available
 
-if is_torch_available():
-    from transformers import (OpenAIGPTConfig, OpenAIGPTModel, OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-                                    OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel)
-
-from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .modeling_common_test import CommonTestCases, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
+
+
+if is_torch_available():
+    from transformers import (
+        OpenAIGPTConfig,
+        OpenAIGPTModel,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        OpenAIGPTLMHeadModel,
+        OpenAIGPTDoubleHeadsModel,
+    )
 
 
 @require_torch
 class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel) if is_torch_available() else ()
+    all_model_classes = (
+        (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel) if is_torch_available() else ()
+    )
 
     class OpenAIGPTModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_token_type_ids=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     intermediate_size=37,
-                     hidden_act="gelu",
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
-                     scope=None,
-                     ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_token_type_ids=True,
+            use_labels=True,
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            intermediate_size=37,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            max_position_embeddings=512,
+            type_vocab_size=16,
+            type_sequence_label_size=2,
+            initializer_range=0.02,
+            num_labels=3,
+            num_choices=4,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -116,9 +122,7 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
             return config, input_ids, head_mask, token_type_ids, sequence_labels, token_labels, choice_labels
 
         def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+            self.parent.assertListEqual(list(result["loss"].size()), [])
 
         def create_and_check_openai_gpt_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTModel(config=config)
@@ -129,12 +133,10 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
             model(input_ids, token_type_ids=token_type_ids)
             (sequence_output,) = model(input_ids)
 
-            result = {
-                "sequence_output": sequence_output
-            }
+            result = {"sequence_output": sequence_output}
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
 
         def create_and_check_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTLMHeadModel(config)
@@ -143,17 +145,12 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
             loss, lm_logits = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
 
-            result = {
-                "loss": loss,
-                "lm_logits": lm_logits
-            }
+            result = {"loss": loss, "lm_logits": lm_logits}
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["lm_logits"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
         def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTDoubleHeadsModel(config)
@@ -162,26 +159,25 @@ class OpenAIGPTModelTest(CommonTestCases.CommonModelTester):
 
             loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, lm_labels=input_ids)
 
-            result = {
-                "loss": loss,
-                "lm_logits": lm_logits
-            }
+            result = {"loss": loss, "lm_logits": lm_logits}
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["lm_logits"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, head_mask, token_type_ids, sequence_labels, token_labels, choice_labels) = config_and_inputs
-            inputs_dict = {
-                'input_ids': input_ids,
-                'token_type_ids': token_type_ids,
-                'head_mask': head_mask
-            }
+            (
+                config,
+                input_ids,
+                head_mask,
+                token_type_ids,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = config_and_inputs
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
 
             return config, inputs_dict
 

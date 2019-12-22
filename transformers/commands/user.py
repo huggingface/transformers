@@ -1,36 +1,42 @@
+import os
 from argparse import ArgumentParser
 from getpass import getpass
-import os
+from typing import List, Union
+
+from requests.exceptions import HTTPError
 
 from transformers.commands import BaseTransformersCLICommand
-from transformers.hf_api import HfApi, HfFolder, HTTPError
+from transformers.hf_api import HfApi, HfFolder
 
 
 class UserCommands(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
-        login_parser = parser.add_parser('login')
+        login_parser = parser.add_parser("login")
         login_parser.set_defaults(func=lambda args: LoginCommand(args))
-        whoami_parser = parser.add_parser('whoami')
+        whoami_parser = parser.add_parser("whoami")
         whoami_parser.set_defaults(func=lambda args: WhoamiCommand(args))
-        logout_parser = parser.add_parser('logout')
+        logout_parser = parser.add_parser("logout")
         logout_parser.set_defaults(func=lambda args: LogoutCommand(args))
-        list_parser = parser.add_parser('ls')
+        list_parser = parser.add_parser("ls")
         list_parser.set_defaults(func=lambda args: ListObjsCommand(args))
         # upload
-        upload_parser = parser.add_parser('upload')
-        upload_parser.add_argument('path', type=str, help='Local path of the folder or individual file to upload.')
-        upload_parser.add_argument('--filename', type=str, default=None, help='Optional: override individual object filename on S3.')
+        upload_parser = parser.add_parser("upload")
+        upload_parser.add_argument("path", type=str, help="Local path of the folder or individual file to upload.")
+        upload_parser.add_argument(
+            "--filename", type=str, default=None, help="Optional: override individual object filename on S3."
+        )
         upload_parser.set_defaults(func=lambda args: UploadCommand(args))
-
 
 
 class ANSI:
     """
     Helper for en.wikipedia.org/wiki/ANSI_escape_code
     """
+
     _bold = u"\u001b[1m"
     _reset = u"\u001b[0m"
+
     @classmethod
     def bold(cls, s):
         return "{}{}{}".format(cls._bold, s, cls._reset)
@@ -44,14 +50,16 @@ class BaseUserCommand:
 
 class LoginCommand(BaseUserCommand):
     def run(self):
-        print("""
-        _|    _|  _|    _|    _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|_|_|_|    _|_|      _|_|_|  _|_|_|_|  
-        _|    _|  _|    _|  _|        _|          _|    _|_|    _|  _|            _|        _|    _|  _|        _|        
-        _|_|_|_|  _|    _|  _|  _|_|  _|  _|_|    _|    _|  _|  _|  _|  _|_|      _|_|_|    _|_|_|_|  _|        _|_|_|    
-        _|    _|  _|    _|  _|    _|  _|    _|    _|    _|    _|_|  _|    _|      _|        _|    _|  _|        _|        
-        _|    _|    _|_|      _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|        _|    _|    _|_|_|  _|_|_|_|  
+        print(
+            """
+        _|    _|  _|    _|    _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|_|_|_|    _|_|      _|_|_|  _|_|_|_|
+        _|    _|  _|    _|  _|        _|          _|    _|_|    _|  _|            _|        _|    _|  _|        _|
+        _|_|_|_|  _|    _|  _|  _|_|  _|  _|_|    _|    _|  _|  _|  _|  _|_|      _|_|_|    _|_|_|_|  _|        _|_|_|
+        _|    _|  _|    _|  _|    _|  _|    _|    _|    _|    _|_|  _|    _|      _|        _|    _|  _|        _|
+        _|    _|    _|_|      _|_|_|    _|_|_|  _|_|_|  _|      _|    _|_|_|      _|        _|    _|    _|_|_|  _|_|_|_|
 
-        """)
+        """
+        )
         username = input("Username: ")
         password = getpass()
         try:
@@ -91,8 +99,7 @@ class LogoutCommand(BaseUserCommand):
 
 
 class ListObjsCommand(BaseUserCommand):
-    def tabulate(self, rows, headers):
-        # type: (List[List[Union[str, int]]], List[str]) -> str
+    def tabulate(self, rows: List[List[Union[str, int]]], headers: List[str]) -> str:
         """
         Inspired by:
         stackoverflow.com/a/8356620/593036
@@ -101,16 +108,10 @@ class ListObjsCommand(BaseUserCommand):
         col_widths = [max(len(str(x)) for x in col) for col in zip(*rows, headers)]
         row_format = ("{{:{}}} " * len(headers)).format(*col_widths)
         lines = []
-        lines.append(
-            row_format.format(*headers)
-        )
-        lines.append(
-            row_format.format(*["-" * w for w in col_widths])
-        )
+        lines.append(row_format.format(*headers))
+        lines.append(row_format.format(*["-" * w for w in col_widths]))
         for row in rows:
-            lines.append(
-                row_format.format(*row)
-            )
+            lines.append(row_format.format(*row))
         return "\n".join(lines)
 
     def run(self):
@@ -126,15 +127,8 @@ class ListObjsCommand(BaseUserCommand):
         if len(objs) == 0:
             print("No shared file yet")
             exit()
-        rows = [ [
-            obj.filename,
-            obj.LastModified,
-            obj.ETag,
-            obj.Size
-        ] for obj in objs ]
-        print(
-            self.tabulate(rows, headers=["Filename", "LastModified", "ETag", "Size"])
-        )
+        rows = [[obj.filename, obj.LastModified, obj.ETag, obj.Size] for obj in objs]
+        print(self.tabulate(rows, headers=["Filename", "LastModified", "ETag", "Size"]))
 
 
 class UploadCommand(BaseUserCommand):
@@ -143,13 +137,7 @@ class UploadCommand(BaseUserCommand):
         Recursively list all files in a folder.
         """
         entries: List[os.DirEntry] = list(os.scandir(rel_path))
-        files = [
-            (
-                os.path.join(os.getcwd(), f.path),  # filepath
-                f.path  # filename
-            )
-            for f in entries if f.is_file()
-        ]
+        files = [(os.path.join(os.getcwd(), f.path), f.path) for f in entries if f.is_file()]  # filepath  # filename
         for f in entries:
             if f.is_dir():
                 files += self.walk_dir(f.path)
@@ -173,22 +161,14 @@ class UploadCommand(BaseUserCommand):
             raise ValueError("Not a valid file or directory: {}".format(local_path))
 
         for filepath, filename in files:
-            print(
-                "About to upload file {} to S3 under filename {}".format(
-                    ANSI.bold(filepath), ANSI.bold(filename)
-                )
-            )
+            print("About to upload file {} to S3 under filename {}".format(ANSI.bold(filepath), ANSI.bold(filename)))
 
         choice = input("Proceed? [Y/n] ").lower()
-        if not(choice == "" or choice == "y" or choice == "yes"):
+        if not (choice == "" or choice == "y" or choice == "yes"):
             print("Abort")
             exit()
-        print(
-            ANSI.bold("Uploading... This might take a while if files are large")
-        )
+        print(ANSI.bold("Uploading... This might take a while if files are large"))
         for filepath, filename in files:
-            access_url = self._api.presign_and_upload(
-                token=token, filename=filename, filepath=filepath
-            )
+            access_url = self._api.presign_and_upload(token=token, filename=filename, filepath=filepath)
             print("Your file now lives at:")
             print(access_url)

@@ -12,28 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import unittest
-import shutil
 import logging
+import unittest
 
 from transformers import is_tf_available
 
-from .utils import require_tf, slow, SMALL_MODEL_IDENTIFIER
+from .utils import SMALL_MODEL_IDENTIFIER, require_tf, slow
+
 
 if is_tf_available():
-    from transformers import (AutoConfig, BertConfig,
-                                      TFAutoModel, TFBertModel,
-                                      TFAutoModelWithLMHead, TFBertForMaskedLM,
-                                      TFAutoModelForSequenceClassification, TFBertForSequenceClassification,
-                                      TFAutoModelForQuestionAnswering, TFBertForQuestionAnswering)
-    from transformers.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-
-    from .modeling_common_test import (CommonTestCases, ids_tensor)
-    from .configuration_common_test import ConfigTester
+    from transformers import (
+        AutoConfig,
+        BertConfig,
+        TFAutoModel,
+        TFBertModel,
+        TFAutoModelWithLMHead,
+        TFBertForMaskedLM,
+        TFAutoModelForSequenceClassification,
+        TFBertForSequenceClassification,
+        TFAutoModelForQuestionAnswering,
+        TFBertForQuestionAnswering,
+    )
 
 
 @require_tf
@@ -41,11 +42,12 @@ class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         import h5py
+
         self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
 
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        for model_name in ['bert-base-uncased']:
+        for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -58,7 +60,7 @@ class TFAutoModelTest(unittest.TestCase):
     def test_lmhead_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        for model_name in ['bert-base-uncased']:
+        for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -71,7 +73,7 @@ class TFAutoModelTest(unittest.TestCase):
     def test_sequence_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        for model_name in ['bert-base-uncased']:
+        for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -84,7 +86,7 @@ class TFAutoModelTest(unittest.TestCase):
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        for model_name in ['bert-base-uncased']:
+        for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)

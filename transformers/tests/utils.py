@@ -1,7 +1,6 @@
 import os
-import unittest
 import tempfile
-
+import unittest
 from distutils.util import strtobool
 
 from transformers.file_utils import _tf_available, _torch_available
@@ -26,6 +25,7 @@ def parse_flag_from_env(key, default=False):
             # More values are supported, but let's keep the message simple.
             raise ValueError("If set, {} must be yes or no.".format(key))
     return _value
+
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)

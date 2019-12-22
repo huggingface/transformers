@@ -13,37 +13,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Salesforce CTRL."""
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import json
 import logging
 import os
-import regex as re
 from io import open
 
+import regex as re
+
 from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
-    'vocab_file': 'vocab.json',
-    'merges_file': 'merges.txt',
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    'vocab_file':
-    {
-        'ctrl': "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json",
-    },
-    'merges_file':
-    {
-        'ctrl': "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt",
-    },
+    "vocab_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json"},
+    "merges_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt"},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'ctrl': 256,
+    "ctrl": 256,
 }
 
 CONTROL_CODES = {
@@ -104,6 +99,7 @@ CONTROL_CODES = {
     "multilingual": 128406,
 }
 
+
 def get_pairs(word):
     """Return set of symbol pairs in a word.
 
@@ -118,11 +114,13 @@ def get_pairs(word):
     pairs = set(pairs)
     return pairs
 
+
 class CTRLTokenizer(PreTrainedTokenizer):
     """
     CTRL BPE tokenizer. Peculiarities:
         - Byte-Pair-Encoding
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -130,14 +128,18 @@ class CTRLTokenizer(PreTrainedTokenizer):
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         super(CTRLTokenizer, self).__init__(unk_token=unk_token, **kwargs)
-        self.max_len_single_sentence = self.max_len # no default special tokens - you can update this value if you add special tokens
-        self.max_len_sentences_pair = self.max_len # no default special tokens - you can update this value if you add special tokens
+        self.max_len_single_sentence = (
+            self.max_len
+        )  # no default special tokens - you can update this value if you add special tokens
+        self.max_len_sentences_pair = (
+            self.max_len
+        )  # no default special tokens - you can update this value if you add special tokens
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
-        self.decoder = {v:k for k,v in self.encoder.items()}
-        with open(merges_file, encoding='utf-8') as merges_handle:
-            merges = merges_handle.read().split('\n')[1:-1]
+        self.decoder = {v: k for k, v in self.encoder.items()}
+        with open(merges_file, encoding="utf-8") as merges_handle:
+            merges = merges_handle.read().split("\n")[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
@@ -150,14 +152,14 @@ class CTRLTokenizer(PreTrainedTokenizer):
         if token in self.cache:
             return self.cache[token]
         word = tuple(token)
-        word = tuple(list(word[:-1]) + [word[-1]+'</w>'])
+        word = tuple(list(word[:-1]) + [word[-1] + "</w>"])
         pairs = get_pairs(word)
 
         if not pairs:
             return token
 
         while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -166,14 +168,15 @@ class CTRLTokenizer(PreTrainedTokenizer):
             while i < len(word):
                 try:
                     j = word.index(first, i)
-                    new_word.extend(word[i:j])
-                    i = j
-                except:
+                except ValueError:
                     new_word.extend(word[i:])
                     break
+                else:
+                    new_word.extend(word[i:j])
+                    i = j
 
-                if word[i] == first and i < len(word)-1 and word[i+1] == second:
-                    new_word.append(first+second)
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                    new_word.append(first + second)
                     i += 2
                 else:
                     new_word.append(word[i])
@@ -184,7 +187,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
                 break
             else:
                 pairs = get_pairs(word)
-        word = '@@ '.join(word)
+        word = "@@ ".join(word)
         word = word[:-4]
         self.cache[token] = word
         return word
@@ -194,10 +197,10 @@ class CTRLTokenizer(PreTrainedTokenizer):
         """
         split_tokens = []
 
-        words = re.findall(r'\S+\n?', text)
+        words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(' ')])
+            split_tokens.extend([t for t in self.bpe(token).split(" ")])
         return split_tokens
 
     def _convert_token_to_id(self, token):
@@ -210,7 +213,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
-        out_string = ' '.join(tokens).replace('@@ ', '').strip()
+        out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
     def save_vocabulary(self, save_directory):
@@ -218,21 +221,23 @@ class CTRLTokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES['vocab_file'])
-        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES['merges_file'])
+        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
 
-        with open(vocab_file, 'w', encoding='utf-8') as f:
+        with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write(u'#version: 0.2\n')
+            writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning("Saving vocabulary to {}: BPE merge indices are not consecutive."
-                                   " Please check that the tokenizer is not corrupted!".format(merge_file))
+                    logger.warning(
+                        "Saving vocabulary to {}: BPE merge indices are not consecutive."
+                        " Please check that the tokenizer is not corrupted!".format(merge_file)
+                    )
                     index = token_index
-                writer.write(' '.join(bpe_tokens) + u'\n')
+                writer.write(" ".join(bpe_tokens) + "\n")
                 index += 1
 
         return vocab_file, merge_file
