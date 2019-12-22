@@ -56,7 +56,8 @@ setup(
     keywords="NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU",
     license="Apache",
     url="https://github.com/huggingface/transformers",
-    packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
+    package_dir = {'': 'src'},
+    packages=find_packages("src"),
     install_requires=[
         "numpy",
         "boto3",

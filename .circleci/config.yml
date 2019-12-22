@@ -97,9 +97,9 @@ jobs:
             - run: sudo pip install --editable .
             - run: sudo pip install torch tensorflow
             - run: sudo pip install black git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort flake8
-            - run: black --check --line-length 119 examples templates tests transformers utils
-            - run: isort --check-only --recursive examples templates tests transformers utils
-            - run: flake8 examples templates tests transformers utils
+            - run: black --check --line-length 119 examples templates tests src utils
+            - run: isort --check-only --recursive examples templates tests src utils
+            - run: flake8 examples templates tests src utils
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
