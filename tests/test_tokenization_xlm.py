@@ -16,14 +16,15 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
+import unittest
 
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow
 
 
-class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLMTokenizer
 

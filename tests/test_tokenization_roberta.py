@@ -16,15 +16,16 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
+import unittest
 from io import open
 
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow
 
 
-class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = RobertaTokenizer
 
     def setUp(self):

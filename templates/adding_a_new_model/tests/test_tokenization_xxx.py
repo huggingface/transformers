@@ -15,14 +15,15 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 from io import open
 
 from transformers.tokenization_bert import VOCAB_FILES_NAMES, XxxTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 
 
-class XxxTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class XxxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XxxTokenizer
 

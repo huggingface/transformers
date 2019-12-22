@@ -15,17 +15,18 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 
 from transformers.tokenization_t5 import T5Tokenizer
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
-class T5TokenizationTest(CommonTestCases.CommonTokenizerTester):
+class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = T5Tokenizer
 

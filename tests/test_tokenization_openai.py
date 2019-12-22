@@ -16,13 +16,14 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
+import unittest
 
 from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 
 
-class OpenAIGPTTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = OpenAIGPTTokenizer
 

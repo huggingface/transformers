@@ -15,6 +15,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 from io import open
 
 from transformers.tokenization_bert import (
@@ -27,11 +28,11 @@ from transformers.tokenization_bert import (
     _is_whitespace,
 )
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow
 
 
-class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertTokenizer
 
