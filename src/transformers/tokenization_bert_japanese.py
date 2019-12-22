@@ -20,8 +20,6 @@ import logging
 import os
 import unicodedata
 
-import six
-
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 
 
@@ -194,10 +192,7 @@ class MecabTokenizer(object):
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
-        if six.PY2:
-            mecab_output = self.mecab.parse(text.encode("utf-8")).decode("utf-8")
-        else:
-            mecab_output = self.mecab.parse(text)
+        mecab_output = self.mecab.parse(text)
 
         cursor = 0
         for line in mecab_output.split("\n"):

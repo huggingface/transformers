@@ -26,7 +26,6 @@ from os.path import abspath, exists
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import six
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_utils import PretrainedConfig
@@ -939,7 +938,7 @@ def pipeline(
             modelcard = config
 
     # Instantiate tokenizer if needed
-    if isinstance(tokenizer, six.string_types):
+    if isinstance(tokenizer, str):
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
 
     # Instantiate config if needed

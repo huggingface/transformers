@@ -20,8 +20,6 @@ import os
 import unicodedata
 from shutil import copyfile
 
-import six
-
 from .tokenization_utils import PreTrainedTokenizer
 
 
@@ -139,9 +137,6 @@ class AlbertTokenizer(PreTrainedTokenizer):
             outputs = inputs
         outputs = outputs.replace("``", '"').replace("''", '"')
 
-        if six.PY2 and isinstance(outputs, str):
-            outputs = outputs.decode("utf-8")
-
         if not self.keep_accents:
             outputs = unicodedata.normalize("NFKD", outputs)
             outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
@@ -150,14 +145,9 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
         return outputs
 
-    def _tokenize(self, text, return_unicode=True, sample=False):
-        """ Tokenize a string.
-            return_unicode is used only for py2
-        """
+    def _tokenize(self, text, sample=False):
+        """ Tokenize a string. """
         text = self.preprocess_text(text)
-        # note(zhiliny): in some systems, sentencepiece only accepts str for py2
-        if six.PY2 and isinstance(text, unicode):  # noqa: F821
-            text = text.encode("utf-8")
 
         if not sample:
             pieces = self.sp_model.EncodeAsPieces(text)
@@ -177,27 +167,15 @@ class AlbertTokenizer(PreTrainedTokenizer):
             else:
                 new_pieces.append(piece)
 
-        # note(zhiliny): convert back to unicode for py2
-        if six.PY2 and return_unicode:
-            ret_pieces = []
-            for piece in new_pieces:
-                if isinstance(piece, str):
-                    piece = piece.decode("utf-8")
-                ret_pieces.append(piece)
-            new_pieces = ret_pieces
-
         return new_pieces
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         return self.sp_model.PieceToId(token)
 
-    def _convert_id_to_token(self, index, return_unicode=True):
-        """Converts an index (integer) in a token (string/unicode) using the vocab."""
-        token = self.sp_model.IdToPiece(index)
-        if six.PY2 and return_unicode and isinstance(token, str):
-            token = token.decode("utf-8")
-        return token
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.sp_model.IdToPiece(index)
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""

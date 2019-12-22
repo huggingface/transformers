@@ -20,7 +20,6 @@ from os.path import expanduser
 from typing import List
 
 import requests
-import six
 from tqdm import tqdm
 
 
@@ -160,11 +159,8 @@ class TqdmProgressFileReader:
         self.f = f
         self.total_size = os.fstat(f.fileno()).st_size  # type: int
         self.pbar = tqdm(total=self.total_size, leave=False)
-        if six.PY3:
-            # does not work unless PY3
-            # no big deal as the CLI does not currently support PY2 anyways.
-            self.read = f.read
-            f.read = self._read
+        self.read = f.read
+        f.read = self._read
 
     def _read(self, n=-1):
         self.pbar.update(n)
@@ -182,16 +178,7 @@ class HfFolder:
         """
         Save token, creating folder as needed.
         """
-        if six.PY3:
-            os.makedirs(os.path.dirname(cls.path_token), exist_ok=True)
-        else:
-            # Python 2
-            try:
-                os.makedirs(os.path.dirname(cls.path_token))
-            except OSError as e:
-                if e.errno != os.errno.EEXIST:
-                    raise e
-                pass
+        os.makedirs(os.path.dirname(cls.path_token), exist_ok=True)
         with open(cls.path_token, "w+") as f:
             f.write(token)
 
