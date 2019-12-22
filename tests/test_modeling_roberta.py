@@ -19,7 +19,7 @@ import unittest
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import CommonTestCases, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
@@ -37,7 +37,7 @@ if is_torch_available():
 
 
 @require_torch
-class RobertaModelTest(CommonTestCases.CommonModelTester):
+class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (RobertaForMaskedLM, RobertaModel) if is_torch_available() else ()
 

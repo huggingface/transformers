@@ -15,11 +15,12 @@
 from __future__ import absolute_import, division, print_function
 
 import random
+import unittest
 
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import CommonTestCases, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
@@ -30,7 +31,7 @@ if is_torch_available():
 
 
 @require_torch
-class TransfoXLModelTest(CommonTestCases.CommonModelTester):
+class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel) if is_torch_available() else ()
     test_pruning = False
