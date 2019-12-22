@@ -15,31 +15,10 @@
 
 
 import os
+import pickle
 import shutil
-import sys
 import tempfile
 from io import open
-
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-
-    class TemporaryDirectory(object):
-        """Context manager for tempfile.mkdtemp() so it's usable with "with" statement."""
-
-        def __enter__(self):
-            self.name = tempfile.mkdtemp()
-            return self.name
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            shutil.rmtree(self.name)
-
-
-else:
-    import pickle
-
-    TemporaryDirectory = tempfile.TemporaryDirectory
-    unicode = str
 
 
 class TokenizerTesterMixin:
@@ -90,7 +69,7 @@ class TokenizerTesterMixin:
 
         before_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
 
-        with TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory() as tmpdirname:
             tokenizer.save_pretrained(tmpdirname)
             tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
 
@@ -108,7 +87,7 @@ class TokenizerTesterMixin:
         text = "Munich and Berlin are nice cities"
         subwords = tokenizer.tokenize(text)
 
-        with TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory() as tmpdirname:
 
             filename = os.path.join(tmpdirname, "tokenizer.bin")
             with open(filename, "wb") as handle:
@@ -246,7 +225,7 @@ class TokenizerTesterMixin:
         self.assertEqual(text_2, output_text)
 
         self.assertNotEqual(len(tokens_2), 0)
-        self.assertIsInstance(text_2, (str, unicode))
+        self.assertIsInstance(text_2, str)
 
     def test_encode_decode_with_spaces(self):
         tokenizer = self.get_tokenizer()
@@ -268,9 +247,6 @@ class TokenizerTesterMixin:
             self.assertListEqual(weights_list, weights_list_2)
 
     def test_mask_output(self):
-        if sys.version_info <= (3, 0):
-            return
-
         tokenizer = self.get_tokenizer()
 
         if tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer":

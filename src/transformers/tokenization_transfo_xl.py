@@ -21,7 +21,7 @@
 import glob
 import logging
 import os
-import sys
+import pickle
 from collections import Counter, OrderedDict
 from io import open
 
@@ -35,11 +35,6 @@ try:
     import torch
 except ImportError:
     pass
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
 
 
 logger = logging.getLogger(__name__)
