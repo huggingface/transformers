@@ -17,7 +17,7 @@ jobs:
     run_tests_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
         resource_class: xlarge
@@ -31,7 +31,7 @@ jobs:
     run_tests_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.7
         environment:
             OMP_NUM_THREADS: 1
         resource_class: xlarge
