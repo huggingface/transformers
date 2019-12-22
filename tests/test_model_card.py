@@ -20,7 +20,7 @@ import unittest
 
 from transformers.modelcard import ModelCard
 
-from .test_tokenization_commo import TemporaryDirectory
+from .test_tokenization_common import TemporaryDirectory
 
 
 class ModelCardTester(unittest.TestCase):

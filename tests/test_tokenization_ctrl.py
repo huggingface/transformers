@@ -15,14 +15,15 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
+import unittest
 from io import open
 
 from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 
 
-class CTRLTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class CTRLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CTRLTokenizer
 

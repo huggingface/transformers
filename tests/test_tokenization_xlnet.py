@@ -15,17 +15,18 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
-class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = XLNetTokenizer
 

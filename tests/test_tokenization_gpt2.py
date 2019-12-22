@@ -16,14 +16,15 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
+import unittest
 from io import open
 
 from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES, GPT2Tokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 
 
-class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
+class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = GPT2Tokenizer
 

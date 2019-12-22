@@ -15,16 +15,17 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 
 from transformers.tokenization_albert import AlbertTokenizer
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/spiece.model")
 
 
-class AlbertTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = AlbertTokenizer
 

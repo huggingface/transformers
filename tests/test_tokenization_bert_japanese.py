@@ -15,6 +15,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 from io import open
 
 from transformers.tokenization_bert import WordpieceTokenizer
@@ -25,12 +26,12 @@ from transformers.tokenization_bert_japanese import (
     MecabTokenizer,
 )
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 from .utils import custom_tokenizers, slow
 
 
 @custom_tokenizers
-class BertJapaneseTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
 
@@ -130,7 +131,7 @@ class BertJapaneseTokenizationTest(CommonTestCases.CommonTokenizerTester):
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
 
 
-class BertJapaneseCharacterTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
 

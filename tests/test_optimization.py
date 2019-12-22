@@ -19,7 +19,7 @@ import unittest
 
 from transformers import is_torch_available
 
-from .test_tokenization_commo import TemporaryDirectory
+from .test_tokenization_common import TemporaryDirectory
 from .utils import require_torch
 
 

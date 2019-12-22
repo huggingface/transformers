@@ -15,11 +15,12 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import unittest
 from io import open
 
 from transformers import is_torch_available
 
-from .test_tokenization_commo import CommonTestCases
+from .test_tokenization_common import TokenizerTesterMixin
 from .utils import require_torch
 
 
@@ -28,7 +29,7 @@ if is_torch_available():
 
 
 @require_torch
-class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
+class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
 
