@@ -101,7 +101,7 @@ pip install [--editable] .
 
 ### Tests
 
-A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 These tests can be run using `unittest` or `pytest` (install pytest if needed with `pip install pytest`).
 
@@ -110,14 +110,14 @@ Depending on which framework is installed (TensorFlow 2.0 and/or PyTorch), the i
 You can run the tests from the root of the cloned repository with the commands:
 
 ```bash
-python -m unittest discover -s transformers/tests -p "*test.py" -t .
+python -m unittest discover -s tests -p "*test.py" -t .
 python -m unittest discover -s examples -p "*test.py" -t examples
 ```
 
 or
 
 ```bash
-python -m pytest -sv ./transformers/tests/
+python -m pytest -sv ./tests/
 python -m pytest -sv ./examples/
 ```
 
