@@ -95,7 +95,7 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install --editable .
-            - run: sudo pip install torch tensorflow tensorboardX scikit-learn
+            - run: sudo pip install torch tensorflow
             - run: sudo pip install black git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort flake8
             - run: black --check --line-length 119 examples templates transformers utils
             - run: isort --check-only --recursive examples templates transformers utils

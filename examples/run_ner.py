@@ -25,13 +25,13 @@ import random
 
 import numpy as np
 import torch
+from seqeval.metrics import f1_score, precision_score, recall_score
 from tensorboardX import SummaryWriter
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from seqeval.metrics import f1_score, precision_score, recall_score
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
