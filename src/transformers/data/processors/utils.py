@@ -18,7 +18,6 @@ import copy
 import csv
 import json
 import logging
-import sys
 
 from ...file_utils import is_tf_available, is_torch_available
 
@@ -98,13 +97,7 @@ class DataProcessor(object):
     def _read_tsv(cls, input_file, quotechar=None):
         """Reads a tab separated value file."""
         with open(input_file, "r", encoding="utf-8-sig") as f:
-            reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
-            lines = []
-            for line in reader:
-                if sys.version_info[0] == 2:
-                    line = list(unicode(cell, "utf-8") for cell in line)  # noqa: F821
-                lines.append(line)
-            return lines
+            return list(csv.reader(f, delimiter="\t", quotechar=quotechar))
 
 
 class SingleSentenceClassificationProcessor(DataProcessor):

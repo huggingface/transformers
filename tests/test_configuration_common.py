@@ -16,8 +16,7 @@
 
 import json
 import os
-
-from .test_tokenization_common import TemporaryDirectory
+import tempfile
 
 
 class ConfigTester(object):
@@ -42,7 +41,7 @@ class ConfigTester(object):
     def create_and_test_config_to_json_file(self):
         config_first = self.config_class(**self.inputs_dict)
 
-        with TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory() as tmpdirname:
             json_file_path = os.path.join(tmpdirname, "config.json")
             config_first.to_json_file(json_file_path)
             config_second = self.config_class.from_json_file(json_file_path)
@@ -52,7 +51,7 @@ class ConfigTester(object):
     def create_and_test_config_from_and_save_pretrained(self):
         config_first = self.config_class(**self.inputs_dict)
 
-        with TemporaryDirectory() as tmpdirname:
+        with tempfile.TemporaryDirectory() as tmpdirname:
             config_first.save_pretrained(tmpdirname)
             config_second = self.config_class.from_pretrained(tmpdirname)
 

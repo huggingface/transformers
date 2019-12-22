@@ -166,7 +166,7 @@ def filename_to_url(filename, cache_dir=None):
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
-    if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
+    if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
     cache_path = os.path.join(cache_dir, filename)
@@ -201,9 +201,9 @@ def cached_path(
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
-    if sys.version_info[0] == 3 and isinstance(url_or_filename, Path):
+    if isinstance(url_or_filename, Path):
         url_or_filename = str(url_or_filename)
-    if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
+    if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
     if is_remote_url(url_or_filename):
@@ -314,9 +314,7 @@ def get_from_cache(
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
-    if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
-        cache_dir = str(cache_dir)
-    if sys.version_info[0] == 2 and not isinstance(cache_dir, str):
+    if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
     if not os.path.exists(cache_dir):
@@ -335,8 +333,6 @@ def get_from_cache(
         except (EnvironmentError, requests.exceptions.Timeout):
             etag = None
 
-    if sys.version_info[0] == 2 and etag is not None:
-        etag = etag.decode("utf-8")
     filename = url_to_filename(url, etag)
 
     # get cache path to put the file
@@ -400,9 +396,6 @@ def get_from_cache(
                 meta = {"url": url, "etag": etag}
                 meta_path = cache_path + ".json"
                 with open(meta_path, "w") as meta_file:
-                    output_string = json.dumps(meta)
-                    if sys.version_info[0] == 2 and isinstance(output_string, str):
-                        output_string = unicode(output_string, "utf-8")  # noqa: F821
-                    meta_file.write(output_string)
+                    json.dump(meta, meta_file)
 
     return cache_path
