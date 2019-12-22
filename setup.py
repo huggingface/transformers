@@ -34,15 +34,16 @@ To create the package for pypi.
 
 """
 from io import open
+
 from setuptools import find_packages, setup
 
 
 extras = {
-    'serving': ['pydantic', 'uvicorn', 'fastapi'],
-    'serving-tf': ['pydantic', 'uvicorn', 'fastapi', 'tensorflow'],
-    'serving-torch': ['pydantic', 'uvicorn', 'fastapi', 'torch']
+    "serving": ["pydantic", "uvicorn", "fastapi"],
+    "serving-tf": ["pydantic", "uvicorn", "fastapi", "tensorflow"],
+    "serving-torch": ["pydantic", "uvicorn", "fastapi", "torch"],
 }
-extras['all'] = [package for package in extras.values()]
+extras["all"] = [package for package in extras.values()]
 
 setup(
     name="transformers",
@@ -50,30 +51,29 @@ setup(
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
-    long_description=open("README.md", "r", encoding='utf-8').read(),
+    long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    keywords='NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU',
-    license='Apache',
+    keywords="NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU",
+    license="Apache",
     url="https://github.com/huggingface/transformers",
-    packages=find_packages(exclude=["*.tests", "*.tests.*",
-                                    "tests.*", "tests"]),
-    install_requires=['numpy',
-                      'boto3',
-                      'filelock',
-                      'requests',
-                      'tqdm',
-                      'regex != 2019.12.17',
-                      'sentencepiece',
-                      'sacremoses'],
-    extras_require=extras,
-    scripts=[
-        'transformers-cli'
+    packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
+    install_requires=[
+        "numpy",
+        "boto3",
+        "filelock",
+        "requests",
+        "tqdm",
+        "regex != 2019.12.17",
+        "sentencepiece",
+        "sacremoses",
     ],
+    extras_require=extras,
+    scripts=["transformers-cli"],
     # python_requires='>=3.5.0',
     classifiers=[
-          'Intended Audience :: Science/Research',
-          'License :: OSI Approved :: Apache Software License',
-          'Programming Language :: Python :: 3',
-          'Topic :: Scientific/Engineering :: Artificial Intelligence',
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: Apache Software License",
+        "Programming Language :: Python :: 3",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )

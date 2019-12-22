@@ -12,61 +12,73 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import os
-import unittest
-import json
 import random
+import unittest
 
 from transformers import is_torch_available
+
+from .configuration_common_test import ConfigTester
+from .modeling_common_test import CommonTestCases, ids_tensor
+from .utils import CACHE_DIR, require_torch, slow, torch_device
+
 
 if is_torch_available():
     import torch
 
-    from transformers import (XLNetConfig, XLNetModel, XLNetLMHeadModel, XLNetForSequenceClassification,
-                              XLNetForTokenClassification, XLNetForQuestionAnswering)
+    from transformers import (
+        XLNetConfig,
+        XLNetModel,
+        XLNetLMHeadModel,
+        XLNetForSequenceClassification,
+        XLNetForTokenClassification,
+        XLNetForQuestionAnswering,
+    )
     from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-
-from .modeling_common_test import (CommonTestCases, ids_tensor)
-from .configuration_common_test import ConfigTester
-from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 @require_torch
 class XLNetModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes=(XLNetModel, XLNetLMHeadModel, XLNetForTokenClassification,
-                    XLNetForSequenceClassification, XLNetForQuestionAnswering) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            XLNetModel,
+            XLNetLMHeadModel,
+            XLNetForTokenClassification,
+            XLNetForSequenceClassification,
+            XLNetForQuestionAnswering,
+        )
+        if is_torch_available()
+        else ()
+    )
     test_pruning = False
 
     class XLNetModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     mem_len=10,
-                     clamp_len=-1,
-                     reuse_len=15,
-                     is_training=True,
-                     use_labels=True,
-                     vocab_size=99,
-                     cutoffs=[10, 50, 80],
-                     hidden_size=32,
-                     num_attention_heads=4,
-                     d_inner=128,
-                     num_hidden_layers=5,
-                     type_sequence_label_size=2,
-                     untie_r=True,
-                     bi_data=False,
-                     same_length=False,
-                     initializer_range=0.05,
-                     seed=1,
-                     type_vocab_size=2,
-            ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            mem_len=10,
+            clamp_len=-1,
+            reuse_len=15,
+            is_training=True,
+            use_labels=True,
+            vocab_size=99,
+            cutoffs=[10, 50, 80],
+            hidden_size=32,
+            num_attention_heads=4,
+            d_inner=128,
+            num_hidden_layers=5,
+            type_sequence_label_size=2,
+            untie_r=True,
+            bi_data=False,
+            same_length=False,
+            initializer_range=0.05,
+            seed=1,
+            type_vocab_size=2,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -97,9 +109,13 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
             input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
 
             input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
-            perm_mask = torch.zeros(self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device)
+            perm_mask = torch.zeros(
+                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device
+            )
             perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-            target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device)
+            target_mapping = torch.zeros(
+                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device
+            )
             target_mapping[:, 0, -1] = 1.0  # predict last token
 
             sequence_labels = None
@@ -125,17 +141,43 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 reuse_len=self.reuse_len,
                 bi_data=self.bi_data,
                 initializer_range=self.initializer_range,
-                num_labels=self.type_sequence_label_size)
+                num_labels=self.type_sequence_label_size,
+            )
 
-            return (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                    target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels)
+            return (
+                config,
+                input_ids_1,
+                input_ids_2,
+                input_ids_q,
+                perm_mask,
+                input_mask,
+                target_mapping,
+                segment_ids,
+                lm_labels,
+                sequence_labels,
+                is_impossible_labels,
+                token_labels,
+            )
 
         def set_seed(self):
             random.seed(self.seed)
             torch.manual_seed(self.seed)
 
-        def create_and_check_xlnet_base_model(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels):
+        def create_and_check_xlnet_base_model(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
+        ):
             model = XLNetModel(config)
             model.to(torch_device)
             model.eval()
@@ -158,14 +200,28 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
             self.parent.assertEqual(len(no_mems_outputs), 1)
 
             self.parent.assertListEqual(
-                list(result["outputs"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_base_model_with_att_output(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                    target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels):
+        def create_and_check_xlnet_base_model_with_att_output(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
+        ):
             model = XLNetModel(config)
             model.to(torch_device)
             model.eval()
@@ -177,15 +233,30 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
             self.parent.assertEqual(len(attentions[0]), 2)
             self.parent.assertTrue(attentions[0][0].shape, attentions[0][0].shape)
 
-        def create_and_check_xlnet_lm_head(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels):
+        def create_and_check_xlnet_lm_head(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
+        ):
             model = XLNetLMHeadModel(config)
             model.to(torch_device)
             model.eval()
 
             loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
 
-            loss_2, all_logits_2, mems_2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1)
+            loss_2, all_logits_2, mems_2 = model(
+                input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1
+            )
 
             logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
 
@@ -198,28 +269,39 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 "all_logits_2": all_logits_2,
             }
 
+            self.parent.assertListEqual(list(result["loss_1"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss_1"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["all_logits_1"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
+            self.parent.assertListEqual(list(result["loss_2"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss_2"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["all_logits_2"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
-                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_qa(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels):
+        def create_and_check_xlnet_qa(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
+        ):
             model = XLNetForQuestionAnswering(config)
             model.to(torch_device)
             model.eval()
@@ -227,21 +309,26 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
             outputs = model(input_ids_1)
             start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
 
-            outputs = model(input_ids_1, start_positions=sequence_labels,
-                                         end_positions=sequence_labels,
-                                         cls_index=sequence_labels,
-                                         is_impossible=is_impossible_labels,
-                                         p_mask=input_mask)
+            outputs = model(
+                input_ids_1,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+                cls_index=sequence_labels,
+                is_impossible=is_impossible_labels,
+                p_mask=input_mask,
+            )
 
-            outputs = model(input_ids_1, start_positions=sequence_labels,
-                                         end_positions=sequence_labels,
-                                         cls_index=sequence_labels,
-                                         is_impossible=is_impossible_labels)
+            outputs = model(
+                input_ids_1,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+                cls_index=sequence_labels,
+                is_impossible=is_impossible_labels,
+            )
 
             total_loss, mems = outputs
 
-            outputs = model(input_ids_1, start_positions=sequence_labels,
-                                         end_positions=sequence_labels)
+            outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels)
 
             total_loss, mems = outputs
 
@@ -255,30 +342,42 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 "mems": mems,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+            )
             self.parent.assertListEqual(
-                list(result["start_top_log_probs"].size()),
-                [self.batch_size, model.config.start_n_top])
-            self.parent.assertListEqual(
-                list(result["start_top_index"].size()),
-                [self.batch_size, model.config.start_n_top])
+                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+            )
             self.parent.assertListEqual(
                 list(result["end_top_log_probs"].size()),
-                [self.batch_size, model.config.start_n_top * model.config.end_n_top])
+                [self.batch_size, model.config.start_n_top * model.config.end_n_top],
+            )
             self.parent.assertListEqual(
                 list(result["end_top_index"].size()),
-                [self.batch_size, model.config.start_n_top * model.config.end_n_top])
-            self.parent.assertListEqual(
-                list(result["cls_logits"].size()),
-                [self.batch_size])
+                [self.batch_size, model.config.start_n_top * model.config.end_n_top],
+            )
+            self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def create_and_check_xlnet_token_classif(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels):
+        def create_and_check_xlnet_token_classif(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
+        ):
             model = XLNetForTokenClassification(config)
             model.to(torch_device)
             model.eval()
@@ -292,26 +391,30 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 "logits": logits,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.seq_length, self.type_sequence_label_size])
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
-        def prepare_config_and_inputs_for_common(self):
-            config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels,
-                sequence_labels, is_impossible_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids_1}
-            return config, inputs_dict
-
-        def create_and_check_xlnet_sequence_classif(self, config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels, sequence_labels, is_impossible_labels, token_labels):
+        def create_and_check_xlnet_sequence_classif(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
+        ):
             model = XLNetForSequenceClassification(config)
             model.to(torch_device)
             model.eval()
@@ -325,24 +428,33 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
                 "logits": logits,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.type_sequence_label_size])
+                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
+            )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
-                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers)
+                [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids_1, input_ids_2, input_ids_q, perm_mask, input_mask,
-                target_mapping, segment_ids, lm_labels,
-                sequence_labels, is_impossible_labels, token_labels) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids_1}
+            (
+                config,
+                input_ids_1,
+                input_ids_2,
+                input_ids_q,
+                perm_mask,
+                input_mask,
+                target_mapping,
+                segment_ids,
+                lm_labels,
+                sequence_labels,
+                is_impossible_labels,
+                token_labels,
+            ) = config_and_inputs
+            inputs_dict = {"input_ids": input_ids_1}
             return config, inputs_dict
-
 
     def setUp(self):
         self.model_tester = XLNetModelTest.XLNetModelTester(self)

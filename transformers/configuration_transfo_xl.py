@@ -17,18 +17,17 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import json
 import logging
-import sys
-from io import open
 
 from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 
 TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'transfo-xl-wt103': "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-config.json",
+    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-config.json",
 }
+
 
 class TransfoXLConfig(PretrainedConfig):
     """Configuration class to store the configuration of a `TransfoXLModel`.
@@ -65,38 +64,41 @@ class TransfoXLConfig(PretrainedConfig):
             proj_init_std: parameters initialized by N(0, init_std)
             init_std: parameters initialized by N(0, init_std)
     """
+
     pretrained_config_archive_map = TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-    def __init__(self,
-                 vocab_size=267735,
-                 cutoffs=[20000, 40000, 200000],
-                 d_model=1024,
-                 d_embed=1024,
-                 n_head=16,
-                 d_head=64,
-                 d_inner=4096,
-                 div_val=4,
-                 pre_lnorm=False,
-                 n_layer=18,
-                 tgt_len=128,
-                 ext_len=0,
-                 mem_len=1600,
-                 clamp_len=1000,
-                 same_length=True,
-                 proj_share_all_but_first=True,
-                 attn_type=0,
-                 sample_softmax=-1,
-                 adaptive=True,
-                 tie_weight=True,
-                 dropout=0.1,
-                 dropatt=0.0,
-                 untie_r=True,
-                 init="normal",
-                 init_range=0.01,
-                 proj_init_std=0.01,
-                 init_std=0.02,
-                 layer_norm_epsilon=1e-5,
-                 **kwargs):
+    def __init__(
+        self,
+        vocab_size=267735,
+        cutoffs=[20000, 40000, 200000],
+        d_model=1024,
+        d_embed=1024,
+        n_head=16,
+        d_head=64,
+        d_inner=4096,
+        div_val=4,
+        pre_lnorm=False,
+        n_layer=18,
+        tgt_len=128,
+        ext_len=0,
+        mem_len=1600,
+        clamp_len=1000,
+        same_length=True,
+        proj_share_all_but_first=True,
+        attn_type=0,
+        sample_softmax=-1,
+        adaptive=True,
+        tie_weight=True,
+        dropout=0.1,
+        dropatt=0.0,
+        untie_r=True,
+        init="normal",
+        init_range=0.01,
+        proj_init_std=0.01,
+        init_std=0.02,
+        layer_norm_epsilon=1e-5,
+        **kwargs
+    ):
         """Constructs TransfoXLConfig.
         """
         super(TransfoXLConfig, self).__init__(**kwargs)

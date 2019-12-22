@@ -12,18 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import unittest
-import shutil
 import logging
+import unittest
 
-from transformers import AutoTokenizer, BertTokenizer, AutoTokenizer, GPT2Tokenizer
-from transformers import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
+from transformers import (
+    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    AutoTokenizer,
+    BertTokenizer,
+    GPT2Tokenizer,
+)
 
-from .utils import slow, SMALL_MODEL_IDENTIFIER
+from .utils import SMALL_MODEL_IDENTIFIER, slow
 
 
 class AutoTokenizerTest(unittest.TestCase):
@@ -47,6 +49,7 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(tokenizer, BertTokenizer)
         self.assertEqual(len(tokenizer), 12)
+
 
 if __name__ == "__main__":
     unittest.main()

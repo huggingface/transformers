@@ -1,6 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import unittest
 
@@ -8,11 +6,12 @@ from transformers import is_tf_available
 
 from .utils import require_tf
 
+
 if is_tf_available():
     import tensorflow as tf
     from tensorflow.python.eager import context
     from tensorflow.python.framework import ops
-    from transformers import (create_optimizer, GradientAccumulator)
+    from transformers import create_optimizer, GradientAccumulator
 
 
 @require_tf
@@ -21,7 +20,7 @@ class OptimizationFTest(unittest.TestCase):
         self.assertEqual(len(list1), len(list2))
         for a, b in zip(list1, list2):
             self.assertAlmostEqual(a, b, delta=tol)
-    
+
     def testGradientAccumulator(self):
         accumulator = GradientAccumulator()
         accumulator([tf.constant([1.0, 2.0])])
@@ -42,8 +41,8 @@ class OptimizationFTest(unittest.TestCase):
         physical_devices = tf.config.experimental.list_physical_devices("CPU")
         tf.config.experimental.set_virtual_device_configuration(
             physical_devices[0],
-            [tf.config.experimental.VirtualDeviceConfiguration(),
-            tf.config.experimental.VirtualDeviceConfiguration()])
+            [tf.config.experimental.VirtualDeviceConfiguration(), tf.config.experimental.VirtualDeviceConfiguration()],
+        )
 
         devices = tf.config.experimental.list_logical_devices(device_type="CPU")
         strategy = tf.distribute.MirroredStrategy(devices=[device.name for device in devices])

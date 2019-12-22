@@ -12,63 +12,76 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import unittest
 
 from transformers import is_torch_available
 
-if is_torch_available():
-    from transformers import (XLMConfig, XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
-                                      XLMForSequenceClassification, XLMForQuestionAnsweringSimple)
-    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
-
-from .modeling_common_test import (CommonTestCases, ids_tensor)
 from .configuration_common_test import ConfigTester
+from .modeling_common_test import CommonTestCases, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
+
+
+if is_torch_available():
+    from transformers import (
+        XLMConfig,
+        XLMModel,
+        XLMWithLMHeadModel,
+        XLMForQuestionAnswering,
+        XLMForSequenceClassification,
+        XLMForQuestionAnsweringSimple,
+    )
+    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @require_torch
 class XLMModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (XLMModel, XLMWithLMHeadModel, XLMForQuestionAnswering,
-                         XLMForSequenceClassification, XLMForQuestionAnsweringSimple) if is_torch_available() else ()
-
+    all_model_classes = (
+        (
+            XLMModel,
+            XLMWithLMHeadModel,
+            XLMForQuestionAnswering,
+            XLMForSequenceClassification,
+            XLMForQuestionAnsweringSimple,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     class XLMModelTester(object):
-
-        def __init__(self,
-                     parent,
-                     batch_size=13,
-                     seq_length=7,
-                     is_training=True,
-                     use_input_lengths=True,
-                     use_token_type_ids=True,
-                     use_labels=True,
-                     gelu_activation=True,
-                     sinusoidal_embeddings=False,
-                     causal=False,
-                     asm=False,
-                     n_langs=2,
-                     vocab_size=99,
-                     n_special=0,
-                     hidden_size=32,
-                     num_hidden_layers=5,
-                     num_attention_heads=4,
-                     hidden_dropout_prob=0.1,
-                     attention_probs_dropout_prob=0.1,
-                     max_position_embeddings=512,
-                     type_vocab_size=16,
-                     type_sequence_label_size=2,
-                     initializer_range=0.02,
-                     num_labels=3,
-                     num_choices=4,
-                     summary_type="last",
-                     use_proj=True,
-                     scope=None,
-                    ):
+        def __init__(
+            self,
+            parent,
+            batch_size=13,
+            seq_length=7,
+            is_training=True,
+            use_input_lengths=True,
+            use_token_type_ids=True,
+            use_labels=True,
+            gelu_activation=True,
+            sinusoidal_embeddings=False,
+            causal=False,
+            asm=False,
+            n_langs=2,
+            vocab_size=99,
+            n_special=0,
+            hidden_size=32,
+            num_hidden_layers=5,
+            num_attention_heads=4,
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            max_position_embeddings=512,
+            type_vocab_size=16,
+            type_sequence_label_size=2,
+            initializer_range=0.02,
+            num_labels=3,
+            num_choices=4,
+            summary_type="last",
+            use_proj=True,
+            scope=None,
+        ):
             self.parent = parent
             self.batch_size = batch_size
             self.seq_length = seq_length
@@ -105,7 +118,9 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
 
             input_lengths = None
             if self.use_input_lengths:
-                input_lengths = ids_tensor([self.batch_size], vocab_size=2) + self.seq_length - 2  # small variation of seq_length
+                input_lengths = (
+                    ids_tensor([self.batch_size], vocab_size=2) + self.seq_length - 2
+                )  # small variation of seq_length
 
             token_type_ids = None
             if self.use_token_type_ids:
@@ -120,31 +135,49 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 is_impossible_labels = ids_tensor([self.batch_size], 2).float()
 
             config = XLMConfig(
-                 vocab_size=self.vocab_size,
-                 n_special=self.n_special,
-                 emb_dim=self.hidden_size,
-                 n_layers=self.num_hidden_layers,
-                 n_heads=self.num_attention_heads,
-                 dropout=self.hidden_dropout_prob,
-                 attention_dropout=self.attention_probs_dropout_prob,
-                 gelu_activation=self.gelu_activation,
-                 sinusoidal_embeddings=self.sinusoidal_embeddings,
-                 asm=self.asm,
-                 causal=self.causal,
-                 n_langs=self.n_langs,
-                 max_position_embeddings=self.max_position_embeddings,
-                 initializer_range=self.initializer_range,
-                 summary_type=self.summary_type,
-                 use_proj=self.use_proj)
+                vocab_size=self.vocab_size,
+                n_special=self.n_special,
+                emb_dim=self.hidden_size,
+                n_layers=self.num_hidden_layers,
+                n_heads=self.num_attention_heads,
+                dropout=self.hidden_dropout_prob,
+                attention_dropout=self.attention_probs_dropout_prob,
+                gelu_activation=self.gelu_activation,
+                sinusoidal_embeddings=self.sinusoidal_embeddings,
+                asm=self.asm,
+                causal=self.causal,
+                n_langs=self.n_langs,
+                max_position_embeddings=self.max_position_embeddings,
+                initializer_range=self.initializer_range,
+                summary_type=self.summary_type,
+                use_proj=self.use_proj,
+            )
 
-            return config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask
+            return (
+                config,
+                input_ids,
+                token_type_ids,
+                input_lengths,
+                sequence_labels,
+                token_labels,
+                is_impossible_labels,
+                input_mask,
+            )
 
         def check_loss_output(self, result):
-            self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+            self.parent.assertListEqual(list(result["loss"].size()), [])
 
-        def create_and_check_xlm_model(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+        def create_and_check_xlm_model(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
             model = XLMModel(config=config)
             model.to(torch_device)
             model.eval()
@@ -156,11 +189,20 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 "sequence_output": sequence_output,
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()),
-                [self.batch_size, self.seq_length, self.hidden_size])
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
 
-
-        def create_and_check_xlm_lm_head(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+        def create_and_check_xlm_lm_head(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
             model = XLMWithLMHeadModel(config)
             model.to(torch_device)
             model.eval()
@@ -172,23 +214,29 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 "logits": logits,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.seq_length, self.vocab_size])
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
 
-
-        def create_and_check_xlm_simple_qa(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+        def create_and_check_xlm_simple_qa(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
             model = XLMForQuestionAnsweringSimple(config)
             model.to(torch_device)
             model.eval()
 
             outputs = model(input_ids)
 
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                       end_positions=sequence_labels)
+            outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
             loss, start_logits, end_logits = outputs
 
             result = {
@@ -196,16 +244,21 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 "start_logits": start_logits,
                 "end_logits": end_logits,
             }
-            self.parent.assertListEqual(
-                list(result["start_logits"].size()),
-                [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(
-                list(result["end_logits"].size()),
-                [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
-
-        def create_and_check_xlm_qa(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+        def create_and_check_xlm_qa(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
             model = XLMForQuestionAnswering(config)
             model.to(torch_device)
             model.eval()
@@ -213,21 +266,26 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
             outputs = model(input_ids)
             start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = outputs
 
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                         end_positions=sequence_labels,
-                                         cls_index=sequence_labels,
-                                         is_impossible=is_impossible_labels,
-                                         p_mask=input_mask)
+            outputs = model(
+                input_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+                cls_index=sequence_labels,
+                is_impossible=is_impossible_labels,
+                p_mask=input_mask,
+            )
 
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                         end_positions=sequence_labels,
-                                         cls_index=sequence_labels,
-                                         is_impossible=is_impossible_labels)
+            outputs = model(
+                input_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+                cls_index=sequence_labels,
+                is_impossible=is_impossible_labels,
+            )
 
             (total_loss,) = outputs
 
-            outputs = model(input_ids, start_positions=sequence_labels,
-                                         end_positions=sequence_labels)
+            outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
 
             (total_loss,) = outputs
 
@@ -240,27 +298,34 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 "cls_logits": cls_logits,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
+                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+            )
             self.parent.assertListEqual(
-                list(result["start_top_log_probs"].size()),
-                [self.batch_size, model.config.start_n_top])
-            self.parent.assertListEqual(
-                list(result["start_top_index"].size()),
-                [self.batch_size, model.config.start_n_top])
+                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+            )
             self.parent.assertListEqual(
                 list(result["end_top_log_probs"].size()),
-                [self.batch_size, model.config.start_n_top * model.config.end_n_top])
+                [self.batch_size, model.config.start_n_top * model.config.end_n_top],
+            )
             self.parent.assertListEqual(
                 list(result["end_top_index"].size()),
-                [self.batch_size, model.config.start_n_top * model.config.end_n_top])
-            self.parent.assertListEqual(
-                list(result["cls_logits"].size()),
-                [self.batch_size])
+                [self.batch_size, model.config.start_n_top * model.config.end_n_top],
+            )
+            self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
 
-
-        def create_and_check_xlm_sequence_classif(self, config, input_ids, token_type_ids, input_lengths, sequence_labels, token_labels, is_impossible_labels, input_mask):
+        def create_and_check_xlm_sequence_classif(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
             model = XLMForSequenceClassification(config)
             model.to(torch_device)
             model.eval()
@@ -273,19 +338,24 @@ class XLMModelTest(CommonTestCases.CommonModelTester):
                 "logits": logits,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["loss"].size()),
-                [])
-            self.parent.assertListEqual(
-                list(result["logits"].size()),
-                [self.batch_size, self.type_sequence_label_size])
-
+                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, token_type_ids, input_lengths,
-             sequence_labels, token_labels, is_impossible_labels, input_mask) = config_and_inputs
-            inputs_dict = {'input_ids': input_ids, 'token_type_ids': token_type_ids, 'lengths': input_lengths}
+            (
+                config,
+                input_ids,
+                token_type_ids,
+                input_lengths,
+                sequence_labels,
+                token_labels,
+                is_impossible_labels,
+                input_mask,
+            ) = config_and_inputs
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "lengths": input_lengths}
             return config, inputs_dict
 
     def setUp(self):

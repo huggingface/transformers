@@ -1,16 +1,16 @@
-from tqdm import tqdm
-import collections
+import json
 import logging
 import os
-import json
-import numpy as np
-from multiprocessing import Pool
-from multiprocessing import cpu_count
 from functools import partial
+from multiprocessing import Pool, cpu_count
 
-from ...tokenization_bert import BasicTokenizer, whitespace_tokenize
-from .utils import DataProcessor, InputExample, InputFeatures
+import numpy as np
+from tqdm import tqdm
+
 from ...file_utils import is_tf_available, is_torch_available
+from ...tokenization_bert import whitespace_tokenize
+from .utils import DataProcessor
+
 
 if is_torch_available():
     import torch
@@ -82,8 +82,8 @@ def _is_whitespace(c):
         return True
     return False
 
-def squad_convert_example_to_features(example, max_seq_length,
-                                       doc_stride, max_query_length, is_training):
+
+def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_query_length, is_training):
     features = []
     if is_training and not example.is_impossible:
         # Get start and end position
@@ -91,7 +91,7 @@ def squad_convert_example_to_features(example, max_seq_length,
         end_position = example.end_position
 
         # If the answer cannot be found in the text, then skip this example.
-        actual_text = " ".join(example.doc_tokens[start_position:(end_position + 1)])
+        actual_text = " ".join(example.doc_tokens[start_position : (end_position + 1)])
         cleaned_answer_text = " ".join(whitespace_tokenize(example.answer_text))
         if actual_text.find(cleaned_answer_text) == -1:
             logger.warning("Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text)
@@ -121,8 +121,11 @@ def squad_convert_example_to_features(example, max_seq_length,
     spans = []
 
     truncated_query = tokenizer.encode(example.question_text, add_special_tokens=False, max_length=max_query_length)
-    sequence_added_tokens = tokenizer.max_len - tokenizer.max_len_single_sentence + 1 \
-        if 'roberta' in str(type(tokenizer)) else tokenizer.max_len - tokenizer.max_len_single_sentence
+    sequence_added_tokens = (
+        tokenizer.max_len - tokenizer.max_len_single_sentence + 1
+        if "roberta" in str(type(tokenizer))
+        else tokenizer.max_len - tokenizer.max_len_single_sentence
+    )
     sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
@@ -135,16 +138,18 @@ def squad_convert_example_to_features(example, max_seq_length,
             return_overflowing_tokens=True,
             pad_to_max_length=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
-            truncation_strategy='only_second' if tokenizer.padding_side == "right" else 'only_first'
+            truncation_strategy="only_second" if tokenizer.padding_side == "right" else "only_first",
         )
 
-        paragraph_len = min(len(all_doc_tokens) - len(spans) * doc_stride,
-                            max_seq_length - len(truncated_query) - sequence_pair_added_tokens)
+        paragraph_len = min(
+            len(all_doc_tokens) - len(spans) * doc_stride,
+            max_seq_length - len(truncated_query) - sequence_pair_added_tokens,
+        )
 
-        if tokenizer.pad_token_id in encoded_dict['input_ids']:
-            non_padded_ids = encoded_dict['input_ids'][:encoded_dict['input_ids'].index(tokenizer.pad_token_id)]
+        if tokenizer.pad_token_id in encoded_dict["input_ids"]:
+            non_padded_ids = encoded_dict["input_ids"][: encoded_dict["input_ids"].index(tokenizer.pad_token_id)]
         else:
-            non_padded_ids = encoded_dict['input_ids']
+            non_padded_ids = encoded_dict["input_ids"]
 
         tokens = tokenizer.convert_ids_to_tokens(non_padded_ids)
 
@@ -170,17 +175,20 @@ def squad_convert_example_to_features(example, max_seq_length,
     for doc_span_index in range(len(spans)):
         for j in range(spans[doc_span_index]["paragraph_len"]):
             is_max_context = _new_check_is_max_context(spans, doc_span_index, doc_span_index * doc_stride + j)
-            index = j if tokenizer.padding_side == "left" else spans[doc_span_index][
-                                                                   "truncated_query_with_special_tokens_length"] + j
+            index = (
+                j
+                if tokenizer.padding_side == "left"
+                else spans[doc_span_index]["truncated_query_with_special_tokens_length"] + j
+            )
             spans[doc_span_index]["token_is_max_context"][index] = is_max_context
 
     for span in spans:
         # Identify the position of the CLS token
-        cls_index = span['input_ids'].index(tokenizer.cls_token_id)
+        cls_index = span["input_ids"].index(tokenizer.cls_token_id)
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
         # Original TF implem also keep the classification token (set to 0) (not sure why...)
-        p_mask = np.array(span['token_type_ids'])
+        p_mask = np.array(span["token_type_ids"])
 
         p_mask = np.minimum(p_mask, 1)
 
@@ -219,31 +227,34 @@ def squad_convert_example_to_features(example, max_seq_length,
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
 
-        features.append(SquadFeatures(
-            span['input_ids'],
-            span['attention_mask'],
-            span['token_type_ids'],
-            cls_index,
-            p_mask.tolist(),
-            example_index=0, # Can not set unique_id and example_index here. They will be set after multiple processing.
-            unique_id=0,
-            paragraph_len=span['paragraph_len'],
-            token_is_max_context=span["token_is_max_context"],
-            tokens=span["tokens"],
-            token_to_orig_map=span["token_to_orig_map"],
-
-            start_position=start_position,
-            end_position=end_position
-        ))
+        features.append(
+            SquadFeatures(
+                span["input_ids"],
+                span["attention_mask"],
+                span["token_type_ids"],
+                cls_index,
+                p_mask.tolist(),
+                example_index=0,  # Can not set unique_id and example_index here. They will be set after multiple processing.
+                unique_id=0,
+                paragraph_len=span["paragraph_len"],
+                token_is_max_context=span["token_is_max_context"],
+                tokens=span["tokens"],
+                token_to_orig_map=span["token_to_orig_map"],
+                start_position=start_position,
+                end_position=end_position,
+            )
+        )
     return features
+
 
 def squad_convert_example_to_features_init(tokenizer_for_convert):
     global tokenizer
     tokenizer = tokenizer_for_convert
 
-def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
-                                       doc_stride, max_query_length, is_training, 
-                                       return_dataset=False, threads=1):
+
+def squad_convert_examples_to_features(
+    examples, tokenizer, max_seq_length, doc_stride, max_query_length, is_training, return_dataset=False, threads=1
+):
     """
     Converts a list of examples into a list of features that can be directly given as input to a model.
     It is model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
@@ -269,7 +280,7 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
         processor = SquadV2Processor()
         examples = processor.get_dev_examples(data_dir)
 
-        features = squad_convert_examples_to_features( 
+        features = squad_convert_examples_to_features(
             examples=examples,
             tokenizer=tokenizer,
             max_seq_length=args.max_seq_length,
@@ -279,17 +290,28 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
         )
     """
 
-    # Defining helper methods    
+    # Defining helper methods
     features = []
     threads = min(threads, cpu_count())
     with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
-        annotate_ = partial(squad_convert_example_to_features, max_seq_length=max_seq_length,
-                                       doc_stride=doc_stride, max_query_length=max_query_length, is_training=is_training)
-        features = list(tqdm(p.imap(annotate_, examples, chunksize=32), total=len(examples), desc='convert squad examples to features'))
+        annotate_ = partial(
+            squad_convert_example_to_features,
+            max_seq_length=max_seq_length,
+            doc_stride=doc_stride,
+            max_query_length=max_query_length,
+            is_training=is_training,
+        )
+        features = list(
+            tqdm(
+                p.imap(annotate_, examples, chunksize=32),
+                total=len(examples),
+                desc="convert squad examples to features",
+            )
+        )
     new_features = []
     unique_id = 1000000000
     example_index = 0
-    for example_features in tqdm(features, total=len(features), desc='add example index and unique id'):
+    for example_features in tqdm(features, total=len(features), desc="add example index and unique id"):
         if not example_features:
             continue
         for example_feature in example_features:
@@ -300,7 +322,7 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
         example_index += 1
     features = new_features
     del new_features
-    if return_dataset == 'pt':
+    if return_dataset == "pt":
         if not is_torch_available():
             raise ImportError("Pytorch must be installed to return a pytorch dataset.")
 
@@ -341,12 +363,13 @@ def squad_convert_examples_to_features(examples, tokenizer, max_seq_length,
                         "input_ids": ex.input_ids,
                         "attention_mask": ex.attention_mask,
                         "token_type_ids": ex.token_type_ids,
-                    }, {
+                    },
+                    {
                         "start_position": ex.start_position,
                         "end_position": ex.end_position,
                         "cls_index": ex.cls_index,
                         "p_mask": ex.p_mask,
-                    }
+                    },
                 )
 
         return tf.data.Dataset.from_generator(
@@ -616,8 +639,8 @@ class SquadFeatures(object):
             has more information related to that token and should be prioritized over this feature for that token.
         tokens: list of tokens corresponding to the input ids
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
-        start_position: start of the answer token index 
-        end_position: end of the answer token index 
+        start_position: start of the answer token index
+        end_position: end of the answer token index
     """
 
     def __init__(

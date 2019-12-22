@@ -18,22 +18,24 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 
+from .tokenization_albert import AlbertTokenizer
 from .tokenization_bert import BertTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
-from .tokenization_openai import OpenAIGPTTokenizer
-from .tokenization_gpt2 import GPT2Tokenizer
-from .tokenization_ctrl import CTRLTokenizer
-from .tokenization_transfo_xl import TransfoXLTokenizer
-from .tokenization_xlnet import XLNetTokenizer
-from .tokenization_xlm import XLMTokenizer
-from .tokenization_roberta import RobertaTokenizer
-from .tokenization_distilbert import DistilBertTokenizer
 from .tokenization_camembert import CamembertTokenizer
-from .tokenization_albert import AlbertTokenizer
+from .tokenization_ctrl import CTRLTokenizer
+from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_openai import OpenAIGPTTokenizer
+from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .tokenization_transfo_xl import TransfoXLTokenizer
+from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .tokenization_xlnet import XLNetTokenizer
+
 
 logger = logging.getLogger(__name__)
+
 
 class AutoTokenizer(object):
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
@@ -62,9 +64,12 @@ class AutoTokenizer(object):
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
+
     def __init__(self):
-        raise EnvironmentError("AutoTokenizer is designed to be instantiated "
-            "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method.")
+        raise EnvironmentError(
+            "AutoTokenizer is designed to be instantiated "
+            "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method."
+        )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
@@ -125,34 +130,38 @@ class AutoTokenizer(object):
             tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
         """
-        if 't5' in pretrained_model_name_or_path:
+        if "t5" in pretrained_model_name_or_path:
             return T5Tokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'distilbert' in pretrained_model_name_or_path:
+        elif "distilbert" in pretrained_model_name_or_path:
             return DistilBertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'albert' in pretrained_model_name_or_path:
+        elif "albert" in pretrained_model_name_or_path:
             return AlbertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'camembert' in pretrained_model_name_or_path:
+        elif "camembert" in pretrained_model_name_or_path:
             return CamembertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'xlm-roberta' in pretrained_model_name_or_path:
+        elif "xlm-roberta" in pretrained_model_name_or_path:
             return XLMRobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'roberta' in pretrained_model_name_or_path:
+        elif "roberta" in pretrained_model_name_or_path:
             return RobertaTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'bert-base-japanese' in pretrained_model_name_or_path:
+        elif "bert-base-japanese" in pretrained_model_name_or_path:
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'bert' in pretrained_model_name_or_path:
+        elif "bert" in pretrained_model_name_or_path:
             return BertTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'openai-gpt' in pretrained_model_name_or_path:
+        elif "openai-gpt" in pretrained_model_name_or_path:
             return OpenAIGPTTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'gpt2' in pretrained_model_name_or_path:
+        elif "gpt2" in pretrained_model_name_or_path:
             return GPT2Tokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'transfo-xl' in pretrained_model_name_or_path:
+        elif "transfo-xl" in pretrained_model_name_or_path:
             return TransfoXLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'xlnet' in pretrained_model_name_or_path:
+        elif "xlnet" in pretrained_model_name_or_path:
             return XLNetTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'xlm' in pretrained_model_name_or_path:
+        elif "xlm" in pretrained_model_name_or_path:
             return XLMTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif 'ctrl' in pretrained_model_name_or_path:
+        elif "ctrl" in pretrained_model_name_or_path:
             return CTRLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        raise ValueError("Unrecognized model identifier in {}. Should contains one of "
-                         "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-                         "'xlm-roberta', 'xlm', 'roberta', 'distilbert,' 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
+        raise ValueError(
+            "Unrecognized model identifier in {}. Should contains one of "
+            "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
+            "'xlm-roberta', 'xlm', 'roberta', 'distilbert,' 'camembert', 'ctrl', 'albert'".format(
+                pretrained_model_name_or_path
+            )
+        )

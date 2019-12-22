@@ -14,14 +14,15 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import os
 import unittest
-import json
 
-from transformers.tokenization_xlm import XLMTokenizer, VOCAB_FILES_NAMES
+from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
 from .tokenization_tests_commons import CommonTestCases
 from .utils import slow
+
 
 class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
@@ -31,15 +32,34 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         super(XLMTokenizationTest, self).setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n",
-                 "w</w>", "r</w>", "t</w>",
-                 "lo", "low", "er</w>",
-                 "low</w>", "lowest</w>", "newer</w>", "wider</w>", "<unk>"]
+        vocab = [
+            "l",
+            "o",
+            "w",
+            "e",
+            "r",
+            "s",
+            "t",
+            "i",
+            "d",
+            "n",
+            "w</w>",
+            "r</w>",
+            "t</w>",
+            "lo",
+            "low",
+            "er</w>",
+            "low</w>",
+            "lowest</w>",
+            "newer</w>",
+            "wider</w>",
+            "<unk>",
+        ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['vocab_file'])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES['merges_file'])
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(self.vocab_file, "w") as fp:
             fp.write(json.dumps(vocab_tokens))
         with open(self.merges_file, "w") as fp:
@@ -49,8 +69,8 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         return XLMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self):
-        input_text = u"lower newer"
-        output_text = u"lower newer"
+        input_text = "lower newer"
+        output_text = "lower newer"
         return input_text, output_text
 
     def test_full_tokenizer(self):
@@ -64,8 +84,7 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     @slow
     def test_sequence_builders(self):
@@ -80,5 +99,6 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
         assert encoded_sentence == [1] + text + [1]
         assert encoded_pair == [1] + text + [1] + text_2 + [1]
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

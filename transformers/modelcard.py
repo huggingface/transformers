@@ -14,8 +14,7 @@
 # limitations under the License.
 """ Configuration base class and utilities."""
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
 import json
@@ -24,9 +23,15 @@ import os
 from io import open
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
-
-from .file_utils import CONFIG_NAME, MODEL_CARD_NAME, WEIGHTS_NAME, TF2_WEIGHTS_NAME, \
-                        cached_path, is_remote_url, hf_bucket_url
+from .file_utils import (
+    CONFIG_NAME,
+    MODEL_CARD_NAME,
+    TF2_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -48,17 +53,18 @@ class ModelCard(object):
 
         Parameters:
     """
+
     def __init__(self, **kwargs):
         # Recomended attributes from https://arxiv.org/abs/1810.03993 (see papers)
-        self.model_details = kwargs.pop('model_details', {})
-        self.intended_use = kwargs.pop('intended_use', {})
-        self.factors = kwargs.pop('factors', {})
-        self.metrics = kwargs.pop('metrics', {})
-        self.evaluation_data = kwargs.pop('evaluation_data', {})
-        self.training_data = kwargs.pop('training_data', {})
-        self.quantitative_analyses = kwargs.pop('quantitative_analyses', {})
-        self.ethical_considerations = kwargs.pop('ethical_considerations', {})
-        self.caveats_and_recommendations = kwargs.pop('caveats_and_recommendations', {})
+        self.model_details = kwargs.pop("model_details", {})
+        self.intended_use = kwargs.pop("intended_use", {})
+        self.factors = kwargs.pop("factors", {})
+        self.metrics = kwargs.pop("metrics", {})
+        self.evaluation_data = kwargs.pop("evaluation_data", {})
+        self.training_data = kwargs.pop("training_data", {})
+        self.quantitative_analyses = kwargs.pop("quantitative_analyses", {})
+        self.ethical_considerations = kwargs.pop("ethical_considerations", {})
+        self.caveats_and_recommendations = kwargs.pop("caveats_and_recommendations", {})
 
         # Open additional attributes
         for key, value in kwargs.items():
@@ -122,10 +128,10 @@ class ModelCard(object):
             modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
 
         """
-        cache_dir = kwargs.pop('cache_dir', None)
-        proxies = kwargs.pop('proxies', None)
-        find_from_standard_name = kwargs.pop('find_from_standard_name', True)
-        return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
+        cache_dir = kwargs.pop("cache_dir", None)
+        proxies = kwargs.pop("proxies", None)
+        find_from_standard_name = kwargs.pop("find_from_standard_name", True)
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             # For simplicity we use the same pretrained url than the configuration files
@@ -145,36 +151,43 @@ class ModelCard(object):
 
         try:
             # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, force_download=True,
-                                               proxies=proxies, resume_download=False)
+            resolved_model_card_file = cached_path(
+                model_card_file, cache_dir=cache_dir, force_download=True, proxies=proxies, resume_download=False
+            )
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:
-                logger.info("loading model card file {} from cache at {}".format(
-                    model_card_file, resolved_model_card_file))
+                logger.info(
+                    "loading model card file {} from cache at {}".format(model_card_file, resolved_model_card_file)
+                )
             # Load model card
             modelcard = cls.from_json_file(resolved_model_card_file)
 
         except EnvironmentError:
             if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-                logger.warning("Couldn't reach server at '{}' to download model card file.".format(
-                        model_card_file))
+                logger.warning("Couldn't reach server at '{}' to download model card file.".format(model_card_file))
             else:
-                logger.warning("Model name '{}' was not found in model name list ({}). " \
-                      "We assumed '{}' was a path or url to a model card file named {} or " \
-                      "a directory containing such a file but couldn't find any such file at this path or url.".format(
+                logger.warning(
+                    "Model name '{}' was not found in model name list ({}). "
+                    "We assumed '{}' was a path or url to a model card file named {} or "
+                    "a directory containing such a file but couldn't find any such file at this path or url.".format(
                         pretrained_model_name_or_path,
-                        ', '.join(ALL_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
-                        model_card_file, MODEL_CARD_NAME))
+                        ", ".join(ALL_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
+                        model_card_file,
+                        MODEL_CARD_NAME,
+                    )
+                )
             logger.warning("Creating an empty model card.")
 
             # We fall back on creating an empty model card
             modelcard = cls()
 
         except json.JSONDecodeError:
-            logger.warning("Couldn't reach server at '{}' to download model card file or "
-                           "model card file is not a valid JSON file. "
-                           "Please check network or file content here: {}.".format(model_card_file, resolved_model_card_file))
+            logger.warning(
+                "Couldn't reach server at '{}' to download model card file or "
+                "model card file is not a valid JSON file. "
+                "Please check network or file content here: {}.".format(model_card_file, resolved_model_card_file)
+            )
             logger.warning("Creating an empty model card.")
 
             # We fall back on creating an empty model card
@@ -203,7 +216,7 @@ class ModelCard(object):
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `ModelCard` from a json file of parameters."""
-        with open(json_file, "r", encoding='utf-8') as reader:
+        with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
         dict_obj = json.loads(text)
         return cls(**dict_obj)
@@ -225,5 +238,5 @@ class ModelCard(object):
 
     def to_json_file(self, json_file_path):
         """ Save this instance to a json file."""
-        with open(json_file_path, "w", encoding='utf-8') as writer:
+        with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string())

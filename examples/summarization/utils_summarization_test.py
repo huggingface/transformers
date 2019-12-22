@@ -17,12 +17,7 @@ import unittest
 import numpy as np
 import torch
 
-from utils_summarization import (
-    compute_token_type_ids,
-    fit_to_block_size,
-    build_mask,
-    process_story,
-)
+from utils_summarization import build_mask, compute_token_type_ids, fit_to_block_size, process_story
 
 
 class SummarizationDataProcessingTest(unittest.TestCase):
@@ -33,25 +28,19 @@ class SummarizationDataProcessingTest(unittest.TestCase):
         """ Pad the sequence with 0 if the sequence is smaller than the block size."""
         sequence = [1, 2, 3, 4]
         expected_output = [1, 2, 3, 4, 0, 0, 0, 0, 0, 0]
-        self.assertEqual(
-            fit_to_block_size(sequence, self.block_size, 0), expected_output
-        )
+        self.assertEqual(fit_to_block_size(sequence, self.block_size, 0), expected_output)
 
     def test_fit_to_block_sequence_fit_exactly(self):
         """ Do nothing if the sequence is the right size. """
         sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         expected_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        self.assertEqual(
-            fit_to_block_size(sequence, self.block_size, 0), expected_output
-        )
+        self.assertEqual(fit_to_block_size(sequence, self.block_size, 0), expected_output)
 
     def test_fit_to_block_sequence_too_big(self):
         """ Truncate the sequence if it is too long. """
         sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
         expected_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        self.assertEqual(
-            fit_to_block_size(sequence, self.block_size, 0), expected_output
-        )
+        self.assertEqual(fit_to_block_size(sequence, self.block_size, 0), expected_output)
 
     def test_process_story_no_highlights(self):
         """ Processing a story with no highlights returns an empty list for the summary.
@@ -95,9 +84,7 @@ class SummarizationDataProcessingTest(unittest.TestCase):
     def test_build_mask(self):
         sequence = torch.tensor([1, 2, 3, 4, 23, 23, 23])
         expected = torch.tensor([1, 1, 1, 1, 0, 0, 0])
-        np.testing.assert_array_equal(
-            build_mask(sequence, 23).numpy(), expected.numpy()
-        )
+        np.testing.assert_array_equal(build_mask(sequence, 23).numpy(), expected.numpy())
 
     def test_build_mask_with_padding_equal_to_one(self):
         sequence = torch.tensor([8, 2, 3, 4, 1, 1, 1])
@@ -106,12 +93,8 @@ class SummarizationDataProcessingTest(unittest.TestCase):
 
     def test_compute_token_type_ids(self):
         separator = 101
-        batch = torch.tensor(
-            [[1, 2, 3, 4, 5, 6], [1, 2, 3, 101, 5, 6], [1, 101, 3, 4, 101, 6]]
-        )
-        expected = torch.tensor(
-            [[1, 1, 1, 1, 1, 1], [1, 1, 1, 0, 0, 0], [1, 0, 0, 0, 1, 1]]
-        )
+        batch = torch.tensor([[1, 2, 3, 4, 5, 6], [1, 2, 3, 101, 5, 6], [1, 101, 3, 4, 101, 6]])
+        expected = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 1, 1, 0, 0, 0], [1, 0, 0, 0, 1, 1]])
 
         result = compute_token_type_ids(batch, separator)
         np.testing.assert_array_equal(result, expected)

@@ -13,45 +13,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ DistilBERT model configuration """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
-import json
 import logging
-from io import open
 
 from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 
 DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'distilbert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-config.json",
-    'distilbert-base-uncased-distilled-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-config.json",
-    'distilbert-base-german-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-config.json",
-    'distilbert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-config.json",
+    "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-config.json",
+    "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-config.json",
+    "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-config.json",
+    "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-config.json",
 }
 
 
 class DistilBertConfig(PretrainedConfig):
     pretrained_config_archive_map = DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
-    def __init__(self,
-                 vocab_size=30522,
-                 max_position_embeddings=512,
-                 sinusoidal_pos_embds=False,
-                 n_layers=6,
-                 n_heads=12,
-                 dim=768,
-                 hidden_dim=4*768,
-                 dropout=0.1,
-                 attention_dropout=0.1,
-                 activation='gelu',
-                 initializer_range=0.02,
-                 tie_weights_=True,
-                 qa_dropout=0.1,
-                 seq_classif_dropout=0.2,
-                 **kwargs):
+    def __init__(
+        self,
+        vocab_size=30522,
+        max_position_embeddings=512,
+        sinusoidal_pos_embds=False,
+        n_layers=6,
+        n_heads=12,
+        dim=768,
+        hidden_dim=4 * 768,
+        dropout=0.1,
+        attention_dropout=0.1,
+        activation="gelu",
+        initializer_range=0.02,
+        tie_weights_=True,
+        qa_dropout=0.1,
+        seq_classif_dropout=0.2,
+        **kwargs
+    ):
         super(DistilBertConfig, self).__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
