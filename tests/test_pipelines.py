@@ -2,7 +2,8 @@ import unittest
 from typing import Iterable
 
 from transformers import pipeline
-from transformers.tests.utils import require_tf, require_torch
+
+from .utils import require_tf, require_torch
 
 
 QA_FINETUNED_MODELS = {

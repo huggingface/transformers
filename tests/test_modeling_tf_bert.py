@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 XXX Authors.
+# Copyright 2018 The Google AI Language Team Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,39 +16,45 @@ from __future__ import absolute_import, division, print_function
 
 import unittest
 
-from transformers import XxxConfig, is_tf_available
+from transformers import BertConfig, is_tf_available
 
-from .configuration_common_test import ConfigTester
-from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
+from .test_configuration_common import ConfigTester
+from .test_modeling_tf_common import TFCommonTestCases, ids_tensor
 from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
-    from transformers.modeling_tf_xxx import (
-        TFXxxModel,
-        TFXxxForMaskedLM,
-        TFXxxForSequenceClassification,
-        TFXxxForTokenClassification,
-        TFXxxForQuestionAnswering,
+    import tensorflow as tf
+    from transformers.modeling_tf_bert import (
+        TFBertModel,
+        TFBertForMaskedLM,
+        TFBertForNextSentencePrediction,
+        TFBertForPreTraining,
+        TFBertForSequenceClassification,
+        TFBertForMultipleChoice,
+        TFBertForTokenClassification,
+        TFBertForQuestionAnswering,
     )
 
 
 @require_tf
-class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
     all_model_classes = (
         (
-            TFXxxModel,
-            TFXxxForMaskedLM,
-            TFXxxForQuestionAnswering,
-            TFXxxForSequenceClassification,
-            TFXxxForTokenClassification,
+            TFBertModel,
+            TFBertForMaskedLM,
+            TFBertForNextSentencePrediction,
+            TFBertForPreTraining,
+            TFBertForQuestionAnswering,
+            TFBertForSequenceClassification,
+            TFBertForTokenClassification,
         )
         if is_tf_available()
         else ()
     )
 
-    class TFXxxModelTester(object):
+    class TFBertModelTester(object):
         def __init__(
             self,
             parent,
@@ -116,7 +122,7 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
                 choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-            config = XxxConfig(
+            config = BertConfig(
                 vocab_size=self.vocab_size,
                 hidden_size=self.hidden_size,
                 num_hidden_layers=self.num_hidden_layers,
@@ -132,10 +138,10 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-        def create_and_check_xxx_model(
+        def create_and_check_bert_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = TFXxxModel(config=config)
+            model = TFBertModel(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             sequence_output, pooled_output = model(inputs)
 
@@ -153,10 +159,10 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
             )
             self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
-        def create_and_check_xxx_for_masked_lm(
+        def create_and_check_bert_for_masked_lm(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = TFXxxForMaskedLM(config=config)
+            model = TFBertForMaskedLM(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             (prediction_scores,) = model(inputs)
             result = {
@@ -166,11 +172,37 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_xxx_for_sequence_classification(
+        def create_and_check_bert_for_next_sequence_prediction(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = TFBertForNextSentencePrediction(config=config)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            (seq_relationship_score,) = model(inputs)
+            result = {
+                "seq_relationship_score": seq_relationship_score.numpy(),
+            }
+            self.parent.assertListEqual(list(result["seq_relationship_score"].shape), [self.batch_size, 2])
+
+        def create_and_check_bert_for_pretraining(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = TFBertForPreTraining(config=config)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            prediction_scores, seq_relationship_score = model(inputs)
+            result = {
+                "prediction_scores": prediction_scores.numpy(),
+                "seq_relationship_score": seq_relationship_score.numpy(),
+            }
+            self.parent.assertListEqual(
+                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            )
+            self.parent.assertListEqual(list(result["seq_relationship_score"].shape), [self.batch_size, 2])
+
+        def create_and_check_bert_for_sequence_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
-            model = TFXxxForSequenceClassification(config=config)
+            model = TFBertForSequenceClassification(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             (logits,) = model(inputs)
             result = {
@@ -178,11 +210,30 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
             }
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
-        def create_and_check_xxx_for_token_classification(
+        def create_and_check_bert_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = TFBertForMultipleChoice(config=config)
+            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+            inputs = {
+                "input_ids": multiple_choice_inputs_ids,
+                "attention_mask": multiple_choice_input_mask,
+                "token_type_ids": multiple_choice_token_type_ids,
+            }
+            (logits,) = model(inputs)
+            result = {
+                "logits": logits.numpy(),
+            }
+            self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+
+        def create_and_check_bert_for_token_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
-            model = TFXxxForTokenClassification(config=config)
+            model = TFBertForTokenClassification(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             (logits,) = model(inputs)
             result = {
@@ -192,10 +243,10 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
                 list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels]
             )
 
-        def create_and_check_xxx_for_question_answering(
+        def create_and_check_bert_for_question_answering(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = TFXxxForQuestionAnswering(config=config)
+            model = TFBertForQuestionAnswering(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             start_logits, end_logits = model(inputs)
             result = {
@@ -220,36 +271,49 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = TFXxxModelTest.TFXxxModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XxxConfig, hidden_size=37)
+        self.model_tester = TFBertModelTest.TFBertModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_xxx_model(self):
+    def test_bert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xxx_model(*config_and_inputs)
+        self.model_tester.create_and_check_bert_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xxx_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_for_multiple_choice(*config_and_inputs)
+
+    def test_for_next_sequence_prediction(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_for_next_sequence_prediction(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_for_pretraining(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xxx_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_bert_for_question_answering(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xxx_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_bert_for_sequence_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xxx_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["xxx-base-uncased"]:
-            model = TFXxxModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ["bert-base-uncased"]:
+            model = TFBertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 

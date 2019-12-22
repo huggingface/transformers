@@ -58,7 +58,7 @@ jobs:
             - run: sudo pip install --progress-bar off .
             - run: sudo pip install pytest pytest-xdist
             - run: sudo pip install mecab-python3
-            - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./tests/tokenization_bert_japanese_test.py
+            - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
     run_examples_py3_torch:
         working_directory: ~/transformers
         docker:

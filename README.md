@@ -110,8 +110,8 @@ Depending on which framework is installed (TensorFlow 2.0 and/or PyTorch), the i
 You can run the tests from the root of the cloned repository with the commands:
 
 ```bash
-python -m unittest discover -s tests -p "*test.py" -t .
-python -m unittest discover -s examples -p "*test.py" -t examples
+python -m unittest -v discover -s tests -t . -v
+python -m unittest -v discover -s examples -t examples -v
 ```
 
 or
