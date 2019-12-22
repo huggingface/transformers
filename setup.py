@@ -67,12 +67,19 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
+        # accessing files from S3 directly
         "boto3",
+        # filesystem locks e.g. to prevent parallel downloads
         "filelock",
+        # for downloading models over HTTPS
         "requests",
+        # progress bars in model download and training scripts
         "tqdm",
+        # for OpenAI GPT
         "regex != 2019.12.17",
+        # for XLNet
         "sentencepiece",
+        # for XLM
         "sacremoses",
     ],
     extras_require=extras,
