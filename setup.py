@@ -55,7 +55,7 @@ setup(
     keywords="NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU",
     license="Apache",
     url="https://github.com/huggingface/transformers",
-    package_dir = {'': 'src'},
+    package_dir={"": "src"},
     packages=find_packages("src"),
     install_requires=[
         "numpy",
@@ -69,11 +69,18 @@ setup(
     ],
     extras_require=extras,
     scripts=["transformers-cli"],
-    # python_requires='>=3.5.0',
+    python_requires=">=3.5.0",
     classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Education",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
 )
