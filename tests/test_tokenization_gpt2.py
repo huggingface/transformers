@@ -17,7 +17,6 @@
 import json
 import os
 import unittest
-from io import open
 
 from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES, GPT2Tokenizer
 

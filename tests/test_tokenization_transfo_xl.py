@@ -16,7 +16,6 @@
 
 import os
 import unittest
-from io import open
 
 from transformers import is_torch_available
 

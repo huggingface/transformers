@@ -21,7 +21,6 @@ import os
 import re
 import sys
 import unicodedata
-from io import open
 
 import sacremoses as sm
 

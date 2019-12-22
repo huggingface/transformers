@@ -19,7 +19,6 @@ import json
 import logging
 import os
 from functools import lru_cache
-from io import open
 
 import regex as re
 

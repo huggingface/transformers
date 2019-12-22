@@ -14,7 +14,6 @@ import tempfile
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
-from io import open
 from urllib.parse import urlparse
 
 import boto3

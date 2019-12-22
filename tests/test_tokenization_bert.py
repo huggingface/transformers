@@ -16,7 +16,6 @@
 
 import os
 import unittest
-from io import open
 
 from transformers.tokenization_bert import (
     VOCAB_FILES_NAMES,

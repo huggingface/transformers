@@ -17,7 +17,6 @@
 
 import argparse
 import logging
-from io import open
 
 import torch
 

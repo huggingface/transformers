@@ -16,7 +16,6 @@
 import json
 import os
 import unittest
-from io import open
 
 from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 

@@ -20,7 +20,6 @@ import json
 import logging
 import math
 import os
-from io import open
 
 import torch
 import torch.nn as nn
