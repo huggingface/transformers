@@ -104,7 +104,3 @@ class ExamplesTests(unittest.TestCase):
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result), 10)
-
-
-if __name__ == "__main__":
-    unittest.main()

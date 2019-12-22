@@ -101,7 +101,7 @@ pip install [--editable] .
 
 ### Tests
 
-A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 These tests can be run using `unittest` or `pytest` (install pytest if needed with `pip install pytest`).
 
@@ -110,14 +110,14 @@ Depending on which framework is installed (TensorFlow 2.0 and/or PyTorch), the i
 You can run the tests from the root of the cloned repository with the commands:
 
 ```bash
-python -m unittest discover -s transformers/tests -p "*test.py" -t .
-python -m unittest discover -s examples -p "*test.py" -t examples
+python -m unittest -v discover -s tests -t . -v
+python -m unittest -v discover -s examples -t examples -v
 ```
 
 or
 
 ```bash
-python -m pytest -sv ./transformers/tests/
+python -m pytest -sv ./tests/
 python -m pytest -sv ./examples/
 ```
 
@@ -251,7 +251,7 @@ valid_dataset = glue_convert_examples_to_features(data['validation'], tokenizer,
 train_dataset = train_dataset.shuffle(100).batch(32).repeat(2)
 valid_dataset = valid_dataset.batch(64)
 
-# Prepare training: Compile tf.keras model with optimizer, loss and learning rate schedule 
+# Prepare training: Compile tf.keras model with optimizer, loss and learning rate schedule
 optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
 loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
@@ -281,7 +281,7 @@ print("sentence_2 is", "a paraphrase" if pred_2 else "not a paraphrase", "of sen
 
 ## Quick tour of the fine-tuning/usage scripts
 
-**Important**  
+**Important**
 Before running the fine-tuning scripts, please read the
 [instructions](#run-the-examples) on how to
 setup your environment to run the examples.
@@ -442,7 +442,7 @@ python ./examples/run_generation.py \
     --model_name_or_path=gpt2 \
 ```
 
-and from the Salesforce CTRL model: 
+and from the Salesforce CTRL model:
 ```shell
 python ./examples/run_generation.py \
     --model_type=ctrl \
@@ -495,13 +495,13 @@ transformers-cli ls
 ## Quick tour of pipelines
 
 New in version `v2.3`: `Pipeline` are high-level objects which automatically handle tokenization, running your data through a transformers model
-and outputting the result in a structured object. 
+and outputting the result in a structured object.
 
 You can create `Pipeline` objects for the following down-stream tasks:
 
  - `feature-extraction`: Generates a tensor representation for the input sequence
  - `ner`: Generates named entity mapping for each word in the input sequence.
- - `sentiment-analysis`: Gives the polarity (positive / negative) of the whole input sequence. 
+ - `sentiment-analysis`: Gives the polarity (positive / negative) of the whole input sequence.
  - `question-answering`: Provided some context and a question refering to the context, it will extract the answer to the question
  in the context.
 
@@ -516,7 +516,7 @@ nlp('We are very happy to include pipeline into the transformers repository.')
 # Allocate a pipeline for question-answering
 nlp = pipeline('question-answering')
 nlp({
-    'question': 'What is the name of the repository ?', 
+    'question': 'What is the name of the repository ?',
     'context': 'Pipeline have been included in the huggingface/transformers repository'
 })
 >>> {'score': 0.28756016668193496, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
