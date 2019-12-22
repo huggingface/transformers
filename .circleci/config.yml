@@ -10,11 +10,8 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install tensorflow
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov pytest-xdist
-            - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo pip install .[sklearn,tf,torch,testing]
+            - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_torch:
@@ -27,10 +24,8 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov pytest-xdist
-            - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_tf:
@@ -43,10 +38,8 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install tensorflow
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov pytest-xdist
-            - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo pip install .[sklearn,tf,testing]
+            - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_custom_tokenizers:
@@ -55,9 +48,7 @@ jobs:
             - image: circleci/python:3.5
         steps:
             - checkout
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest pytest-xdist
-            - run: sudo pip install mecab-python3
+            - run: sudo pip install .[mecab,testing]
             - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
     run_examples_torch:
         working_directory: ~/transformers
@@ -69,10 +60,8 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest pytest-xdist
-            - run: sudo pip install tensorboardX scikit-learn
+            - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install -r examples/requirements.txt
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
     deploy_doc:
         working_directory: ~/transformers
@@ -83,8 +72,7 @@ jobs:
                   fingerprints:
                       - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
             - checkout
-            - run: sudo pip install --progress-bar off -r docs/requirements.txt
-            - run: sudo pip install --progress-bar off .
+            - run: sudo pip install .[tf,torch,docs]
             - run: ./.circleci/deploy.sh
     check_code_quality:
         working_directory: ~/transformers
@@ -94,9 +82,9 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --editable .
-            - run: sudo pip install torch tensorflow
-            - run: sudo pip install black git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort flake8
+            # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
+            - run: sudo pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+            - run: sudo pip install .[tf,torch,quality]
             - run: black --check --line-length 119 examples templates tests src utils
             - run: isort --check-only --recursive examples templates tests src utils
             - run: flake8 examples templates tests src utils

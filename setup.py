@@ -37,12 +37,20 @@ To create the package for pypi.
 from setuptools import find_packages, setup
 
 
-extras = {
-    "serving": ["pydantic", "uvicorn", "fastapi"],
-    "serving-tf": ["pydantic", "uvicorn", "fastapi", "tensorflow"],
-    "serving-torch": ["pydantic", "uvicorn", "fastapi", "torch"],
-}
-extras["all"] = [package for package in extras.values()]
+extras = {}
+
+extras["mecab"] = ["mecab-python3"]
+extras["sklearn"] = ["scikit-learn"]
+extras["tf"] = ["tensorflow"]
+extras["torch"] = ["torch"]
+
+extras["serving"] = ["pydantic", "uvicorn", "fastapi"]
+extras["all"] = extras["serving"] + ["tensorflow", "torch"]
+
+extras["testing"] = ["pytest", "pytest-xdist"]
+extras["quality"] = ["black", "isort", "flake8"]
+extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",

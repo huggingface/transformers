@@ -102,7 +102,7 @@ Follow these steps to start contributing:
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
    under your github user account.
 2. Clone your fork to your local disk, and add the base repository as a remote:
-   
+
    ```bash
    $ git clone git@github.com:<your Github handle>/transformers.git
    $ cd transformers
@@ -114,43 +114,43 @@ Follow these steps to start contributing:
    ```bash
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
-   
+
    **do not** work on the `master` branch.
-   
+
 4. Set up a development environment by running the following command in a virtual environment:
 
    ```bash
-   $ pip install -r requirements-dev.txt
+   $ pip install -e .[dev]
    ```
 
 5. Develop the features on your branch. Add changed files using `git add` and
    then `git commit` to record your changes locally:
-   
+
    ```bash
    $ git add modified_file.py
    $ git commit
    ```
-   
+
    Please write [good commit
    messages](https://chris.beams.io/posts/git-commit/). It
    is a good idea to sync your copy of the code with the original repository
    regularly. This way you can quickly account for changes:
-   
+
    ```bash
    $ git fetch upstream
    $ git rebase upstream/master
    ```
-   
+
    Push the changes to your account using:
-   
+
    ```bash
    $ git push -u origin a-descriptive-name-for-my-changes
    ```
-   
+
 6. Once you are satisfied (**and the checklist below is happy too**), go to the
    webpage of your fork on Github. Click on 'Pull request' to send your changes
    to the project maintainers for review.
-   
+
 7. It's ok if maintainers ask you for changes. It happens to core contributors
    too! So everyone can see the changes in the Pull request, work in your local
    branch and push the changes to your fork. They will automatically appear in
