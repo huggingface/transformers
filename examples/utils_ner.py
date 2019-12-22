@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Named entity recognition fine-tuning: utilities to work with CoNLL-2003 task. """
 
-from __future__ import absolute_import, division, print_function
 
 import logging
 import os

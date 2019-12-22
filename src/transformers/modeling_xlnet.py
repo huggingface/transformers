@@ -15,7 +15,7 @@
 # limitations under the License.
 """ PyTorch XLNet model.
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import logging
 import math

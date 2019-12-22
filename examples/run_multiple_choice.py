@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Finetuning the library models for multiple choice (Bert, Roberta, XLNet)."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Transformer XL checkpoint and datasets."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging

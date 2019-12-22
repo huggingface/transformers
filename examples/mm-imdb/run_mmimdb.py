@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Finetuning the library models for multimodal multiclass prediction on MM-IMDB dataset."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob

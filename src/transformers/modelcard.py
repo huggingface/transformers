@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Configuration base class and utilities."""
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
 import json
