@@ -18,20 +18,12 @@
 import json
 import logging
 import os
+from functools import lru_cache
 from io import open
 
 import regex as re
 
 from .tokenization_utils import PreTrainedTokenizer
-
-
-try:
-    from functools import lru_cache
-except ImportError:
-    # Just a dummy decorator to get the checks to run on python2
-    # because honestly I don't want to support a byte-level unicode BPE tokenizer on python 2 right now.
-    def lru_cache():
-        return lambda func: func
 
 
 logger = logging.getLogger(__name__)

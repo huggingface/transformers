@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
 from io import open
+from urllib.parse import urlparse
 
 import boto3
 import requests
@@ -65,10 +66,6 @@ except ImportError:
     )
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse
 
 try:
     from pathlib import Path
