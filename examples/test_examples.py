@@ -18,17 +18,11 @@ import argparse
 import logging
 import sys
 import unittest
+from unittest.mock import patch
 
 import run_generation
 import run_glue
 import run_squad
-
-
-try:
-    # python 3.4+ can use builtin unittest.mock instead of mock package
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
 
 
 logging.basicConfig(level=logging.DEBUG)
