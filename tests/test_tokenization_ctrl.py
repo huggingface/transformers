@@ -15,7 +15,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
-import unittest
 from io import open
 
 from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
@@ -63,7 +62,3 @@ class CTRLTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         input_bpe_tokens = [0, 1, 2, 4, 5, 1, 0, 3, 6]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
-import unittest
 from io import open
 
 from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES, GPT2Tokenizer
@@ -84,7 +83,3 @@ class GPT2TokenizationTest(CommonTestCases.CommonTokenizerTester):
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-
-if __name__ == "__main__":
-    unittest.main()

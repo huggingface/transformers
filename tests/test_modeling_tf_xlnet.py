@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function
 
 import random
-import unittest
 
 from transformers import XLNetConfig, is_tf_available
 
@@ -401,7 +400,3 @@ class TFXLNetModelTest(TFCommonTestCases.TFCommonModelTester):
         for model_name in list(TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFXLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()

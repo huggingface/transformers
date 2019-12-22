@@ -98,7 +98,3 @@ class SummarizationDataProcessingTest(unittest.TestCase):
 
         result = compute_token_type_ids(batch, separator)
         np.testing.assert_array_equal(result, expected)
-
-
-if __name__ == "__main__":
-    unittest.main()

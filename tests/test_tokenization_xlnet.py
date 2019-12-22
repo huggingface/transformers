@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import unittest
 
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
@@ -183,7 +182,3 @@ class XLNetTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         assert encoded_sentence == text + [4, 3]
         assert encoded_pair == text + [4] + text_2 + [4, 3]
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -14,8 +14,6 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
-import unittest
-
 from transformers import XxxConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
@@ -251,7 +249,3 @@ class TFXxxModelTest(TFCommonTestCases.TFCommonModelTester):
         for model_name in ["xxx-base-uncased"]:
             model = TFXxxModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()

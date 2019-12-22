@@ -298,7 +298,3 @@ class RobertaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         expected_tensor = torch.Tensor([[-0.9469, 0.3913, 0.5118]])
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-3))
-
-
-if __name__ == "__main__":
-    unittest.main()

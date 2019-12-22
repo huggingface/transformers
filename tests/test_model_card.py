@@ -80,7 +80,3 @@ class ModelCardTester(unittest.TestCase):
             model_card_second = ModelCard.from_pretrained(tmpdirname)
 
         self.assertEqual(model_card_second.to_dict(), model_card_first.to_dict())
-
-
-if __name__ == "__main__":
-    unittest.main()

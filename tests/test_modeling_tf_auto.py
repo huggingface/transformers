@@ -99,7 +99,3 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
-
-
-if __name__ == "__main__":
-    unittest.main()

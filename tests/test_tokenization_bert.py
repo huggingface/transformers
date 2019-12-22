@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import unittest
 from io import open
 
 from transformers.tokenization_bert import (
@@ -146,7 +145,3 @@ class BertTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         assert encoded_sentence == [101] + text + [102]
         assert encoded_pair == [101] + text + [102] + text_2 + [102]
-
-
-if __name__ == "__main__":
-    unittest.main()

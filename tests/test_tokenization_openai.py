@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
-import unittest
 
 from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 
@@ -83,7 +82,3 @@ class OpenAIGPTTokenizationTest(CommonTestCases.CommonTokenizerTester):
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-
-if __name__ == "__main__":
-    unittest.main()

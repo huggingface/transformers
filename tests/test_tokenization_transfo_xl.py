@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import unittest
 from io import open
 
 from transformers import is_torch_available
@@ -83,7 +82,3 @@ class TransfoXLTokenizationTest(CommonTestCases.CommonTokenizerTester):
         self.assertListEqual(
             tokenizer.tokenize(" \tHeLLo ! how  \n Are yoU ?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -14,8 +14,6 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
-import unittest
-
 from transformers import T5Config, is_tf_available
 
 from .test_configuration_common import ConfigTester
@@ -165,7 +163,3 @@ class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
         for model_name in ["t5-small"]:
             model = TFT5Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()

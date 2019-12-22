@@ -14,8 +14,6 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
-import unittest
-
 from transformers import CTRLConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
@@ -201,7 +199,3 @@ class TFCTRLModelTest(TFCommonTestCases.TFCommonModelTester):
         for model_name in list(TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFCTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()

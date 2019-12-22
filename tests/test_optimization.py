@@ -150,7 +150,3 @@ class ScheduleInitTest(unittest.TestCase):
         )
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
         self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
-
-
-if __name__ == "__main__":
-    unittest.main()

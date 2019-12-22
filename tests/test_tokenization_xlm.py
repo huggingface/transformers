@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
-import unittest
 
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
@@ -98,7 +97,3 @@ class XLMTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         assert encoded_sentence == [1] + text + [1]
         assert encoded_pair == [1] + text + [1] + text_2 + [1]
-
-
-if __name__ == "__main__":
-    unittest.main()

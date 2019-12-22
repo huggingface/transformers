@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function
 
 import random
-import unittest
 
 from transformers import is_torch_available
 
@@ -208,7 +207,3 @@ class TransfoXLModelTest(CommonTestCases.CommonModelTester):
         for model_name in list(TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TransfoXLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()
