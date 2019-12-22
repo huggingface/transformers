@@ -23,7 +23,6 @@ import logging
 import os
 import pickle
 from collections import Counter, OrderedDict
-from io import open
 
 import numpy as np
 

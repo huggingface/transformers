@@ -20,7 +20,6 @@ import copy
 import json
 import logging
 import os
-from io import open
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 

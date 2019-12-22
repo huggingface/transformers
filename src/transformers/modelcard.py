@@ -19,7 +19,6 @@ import copy
 import json
 import logging
 import os
-from io import open
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .file_utils import (

@@ -21,7 +21,6 @@ import glob
 import json
 import logging
 import os
-from io import open
 from typing import List
 
 import tqdm

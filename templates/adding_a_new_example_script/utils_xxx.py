@@ -19,7 +19,6 @@ import collections
 import json
 import logging
 import math
-from io import open
 
 from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 

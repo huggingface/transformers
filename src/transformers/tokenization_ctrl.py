@@ -18,7 +18,6 @@
 import json
 import logging
 import os
-from io import open
 
 import regex as re
 

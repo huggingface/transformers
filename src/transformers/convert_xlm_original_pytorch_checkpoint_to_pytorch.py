@@ -18,7 +18,6 @@
 import argparse
 import json
 import logging
-from io import open
 
 import numpy
 import torch

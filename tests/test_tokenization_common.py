@@ -18,7 +18,6 @@ import os
 import pickle
 import shutil
 import tempfile
-from io import open
 
 
 class TokenizerTesterMixin:

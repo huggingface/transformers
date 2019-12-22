@@ -20,7 +20,6 @@ import logging
 import os
 import pickle
 import sys
-from io import open
 
 import torch
 

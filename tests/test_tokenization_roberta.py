@@ -17,7 +17,6 @@
 import json
 import os
 import unittest
-from io import open
 
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
 

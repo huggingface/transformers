@@ -33,7 +33,6 @@ To create the package for pypi.
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
 """
-from io import open
 
 from setuptools import find_packages, setup
 

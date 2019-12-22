@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import re
-from io import open
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
