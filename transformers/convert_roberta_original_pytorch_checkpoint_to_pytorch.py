@@ -20,12 +20,12 @@ import argparse
 import logging
 import pathlib
 
-import torch
-from packaging import version
-
 import fairseq
+import torch
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
+from packaging import version
+
 from transformers.modeling_bert import (
     BertConfig,
     BertIntermediate,

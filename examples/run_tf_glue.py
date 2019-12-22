@@ -1,8 +1,8 @@
 import os
 
 import tensorflow as tf
-
 import tensorflow_datasets
+
 from transformers import (
     BertConfig,
     BertForSequenceClassification,
