@@ -14,10 +14,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
+import unittest
+
 from transformers import is_tf_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFCommonTestCases, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_tf, slow
 
 
@@ -34,7 +36,7 @@ if is_tf_available():
 
 
 @require_tf
-class TFXLMModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple)

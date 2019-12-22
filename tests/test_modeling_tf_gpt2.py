@@ -14,10 +14,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
+import unittest
+
 from transformers import GPT2Config, is_tf_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFCommonTestCases, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_tf, slow
 
 
@@ -32,7 +34,7 @@ if is_tf_available():
 
 
 @require_tf
-class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2DoubleHeadsModel) if is_tf_available() else ()
     # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()

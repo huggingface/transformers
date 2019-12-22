@@ -14,10 +14,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
+import unittest
+
 from transformers import DistilBertConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFCommonTestCases, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from .utils import require_tf
 
 
@@ -31,7 +33,7 @@ if is_tf_available():
 
 
 @require_tf
-class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (

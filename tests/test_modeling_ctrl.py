@@ -13,10 +13,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
+import unittest
+
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import CommonTestCases, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
@@ -25,7 +27,7 @@ if is_torch_available():
 
 
 @require_torch
-class CTRLModelTest(CommonTestCases.CommonModelTester):
+class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()
     test_pruning = False

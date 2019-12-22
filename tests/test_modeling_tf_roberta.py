@@ -19,7 +19,7 @@ import unittest
 from transformers import RobertaConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFCommonTestCases, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_tf, slow
 
 
@@ -36,7 +36,7 @@ if is_tf_available():
 
 
 @require_tf
-class TFRobertaModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification) if is_tf_available() else ()

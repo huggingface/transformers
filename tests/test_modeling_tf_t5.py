@@ -14,10 +14,12 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
+import unittest
+
 from transformers import T5Config, is_tf_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFCommonTestCases, ids_tensor
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_tf, slow
 
 
@@ -26,7 +28,7 @@ if is_tf_available():
 
 
 @require_tf
-class TFT5ModelTest(TFCommonTestCases.TFCommonModelTester):
+class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if is_tf_available() else ()
