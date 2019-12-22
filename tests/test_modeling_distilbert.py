@@ -16,33 +16,30 @@ from __future__ import absolute_import, division, print_function
 
 import unittest
 
-from transformers import DistilBertConfig, is_tf_available
+from transformers import is_torch_available
 
-from .configuration_common_test import ConfigTester
-from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
-from .utils import require_tf
+from .test_configuration_common import ConfigTester
+from .test_modeling_common import CommonTestCases, ids_tensor
+from .utils import require_torch, torch_device
 
 
-if is_tf_available():
-    from transformers.modeling_tf_distilbert import (
-        TFDistilBertModel,
-        TFDistilBertForMaskedLM,
-        TFDistilBertForQuestionAnswering,
-        TFDistilBertForSequenceClassification,
+if is_torch_available():
+    from transformers import (
+        DistilBertConfig,
+        DistilBertModel,
+        DistilBertForMaskedLM,
+        DistilBertForTokenClassification,
+        DistilBertForQuestionAnswering,
+        DistilBertForSequenceClassification,
     )
 
 
-@require_tf
-class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
+@require_torch
+class DistilBertModelTest(CommonTestCases.CommonModelTester):
 
     all_model_classes = (
-        (
-            TFDistilBertModel,
-            TFDistilBertForMaskedLM,
-            TFDistilBertForQuestionAnswering,
-            TFDistilBertForSequenceClassification,
-        )
-        if is_tf_available()
+        (DistilBertModel, DistilBertForMaskedLM, DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
+        if is_torch_available()
         else None
     )
     test_pruning = True
@@ -50,7 +47,7 @@ class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
     test_resize_embeddings = True
     test_head_masking = True
 
-    class TFDistilBertModelTester(object):
+    class DistilBertModelTester(object):
         def __init__(
             self,
             parent,
@@ -129,63 +126,91 @@ class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
 
             return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
+        def check_loss_output(self, result):
+            self.parent.assertListEqual(list(result["loss"].size()), [])
+
         def create_and_check_distilbert_model(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = TFDistilBertModel(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask}
-
-            outputs = model(inputs)
-            sequence_output = outputs[0]
-
-            inputs = [input_ids, input_mask]
-
-            (sequence_output,) = model(inputs)
+            model = DistilBertModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            (sequence_output,) = model(input_ids, input_mask)
+            (sequence_output,) = model(input_ids)
 
             result = {
-                "sequence_output": sequence_output.numpy(),
+                "sequence_output": sequence_output,
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
 
         def create_and_check_distilbert_for_masked_lm(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = TFDistilBertForMaskedLM(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask}
-            (prediction_scores,) = model(inputs)
+            model = DistilBertForMaskedLM(config=config)
+            model.to(torch_device)
+            model.eval()
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, masked_lm_labels=token_labels)
             result = {
-                "prediction_scores": prediction_scores.numpy(),
+                "loss": loss,
+                "prediction_scores": prediction_scores,
             }
             self.parent.assertListEqual(
-                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
+            self.check_loss_output(result)
 
         def create_and_check_distilbert_for_question_answering(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
-            model = TFDistilBertForQuestionAnswering(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask}
-            start_logits, end_logits = model(inputs)
+            model = DistilBertForQuestionAnswering(config=config)
+            model.to(torch_device)
+            model.eval()
+            loss, start_logits, end_logits = model(
+                input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
+            )
             result = {
-                "start_logits": start_logits.numpy(),
-                "end_logits": end_logits.numpy(),
+                "loss": loss,
+                "start_logits": start_logits,
+                "end_logits": end_logits,
             }
-            self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
+            self.check_loss_output(result)
 
         def create_and_check_distilbert_for_sequence_classification(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
-            model = TFDistilBertForSequenceClassification(config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask}
-            (logits,) = model(inputs)
+            model = DistilBertForSequenceClassification(config)
+            model.to(torch_device)
+            model.eval()
+            loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
             result = {
-                "logits": logits.numpy(),
+                "loss": loss,
+                "logits": logits,
             }
-            self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+            self.check_loss_output(result)
+
+        def create_and_check_distilbert_for_token_classification(
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_labels = self.num_labels
+            model = DistilBertForTokenClassification(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels]
+            )
+            self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -194,7 +219,7 @@ class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = TFDistilBertModelTest.TFDistilBertModelTester(self)
+        self.model_tester = DistilBertModelTest.DistilBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DistilBertConfig, dim=37)
 
     def test_config(self):
@@ -215,6 +240,10 @@ class TFDistilBertModelTest(TFCommonTestCases.TFCommonModelTester):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_distilbert_for_token_classification(*config_and_inputs)
 
     # @slow
     # def test_model_from_pretrained(self):

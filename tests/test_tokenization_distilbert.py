@@ -18,7 +18,7 @@ import unittest
 
 from transformers.tokenization_distilbert import DistilBertTokenizer
 
-from .tokenization_bert_test import BertTokenizationTest
+from .test_tokenization_bert import BertTokenizationTest
 from .utils import slow
 
 

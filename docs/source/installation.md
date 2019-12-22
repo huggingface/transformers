@@ -29,8 +29,8 @@ Tests can be run using `unittest` or `pytest` (install pytest if needed with `pi
 Run all the tests from the root of the cloned repository with the commands:
 
 ```bash
-python -m unittest discover -s tests -p "*test.py" -t .
-python -m unittest discover -s examples -p "*test.py" -t examples
+python -m unittest discover -s tests -t . -v
+python -m unittest discover -s examples -t examples -v
 ```
 
 or

@@ -16,30 +16,29 @@ from __future__ import absolute_import, division, print_function
 
 import unittest
 
-from transformers import GPT2Config, is_tf_available
+from transformers import is_torch_available
 
-from .configuration_common_test import ConfigTester
-from .modeling_tf_common_test import TFCommonTestCases, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .test_configuration_common import ConfigTester
+from .test_modeling_common import CommonTestCases, ids_tensor
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
-if is_tf_available():
-    import tensorflow as tf
-    from transformers.modeling_tf_gpt2 import (
-        TFGPT2Model,
-        TFGPT2LMHeadModel,
-        TFGPT2DoubleHeadsModel,
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+if is_torch_available():
+    from transformers import (
+        GPT2Config,
+        GPT2Model,
+        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        GPT2LMHeadModel,
+        GPT2DoubleHeadsModel,
     )
 
 
-@require_tf
-class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
+@require_torch
+class GPT2ModelTest(CommonTestCases.CommonModelTester):
 
-    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2DoubleHeadsModel) if is_tf_available() else ()
-    # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()
+    all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
 
-    class TFGPT2ModelTester(object):
+    class GPT2ModelTester(object):
         def __init__(
             self,
             parent,
@@ -142,55 +141,69 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                 choice_labels,
             )
 
+        def check_loss_output(self, result):
+            self.parent.assertListEqual(list(result["loss"].size()), [])
+
         def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-            model = TFGPT2Model(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-            sequence_output = model(inputs)[0]
+            model = GPT2Model(config=config)
+            model.to(torch_device)
+            model.eval()
 
-            inputs = [input_ids, None, input_mask]  # None is the input for 'past'
-            sequence_output = model(inputs)[0]
-
-            sequence_output = model(input_ids)[0]
+            model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+            model(input_ids, token_type_ids=token_type_ids)
+            sequence_output, presents = model(input_ids)
 
             result = {
-                "sequence_output": sequence_output.numpy(),
+                "sequence_output": sequence_output,
+                "presents": presents,
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
+            self.parent.assertEqual(len(result["presents"]), config.n_layer)
 
-        def create_and_check_gpt2_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-            model = TFGPT2LMHeadModel(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-            prediction_scores = model(inputs)[0]
-            result = {
-                "prediction_scores": prediction_scores.numpy(),
-            }
+        def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+            model = GPT2LMHeadModel(config)
+            model.to(torch_device)
+            model.eval()
+
+            loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
+
+            result = {"loss": loss, "lm_logits": lm_logits}
+
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_gpt2_double_head(
+        def create_and_check_double_lm_head_model(
             self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
         ):
-            model = TFGPT2DoubleHeadsModel(config=config)
+            model = GPT2DoubleHeadsModel(config)
+            model.to(torch_device)
+            model.eval()
 
-            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
-            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
 
             inputs = {
                 "input_ids": multiple_choice_inputs_ids,
                 "mc_token_ids": mc_token_ids,
                 "attention_mask": multiple_choice_input_mask,
                 "token_type_ids": multiple_choice_token_type_ids,
+                "lm_labels": multiple_choice_inputs_ids,
             }
-            lm_logits, mc_logits = model(inputs)[:2]
-            result = {"lm_logits": lm_logits.numpy(), "mc_logits": mc_logits.numpy()}
+
+            loss, lm_logits, mc_logits, _ = model(**inputs)
+
+            result = {"loss": loss, "lm_logits": lm_logits, "mc_logits": mc_logits}
+
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["lm_logits"].shape), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size]
+                list(result["lm_logits"].size()), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size]
             )
-            self.parent.assertListEqual(list(result["mc_logits"].shape), [self.batch_size, self.num_choices])
+            self.parent.assertListEqual(list(result["mc_logits"].size()), [self.batch_size, self.num_choices])
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -207,11 +220,12 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
                 choice_labels,
             ) = config_and_inputs
 
-            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = TFGPT2ModelTest.TFGPT2ModelTester(self)
+        self.model_tester = GPT2ModelTest.GPT2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)
 
     def test_config(self):
@@ -221,18 +235,18 @@ class TFGPT2ModelTest(TFCommonTestCases.TFCommonModelTester):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_model(*config_and_inputs)
 
-    def test_gpt2_lm_head(self):
+    def test_gpt2_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_lm_head(*config_and_inputs)
+        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
-    def test_gpt2_double_head(self):
+    def test_gpt2_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
+        self.model_tester.create_and_check_double_lm_head_model(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFGPT2Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = GPT2Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 
