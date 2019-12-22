@@ -16,14 +16,13 @@
 """ Tokenization classes for Transformer XL model.
     Adapted from https://github.com/kimiyoung/transformer-xl.
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import glob
 import logging
 import os
-import sys
+import pickle
 from collections import Counter, OrderedDict
-from io import open
 
 import numpy as np
 
@@ -35,11 +34,6 @@ try:
     import torch
 except ImportError:
     pass
-
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
 
 
 logger = logging.getLogger(__name__)
@@ -238,7 +232,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:

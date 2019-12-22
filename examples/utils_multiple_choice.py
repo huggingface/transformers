@@ -15,15 +15,12 @@
 # limitations under the License.
 """ Multiple choice fine-tuning: utilities to work with multiple choice tasks of reading comprehension  """
 
-from __future__ import absolute_import, division, print_function
 
 import csv
 import glob
 import json
 import logging
 import os
-import sys
-from io import open
 from typing import List
 
 import tqdm
@@ -180,13 +177,7 @@ class SwagProcessor(DataProcessor):
 
     def _read_csv(self, input_file):
         with open(input_file, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            lines = []
-            for line in reader:
-                if sys.version_info[0] == 2:
-                    line = list(unicode(cell, "utf-8") for cell in line)  # noqa: F821
-                lines.append(line)
-            return lines
+            return list(csv.reader(f))
 
     def _create_examples(self, lines: List[List[str]], type: str):
         """Creates examples for the training and dev sets."""

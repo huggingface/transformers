@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
 
-from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob
@@ -186,7 +185,7 @@ def train(args, train_dataset, model, tokenizer):
     train_iterator = trange(
         epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
     )
-    # Added here for reproductibility (even between python 2 and 3)
+    # Added here for reproductibility
     set_seed(args)
 
     for _ in train_iterator:

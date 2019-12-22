@@ -13,20 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import logging
 
 from .tokenization_gpt2 import GPT2Tokenizer
-
-
-try:
-    from functools import lru_cache
-except ImportError:
-    # Just a dummy decorator to get the checks to run on python2
-    # because honestly I don't want to support a byte-level unicode BPE tokenizer on python 2 right now.
-    def lru_cache():
-        return lambda func: func
 
 
 logger = logging.getLogger(__name__)

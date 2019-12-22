@@ -14,7 +14,6 @@
 # limitations under the License.
 """ T5 model configuration """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 

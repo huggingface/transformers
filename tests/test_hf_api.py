@@ -12,14 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import, division, print_function
+
 
 import os
 import time
 import unittest
 
 import requests
-import six
 from requests.exceptions import HTTPError
 
 from transformers.hf_api import HfApi, HfFolder, PresignedUrl, S3Obj
@@ -50,7 +49,7 @@ class HfApiLoginTest(HfApiCommonTest):
 
     def test_login_valid(self):
         token = self._api.login(username=USER, password=PASS)
-        self.assertIsInstance(token, six.string_types)
+        self.assertIsInstance(token, str)
 
 
 class HfApiEndpointsTest(HfApiCommonTest):
@@ -74,7 +73,7 @@ class HfApiEndpointsTest(HfApiCommonTest):
     def test_presign_and_upload(self):
         for FILE_KEY, FILE_PATH in FILES:
             access_url = self._api.presign_and_upload(token=self._token, filename=FILE_KEY, filepath=FILE_PATH)
-            self.assertIsInstance(access_url, six.string_types)
+            self.assertIsInstance(access_url, str)
             with open(FILE_PATH, "r") as f:
                 body = f.read()
             r = requests.get(access_url)

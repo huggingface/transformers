@@ -14,7 +14,6 @@ import logging
 import math
 import re
 import string
-from io import open
 
 from transformers.tokenization_bert import BasicTokenizer
 

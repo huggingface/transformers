@@ -13,26 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import json
 import logging
 import os
-import sys
-from io import open
+from functools import lru_cache
 
 import regex as re
 
 from .tokenization_utils import PreTrainedTokenizer
-
-
-try:
-    from functools import lru_cache
-except ImportError:
-    # Just a dummy decorator to get the checks to run on python2
-    # because honestly I don't want to support a byte-level unicode BPE tokenizer on python 2 right now.
-    def lru_cache():
-        return lambda func: func
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +70,6 @@ def bytes_to_unicode():
     This is a signficant percentage of your normal, say, 32K bpe vocab.
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     """
-    _chr = unichr if sys.version_info[0] == 2 else chr  # noqa: F821
     bs = (
         list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
     )
@@ -91,7 +80,7 @@ def bytes_to_unicode():
             bs.append(b)
             cs.append(2 ** 8 + n)
             n += 1
-    cs = [_chr(n) for n in cs]
+    cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
 
 
@@ -212,23 +201,18 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         bpe_tokens = []
         for token in re.findall(self.pat, text):
-            if sys.version_info[0] == 2:
-                token = "".join(
-                    self.byte_encoder[ord(b)] for b in token
-                )  # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
-            else:
-                token = "".join(
-                    self.byte_encoder[b] for b in token.encode("utf-8")
-                )  # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
+            token = "".join(
+                self.byte_encoder[b] for b in token.encode("utf-8")
+            )  # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
     def convert_tokens_to_string(self, tokens):

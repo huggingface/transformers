@@ -12,23 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import, division, print_function
+
 
 import argparse
 import logging
 import sys
 import unittest
+from unittest.mock import patch
 
 import run_generation
 import run_glue
 import run_squad
-
-
-try:
-    # python 3.4+ can use builtin unittest.mock instead of mock package
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
 
 
 logging.basicConfig(level=logging.DEBUG)

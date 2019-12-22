@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Salesforce CTRL."""
-from __future__ import absolute_import, division, print_function, unicode_literals
+
 
 import json
 import logging
 import os
-from io import open
 
 import regex as re
 
@@ -204,11 +203,11 @@ class CTRLTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):

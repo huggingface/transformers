@@ -16,7 +16,7 @@
 """BERT finetuning runner.
    Finetuning the library models for multiple choice on SWAG (Bert).
 """
-from __future__ import absolute_import, division, print_function
+
 
 import argparse
 import csv
@@ -24,7 +24,6 @@ import glob
 import logging
 import os
 import random
-import sys
 
 import numpy as np
 import torch
@@ -104,12 +103,7 @@ class InputFeatures(object):
 
 def read_swag_examples(input_file, is_training=True):
     with open(input_file, "r", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        lines = []
-        for line in reader:
-            if sys.version_info[0] == 2:
-                line = list(unicode(cell, "utf-8") for cell in line)  # noqa: F821
-            lines.append(line)
+        lines = list(csv.reader(f))
 
     if is_training and lines[0][-1] != "label":
         raise ValueError("For training, the input file must contain a label column.")
@@ -347,7 +341,7 @@ def train(args, train_dataset, model, tokenizer):
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
-    set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+    set_seed(args)  # Added here for reproductibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):

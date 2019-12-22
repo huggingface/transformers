@@ -18,7 +18,6 @@
 # In this template, replace all the XXX (various casings) with your model name
 ####################################################
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
 import os
