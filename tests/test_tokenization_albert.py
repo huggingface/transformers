@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import unittest
 
 from transformers.tokenization_albert import AlbertTokenizer
 
@@ -78,7 +77,3 @@ class AlbertTokenizationTest(CommonTestCases.CommonTokenizerTester):
         assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + text_2 + [
             tokenizer.sep_token_id
         ]
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -49,7 +49,3 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(tokenizer, BertTokenizer)
         self.assertEqual(len(tokenizer), 12)
-
-
-if __name__ == "__main__":
-    unittest.main()

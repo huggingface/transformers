@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function
 
 import json
 import os
-import unittest
 
 from .tokenization_tests_commons import TemporaryDirectory
 
@@ -64,7 +63,3 @@ class ConfigTester(object):
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
         self.create_and_test_config_from_and_save_pretrained()
-
-
-if __name__ == "__main__":
-    unittest.main()

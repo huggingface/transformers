@@ -16,7 +16,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import os
-import unittest
 from io import open
 
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
@@ -111,7 +110,3 @@ class RobertaTokenizationTest(CommonTestCases.CommonTokenizerTester):
 
         assert encoded_sentence == encoded_text_from_decode
         assert encoded_pair == encoded_pair_from_decode
-
-
-if __name__ == "__main__":
-    unittest.main()

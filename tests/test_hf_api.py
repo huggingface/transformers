@@ -102,7 +102,3 @@ class HfFolderTest(unittest.TestCase):
         # ^^ not an error, we test that the
         # second call does not fail.
         self.assertEqual(HfFolder.get_token(), None)
-
-
-if __name__ == "__main__":
-    unittest.main()

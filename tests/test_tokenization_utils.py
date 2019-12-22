@@ -44,7 +44,3 @@ class TokenizerUtilsTest(unittest.TestCase):
     @slow
     def test_pretrained_tokenizers(self):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -205,7 +205,3 @@ class MultiColumnInputTestCase(unittest.TestCase):
         for tokenizer, model, config in TF_QA_FINETUNED_MODELS:
             nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer)
             self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
-
-
-if __name__ == "__main__":
-    unittest.main()

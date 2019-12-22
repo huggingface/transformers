@@ -244,7 +244,3 @@ class TFRobertaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(list(output.numpy().shape), expected_shape)
         expected_tensor = tf.constant([[-0.9469, 0.3913, 0.5118]])
         self.assertTrue(numpy.allclose(output.numpy(), expected_tensor.numpy(), atol=1e-3))
-
-
-if __name__ == "__main__":
-    unittest.main()

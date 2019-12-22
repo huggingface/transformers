@@ -83,7 +83,3 @@ class OptimizationFTest(unittest.TestCase):
         self.assertEqual(accumulator.step, 0)
         self.assertListAlmostEqual(accumulator._gradients[0].values[0].value().numpy().tolist(), [0.0, 0.0], tol=1e-2)
         self.assertListAlmostEqual(accumulator._gradients[0].values[1].value().numpy().tolist(), [0.0, 0.0], tol=1e-2)
-
-
-if __name__ == "__main__":
-    unittest.main()

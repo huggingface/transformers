@@ -48,7 +48,3 @@ class EncoderDecoderModelTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             _ = Model2Model.from_pretrained("does-not-exist")
-
-
-if __name__ == "__main__":
-    unittest.main()

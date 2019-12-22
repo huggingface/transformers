@@ -892,7 +892,3 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function
 
 import random
-import unittest
 
 from transformers import is_torch_available
 
@@ -499,7 +498,3 @@ class XLNetModelTest(CommonTestCases.CommonModelTester):
         for model_name in list(XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = XLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()

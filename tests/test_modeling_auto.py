@@ -100,7 +100,3 @@ class AutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, BertForMaskedLM)
-
-
-if __name__ == "__main__":
-    unittest.main()

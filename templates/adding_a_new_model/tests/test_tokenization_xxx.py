@@ -15,7 +15,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-import unittest
 from io import open
 
 from transformers.tokenization_bert import VOCAB_FILES_NAMES, XxxTokenizer
@@ -63,7 +62,3 @@ class XxxTokenizationTest(CommonTestCases.CommonTokenizerTester):
         tokens = tokenizer.tokenize("UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
-
-
-if __name__ == "__main__":
-    unittest.main()

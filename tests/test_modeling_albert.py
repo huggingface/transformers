@@ -14,8 +14,6 @@
 # limitations under the License.
 from __future__ import absolute_import, division, print_function
 
-import unittest
-
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
@@ -249,7 +247,3 @@ class AlbertModelTest(CommonTestCases.CommonModelTester):
         for model_name in list(ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = AlbertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-
-if __name__ == "__main__":
-    unittest.main()
