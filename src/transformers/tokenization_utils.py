@@ -23,8 +23,6 @@ import os
 import re
 from io import open
 
-import six
-
 from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
 
 
@@ -251,11 +249,9 @@ class PreTrainedTokenizer(object):
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
-                    assert isinstance(value, (list, tuple)) and all(
-                        isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value  # noqa: F821
-                    )
+                    assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
                 else:
-                    assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))  # noqa: F821
+                    assert isinstance(value, str)
                 setattr(self, key, value)
 
     @classmethod
@@ -567,7 +563,7 @@ class PreTrainedTokenizer(object):
 
         to_add_tokens = []
         for token in new_tokens:
-            assert isinstance(token, str) or (six.PY2 and isinstance(token, unicode))  # noqa: F821
+            assert isinstance(token, str)
             if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
                 token = token.lower()
             if (
@@ -649,12 +645,10 @@ class PreTrainedTokenizer(object):
         for key, value in special_tokens_dict.items():
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES
             if key == "additional_special_tokens":
-                assert isinstance(value, (list, tuple)) and all(
-                    isinstance(t, str) or (six.PY2 and isinstance(t, unicode)) for t in value  # noqa: F821
-                )
+                assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
                 added_tokens += self.add_tokens(value)
             else:
-                assert isinstance(value, str) or (six.PY2 and isinstance(value, unicode))  # noqa: F821
+                assert isinstance(value, str)
                 added_tokens += self.add_tokens([value])
             logger.info("Assigning %s to the %s key of the tokenizer", value, key)
             setattr(self, key, value)
@@ -740,13 +734,13 @@ class PreTrainedTokenizer(object):
         raise NotImplementedError
 
     def convert_tokens_to_ids(self, tokens):
-        """ Converts a single token, or a sequence of tokens, (str/unicode) in a single integer id
+        """ Converts a single token, or a sequence of tokens, (str) in a single integer id
             (resp. a sequence of ids), using the vocabulary.
         """
         if tokens is None:
             return None
 
-        if isinstance(tokens, str) or (six.PY2 and isinstance(tokens, unicode)):  # noqa: F821
+        if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
         ids = []
@@ -901,9 +895,9 @@ class PreTrainedTokenizer(object):
         """
 
         def get_input_ids(text):
-            if isinstance(text, six.string_types):
+            if isinstance(text, str):
                 return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], six.string_types):
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
@@ -1297,7 +1291,7 @@ class PreTrainedTokenizer(object):
 
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         """ Converts a single index or a sequence of indices (integers) in a token "
-            (resp.) a sequence of tokens (str/unicode), using the vocabulary and added tokens.
+            (resp.) a sequence of tokens (str), using the vocabulary and added tokens.
 
             Args:
                 skip_special_tokens: Don't decode special tokens (self.all_special_tokens). Default: False

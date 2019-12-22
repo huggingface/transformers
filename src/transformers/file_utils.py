@@ -18,7 +18,6 @@ from io import open
 
 import boto3
 import requests
-import six
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from filelock import FileLock
@@ -107,36 +106,20 @@ def is_tf_available():
     return _tf_available
 
 
-if not six.PY2:
+def add_start_docstrings(*docstr):
+    def docstring_decorator(fn):
+        fn.__doc__ = "".join(docstr) + fn.__doc__
+        return fn
 
-    def add_start_docstrings(*docstr):
-        def docstring_decorator(fn):
-            fn.__doc__ = "".join(docstr) + fn.__doc__
-            return fn
-
-        return docstring_decorator
-
-    def add_end_docstrings(*docstr):
-        def docstring_decorator(fn):
-            fn.__doc__ = fn.__doc__ + "".join(docstr)
-            return fn
-
-        return docstring_decorator
+    return docstring_decorator
 
 
-else:
-    # Not possible to update class docstrings on python2
-    def add_start_docstrings(*docstr):
-        def docstring_decorator(fn):
-            return fn
+def add_end_docstrings(*docstr):
+    def docstring_decorator(fn):
+        fn.__doc__ = fn.__doc__ + "".join(docstr)
+        return fn
 
-        return docstring_decorator
-
-    def add_end_docstrings(*docstr):
-        def docstring_decorator(fn):
-            return fn
-
-        return docstring_decorator
+    return docstring_decorator
 
 
 def is_remote_url(url_or_filename):
@@ -297,7 +280,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
-    elif isinstance(user_agent, six.string_types):
+    elif isinstance(user_agent, str):
         ua += "; " + user_agent
     headers = {"user-agent": ua}
     if resume_size > 0:

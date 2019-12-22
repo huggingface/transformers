@@ -171,13 +171,13 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
         return self.sp_model.PieceToId(token) + self.fairseq_offset
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
