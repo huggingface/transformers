@@ -34,8 +34,8 @@ class ANSI:
     Helper for en.wikipedia.org/wiki/ANSI_escape_code
     """
 
-    _bold = u"\u001b[1m"
-    _reset = u"\u001b[0m"
+    _bold = "\u001b[1m"
+    _reset = "\u001b[0m"
 
     @classmethod
     def bold(cls, s):

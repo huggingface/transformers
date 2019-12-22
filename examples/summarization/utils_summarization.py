@@ -94,7 +94,7 @@ def process_story(raw_story):
 
 
 def _add_missing_period(line):
-    END_TOKENS = [".", "!", "?", "...", "'", "`", '"', u"\u2019", u"\u2019", ")"]
+    END_TOKENS = [".", "!", "?", "...", "'", "`", '"', "\u2019", "\u2019", ")"]
     if line.startswith("@highlight"):
         return line
     if line[-1] in END_TOKENS:
