@@ -66,6 +66,12 @@ Choose the right framework for every part of a model's lifetime
 
 This repo is tested on Python 3.5+, PyTorch 1.0.0+ and TensorFlow 2.0.0-rc1
 
+You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
+
+Create a virtual environment with the version of Python you're going to use and activate it.
+
+Now, if you want to use 🤗 Transformers, you can install it with pip. If you'd like to play with the examples, you must install it from source.
+
 ### With pip
 
 First you need to install one of, or both, TensorFlow 2.0 and PyTorch.
@@ -85,43 +91,48 @@ Please refer to [TensorFlow installation page](https://www.tensorflow.org/instal
 When TensorFlow 2.0 and/or PyTorch has been installed, you can install from source by cloning the repository and running:
 
 ```bash
-pip install [--editable] .
-```
-
-### Run the examples
-
-Examples are included in the repository but are not shipped with the library.
-Therefore, in order to run the latest versions of the examples you also need to install from source. To do so, create a new virtual environment and follow these steps:
-
-```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 pip install [--editable] .
 ```
 
+When you update the repository, you should upgrade the transformers installation and its dependencies as follows:
+
+```bash
+git pull
+pip install --upgrade [--editable] .
+```
+
+### Run the examples
+
+Examples are included in the repository but are not shipped with the library.
+
+Therefore, in order to run the latest versions of the examples, you need to install from source, as described above.
+
+Look at the [README](https://github.com/huggingface/transformers/blob/master/examples/README.md) for how to run examples.
+
 ### Tests
 
-A series of tests are included for the library and the example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
-
-These tests can be run using `unittest` or `pytest` (install pytest if needed with `pip install pytest`).
+A series of tests are included for the library and for some example scripts. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 Depending on which framework is installed (TensorFlow 2.0 and/or PyTorch), the irrelevant tests will be skipped. Ensure that both frameworks are installed if you want to execute all tests.
 
-You can run the tests from the root of the cloned repository with the commands:
+Here's the easiest way to run tests for the library:
 
 ```bash
-python -m unittest discover -s tests -t . -v
-python -m unittest discover -s examples -t examples -v
+pip install -e .[testing]
+make test
 ```
 
-or
+and for the examples:
 
 ```bash
-python -m pytest -sv ./tests/
-python -m pytest -sv ./examples/
+pip install -e .[testing]
+pip install -r examples/requirements.txt
+make test-examples
 ```
 
-By default, slow tests are skipped. Set the `RUN_SLOW` environment variable to `yes` to run them.
+For details, refer to the [contributing guide](https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md#tests).
 
 ### Do you want to run a Transformer model on a mobile device?
 
