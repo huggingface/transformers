@@ -284,7 +284,6 @@ class ModelTesterMixin:
             multihead_outputs = head_mask.grad
 
             attentions = outputs[-1]
-            hidden_states = outputs[-2]
 
             # Remove Nan
             for t in attentions:
@@ -590,7 +589,7 @@ class ModelTesterMixin:
                 inputs_dict["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                model(**inputs_dict)
 
 
 class ConfigTester(object):

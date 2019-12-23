@@ -332,7 +332,7 @@ class TFModelTesterMixin:
                 inputs_dict["encoder_inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
                 inputs_dict["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
-            outputs = model(inputs_dict)
+            model(inputs_dict)
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
