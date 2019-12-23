@@ -91,7 +91,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "bert-base-german-dbmdz-uncased": {"do_lower_case": True},
     "bert-base-finnish-cased-v1": {"do_lower_case": False},
     "bert-base-finnish-uncased-v1": {"do_lower_case": True},
-    "bert-base-dutch-cased": {'do_lower_case': False},
+    "bert-base-dutch-cased": {"do_lower_case": False},
 }
 
 
