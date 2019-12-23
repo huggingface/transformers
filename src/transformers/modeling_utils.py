@@ -585,8 +585,6 @@ class PreTrainedModel(nn.Module):
                 Beginning of sentence token if no prompt is provided. Default to 0.
             **eos_token_ids**: (`optional`) int or list of int
                 End of sequence token or list of tokens to stop the generation. Default to 0.
-            **length_penalty**: (`optional`) int
-                Exponential penalty to the length. Default to 0.
             **length_penalty**: (`optional`) float
                 Exponential penalty to the length. Default to 1.
             **num_return_sequences**: (`optional`) int
