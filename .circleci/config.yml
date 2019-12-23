@@ -84,7 +84,7 @@ jobs:
                       - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
             - checkout
             - run: sudo pip install --progress-bar off -r docs/requirements.txt
-            - run: sudo pip install --progress-bar off -r requirements.txt
+            - run: sudo pip install --progress-bar off .
             - run: ./.circleci/deploy.sh
     check_code_quality:
         working_directory: ~/transformers
