@@ -843,7 +843,7 @@ class PreTrainedTokenizer(object):
                         if is_lower_casing:
                             matching_text = matching_text.lower()
                             detokenized = detokenized.lower()
-                        # TODO: Remove accents with tokenization_xlm.lowercase_and_remove_accent? Will improve accuracy for XLM
+                        # TODO: In order to improve the effectiveness of this search, the text should get the same treatment as the tokens (lowercasing, accents removal, etc.)
                         index = matching_text.find(detokenized)
                         if (index != -1):
                             # Words that have a wordpiece tokenization that 
