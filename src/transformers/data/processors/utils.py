@@ -294,7 +294,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             return features
         elif return_tensors == "tf":
             if not is_tf_available():
-                raise ImportError("return_tensors set to 'tf' but TensorFlow 2.0 can't be imported")
+                raise RuntimeError("return_tensors set to 'tf' but TensorFlow 2.0 can't be imported")
             import tensorflow as tf
 
             def gen():
@@ -309,7 +309,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             return dataset
         elif return_tensors == "pt":
             if not is_torch_available():
-                raise ImportError("return_tensors set to 'pt' but PyTorch can't be imported")
+                raise RuntimeError("return_tensors set to 'pt' but PyTorch can't be imported")
             import torch
             from torch.utils.data import TensorDataset
 

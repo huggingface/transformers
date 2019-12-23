@@ -68,7 +68,7 @@ def get_framework(model=None):
         # Try to guess which framework to use from the model classname
         framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     elif not is_tf_available() and not is_torch_available():
-        raise ImportError(
+        raise RuntimeError(
             "At least one of TensorFlow 2.0 or PyTorch should be installed. "
             "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
             "To install PyTorch, read the instructions at https://pytorch.org/."
