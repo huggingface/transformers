@@ -454,12 +454,12 @@ class PreTrainedModel(nn.Module):
                     from transformers import load_tf2_checkpoint_in_pytorch_model
 
                     model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
-                except ImportError as e:
+                except ImportError:
                     logger.error(
                         "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
                         "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
                     )
-                    raise e
+                    raise
         else:
             # Convert old format to new format if needed from a PyTorch state_dict
             old_keys = []
