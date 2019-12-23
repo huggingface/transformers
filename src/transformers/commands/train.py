@@ -8,7 +8,7 @@ from transformers.commands import BaseTransformersCLICommand
 
 
 if not is_tf_available() and not is_torch_available():
-    raise ImportError("At least one of PyTorch or TensorFlow 2.0+ should be installed to use CLI training")
+    raise RuntimeError("At least one of PyTorch or TensorFlow 2.0+ should be installed to use CLI training")
 
 # TF training parameters
 USE_XLA = False

@@ -324,7 +324,7 @@ def squad_convert_examples_to_features(
     del new_features
     if return_dataset == "pt":
         if not is_torch_available():
-            raise ImportError("Pytorch must be installed to return a pytorch dataset.")
+            raise RuntimeError("PyTorch must be installed to return a PyTorch dataset.")
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -354,7 +354,7 @@ def squad_convert_examples_to_features(
         return features, dataset
     elif return_dataset == "tf":
         if not is_tf_available():
-            raise ImportError("TensorFlow must be installed to return a TensorFlow dataset.")
+            raise RuntimeError("TensorFlow must be installed to return a TensorFlow dataset.")
 
         def gen():
             for ex in features:
