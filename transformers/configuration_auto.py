@@ -30,6 +30,7 @@ from .configuration_distilbert import DistilBertConfig, DISTILBERT_PRETRAINED_CO
 from .configuration_albert import AlbertConfig, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_camembert import CamembertConfig, CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_t5 import T5Config, T5_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .configuration_unilm import UnilmConfig, UNILM_PRETRAINED_CONFIG_ARCHIVE_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict((key, value)
         ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UNILM_PRETRAINED_CONFIG_ARCHIVE_MAP, 
         ]
     for key, value, in pretrained_map.items())
 
@@ -168,6 +170,8 @@ class AutoConfig(object):
             return XLMConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif 'ctrl' in pretrained_model_name_or_path:
             return CTRLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        elif 'unilm' in pretrained_model_name_or_path:
+            return UnilmConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         raise ValueError("Unrecognized model identifier in {}. Should contains one of "
                          "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
                          "'xlm', 'roberta', 'distilbert', 'camembert', 'ctrl', 'albert'".format(pretrained_model_name_or_path))
