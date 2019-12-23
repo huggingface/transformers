@@ -491,7 +491,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         return self.lm_head
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        # inputs_ids contain only last token if past is in kwargs and defined
+        # inputs_ids should only be composed of last token if past is in kwargs and defined
         input_ids = input_ids[:, -1].unsqueeze(-1) if 'past' in kwargs and kwargs['past'] else input_ids
 
         inputs = {"input_ids": input_ids}
