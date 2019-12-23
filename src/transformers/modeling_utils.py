@@ -540,8 +540,8 @@ class PreTrainedModel(nn.Module):
         return {"input_ids": input_ids}
 
     def _do_output_past(self, outputs):
-        # TODO: might be better to write a self.do_output_past method for each individual class as is done for
-        # prepare_inputs_for_generation
+        # TODO: might be better to write a self.do_output_past method for each
+        # individual class as is done for prepare_inputs_for_generation
         has_output_past = hasattr(self.config, 'output_past') and self.config.output_past
         has_multiple_outputs = len(outputs) > 1
         has_mem_len = hasattr(self, 'mem_len')
