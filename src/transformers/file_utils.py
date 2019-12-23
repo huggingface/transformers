@@ -292,7 +292,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logger.level <= logging.INFO),
+        disable=bool(logger.getEffectiveLevel() == logging.NOTSET),
     )
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
