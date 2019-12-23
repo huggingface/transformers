@@ -241,8 +241,6 @@ class AlbertAttention(BertSelfAttention):
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        reshaped_context_layer = context_layer.view(*new_context_layer_shape)
 
         # Should find a better way to do this
         w = (
@@ -333,9 +331,6 @@ class AlbertTransformer(nn.Module):
 
             # Index of the hidden group
             group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
-
-            # Index of the layer inside the group
-            layer_idx = int(i - group_idx * layers_per_group)
 
             layer_group_output = self.albert_layer_groups[group_idx](
                 hidden_states,

@@ -320,7 +320,7 @@ class TFPreTrainedModel(tf.keras.Model):
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
-        ret = model(model.dummy_inputs, training=False)  # build the network with dummy inputs
+        model(model.dummy_inputs, training=False)  # build the network with dummy inputs
 
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -333,7 +333,7 @@ class TFPreTrainedModel(tf.keras.Model):
                 "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
             )
 
-        ret = model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+        model(model.dummy_inputs, training=False)  # Make sure restore ops are run
 
         # Check if the models are the same to output loading informations
         with h5py.File(resolved_archive_file, "r") as f:
@@ -515,7 +515,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             cls_index = inputs[1] if len(inputs) > 1 else None
             assert len(inputs) <= 2, "Too many inputs."
         else:
-            input_ids = inputs.get("input_ids")
+            hidden_states = inputs.get("hidden_states")
             cls_index = inputs.get("cls_index", None)
 
         if self.summary_type == "last":
