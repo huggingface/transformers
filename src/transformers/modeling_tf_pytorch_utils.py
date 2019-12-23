@@ -76,12 +76,12 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
     try:
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
-    except ImportError as e:
+    except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
-        raise e
+        raise
 
     pt_path = os.path.abspath(pytorch_checkpoint_path)
     logger.info("Loading PyTorch weights from {}".format(pt_path))
@@ -111,12 +111,12 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         import torch  # noqa: F401
         import tensorflow as tf  # noqa: F401
         from tensorflow.python.keras import backend as K
-    except ImportError as e:
+    except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
-        raise e
+        raise
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
@@ -209,12 +209,12 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
     try:
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
-    except ImportError as e:
+    except ImportError:
         logger.error(
             "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
-        raise e
+        raise
 
     import transformers
 
@@ -251,12 +251,12 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     try:
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
-    except ImportError as e:
+    except ImportError:
         logger.error(
             "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
             "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
         )
-        raise e
+        raise
 
     new_pt_params_dict = {}
     current_pt_params_dict = dict(pt_model.named_parameters())
