@@ -28,7 +28,7 @@ import time
 
 import torch
 
-from transformers import TransfoXLCorpus, TransfoXLLMHeadModel, TransfoXLTokenizer
+from transformers import TransfoXLCorpus, TransfoXLLMHeadModel
 
 
 logging.basicConfig(
@@ -73,9 +73,7 @@ def main():
     # The pre-processing involve computing word frequencies to prepare the Adaptive input and SoftMax
     # and tokenizing the dataset
     # The pre-processed corpus is a convertion (using the conversion script )
-    tokenizer = TransfoXLTokenizer.from_pretrained(args.model_name)
     corpus = TransfoXLCorpus.from_pretrained(args.model_name)
-    ntokens = len(corpus.vocab)
 
     va_iter = corpus.get_iterator("valid", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len)
     te_iter = corpus.get_iterator("test", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len)
