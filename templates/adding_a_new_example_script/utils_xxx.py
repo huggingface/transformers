@@ -868,8 +868,6 @@ def write_predictions_extended(
         orig_data = json.load(reader)["data"]
 
     qid_to_has_ans = make_qid_to_has_ans(orig_data)
-    has_ans_qids = [k for k, v in qid_to_has_ans.items() if v]
-    no_ans_qids = [k for k, v in qid_to_has_ans.items() if not v]
     exact_raw, f1_raw = get_raw_scores(orig_data, all_predictions)
     out_eval = {}
 
