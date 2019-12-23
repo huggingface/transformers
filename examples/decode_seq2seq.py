@@ -39,7 +39,7 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from transformers import (UnilmTokenizer, WhitespaceTokenizer,
-                          UnilmForSeq2SeqDecode, AdamW, WarmupLinearSchedule, UnilmConfig)
+                          UnilmForSeq2SeqDecode, AdamW, UnilmConfig)
 
 import utils_seq2seq
 
