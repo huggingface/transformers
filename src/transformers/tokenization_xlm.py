@@ -646,7 +646,7 @@ class XLMTokenizer(PreTrainedTokenizer):
                 self.ja_word_tokenizer = Mykytea.Mykytea(
                     "-model %s/local/share/kytea/model.bin" % os.path.expanduser("~")
                 )
-            except (AttributeError, ImportError) as e:
+            except (AttributeError, ImportError):
                 logger.error(
                     "Make sure you install KyTea (https://github.com/neubig/kytea) and it's python wrapper (https://github.com/chezou/Mykytea-python) with the following steps"
                 )
@@ -655,7 +655,7 @@ class XLMTokenizer(PreTrainedTokenizer):
                 logger.error("3. ./configure --prefix=$HOME/local")
                 logger.error("4. make && make install")
                 logger.error("5. pip install kytea")
-                raise e
+                raise
         return list(self.ja_word_tokenizer.getWS(text))
 
     @property
@@ -760,12 +760,12 @@ class XLMTokenizer(PreTrainedTokenizer):
                     from pythainlp.tokenize import word_tokenize as th_word_tokenize
                 else:
                     th_word_tokenize = sys.modules["pythainlp"].word_tokenize
-            except (AttributeError, ImportError) as e:
+            except (AttributeError, ImportError):
                 logger.error(
                     "Make sure you install PyThaiNLP (https://github.com/PyThaiNLP/pythainlp) with the following steps"
                 )
                 logger.error("1. pip install pythainlp")
-                raise e
+                raise
             text = th_word_tokenize(text)
         elif lang == "zh":
             try:
@@ -773,10 +773,10 @@ class XLMTokenizer(PreTrainedTokenizer):
                     import jieba
                 else:
                     jieba = sys.modules["jieba"]
-            except (AttributeError, ImportError) as e:
+            except (AttributeError, ImportError):
                 logger.error("Make sure you install Jieba (https://github.com/fxsjy/jieba) with the following steps")
                 logger.error("1. pip install jieba")
-                raise e
+                raise
             text = " ".join(jieba.cut(text))
             text = self.moses_pipeline(text, lang=lang)
             text = text.split()
