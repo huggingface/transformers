@@ -20,3 +20,4 @@ deploy_doc "89fd345" v1.2.0
 deploy_doc "fc9faa8" v2.0.0
 deploy_doc "3ddce1d" v2.1.1
 deploy_doc "f2f3294" v2.2.0
+deploy_doc "d0f8b9a" v2.3.0
