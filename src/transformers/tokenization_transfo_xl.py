@@ -26,14 +26,12 @@ from collections import Counter, OrderedDict
 
 import numpy as np
 
-from .file_utils import cached_path
+from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer
 
 
-try:
+if is_torch_available():
     import torch
-except ImportError:
-    pass
 
 
 logger = logging.getLogger(__name__)
