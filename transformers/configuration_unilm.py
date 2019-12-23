@@ -71,7 +71,7 @@ class UnilmConfig(PretrainedConfig):
     pretrained_config_archive_map = UNILM_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(self,
-                 vocab_size_or_config_json_file=30522,
+                 vocab_size=28996,
                  hidden_size=768,
                  num_hidden_layers=12,
                  num_attention_heads=12,
@@ -85,14 +85,14 @@ class UnilmConfig(PretrainedConfig):
                  layer_norm_eps=1e-12,
                  **kwargs):
         super(UnilmConfig, self).__init__(**kwargs)
-        if isinstance(vocab_size_or_config_json_file, str) or (sys.version_info[0] == 2
-                        and isinstance(vocab_size_or_config_json_file, unicode)):
-            with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
+        if isinstance(vocab_size, str) or (sys.version_info[0] == 2
+                        and isinstance(vocab_size, unicode)):
+            with open(vocab_size, "r", encoding='utf-8') as reader:
                 json_config = json.loads(reader.read())
             for key, value in json_config.items():
                 self.__dict__[key] = value
-        elif isinstance(vocab_size_or_config_json_file, int):
-            self.vocab_size = vocab_size_or_config_json_file
+        elif isinstance(vocab_size, int):
+            self.vocab_size = vocab_size
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
             self.num_attention_heads = num_attention_heads
