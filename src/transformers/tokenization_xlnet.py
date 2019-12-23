@@ -100,6 +100,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
+            raise
 
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
@@ -127,6 +128,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
+            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 

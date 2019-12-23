@@ -107,6 +107,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                 "https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
+            raise
 
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
@@ -132,6 +133,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                 "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
+            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
