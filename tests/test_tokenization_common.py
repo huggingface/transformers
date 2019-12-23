@@ -159,7 +159,6 @@ class TokenizerTesterMixin:
         self.assertEqual(all_size_2, all_size + len(new_toks))
 
         tokens = tokenizer.encode("aaaaa bbbbbb low cccccccccdddddddd l", add_special_tokens=False)
-        out_string = tokenizer.decode(tokens)
 
         self.assertGreaterEqual(len(tokens), 4)
         self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
@@ -178,7 +177,6 @@ class TokenizerTesterMixin:
         tokens = tokenizer.encode(
             ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l", add_special_tokens=False
         )
-        out_string = tokenizer.decode(tokens)
 
         self.assertGreaterEqual(len(tokens), 6)
         self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
