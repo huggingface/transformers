@@ -18,7 +18,6 @@
 
 import logging
 import os
-import ipdb
 
 import torch
 from torch import nn
@@ -794,7 +793,6 @@ class PreTrainedModel(nn.Module):
     ):
         """ Generate sequences for each example with beam search.
         """
-        ipdb.set_trace()
         # Expand input to num beams
         input_ids = input_ids.unsqueeze(1).expand(batch_size, num_beams, cur_len)
         input_ids = input_ids.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
