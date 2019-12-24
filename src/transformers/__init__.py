@@ -103,7 +103,7 @@ from .pipelines import (
 )
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
+from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
