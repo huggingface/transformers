@@ -1012,11 +1012,11 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
-        sequence_length = input_ids.shape[1]
         dummy_token = torch.zeros((effective_batch_size, 1), dtype=torch.long, device=input_ids.device)
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         # Build permutation mask so that previous tokens don't see last token
+        sequence_length = input_ids.shape[1]
         perm_mask = torch.zeros(
             (effective_batch_size, sequence_length, sequence_length), dtype=torch.float, device=input_ids.device
         )
