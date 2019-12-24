@@ -1411,6 +1411,7 @@ class PreTrainedTokenizer(object):
         )
         return out_string
 
+
 class FastPreTrainedTokenizer(PreTrainedTokenizer):
     def __init__(self, **kwargs):
         super(FastPreTrainedTokenizer, self).__init__(**kwargs)
@@ -1438,12 +1439,14 @@ class FastPreTrainedTokenizer(PreTrainedTokenizer):
         self.tokenizer.add_special_tokens(self.all_special_tokens)
 
     @staticmethod
-    def _convert_encoding(encoding,
-                          return_tensors=None,
-                          return_token_type_ids=True,
-                          return_attention_mask=True,
-                          return_overflowing_tokens=False,
-                          return_special_tokens_mask=False):
+    def _convert_encoding(
+        encoding,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+    ):
         encoding_dict = {
             "input_ids": encoding.ids,
         }
@@ -1458,14 +1461,14 @@ class FastPreTrainedTokenizer(PreTrainedTokenizer):
             encoding_dict["special_tokens_mask"] = encoding.special_tokens_mask
 
         # Prepare inputs as tensors if asked
-        if return_tensors == 'tf' and is_tf_available():
+        if return_tensors == "tf" and is_tf_available():
             encoding_dict["input_ids"] = tf.constant([encoding_dict["input_ids"]])
             encoding_dict["token_type_ids"] = tf.constant([encoding_dict["token_type_ids"]])
 
             if "attention_mask" in encoding_dict:
                 encoding_dict["attention_mask"] = tf.constant([encoding_dict["attention_mask"]])
 
-        elif return_tensors == 'pt' and is_torch_available():
+        elif return_tensors == "pt" and is_torch_available():
             encoding_dict["input_ids"] = torch.tensor([encoding_dict["input_ids"]])
             encoding_dict["token_type_ids"] = torch.tensor([encoding_dict["token_type_ids"]])
 
@@ -1474,26 +1477,32 @@ class FastPreTrainedTokenizer(PreTrainedTokenizer):
         elif return_tensors is not None:
             logger.warning(
                 "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    return_tensors))
+                    return_tensors
+                )
+            )
 
         return encoding_dict
 
-    def encode_plus(self,
-                    text,
-                    text_pair=None,
-                    return_tensors=None,
-                    return_token_type_ids=True,
-                    return_attention_mask=True,
-                    return_overflowing_tokens=False,
-                    return_special_tokens_mask=False,
-                    **kwargs):
+    def encode_plus(
+        self,
+        text,
+        text_pair=None,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+        **kwargs
+    ):
         encoding = self.tokenizer.encode(text, text_pair)
-        return self._convert_encoding(encoding,
-                                      return_tensors=return_tensors,
-                                      return_token_type_ids=return_token_type_ids,
-                                      return_attention_mask=return_attention_mask,
-                                      return_overflowing_tokens=return_overflowing_tokens,
-                                      return_special_tokens_mask=return_special_tokens_mask)
+        return self._convert_encoding(
+            encoding,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+        )
 
     def tokenize(self, text):
         return self.tokenizer.encode(text).tokens
@@ -1510,19 +1519,26 @@ class FastPreTrainedTokenizer(PreTrainedTokenizer):
     def add_tokens(self, new_tokens):
         self.tokenizer.add_tokens(new_tokens)
 
-    def encode_batch(self, texts,
-                     return_tensors=None,
-                     return_token_type_ids=True,
-                     return_attention_mask=True,
-                     return_overflowing_tokens=False,
-                     return_special_tokens_mask=False):
-        return [self._convert_encoding(encoding,
-                                       return_tensors=return_tensors,
-                                       return_token_type_ids=return_token_type_ids,
-                                       return_attention_mask=return_attention_mask,
-                                       return_overflowing_tokens=return_overflowing_tokens,
-                                       return_special_tokens_mask=return_special_tokens_mask)
-                for encoding in self.tokenizer.encode_batch(texts)]
+    def encode_batch(
+        self,
+        texts,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+    ):
+        return [
+            self._convert_encoding(
+                encoding,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+            )
+            for encoding in self.tokenizer.encode_batch(texts)
+        ]
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = self.tokenizer.decode(token_ids, skip_special_tokens)
@@ -1534,6 +1550,7 @@ class FastPreTrainedTokenizer(PreTrainedTokenizer):
             return text
 
     def decode_batch(self, ids_batch, skip_special_tokens=False, clear_up_tokenization_spaces=True):
-        return [self.clean_up_tokenization(text)
-                if clear_up_tokenization_spaces else text
-                for text in self.tokenizer.decode_batch(ids_batch, skip_special_tokens)]
+        return [
+            self.clean_up_tokenization(text) if clear_up_tokenization_spaces else text
+            for text in self.tokenizer.decode_batch(ids_batch, skip_special_tokens)
+        ]
