@@ -178,9 +178,11 @@ class BertTokenizer(PreTrainedTokenizer):
             self.spm_tokenize = True
             self.sp_model = spm.SentencePieceProcessor()
             if sp_model_file is None:
+                # In this case, path is file in from_pretrain func
                 self.vocab_file = vocab_file
                 load_status = self.sp_model.Load(vocab_file)
             else:
+                # In this case, path is dir in from_pretrain func
                 self.vocab_file = sp_model_file
                 load_status = self.sp_model.Load(sp_model_file)
 
