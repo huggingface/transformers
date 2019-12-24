@@ -10,7 +10,7 @@ Execute the following steps in a new virtual environment:
 ```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
-pip install [--editable] .
+pip install .
 pip install -r ./examples/requirements.txt
 ```
 
