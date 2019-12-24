@@ -20,6 +20,8 @@ import logging
 import os
 import unicodedata
 
+import tokenizers as tk
+
 from .tokenization_utils import FastPreTrainedTokenizer, PreTrainedTokenizer
 
 
@@ -552,49 +554,41 @@ class BertTokenizerFast(FastPreTrainedTokenizer):
         add_special_tokens=True,
         **kwargs
     ):
+        super(BertTokenizerFast, self).__init__(
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            **kwargs
+        )
 
-        try:
-            from tokenizers import Tokenizer, models, pre_tokenizers, decoders, processors
-
-            super(BertTokenizerFast, self).__init__(
-                unk_token=unk_token,
-                sep_token=sep_token,
-                pad_token=pad_token,
-                cls_token=cls_token,
-                mask_token=mask_token,
-                **kwargs
+        self._tokenizer = tk.Tokenizer(tk.models.WordPiece.from_files(vocab_file, unk_token=unk_token))
+        self._update_special_tokens()
+        self._tokenizer.with_pre_tokenizer(
+            tk.pre_tokenizers.BertPreTokenizer.new(
+                do_basic_tokenize=do_basic_tokenize,
+                do_lower_case=do_lower_case,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                never_split=never_split if never_split is not None else [],
             )
+        )
+        self._tokenizer.with_decoder(tk.decoders.WordPiece.new())
 
-            self._tokenizer = Tokenizer(models.WordPiece.from_files(vocab_file, unk_token=unk_token))
-            self._update_special_tokens()
-            self._tokenizer.with_pre_tokenizer(
-                pre_tokenizers.BertPreTokenizer.new(
-                    do_basic_tokenize=do_basic_tokenize,
-                    do_lower_case=do_lower_case,
-                    tokenize_chinese_chars=tokenize_chinese_chars,
-                    never_split=never_split if never_split is not None else [],
+        if add_special_tokens:
+            self._tokenizer.with_post_processor(
+                tk.processors.BertProcessing.new(
+                    (sep_token, self._tokenizer.token_to_id(sep_token)),
+                    (cls_token, self._tokenizer.token_to_id(cls_token)),
                 )
             )
-            self._tokenizer.with_decoder(decoders.WordPiece.new())
-
-            if add_special_tokens:
-                self._tokenizer.with_post_processor(
-                    processors.BertProcessing.new(
-                        (sep_token, self._tokenizer.token_to_id(sep_token)),
-                        (cls_token, self._tokenizer.token_to_id(cls_token)),
-                    )
-                )
-            if max_length is not None:
-                self._tokenizer.with_truncation(max_length, stride, truncation_strategy)
-            self._tokenizer.with_padding(
-                max_length if pad_to_max_length else None,
-                self.padding_side,
-                self.pad_token_id,
-                self.pad_token_type_id,
-                self.pad_token,
-            )
-            self._decoder = decoders.WordPiece.new()
-
-        except (AttributeError, ImportError) as e:
-            logger.error("Make sure you installed `tokenizers` with `pip install tokenizers==0.0.8`")
-            raise e
+        if max_length is not None:
+            self._tokenizer.with_truncation(max_length, stride, truncation_strategy)
+        self._tokenizer.with_padding(
+            max_length if pad_to_max_length else None,
+            self.padding_side,
+            self.pad_token_id,
+            self.pad_token_type_id,
+            self.pad_token,
+        )
+        self._decoder = tk.decoders.WordPiece.new()
