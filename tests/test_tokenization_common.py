@@ -23,6 +23,7 @@ import tempfile
 class TokenizerTesterMixin:
 
     tokenizer_class = None
+    test_rust_tokenizer = False
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -31,6 +32,9 @@ class TokenizerTesterMixin:
         shutil.rmtree(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
+        raise NotImplementedError
+
+    def get_rust_tokenizer(self, **kwargs):
         raise NotImplementedError
 
     def get_input_output_texts(self):
