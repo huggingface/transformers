@@ -93,14 +93,14 @@ When TensorFlow 2.0 and/or PyTorch has been installed, you can install from sour
 ```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
-pip install [--editable] .
+pip install .
 ```
 
 When you update the repository, you should upgrade the transformers installation and its dependencies as follows:
 
 ```bash
 git pull
-pip install --upgrade [--editable] .
+pip install --upgrade .
 ```
 
 ### Run the examples

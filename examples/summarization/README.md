@@ -10,7 +10,7 @@ The model is loaded with the pre-trained weights for the abstractive summarizati
 
 ```
 git clone https://github.com/huggingface/transformers && cd transformers
-pip install [--editable] .
+pip install .
 pip install nltk py-rouge
 cd examples/summarization
 ```
