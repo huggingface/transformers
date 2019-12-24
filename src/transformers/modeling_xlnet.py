@@ -1010,18 +1010,21 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
         # Add dummy token at the end (no attention on this one)
-        dummy_token = torch.zeros((1, 1), dtype=torch.long, device=input_ids.device)
+
+        effective_batch_size = input_ids.shape[0]
+        sequence_length = input_ids.shape[1]
+        dummy_token = torch.zeros((effective_batch_size, 1), dtype=torch.long, device=input_ids.device)
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         # Build permutation mask so that previous tokens don't see last token
         perm_mask = torch.zeros(
-            (input_ids.shape[0], input_ids.shape[1], input_ids.shape[1]), dtype=torch.float, device=input_ids.device
+            (effective_batch_size, sequence_length, sequence_length), dtype=torch.float, device=input_ids.device
         )
         perm_mask[:, :, -1] = 1.0
 
         # We'll only predict the last token
         target_mapping = torch.zeros(
-            (input_ids.shape[0], 1, input_ids.shape[1]), dtype=torch.float, device=input_ids.device
+            (effective_batch_size, 1, sequence_length), dtype=torch.float, device=input_ids.device
         )
         target_mapping[0, 0, -1] = 1.0
 
