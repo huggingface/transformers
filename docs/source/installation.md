@@ -17,7 +17,7 @@ To install from source, clone the repository and install with:
 ``` bash
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install [--editable] .
+pip install .
 ```
 
 ## Tests
