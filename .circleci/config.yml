@@ -14,6 +14,20 @@ jobs:
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
+    run_all_tests_torch_and_tf:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.5
+        environment:
+            OMP_NUM_THREADS: 1
+            RUN_SLOW: yes
+            RUN_CUSTOM_TOKENIZERS: yes
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install .[mecab,sklearn,tf,torch,testing]
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -46,10 +60,12 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: circleci/python:3.5
+        environment:
+            RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
             - run: sudo pip install .[mecab,testing]
-            - run: RUN_CUSTOM_TOKENIZERS=1 python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
+            - run: python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
     run_examples_torch:
         working_directory: ~/transformers
         docker:
@@ -69,8 +85,8 @@ jobs:
             - image: circleci/python:3.5
         steps:
             - add_ssh_keys:
-                  fingerprints:
-                      - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
+                fingerprints:
+                    - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
             - checkout
             - run: sudo pip install .[tf,torch,docs]
             - run: ./.circleci/deploy.sh
@@ -115,3 +131,13 @@ workflows:
             - run_tests_torch
             - run_tests_tf
             - deploy_doc: *workflow_filters
+    run_slow_tests:
+        triggers:
+            - schedule:
+                cron: "0 4 * * 1"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - run_all_tests_torch_and_tf
