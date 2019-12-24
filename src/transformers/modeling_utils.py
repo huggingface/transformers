@@ -544,7 +544,7 @@ class PreTrainedModel(nn.Module):
         # individual class as is done for prepare_inputs_for_generation
         has_output_past = hasattr(self.config, 'output_past') and self.config.output_past
         has_multiple_outputs = len(outputs) > 1
-        has_mem_len = hasattr(self, 'mem_len')
+        has_mem_len = hasattr(self.config, 'mem_len')
 
         if has_output_past and has_multiple_outputs and not has_mem_len:
             return True
