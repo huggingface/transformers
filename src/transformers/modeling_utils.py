@@ -540,8 +540,8 @@ class PreTrainedModel(nn.Module):
         return {"input_ids": input_ids}
 
     def _do_output_past(self, outputs):
-        has_output_past = hasattr(self.config, 'output_past') and self.config.output_past
-        has_mem_len = hasattr(self.config, 'mem_len') and self.config.mem_len
+        has_output_past = hasattr(self.config, "output_past") and self.config.output_past
+        has_mem_len = hasattr(self.config, "mem_len") and self.config.mem_len
 
         if has_output_past and not has_mem_len and len(outputs) > 1:
             return True

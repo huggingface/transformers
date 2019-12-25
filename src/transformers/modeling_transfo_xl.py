@@ -935,7 +935,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         inputs = {"input_ids": input_ids}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if 'past' in model_kwargs and model_kwargs['past']:
-            inputs['mems'] = model_kwargs['past']
+        if "past" in model_kwargs and model_kwargs["past"]:
+            inputs["mems"] = model_kwargs["past"]
 
         return inputs
