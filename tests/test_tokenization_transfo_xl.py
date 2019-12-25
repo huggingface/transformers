@@ -64,8 +64,13 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = TransfoXLTokenizer(vocab_file=self.vocab_file, lower_case=True)
 
-        tokens = tokenizer.tokenize("<unk> UNwanted , running")
+        text = "<unk> UNwanted , running"
+        tokens = tokenizer.tokenize(text)
+        tokens_wo, offsets = tokenizer.tokenize_with_offsets(text)
+        self.assertEqual(len(tokens_wo), len(offsets))
+        self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, ["<unk>", "unwanted", ",", "running"])
+        self.assertListEqual(offsets, [0, 6, 15, 17])
 
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [0, 4, 8, 7])
 

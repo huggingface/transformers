@@ -185,7 +185,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         return out_string
 
     def _detokenize_for_offsets(self, tok):
-        return tok.replace(SPIECE_UNDERLINE, ' ').strip()
+        return tok.replace(SPIECE_UNDERLINE, " ").strip()
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """

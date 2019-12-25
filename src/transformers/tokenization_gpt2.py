@@ -222,7 +222,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return text
 
     def _detokenize_for_offsets(self, tok):
-        return bytearray([self.byte_decoder[c] for c in tok]).decode('utf-8', errors=self.errors).strip()
+        return bytearray([self.byte_decoder[c] for c in tok]).decode("utf-8", errors=self.errors).strip()
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""

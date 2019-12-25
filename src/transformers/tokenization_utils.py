@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for OpenAI GPT."""
+"""Base tokenization class."""
 
 
 import copy
@@ -20,7 +20,10 @@ import itertools
 import json
 import logging
 import os
+import sys
 import re
+import unicodedata
+import html
 
 from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
 
@@ -35,6 +38,9 @@ logger = logging.getLogger(__name__)
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+
+CONTROL_CHARS = u''.join(chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c))[0] == 'C')
+WHITESPACES = re.findall(r'\s', u''.join(chr(c) for c in range(sys.maxunicode + 1)), re.UNICODE)
 
 
 class PreTrainedTokenizer(object):
@@ -244,6 +250,9 @@ class PreTrainedTokenizer(object):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
         self.init_kwargs = {}
+
+        # Tokenization cache for tokenize_with_offsets
+        self._tokenization_cache = {}
 
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -731,6 +740,218 @@ class PreTrainedTokenizer(object):
             Do NOT take care of added tokens.
         """
         raise NotImplementedError
+
+    def _detokenize_for_offsets(self, tok):
+        """
+        Remove any tokenization artifacts for sub-word tokens.
+        Used by tokenize_with_offsets to match tokens back in the original text.
+         (like ## prefix for BERT)
+        :param tok: the token from the tokenizer
+        :return: the token as it would have looked (best approximation) in the original text
+        """
+        return tok.strip()
+
+    def tokenize_with_offsets(self, text, **kwargs):
+        """ Converts a string in a sequence of tokens (string), using the tokenizer
+            and also keeps track of the token offsets relative to the original text.
+            Split in words for word-based vocabulary or sub-words for sub-word-based
+            vocabularies (BPE/SentencePieces/WordPieces).
+
+            Take care of added tokens.
+
+            Keep track of token offsets by trying to progressively tokenize the text character by character,
+            and consume matching tokens along the way.
+            For efficiency, parts of the text that were already matched should be discarded.
+            However, since some tokenizations are dependent on neighboring past text,
+            in cases of mismatch we fall back to use previously matched parts of the text.
+            For some tokenizers, more than a single token can be generated for a single character.
+            In such cases, the nonfinal tokens will have the same offset as the final token.
+
+            Args:
+                text: The sequence to be encoded.
+                **kwargs: passed to the child `self.tokenize()` method
+
+            Return:
+                A tuple of shape::
+                    (tokens: list[str], offsets: list[int])
+            With:
+                ``tokens``: list of tokens
+                ``offsets``: list of offsets in the text corresponsing to ``tokens``
+        """
+
+        def get_max_space_length(text):
+            original_text = text
+            text = html.unescape(text)
+            max_space_length = 0
+            count = False
+            for i, c in enumerate(text):
+                if c in WHITESPACES:
+                    if not count:
+                        count = True
+                        start_index = i
+                else:
+                    if count:
+                        count = False
+                        max_space_length = max(max_space_length, i - start_index)
+            # with a safety margin
+            return max_space_length + (len(original_text) - len(text))
+
+        def is_prefix(lst, other_lst):
+            """
+            Checks if `lst` is a prefix of `other_lst`
+            """
+            if len(lst) > len(other_lst):
+                return False
+            return other_lst[: len(lst)] == lst
+
+        def get_comparison_tokens(
+            tokenize_func,
+            text,
+            boundary_token_offset,
+            token_offset,
+            search_length,
+            cache,
+            **tokenize_func_kwargs
+        ):
+            search_text = text[boundary_token_offset : token_offset + search_length]
+            if search_text not in cache:
+                cache[search_text] = tokenize_func(search_text, **tokenize_func_kwargs)
+            return cache[search_text]
+
+        # Tokenize text
+        tokens = self.tokenize(text, **kwargs)
+
+        # Get maximum search length
+        max_word_length = max([len(word) for word in text.split()])
+        max_space_length = get_max_space_length(text)
+        max_search_length = min(max_word_length + max_space_length, len(text))
+
+        # Initialize token iteration variables
+        boundary_token_index = 0
+        prev_boundary_token_indexes = [0]
+        offsets = [0]
+        i = 0
+        retry = 0
+        while True:
+            token = tokens[i]
+            match_error = False
+
+            # Initialize search variables
+            offset = offsets[i]
+            search_length = 1
+            comparison_tokens = []
+            if retry > 0:
+                # The tokenization from the boundary doesn't match the text, retrying with a previous boundary
+                boundary_token_index = prev_boundary_token_indexes[-retry]
+            elif retry == 0:
+                # Try boundary of the current token
+                boundary_token_index = i
+            else:
+                # instead of failing, tokenize the whole text to get a certain match
+                boundary_token_index = 0
+                search_length = len(text)
+
+            while True:
+                prev_comparison_tokens = comparison_tokens  # for debugging
+                comparison_tokens = get_comparison_tokens(
+                    self.tokenize,
+                    text,
+                    offsets[boundary_token_index],
+                    offset,
+                    search_length,
+                    self._tokenization_cache,
+                    **kwargs
+                )
+
+                target_tokens = tokens[boundary_token_index : i + 1]
+                if is_prefix(target_tokens, comparison_tokens):
+                    # Found a tokenization match
+                    if len(comparison_tokens) > len(target_tokens):
+                        # Handle special cases
+                        relevant_text = text[offset : offset + search_length]
+                        detokenized = self._detokenize_for_offsets(token)
+
+                        relevant_text = relevant_text.lower()
+                        detokenized = detokenized.lower()
+                        # TODO: 2178 - In order to improve the effectiveness of this search,
+                        # the text should get the same treatment as the tokens
+                        # (lowercasing, accents removal, etc.), but I'm not sure how it can be done.
+                        truncate_count = 0
+                        token_match = detokenized
+                        index = relevant_text.find(token_match)
+                        while index == -1:
+                            truncate_count += 1
+                            token_match = token_match[:-truncate_count]
+                            index = relevant_text.find(token_match)
+                        search_length = index + len(token_match)
+                        # TODO: 2178 - Compare with the previous method in:
+                        # .../transformers/pull/2178/files#diff-e8b171e32a922a1fb8080ebf163f28afR847-R868
+
+                    # Store successful boundary
+                    if prev_boundary_token_indexes[-1] != boundary_token_index:
+                        prev_boundary_token_indexes.append(boundary_token_index)
+                    retry = 0
+                    break
+
+                if search_length >= max_search_length:
+                    # The tokenization from the boundary doesn't match the text, retry with a previous boundary,
+                    # keep retrying until all the previous successful boundaries are used
+                    match_error = True
+                    if retry < len(prev_boundary_token_indexes):
+                        retry += 1
+                    elif search_length != len(text):
+                        retry = -1
+                    else:
+                        retry = 0
+                    break
+
+                # Search step
+                search_length += 1
+
+            if match_error:
+                if retry != 0:
+                    continue
+                # Failed to match offsets to the tokens
+                break
+
+            # Keep consuming characters until there's no tokenization match.
+            # Required due to special characters such as in
+            # "Moskva: Russkiĭ fond sodeĭstviii︠a︡ obrazovanii︠u︡ i nauke"
+            if comparison_tokens == target_tokens:
+                while True:
+                    if len(text) <= offset + search_length:
+                        break
+
+                    comparison_tokens = get_comparison_tokens(
+                        self.tokenize,
+                        text,
+                        offsets[boundary_token_index],
+                        offset,
+                        search_length + 1,
+                        self._tokenization_cache,
+                        **kwargs
+                    )
+                    if is_prefix(comparison_tokens, target_tokens):
+                        search_length += 1
+                    else:
+                        break
+
+            if len(text) > offset + search_length:
+                # Add the next token offset only if the end of the text wasn't reached
+                offsets.append(offset + search_length)
+            else:
+                break
+            i += 1
+
+        assert not match_error, "Unknown failure reason"
+        while len(tokens) != len(offsets):
+            # Occurs only for XLM due to _ TODO: 2178 - update reason
+            offsets.append(len(text) - 1)  # bad, but better than having nothing
+
+        # TODO: 2178 - add the following tests somewhere dedicated for tokenize_with_offsets?
+        # https://github.com/allenai/allennlp/pull/3528/files#diff-618425b31b605bab5f39d9ba1d49f819R59-R140
+
+        return tokens, offsets
 
     def convert_tokens_to_ids(self, tokens):
         """ Converts a single token, or a sequence of tokens, (str) in a single integer id

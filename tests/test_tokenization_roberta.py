@@ -77,7 +77,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = RobertaTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        kwargs = {'add_prefix_space': True}
+        kwargs = {"add_prefix_space": True}
         tokens = tokenizer.tokenize(text, **kwargs)
         tokens_wo, offsets = tokenizer.tokenize_with_offsets(text, **kwargs)
         self.assertEqual(len(tokens_wo), len(offsets))
