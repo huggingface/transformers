@@ -881,7 +881,7 @@ class PreTrainedTokenizer(object):
                         # TODO: 2178 - In order to improve the effectiveness of this search,
                         # the text should get the same treatment as the tokens
                         # (lowercasing, accents removal, etc.), but I'm not sure how it can be done.
-                        # While it's not perfect, using `standardize` gives great results. 
+                        # While it's not perfect, using `standardize` gives great results.
                         truncate_count = 0
                         token_match = detokenized
                         index = relevant_text.find(token_match)

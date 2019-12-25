@@ -111,12 +111,12 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         """
         sentence = "30\xa0000"
         expected_tokens = ["3", "0.", "000</w>"]
-        tokens, offsets =tokenizer.tokenize_with_offsets(sentence)
+        tokens, offsets = tokenizer.tokenize_with_offsets(sentence)
         assert tokens == expected_tokens
         assert offsets == [0, 1, 2]
 
         sentence = '".'
         expected_tokens = [".</w>", '"</w>']
-        tokens, offsets =tokenizer.tokenize_with_offsets(sentence)
+        tokens, offsets = tokenizer.tokenize_with_offsets(sentence)
         assert tokens == expected_tokens
         assert offsets == [0, 1]  # Not perfect, but the best possible given this tokenization
