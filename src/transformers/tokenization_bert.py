@@ -216,7 +216,7 @@ class BertTokenizer(PreTrainedTokenizer):
     def _detokenize_for_offsets(self, tok):
         if tok.startswith("##"):
             return tok[2:]
-        return tok.strip()
+        return tok
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """

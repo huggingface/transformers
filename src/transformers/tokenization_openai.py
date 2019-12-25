@@ -189,7 +189,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         return out_string
 
     def _detokenize_for_offsets(self, tok):
-        return tok.replace("</w>", " ").strip()
+        return tok.replace("</w>", " ")
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""

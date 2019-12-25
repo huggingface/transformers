@@ -39,8 +39,8 @@ SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
-CONTROL_CHARS = u''.join(chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c))[0] == 'C')
-WHITESPACES = re.findall(r'\s', u''.join(chr(c) for c in range(sys.maxunicode + 1)), re.UNICODE)
+CONTROL_CHARS = u"".join(chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c))[0] == "C")
+WHITESPACES = re.findall(r"\s", u"".join(chr(c) for c in range(sys.maxunicode + 1)), re.UNICODE)
 
 
 class PreTrainedTokenizer(object):
@@ -749,7 +749,7 @@ class PreTrainedTokenizer(object):
         :param tok: the token from the tokenizer
         :return: the token as it would have looked (best approximation) in the original text
         """
-        return tok.strip()
+        return tok
 
     def tokenize_with_offsets(self, text, **kwargs):
         """ Converts a string in a sequence of tokens (string), using the tokenizer
@@ -805,13 +805,7 @@ class PreTrainedTokenizer(object):
             return other_lst[: len(lst)] == lst
 
         def get_comparison_tokens(
-            tokenize_func,
-            text,
-            boundary_token_offset,
-            token_offset,
-            search_length,
-            cache,
-            **tokenize_func_kwargs
+            tokenize_func, text, boundary_token_offset, token_offset, search_length, cache, **tokenize_func_kwargs
         ):
             search_text = text[boundary_token_offset : token_offset + search_length]
             if search_text not in cache:
@@ -885,7 +879,9 @@ class PreTrainedTokenizer(object):
                             index = relevant_text.find(token_match)
                         search_length = index + len(token_match)
                         # TODO: 2178 - Compare with the previous method in:
-                        # .../transformers/pull/2178/files#diff-e8b171e32a922a1fb8080ebf163f28afR847-R868
+                        # https://github.com/huggingface/transformers/
+                        # pull/2178/files/0c6593df2518a428b35316bce49533389c0e4f5b#
+                        # diff-e8b171e32a922a1fb8080ebf163f28afR847-R868
 
                     # Store successful boundary
                     if prev_boundary_token_indexes[-1] != boundary_token_index:

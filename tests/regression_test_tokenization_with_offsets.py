@@ -22,9 +22,7 @@ from transformers.modeling_distilbert import DISTILBERT_PRETRAINED_MODEL_ARCHIVE
 from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
 
 logging.basicConfig(
-    format="%(filename)s:%(lineno)d - %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
+    format="%(filename)s:%(lineno)d - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -57,9 +55,9 @@ class TokenizationCheck:
             return normalize(tok) == normalize(txt) or tok == "[UNK]" or tok == u"�"
 
         tok_strs = [tokenizer._detokenize_for_offsets(t) for t in tokens]
-        text_strs = [
-            text[offsets[i] : offsets[i + 1]] for i in range(len(tokens) - 1)
-        ] + [text[offsets[len(tokens) - 1] :]]
+        text_strs = [text[offsets[i] : offsets[i + 1]] for i in range(len(tokens) - 1)] + [
+            text[offsets[len(tokens) - 1] :]
+        ]
         if all([samey(tok, txt) for tok, txt in zip(tok_strs, text_strs)]):
             self.diffs_passed += 1
             return True
@@ -137,14 +135,8 @@ class TokenizationCheck:
             self.tokens_vs_spans(tokenizer, tokens_offs, offsets, text)
 
     def show_stats(self):
-        print(
-            "equivalence with tokenize %d passed and %d failed"
-            % (self.equiv_passed, self.equiv_failed)
-        )
-        print(
-            "subword tokens match text %d passed and %d failed"
-            % (self.diffs_passed, self.diffs_failed)
-        )
+        print("equivalence with tokenize %d passed and %d failed" % (self.equiv_passed, self.equiv_failed))
+        print("subword tokens match text %d passed and %d failed" % (self.diffs_passed, self.diffs_failed))
 
 
 def main(test_file):
@@ -182,9 +174,7 @@ def main(test_file):
                 line_count = 0
                 for passage_id, passage_info in tqdm(dataset.items()):
                     try:
-                        tokenizer_check.check_same_tokens(
-                            tokenizer, passage_info["passage"]
-                        )
+                        tokenizer_check.check_same_tokens(tokenizer, passage_info["passage"])
                     except Exception as e:
                         logger.error(str(e))
                         print("passage_id=%s" % passage_id)
@@ -192,9 +182,7 @@ def main(test_file):
                     line_count += 1
                     for qa_pair in passage_info["qa_pairs"]:
                         try:
-                            tokenizer_check.check_same_tokens(
-                                tokenizer, qa_pair["question"]
-                            )
+                            tokenizer_check.check_same_tokens(tokenizer, qa_pair["question"])
                         except Exception as e:
                             logger.error(str(e))
                             print("query_id=%s" % qa_pair["query_id"])

@@ -83,7 +83,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(tokens_wo), len(offsets))
         self.assertListEqual(tokens, tokens_wo)
         self.assertListEqual(tokens, bpe_tokens)
-        self.assertListEqual(offsets, [0, 3, 6, 6, 7, 8, 9])
+        self.assertListEqual(offsets, [0, 3, 5, 6, 7, 8, 9])
 
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]

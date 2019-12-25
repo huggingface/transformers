@@ -218,7 +218,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
     def _detokenize_for_offsets(self, tok):
         if tok.endswith("@@"):
             return tok[:-2]
-        return tok.strip()
+        return tok
 
     def save_vocabulary(self, save_directory):
         """Save the tokenizer vocabulary and merge files to a directory."""
