@@ -18,6 +18,7 @@
 import json
 import logging
 import os
+import random
 from functools import lru_cache
 
 import regex as re
@@ -148,19 +149,20 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.encoder)
 
-    def bpe(self, token):
-        if token in self.cache:
-            return self.cache[token]
+    def bpe(self, token, **kwargs):
+        dropout = kwargs.get("dropout", 0)
+        assert 0 <= dropout <= 1, "Dropout should be in [0, 1]"
+        # if token in self.cache:
+        #     return self.cache[token]
         word = tuple(token)
-        pairs = get_pairs(word)
-
+        pairs = [pair for pair in get_pairs(word) if random.random() > dropout and pair in self.bpe_ranks]
         if not pairs:
             return token
 
         while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
-            if bigram not in self.bpe_ranks:
+            if not pairs:
                 break
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
             first, second = bigram
             new_word = []
             i = 0
@@ -185,12 +187,12 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             if len(word) == 1:
                 break
             else:
-                pairs = get_pairs(word)
+                pairs = [pair for pair in get_pairs(word) if random.random() > dropout and pair in self.bpe_ranks]
         word = " ".join(word)
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text, add_prefix_space=False):
+    def _tokenize(self, text, add_prefix_space=False, **kwargs):
         """ Tokenize a string.
             Args:
                 - add_prefix_space (boolean, default False):
@@ -204,7 +206,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding controle tokens of the BPE (spaces in our case)
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
+            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token, **kwargs).split(" "))
         return bpe_tokens
 
     def _convert_token_to_id(self, token):
