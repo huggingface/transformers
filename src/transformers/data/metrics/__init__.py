@@ -19,7 +19,7 @@ try:
     from sklearn.metrics import matthews_corrcoef, f1_score
 
     _has_sklearn = True
-except (AttributeError, ImportError) as e:
+except (AttributeError, ImportError):
     _has_sklearn = False
 
 

@@ -629,7 +629,7 @@ class T5Stack(T5PreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[1],)  # We keep only self-attention weights for now
 
         hidden_states = self.final_layer_norm(hidden_states)
-        layer_output = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
         # Add last layer
         if self.output_hidden_states:

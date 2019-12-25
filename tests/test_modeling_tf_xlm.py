@@ -224,7 +224,6 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
             inputs = {"input_ids": input_ids, "lengths": input_lengths}
 
-            outputs = model(inputs)
             start_logits, end_logits = model(inputs)
 
             result = {
