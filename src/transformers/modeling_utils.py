@@ -793,7 +793,7 @@ class PreTrainedModel(nn.Module):
 
         # scores for each sentence in the beam
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        # if greedy decoding we make sure that only the first beam is relevant for the first top_k
+        # For greedy decoding we make sure that only words of the first beam are considered to avoid sampling the exact same words for all num_beams
         if not do_sample:
             beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
