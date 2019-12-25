@@ -3,6 +3,7 @@ Pretrained models
 
 Here is the full list of the currently provided pretrained models together with a short presentation of each model.
 
+For a list that includes community-uploaded models, refer to `https://huggingface.co/models <https://huggingface.co/models>`__.
 
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Architecture      | Shortcut name                                              | Details of the model                                                                                                                  |
@@ -79,6 +80,14 @@ Here is the full list of the currently provided pretrained models together with 
 |                   | ``bert-base-japanese-char-whole-word-masking``             | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
 |                   |                                                            | | Trained on Japanese text using Whole-Word-Masking. Text is tokenized into characters.                                               |
 |                   |                                                            | (see `details on cl-tohoku repository <https://github.com/cl-tohoku/bert-japanese>`__).                                               |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-finnish-cased-v1``                             | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on cased Finnish text.                                                                                                      |
+|                   |                                                            | (see `details on turkunlp.org <http://turkunlp.org/FinBERT/>`__).                                                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bert-base-finnish-uncased-v1``                           | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
+|                   |                                                            | | Trained on uncased Finnish text.                                                                                                    |
+|                   |                                                            | (see `details on turkunlp.org <http://turkunlp.org/FinBERT/>`__).                                                                     |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | GPT               | ``openai-gpt``                                             | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
 |                   |                                                            | | OpenAI GPT English model                                                                                                            |
@@ -146,6 +155,10 @@ Here is the full list of the currently provided pretrained models together with 
 |                   |                                                            | | ``roberta-large`` fine-tuned on `MNLI <http://www.nyu.edu/projects/bowman/multinli/>`__.                                            |
 |                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`__)                                                   |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``distilroberta-base``                                     | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
+|                   |                                                            | | The DistilRoBERTa model distilled from the RoBERTa model `roberta-base` checkpoint.                                                 |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``roberta-base-openai-detector``                           | | 12-layer, 768-hidden, 12-heads, 125M parameters                                                                                     |
 |                   |                                                            | | ``roberta-base`` fine-tuned by OpenAI on the outputs of the 1.5B-parameter GPT-2 model.                                             |
 |                   |                                                            | (see `details <https://github.com/openai/gpt-2-output-dataset/tree/master/detector>`__)                                               |
@@ -164,10 +177,6 @@ Here is the full list of the currently provided pretrained models together with 
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``distilgpt2``                                             | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
 |                   |                                                            | | The DistilGPT2 model distilled from the GPT2 model `gpt2` checkpoint.                                                               |
-|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
-|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-|                   | ``distilroberta-base``                                     | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
-|                   |                                                            | | The DistilRoBERTa model distilled from the RoBERTa model `roberta-base` checkpoint.                                                 |
 |                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``distilbert-base-german-cased``                           | | 6-layer, 768-hidden, 12-heads, 66M parameters                                                                                       |
@@ -231,6 +240,12 @@ Here is the full list of the currently provided pretrained models together with 
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``t5-11B``                                                 | | ~11B parameters with 24-layers, 1024-hidden-state, 65536 feed-forward hidden-state, 128-heads,                                      |
 |                   |                                                            | | Trained on English text: the Colossal Clean Crawled Corpus (C4)                                                                     |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| XLM-RoBERTa       | ``xlm-roberta-base``                                       | | ~125M parameters with 12-layers, 768-hidden-state, 3072 feed-forward hidden-state, 8-heads,                                         |
+|                   |                                                            | | Trained on on 2.5 TB of newly created clean CommonCrawl data in 100 languages                                                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``xlm-roberta-large``                                      | | ~355M parameters with 24-layers, 1027-hidden-state, 4096 feed-forward hidden-state, 16-heads,                                       |
+|                   |                                                            | | Trained on 2.5 TB of newly created clean CommonCrawl data in 100 languages                                                          |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
