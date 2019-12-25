@@ -476,6 +476,7 @@ class PreTrainedTokenizer(object):
             added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
             tokenizer.added_tokens_encoder.update(added_tok_encoder)
             tokenizer.added_tokens_decoder.update(added_tok_decoder)
+            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()).union(set(tokenizer.all_special_tokens)))
 
         return tokenizer
 
