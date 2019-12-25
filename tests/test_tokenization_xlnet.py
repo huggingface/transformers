@@ -193,3 +193,50 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         assert encoded_sentence == text + [4, 3]
         assert encoded_pair == text + [4] + text_2 + [4, 3]
+
+    @slow
+    def test_tokenize_with_offsets(self):
+        tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+
+        """ For words that have a wordpiece tokenization that
+            doesn't contain the tokenization of its prefixes.
+        """
+        sentence = "1603"
+        expected_tokens = ["▁16", "03"]
+        tokens, offsets = tokenizer.tokenize_with_offsets(sentence)
+        assert tokens == expected_tokens
+        assert offsets == [0, 2]
+
+        """ For cases in which the current token won't be produced
+            without an additional character that is only part of the
+            text that corresponds to the next tokens.
+            Example for XLNet:
+            text = "How many points did the buccaneers need to tie in the first?"
+            tokens = [..., '▁the', '▁', 'bu', 'cca', 'ne', 'ers', ...]
+            target_tokens = ['▁']
+            comparison_tokens = ['▁', 'b']
+            prev_comparison_tokens = ['']
+        """
+        sentence = "How many points did the buccaneers need to tie in the first?"
+        expected_tokens = [
+            "▁How",
+            "▁many",
+            "▁points",
+            "▁did",
+            "▁the",
+            "▁",
+            "bu",
+            "cca",
+            "ne",
+            "ers",
+            "▁need",
+            "▁to",
+            "▁tie",
+            "▁in",
+            "▁the",
+            "▁first",
+            "?",
+        ]
+        tokens, offsets = tokenizer.tokenize_with_offsets(sentence)
+        assert tokens == expected_tokens
+        assert offsets == [0, 4, 9, 16, 20, 24, 24, 26, 29, 31, 35, 40, 43, 47, 50, 54, 59]

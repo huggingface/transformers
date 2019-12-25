@@ -21,6 +21,7 @@ import unittest
 from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
+from .utils import slow
 
 
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -87,3 +88,15 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + ["<unk>"]
         input_bpe_tokens = [14, 15, 20]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+
+    @slow
+    def test_tokenize_with_offsets(self):
+        tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
+
+        """ OpenAIGPTTokenizer escapes html entities, make sure it is handled properly
+        """
+        sentence = "98&#160; yards"
+        expected_tokens = ["98</w>", "yards</w>"]
+        tokens, offsets = tokenizer.tokenize_with_offsets(sentence)
+        assert tokens == expected_tokens
+        assert offsets == [0, 2]

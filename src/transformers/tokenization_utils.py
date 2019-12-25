@@ -478,6 +478,9 @@ class PreTrainedTokenizer(object):
         tokenizer.init_inputs = init_inputs
         tokenizer.init_kwargs = init_kwargs
 
+        # update unique_added_tokens_encoder with special tokens for correct tokenization
+        tokenizer.unique_added_tokens_encoder.update(set(tokenizer.all_special_tokens))
+
         # Add supplementary tokens.
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
@@ -485,6 +488,7 @@ class PreTrainedTokenizer(object):
             added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
             tokenizer.added_tokens_encoder.update(added_tok_encoder)
             tokenizer.added_tokens_decoder.update(added_tok_decoder)
+            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()))
 
         return tokenizer
 
@@ -812,6 +816,13 @@ class PreTrainedTokenizer(object):
                 cache[search_text] = tokenize_func(search_text, **tokenize_func_kwargs)
             return cache[search_text]
 
+        def standardize(text):
+            text = text.replace("``", '"').replace("''", '"')
+            text = unicodedata.normalize("NFKD", text)
+            text = "".join([c for c in text if not unicodedata.combining(c)])
+            text = text.lower()
+            return text
+
         # Tokenize text
         tokens = self.tokenize(text, **kwargs)
 
@@ -865,11 +876,12 @@ class PreTrainedTokenizer(object):
                         relevant_text = text[offset : offset + search_length]
                         detokenized = self._detokenize_for_offsets(token)
 
-                        relevant_text = relevant_text.lower()
-                        detokenized = detokenized.lower()
+                        relevant_text = standardize(relevant_text)
+                        detokenized = standardize(detokenized)
                         # TODO: 2178 - In order to improve the effectiveness of this search,
                         # the text should get the same treatment as the tokens
                         # (lowercasing, accents removal, etc.), but I'm not sure how it can be done.
+                        # While it's not perfect, using `standardize` gives great results. 
                         truncate_count = 0
                         token_match = detokenized
                         index = relevant_text.find(token_match)
@@ -878,10 +890,6 @@ class PreTrainedTokenizer(object):
                             token_match = token_match[:-truncate_count]
                             index = relevant_text.find(token_match)
                         search_length = index + len(token_match)
-                        # TODO: 2178 - Compare with the previous method in:
-                        # https://github.com/huggingface/transformers/
-                        # pull/2178/files/0c6593df2518a428b35316bce49533389c0e4f5b#
-                        # diff-e8b171e32a922a1fb8080ebf163f28afR847-R868
 
                     # Store successful boundary
                     if prev_boundary_token_indexes[-1] != boundary_token_index:
@@ -941,11 +949,11 @@ class PreTrainedTokenizer(object):
 
         assert not match_error, "Unknown failure reason"
         while len(tokens) != len(offsets):
-            # Occurs only for XLM due to _ TODO: 2178 - update reason
-            offsets.append(len(text) - 1)  # bad, but better than having nothing
-
-        # TODO: 2178 - add the following tests somewhere dedicated for tokenize_with_offsets?
-        # https://github.com/allenai/allennlp/pull/3528/files#diff-618425b31b605bab5f39d9ba1d49f819R59-R140
+            # Occurs only for XLM due to the fact that '".' is tokenized to [".</w>", '"</w>'] (and similarly '",'):
+            # If the text ends with it, then after "." is matched to ".</w>" there's no more text,
+            # so we need to artificially add offset for '"</w>'.
+            # The solution is generalized just in case there are more complex cases.
+            offsets.append(len(text) - 1)  # better than having nothing
 
         return tokens, offsets
 

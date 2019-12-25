@@ -102,3 +102,21 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         assert encoded_sentence == [1] + text + [1]
         assert encoded_pair == [1] + text + [1] + text_2 + [1]
+
+    @slow
+    def test_tokenize_with_offsets(self):
+        tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
+
+        """ XLM has some peculiarities, make sure they are handled properly
+        """
+        sentence = "30\xa0000"
+        expected_tokens = ["3", "0.", "000</w>"]
+        tokens, offsets =tokenizer.tokenize_with_offsets(sentence)
+        assert tokens == expected_tokens
+        assert offsets == [0, 1, 2]
+
+        sentence = '".'
+        expected_tokens = [".</w>", '"</w>']
+        tokens, offsets =tokenizer.tokenize_with_offsets(sentence)
+        assert tokens == expected_tokens
+        assert offsets == [0, 1]  # Not perfect, but the best possible given this tokenization

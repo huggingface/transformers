@@ -68,10 +68,10 @@ class TokenizationCheck:
             tok_list = []
             txt_list = []
             cur_line_len = -1
-            print("\nTokens and text spans have a difference:")
-            print("=" * line_length_limit)
-            print(text.replace("\n", " "))
-            print("=" * line_length_limit)
+            logger.info("\nTokens and text spans have a difference:")
+            logger.info("=" * line_length_limit)
+            logger.info(text.replace("\n", " "))
+            logger.info("=" * line_length_limit)
             for tok_str, text_str in zip(tok_strs, text_strs):
                 if normalize(tok_str) == normalize(text_str):
                     tok_list.append(tok_str)
@@ -82,16 +82,16 @@ class TokenizationCheck:
                     txt_list.append("'" + text_str + " " * (tlen - len(text_str)) + "'")
                 cur_line_len += 1 + len(tok_list[-1])
                 if cur_line_len > line_length_limit:
-                    print("-" * line_length_limit)
-                    print(" ".join(tok_list[0:-1]))
-                    print(" ".join(txt_list[0:-1]))
+                    logger.info("-" * line_length_limit)
+                    logger.info(" ".join(tok_list[0:-1]))
+                    logger.info(" ".join(txt_list[0:-1]))
                     tok_list = tok_list[-1:]
                     txt_list = txt_list[-1:]
                     cur_line_len = len(tok_list[-1])
-            print("-" * line_length_limit)
-            print(" ".join(tok_list))
-            print(" ".join(txt_list))
-            print("-" * line_length_limit)
+            logger.info("-" * line_length_limit)
+            logger.info(" ".join(tok_list))
+            logger.info(" ".join(txt_list))
+            logger.info("-" * line_length_limit)
             self.show_diff -= 1
         self.diffs_failed += 1
         return False
@@ -119,7 +119,7 @@ class TokenizationCheck:
             self.equiv_failed += 1
             if self.limit_warn > 0:
                 linetext = text.replace("\n", " ")
-                print(
+                logger.info(
                     'tokenization is different for "'
                     + linetext
                     + '"\n  '
@@ -137,8 +137,8 @@ class TokenizationCheck:
             self.tokens_vs_spans(tokenizer, tokens_offs, offsets, text)
 
     def show_stats(self):
-        print("equivalence with tokenize %d passed and %d failed" % (self.equiv_passed, self.equiv_failed))
-        print("subword tokens match text %d passed and %d failed" % (self.diffs_passed, self.diffs_failed))
+        logger.info("equivalence with tokenize %d passed and %d failed" % (self.equiv_passed, self.equiv_failed))
+        logger.info("subword tokens match text %d passed and %d failed" % (self.diffs_passed, self.diffs_failed))
 
 
 def main(test_file):
@@ -157,10 +157,6 @@ def main(test_file):
         XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
-    # In XLM, "\"." is tokenized to [".", "\""] and similarly "\",",
-    # so it's not possible to create contiguous offsets.
-    # Also in XLM, "30\xa0000" (\xa0 is space) is tokenized to
-    # ['3', '0.', '000</w>'] which yields offsets of [0, 1, 1].
     still_need_work = []
     for model_map in model_maps:
         for model_name in list(model_map.keys())[:1]:
@@ -179,7 +175,7 @@ def main(test_file):
                         tokenizer_check.check_same_tokens(tokenizer, passage_info["passage"])
                     except Exception as e:
                         logger.error(str(e))
-                        print("passage_id=%s" % passage_id)
+                        logger.info("passage_id=%s" % passage_id)
                         raise e
                     line_count += 1
                     for qa_pair in passage_info["qa_pairs"]:
@@ -187,7 +183,7 @@ def main(test_file):
                             tokenizer_check.check_same_tokens(tokenizer, qa_pair["question"])
                         except Exception as e:
                             logger.error(str(e))
-                            print("query_id=%s" % qa_pair["query_id"])
+                            logger.info("query_id=%s" % qa_pair["query_id"])
                             raise e
                         line_count += 1
             tokenizer_check.show_stats()
