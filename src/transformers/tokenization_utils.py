@@ -817,6 +817,7 @@ class PreTrainedTokenizer(object):
             return cache[search_text]
 
         def standardize(text):
+            # Based on ALBERT's preprocessing
             text = text.replace("``", '"').replace("''", '"')
             text = unicodedata.normalize("NFKD", text)
             text = "".join([c for c in text if not unicodedata.combining(c)])
@@ -873,15 +874,9 @@ class PreTrainedTokenizer(object):
                     # Found a tokenization match
                     if len(comparison_tokens) > len(target_tokens):
                         # Handle special cases
-                        relevant_text = text[offset : offset + search_length]
-                        detokenized = self._detokenize_for_offsets(token)
+                        relevant_text = standardize(text[offset : offset + search_length])
+                        detokenized = standardize(self._detokenize_for_offsets(token))
 
-                        relevant_text = standardize(relevant_text)
-                        detokenized = standardize(detokenized)
-                        # TODO: 2178 - In order to improve the effectiveness of this search,
-                        # the text should get the same treatment as the tokens
-                        # (lowercasing, accents removal, etc.), but I'm not sure how it can be done.
-                        # While it's not perfect, using `standardize` gives great results.
                         truncate_count = 0
                         token_match = detokenized
                         index = relevant_text.find(token_match)
