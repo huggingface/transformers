@@ -152,17 +152,19 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     def bpe(self, token, **kwargs):
         dropout = kwargs.get("dropout", 0)
         assert 0 <= dropout <= 1, "Dropout should be in [0, 1]"
-        # if token in self.cache:
-        #     return self.cache[token]
+
+        if token in self.cache and dropout == 0:
+            return self.cache[token]
+
         word = tuple(token)
         pairs = [pair for pair in get_pairs(word) if random.random() > dropout and pair in self.bpe_ranks]
         if not pairs:
             return token
 
         while True:
-            if not pairs:
-                break
             bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
+            if bigram not in self.bpe_ranks:
+                break
             first, second = bigram
             new_word = []
             i = 0
@@ -188,6 +190,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
                 break
             else:
                 pairs = [pair for pair in get_pairs(word) if random.random() > dropout and pair in self.bpe_ranks]
+                if not pairs:
+                    break
         word = " ".join(word)
         self.cache[token] = word
         return word
