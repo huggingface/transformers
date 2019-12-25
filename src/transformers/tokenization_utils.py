@@ -469,6 +469,9 @@ class PreTrainedTokenizer(object):
         tokenizer.init_inputs = init_inputs
         tokenizer.init_kwargs = init_kwargs
 
+        # update unique_added_tokens_encoder with special tokens for correct tokenization
+        tokenizer.unique_added_tokens_encoder.update(set(tokenizer.all_special_tokens))
+
         # Add supplementary tokens.
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
@@ -476,7 +479,7 @@ class PreTrainedTokenizer(object):
             added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
             tokenizer.added_tokens_encoder.update(added_tok_encoder)
             tokenizer.added_tokens_decoder.update(added_tok_decoder)
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()).union(set(tokenizer.all_special_tokens)))
+            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()))
 
         return tokenizer
 
