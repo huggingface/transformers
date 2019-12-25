@@ -446,8 +446,6 @@ class MultiHeadedAttention(nn.Module):
         batch_size = key.size(0)
         dim_per_head = self.dim_per_head
         head_count = self.head_count
-        key_len = key.size(1)
-        query_len = query.size(1)
 
         def shape(x):
             """  projection """
@@ -503,9 +501,6 @@ class MultiHeadedAttention(nn.Module):
             value = shape(value)
 
         query = shape(query)
-
-        key_len = key.size(2)
-        query_len = query.size(2)
 
         # 2) Calculate and scale scores.
         query = query / math.sqrt(dim_per_head)

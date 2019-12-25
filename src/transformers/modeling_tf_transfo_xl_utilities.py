@@ -118,7 +118,6 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
         hidden, target = inputs
         head_logprob = 0
         if self.n_clusters == 0:
-            softmax_b = tf.get_variable("bias", [self.config.vocab_size], initializer=tf.zeros_initializer())
             output = self._logit(hidden, self.out_layers[0][0], self.out_layers[0][1], self.out_projs[0])
             if target is not None:
                 loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=target, logits=output)

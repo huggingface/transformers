@@ -491,7 +491,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         hidden_states = self.final_layer_norm(hidden_states)
-        layer_output = self.dropout(hidden_states, training=training)
+        hidden_states = self.dropout(hidden_states, training=training)
 
         # Add last layer
         if self.output_hidden_states:
