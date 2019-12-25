@@ -137,6 +137,12 @@ Follow these steps to start contributing:
 
 5. Develop the features on your branch.
 
+   Make sure you have `pytest` and `pytest-xdist` installed. You can install both via:
+   
+   ```bash
+   $ pip install pytest-xdist
+   ```
+   
    As you work on the features, you should make sure that the test suite
    passes:
 
