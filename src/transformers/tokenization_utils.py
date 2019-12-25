@@ -16,14 +16,14 @@
 
 
 import copy
+import html
 import itertools
 import json
 import logging
 import os
-import sys
 import re
+import sys
 import unicodedata
-import html
 
 from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
 

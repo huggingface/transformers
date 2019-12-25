@@ -1,25 +1,27 @@
 # coding=utf-8
 
-import logging
 import json
+import logging
 import random
-import unicodedata
-import sys
 import re
+import sys
+import unicodedata
+
 from tqdm import tqdm
 
 from transformers import AutoTokenizer
 from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_distilbert import DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+
 
 logging.basicConfig(
     format="%(filename)s:%(lineno)d - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
