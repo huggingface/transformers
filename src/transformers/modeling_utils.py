@@ -834,9 +834,13 @@ class PreTrainedModel(nn.Module):
                 )  # (batch_size * num_beams, vocab_size)
 
                 # re-organize to group the beam together so that words from multiple beam idxs are sampled
-                _scores = scores.contiguous().view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
+                _scores = scores.contiguous().view(
+                    batch_size, num_beams * vocab_size
+                )  # (batch_size, num_beams * vocab_size)
                 # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_words = torch.multinomial(F.softmax(_scores, dim=-1), num_samples=2 * num_beams)  # (batch_size, 2 * num_beams)
+                next_words = torch.multinomial(
+                    F.softmax(_scores, dim=-1), num_samples=2 * num_beams
+                )  # (batch_size, 2 * num_beams)
                 # Compute next scores
                 next_scores = torch.gather(_scores, -1, next_words)  # (batch_size, 2 * num_beams)
 
