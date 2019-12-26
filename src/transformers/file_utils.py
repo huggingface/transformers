@@ -11,20 +11,18 @@ import logging
 import os
 import sys
 import tempfile
+import boto3
+import requests
+
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
 from urllib.parse import urlparse
-
-import boto3
-import requests
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from filelock import FileLock
 from tqdm.auto import tqdm
-
 from . import __version__
-
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -213,6 +211,7 @@ def cached_path(
             user_agent=user_agent,
         )
     elif os.path.exists(url_or_filename):
+        
         # File, and it exists.
         return url_or_filename
     elif urlparse(url_or_filename).scheme == "":
@@ -257,6 +256,7 @@ def s3_request(func):
 
 @s3_request
 def s3_etag(url, proxies=None):
+    
     """Check ETag on S3 object."""
     s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
     bucket_name, s3_path = split_s3_path(url)
@@ -266,6 +266,7 @@ def s3_etag(url, proxies=None):
 
 @s3_request
 def s3_get(url, temp_file, proxies=None):
+    
     """Pull a file directly from S3."""
     s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
     bucket_name, s3_path = split_s3_path(url)
@@ -367,6 +368,7 @@ def get_from_cache(
             resume_size = 0
 
         if etag is not None and (not os.path.exists(cache_path) or force_download):
+            
             # Download to temporary file, then copy to cache dir once finished.
             # Otherwise you get corrupt cache entries if the download gets interrupted.
             with temp_file_manager() as temp_file:
