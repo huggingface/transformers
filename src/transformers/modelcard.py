@@ -31,7 +31,6 @@ from .file_utils import (
     is_remote_url,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -76,6 +75,7 @@ class ModelCard(object):
         """ Save a model card object to the directory or file `save_directory_or_file`.
         """
         if os.path.isdir(save_directory_or_file):
+            
             # If we save using the predefined names, we can load using `from_pretrained`
             output_model_card_file = os.path.join(save_directory_or_file, MODEL_CARD_NAME)
         else:
@@ -132,6 +132,7 @@ class ModelCard(object):
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+            
             # For simplicity we use the same pretrained url than the configuration files
             # but with a different suffix (modelcard.json). This suffix is replaced below.
             model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
