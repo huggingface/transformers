@@ -19,9 +19,7 @@
 import logging
 import os
 import re
-
 import numpy
-
 
 logger = logging.getLogger(__name__)
 
