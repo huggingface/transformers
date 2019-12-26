@@ -18,18 +18,17 @@
 import argparse
 import json
 import logging
-
 import numpy
 import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
-
 logging.basicConfig(level=logging.INFO)
 
 
 def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_path):
+    
     # Load checkpoint
     chkpt = torch.load(xlm_checkpoint_path, map_location="cpu")
 
@@ -68,6 +67,7 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    
     # Required parameters
     parser.add_argument(
         "--xlm_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
