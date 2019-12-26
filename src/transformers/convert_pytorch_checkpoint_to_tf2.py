@@ -62,7 +62,6 @@ from transformers import (
     load_pytorch_checkpoint_in_tf2_model,
 )
 
-
 if is_torch_available():
     import torch
     import numpy as np
@@ -458,6 +457,7 @@ if __name__ == "__main__":
     #                                 compare_with_pt_model=args.compare_with_pt_model,
     #                                 use_cached_models=args.use_cached_models)
     # else:
+    
     convert_all_pt_checkpoints_to_tf(
         args.model_type.lower() if args.model_type is not None else None,
         args.tf_dump_path,
