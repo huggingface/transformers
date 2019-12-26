@@ -18,10 +18,9 @@
 import logging
 import os
 import re
+
 from shutil import copyfile
-
 from .tokenization_utils import PreTrainedTokenizer
-
 
 logger = logging.getLogger(__name__)
 
