@@ -22,17 +22,14 @@ import glob
 import logging
 import os
 import pickle
-from collections import Counter, OrderedDict
-
 import numpy as np
 
+from collections import Counter, OrderedDict
 from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer
 
-
 if is_torch_available():
     import torch
-
 
 logger = logging.getLogger(__name__)
 
