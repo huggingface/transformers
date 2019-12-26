@@ -20,7 +20,6 @@ import logging
 
 from .configuration_utils import PretrainedConfig
 
-
 logger = logging.getLogger(__name__)
 
 OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
