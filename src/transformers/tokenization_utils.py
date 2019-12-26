@@ -1508,7 +1508,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return self.tokenizer.encode(text).tokens
 
     def _convert_token_to_id_with_added_voc(self, token):
-        return self.tokenizer.token_to_id(token)
+        id = self.tokenizer.token_to_id(token)
+        if id is None:
+            return self.unk_token_id
+        return id
 
     def _convert_id_to_token(self, index):
         return self.tokenizer.id_to_token(int(index))
