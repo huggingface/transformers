@@ -19,7 +19,6 @@ import logging
 
 from .configuration_utils import PretrainedConfig
 
-
 logger = logging.getLogger(__name__)
 
 DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
