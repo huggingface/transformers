@@ -19,7 +19,6 @@ import logging
 
 from .tokenization_gpt2 import GPT2Tokenizer
 
-
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
