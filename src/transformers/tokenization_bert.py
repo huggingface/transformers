@@ -18,8 +18,8 @@
 import collections
 import logging
 import os
-import unicodedata
 import random
+import unicodedata
 
 from .tokenization_utils import PreTrainedTokenizer
 
