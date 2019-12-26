@@ -28,7 +28,6 @@ from .modeling_roberta import (
     RobertaModel,
 )
 
-
 logger = logging.getLogger(__name__)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
