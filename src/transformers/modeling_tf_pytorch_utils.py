@@ -23,7 +23,6 @@ import numpy
 
 logger = logging.getLogger(__name__)
 
-
 def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
     """ Convert a TF 2.0 model variable name in a pytorch model weight name.
 
