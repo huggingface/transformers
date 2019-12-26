@@ -19,7 +19,6 @@ import logging
 
 from .configuration_utils import PretrainedConfig
 
-
 logger = logging.getLogger(__name__)
 
 CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-ctrl/pytorch/ctrl-config.json"}
