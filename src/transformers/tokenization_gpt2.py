@@ -274,15 +274,17 @@ class GPT2TokenizerFast(FastPreTrainedTokenizer):
 
         self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
         self._update_special_tokens()
-        self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space))
+        self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
         self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())
         if max_length:
-            self._tokenizer.with_truncation(max_length, stride, truncation_strategy)
+            self._tokenizer.with_truncation(max_length,
+                                            stride=stride,
+                                            strategy=truncation_strategy)
         self._tokenizer.with_padding(
-            max_length if pad_to_max_length else None,
-            self.padding_side,
-            self.pad_token_id if self.pad_token_id is not None else 0,
-            self.pad_token_type_id,
-            self.pad_token if self.pad_token is not None else "",
+            max_length=max_length if pad_to_max_length else None,
+            direction=self.padding_side,
+            pad_id=self.pad_token_id if self.pad_token_id is not None else 0,
+            pad_type_id=self.pad_token_type_id,
+            pad_token=self.pad_token if self.pad_token is not None else "",
         )
         self._decoder = tk.decoders.ByteLevel.new()
