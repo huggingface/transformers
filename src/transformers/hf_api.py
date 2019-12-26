@@ -16,10 +16,10 @@
 
 import io
 import os
+import requests
+
 from os.path import expanduser
 from typing import List
-
-import requests
 from tqdm import tqdm
 
 
@@ -97,6 +97,7 @@ class HfApi:
             url: Read-only url for the stored file on S3.
         """
         urls = self.presign(token, filename=filename)
+        
         # streaming upload:
         # https://2.python-requests.org/en/master/user/advanced/#streaming-uploads
         #
