@@ -110,7 +110,7 @@ class ServeCommand(BaseTransformersCLICommand):
             raise RuntimeError(
                 "Using serve command requires FastAPI and unicorn. "
                 "Please install transformers with [serving]: pip install transformers[serving]."
-                "Or install FastAPI and unicorn separatly."
+                "Or install FastAPI and unicorn separately."
             )
         else:
             logger.info("Serving model over {}:{}".format(host, port))
