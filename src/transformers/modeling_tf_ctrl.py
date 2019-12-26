@@ -17,14 +17,12 @@
 
 
 import logging
-
 import numpy as np
 import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
-
 
 logger = logging.getLogger(__name__)
 
