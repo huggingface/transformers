@@ -142,6 +142,7 @@ class BertTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
+        keep_accents=False,
         **kwargs
     ):
         """Constructs a BertTokenizer.
@@ -182,7 +183,10 @@ class BertTokenizer(PreTrainedTokenizer):
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
-                do_lower_case=do_lower_case, never_split=never_split, tokenize_chinese_chars=tokenize_chinese_chars
+                do_lower_case=do_lower_case,
+                never_split=never_split,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                keep_accents=keep_accents
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
@@ -293,7 +297,7 @@ class BertTokenizer(PreTrainedTokenizer):
 class BasicTokenizer(object):
     """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True):
+    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, keep_accents=False):
         """ Constructs a BasicTokenizer.
 
         Args:
@@ -306,12 +310,16 @@ class BasicTokenizer(object):
                 Whether to tokenize Chinese characters.
                 This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
+            **tokenize_chinese_chars**: (`optional`) boolean (default True)
+                Whether to keep accents in characters.
+                This is specially important in languages like Spanish.
         """
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = never_split
         self.tokenize_chinese_chars = tokenize_chinese_chars
+        self.keep_accents = keep_accents
 
     def tokenize(self, text, never_split=None):
         """ Basic Tokenization of a piece of text.
@@ -338,7 +346,8 @@ class BasicTokenizer(object):
         for token in orig_tokens:
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
-                token = self._run_strip_accents(token)
+                if not self.keep_accents:
+                    token = self._run_strip_accents(token)
             split_tokens.extend(self._run_split_on_punc(token))
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
