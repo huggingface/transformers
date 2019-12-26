@@ -20,7 +20,6 @@ import logging
 
 from .configuration_roberta import RobertaConfig
 
-
 logger = logging.getLogger(__name__)
 
 XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
