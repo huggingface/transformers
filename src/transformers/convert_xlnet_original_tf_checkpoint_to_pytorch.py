@@ -18,7 +18,6 @@
 import argparse
 import logging
 import os
-
 import torch
 
 from transformers import (
@@ -44,9 +43,7 @@ GLUE_TASKS_NUM_LABELS = {
     "wnli": 2,
 }
 
-
 logging.basicConfig(level=logging.INFO)
-
 
 def convert_xlnet_checkpoint_to_pytorch(
     tf_checkpoint_path, bert_config_file, pytorch_dump_folder_path, finetuning_task=None
@@ -81,6 +78,7 @@ def convert_xlnet_checkpoint_to_pytorch(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    
     # Required parameters
     parser.add_argument(
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
