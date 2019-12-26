@@ -18,12 +18,10 @@
 import json
 import logging
 import os
-from functools import lru_cache
-
 import regex as re
 
+from functools import lru_cache
 from .tokenization_utils import PreTrainedTokenizer
-
 
 logger = logging.getLogger(__name__)
 
