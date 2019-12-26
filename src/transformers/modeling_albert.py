@@ -17,17 +17,14 @@
 import logging
 import math
 import os
-
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss, MSELoss
 
+from torch.nn import CrossEntropyLoss, MSELoss
 from transformers.configuration_albert import AlbertConfig
 from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
 from transformers.modeling_utils import PreTrainedModel
-
 from .file_utils import add_start_docstrings
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +40,6 @@ ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "albert-xxlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-pytorch_model.bin",
 }
 
-
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     """ Load tf checkpoints in a pytorch model."""
     try:
@@ -58,6 +54,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
