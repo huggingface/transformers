@@ -26,7 +26,6 @@ from .configuration_ctrl import CTRLConfig
 from .file_utils import add_start_docstrings
 from .modeling_utils import Conv1D, PreTrainedModel
 
-
 logger = logging.getLogger(__name__)
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-ctrl/pytorch/seqlen256_v1.bin"}
