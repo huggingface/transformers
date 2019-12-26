@@ -22,7 +22,6 @@ import unicodedata
 
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 
-
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
