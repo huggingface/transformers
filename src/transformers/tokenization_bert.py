@@ -161,6 +161,9 @@ class BertTokenizer(PreTrainedTokenizer):
                 Whether to tokenize Chinese characters.
                 This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
+            **keep_accents**: (`optional`) boolean (default False)
+                Whether to keep accents in characters when lower casing the input.
+                This is specially important in languages like Spanish.
         """
         super(BertTokenizer, self).__init__(
             unk_token=unk_token,
@@ -310,8 +313,8 @@ class BasicTokenizer(object):
                 Whether to tokenize Chinese characters.
                 This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
-            **tokenize_chinese_chars**: (`optional`) boolean (default True)
-                Whether to keep accents in characters.
+            **keep_accents**: (`optional`) boolean (default False)
+                Whether to keep accents in characters when lower casing the input.
                 This is specially important in languages like Spanish.
         """
         if never_split is None:
