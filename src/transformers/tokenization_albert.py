@@ -18,10 +18,9 @@
 import logging
 import os
 import unicodedata
+
 from shutil import copyfile
-
 from .tokenization_utils import PreTrainedTokenizer
-
 
 logger = logging.getLogger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
