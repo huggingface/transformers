@@ -189,7 +189,7 @@ class BertTokenizer(PreTrainedTokenizer):
                 do_lower_case=do_lower_case,
                 never_split=never_split,
                 tokenize_chinese_chars=tokenize_chinese_chars,
-                keep_accents=keep_accents
+                keep_accents=keep_accents,
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 

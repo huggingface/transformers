@@ -90,7 +90,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.tokenize(" \tHoLa!cómo  \n ÉstáS yoU? mísTer SALDAÑA "),
-            ["hola", "!", "cómo", "éstás", "you", "?", "míster", "saldaña"]
+            ["hola", "!", "cómo", "éstás", "you", "?", "míster", "saldaña"],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["h\u00E9llo"])
 
