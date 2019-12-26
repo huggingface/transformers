@@ -18,11 +18,9 @@
 import json
 import logging
 import os
-
 import regex as re
 
 from .tokenization_utils import PreTrainedTokenizer
-
 
 logger = logging.getLogger(__name__)
 
