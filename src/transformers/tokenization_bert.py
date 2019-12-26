@@ -22,7 +22,7 @@ import unicodedata
 
 import tokenizers as tk
 
-from .tokenization_utils import FastPreTrainedTokenizer, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizerFast, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -529,7 +529,7 @@ def _is_punctuation(char):
     return False
 
 
-class BertTokenizerFast(FastPreTrainedTokenizer):
+class BertTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
