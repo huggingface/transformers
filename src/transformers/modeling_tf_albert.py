@@ -17,14 +17,12 @@
 
 
 import logging
-
 import tensorflow as tf
 
 from .configuration_albert import AlbertConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
-
 
 logger = logging.getLogger(__name__)
 
