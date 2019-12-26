@@ -17,16 +17,15 @@
 
 import argparse
 import logging
-
 import torch
 
 from transformers import T5Config, T5Model, load_tf_weights_in_t5
-
 
 logging.basicConfig(level=logging.INFO)
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
+    
     # Initialise PyTorch model
     config = T5Config.from_json_file(config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
@@ -42,6 +41,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    
     # Required parameters
     parser.add_argument(
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
