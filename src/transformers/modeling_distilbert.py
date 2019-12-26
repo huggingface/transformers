@@ -21,16 +21,14 @@
 import copy
 import logging
 import math
-
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
+from torch.nn import CrossEntropyLoss
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel, prune_linear_layer
-
 
 logger = logging.getLogger(__name__)
 
