@@ -18,13 +18,12 @@
 import argparse
 import logging
 import pathlib
-
 import fairseq
 import torch
+
 from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
-
 from transformers.modeling_bert import (
     BertConfig,
     BertIntermediate,
@@ -70,17 +69,21 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
     model = RobertaForSequenceClassification(config) if classification_head else RobertaForMaskedLM(config)
     model.eval()
 
-    # Now let's copy all the weights.
+    # Now let's copy all the weights
     # Embeddings
+    
     model.roberta.embeddings.word_embeddings.weight = roberta_sent_encoder.embed_tokens.weight
     model.roberta.embeddings.position_embeddings.weight = roberta_sent_encoder.embed_positions.weight
     model.roberta.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.roberta.embeddings.token_type_embeddings.weight
-    )  # just zero them out b/c RoBERTa doesn't use them.
+    )  
+    # just zero them out b/c RoBERTa doesn't use them
+    
     model.roberta.embeddings.LayerNorm.weight = roberta_sent_encoder.emb_layer_norm.weight
     model.roberta.embeddings.LayerNorm.bias = roberta_sent_encoder.emb_layer_norm.bias
 
     for i in range(config.num_hidden_layers):
+        
         # Encoder: start of layer
         layer: BertLayer = model.roberta.encoder.layer[i]
         roberta_layer: TransformerSentenceEncoderLayer = roberta_sent_encoder.layers[i]
@@ -130,6 +133,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
         model.classifier.out_proj.weight = roberta.model.classification_heads["mnli"].out_proj.weight
         model.classifier.out_proj.bias = roberta.model.classification_heads["mnli"].out_proj.bias
     else:
+       
         # LM Head
         model.lm_head.dense.weight = roberta.model.decoder.lm_head.dense.weight
         model.lm_head.dense.bias = roberta.model.decoder.lm_head.dense.bias
@@ -161,6 +165,7 @@ def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    
     # Required parameters
     parser.add_argument(
         "--roberta_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
