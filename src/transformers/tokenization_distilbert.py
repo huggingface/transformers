@@ -19,7 +19,6 @@ import logging
 
 from .tokenization_bert import BertTokenizer
 
-
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
