@@ -20,7 +20,6 @@ import logging
 
 from .configuration_utils import PretrainedConfig
 
-
 logger = logging.getLogger(__name__)
 
 XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
