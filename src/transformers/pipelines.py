@@ -20,13 +20,12 @@ import logging
 import os
 import pickle
 import sys
+import numpy as np
+
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import Dict, List, Optional, Tuple, Union
-
-import numpy as np
-
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_utils import PretrainedConfig
 from .data import SquadExample, squad_convert_examples_to_features
@@ -55,9 +54,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
     )
 
-
 logger = logging.getLogger(__name__)
-
 
 def get_framework(model=None):
     """ Select framework (TensorFlow/PyTorch) to use.
@@ -77,7 +74,6 @@ def get_framework(model=None):
         # framework = 'tf' if is_tf_available() else 'pt'
         framework = "pt" if is_torch_available() else "tf"
     return framework
-
 
 class ArgumentHandler(ABC):
     """
