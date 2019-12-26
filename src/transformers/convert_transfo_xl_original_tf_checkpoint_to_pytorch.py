@@ -20,10 +20,9 @@ import logging
 import os
 import pickle
 import sys
-
 import torch
-
 import transformers.tokenization_transfo_xl as data_utils
+
 from transformers import (
     CONFIG_NAME,
     WEIGHTS_NAME,
@@ -32,7 +31,6 @@ from transformers import (
     load_tf_weights_in_transfo_xl,
 )
 from transformers.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,9 +46,11 @@ def convert_transfo_xl_checkpoint_to_pytorch(
     tf_checkpoint_path, transfo_xl_config_file, pytorch_dump_folder_path, transfo_xl_dataset_file
 ):
     if transfo_xl_dataset_file:
+        
         # Convert a pre-processed corpus (see original TensorFlow repo)
         with open(transfo_xl_dataset_file, "rb") as fp:
             corpus = pickle.load(fp, encoding="latin1")
+            
         # Save vocabulary and dataset cache as Dictionaries (should be better than pickles for the long-term)
         pytorch_vocab_dump_path = pytorch_dump_folder_path + "/" + VOCAB_FILES_NAMES["pretrained_vocab_file"]
         print("Save vocabulary to {}".format(pytorch_vocab_dump_path))
@@ -64,11 +64,13 @@ def convert_transfo_xl_checkpoint_to_pytorch(
         torch.save(corpus_dict_no_vocab, pytorch_dataset_dump_path)
 
     if tf_checkpoint_path:
+        
         # Convert a pre-trained TensorFlow model
         config_path = os.path.abspath(transfo_xl_config_file)
         tf_path = os.path.abspath(tf_checkpoint_path)
 
         print("Converting Transformer XL checkpoint from {} with config at {}".format(tf_path, config_path))
+        
         # Initialise PyTorch model
         if transfo_xl_config_file == "":
             config = TransfoXLConfig()
@@ -78,6 +80,7 @@ def convert_transfo_xl_checkpoint_to_pytorch(
         model = TransfoXLLMHeadModel(config)
 
         model = load_tf_weights_in_transfo_xl(model, config, tf_path)
+        
         # Save pytorch-model
         pytorch_weights_dump_path = os.path.join(pytorch_dump_folder_path, WEIGHTS_NAME)
         pytorch_config_dump_path = os.path.join(pytorch_dump_folder_path, CONFIG_NAME)
