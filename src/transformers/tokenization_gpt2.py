@@ -23,7 +23,7 @@ from functools import lru_cache
 import regex as re
 import tokenizers as tk
 
-from .tokenization_utils import PreTrainedTokenizerFast, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -277,9 +277,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
         self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())
         if max_length:
-            self._tokenizer.with_truncation(max_length,
-                                            stride=stride,
-                                            strategy=truncation_strategy)
+            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
         self._tokenizer.with_padding(
             max_length=max_length if pad_to_max_length else None,
             direction=self.padding_side,

@@ -22,7 +22,7 @@ import unicodedata
 
 import tokenizers as tk
 
-from .tokenization_utils import PreTrainedTokenizerFast, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -583,9 +583,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
                 )
             )
         if max_length is not None:
-            self._tokenizer.with_truncation(max_length,
-                                            stride=stride,
-                                            strategy=truncation_strategy)
+            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
         self._tokenizer.with_padding(
             max_length=max_length if pad_to_max_length else None,
             direction=self.padding_side,
