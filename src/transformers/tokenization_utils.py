@@ -1430,10 +1430,10 @@ class FastPreTrainedTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self.tokenizer.get_vocab_size(False)
+        return self.tokenizer.get_vocab_size(with_added_tokens=False)
 
     def __len__(self):
-        return self.tokenizer.get_vocab_size(True)
+        return self.tokenizer.get_vocab_size(with_added_tokens=True)
 
     def _update_special_tokens(self):
         self.tokenizer.add_special_tokens(self.all_special_tokens)
