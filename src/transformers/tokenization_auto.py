@@ -32,9 +32,7 @@ from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 
-
 logger = logging.getLogger(__name__)
-
 
 class AutoTokenizer(object):
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
