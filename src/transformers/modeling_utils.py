@@ -18,12 +18,11 @@
 
 import logging
 import os
-
 import torch
+
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
-
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     DUMMY_INPUTS,
@@ -34,7 +33,6 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
-
 
 logger = logging.getLogger(__name__)
 
