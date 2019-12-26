@@ -17,7 +17,6 @@
 
 
 import logging
-
 import numpy as np
 import tensorflow as tf
 
@@ -31,7 +30,6 @@ from .modeling_tf_utils import (
     get_initializer,
     shape_list,
 )
-
 
 logger = logging.getLogger(__name__)
 
