@@ -23,7 +23,7 @@ from functools import lru_cache
 import regex as re
 import tokenizers as tk
 
-from .tokenization_utils import FastPreTrainedTokenizer, PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizerFast, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -249,7 +249,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return vocab_file, merge_file
 
 
-class GPT2TokenizerFast(FastPreTrainedTokenizer):
+class GPT2TokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

@@ -1412,9 +1412,9 @@ class PreTrainedTokenizer(object):
         return out_string
 
 
-class FastPreTrainedTokenizer(PreTrainedTokenizer):
+class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def __init__(self, **kwargs):
-        super(FastPreTrainedTokenizer, self).__init__(**kwargs)
+        super(PreTrainedTokenizerFast, self).__init__(**kwargs)
 
     @property
     def tokenizer(self):
