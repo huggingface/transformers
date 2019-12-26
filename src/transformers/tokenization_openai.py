@@ -23,7 +23,6 @@ import re
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 
-
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
