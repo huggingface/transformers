@@ -28,7 +28,6 @@ from .modeling_roberta import (
     RobertaModel,
 )
 
-
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
