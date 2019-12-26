@@ -19,14 +19,12 @@
 import itertools
 import logging
 import math
-
 import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, get_initializer, shape_list
-
 
 logger = logging.getLogger(__name__)
 
