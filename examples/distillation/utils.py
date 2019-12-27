@@ -117,9 +117,7 @@ def init_gpu_params(params):
     # initialize multi-GPU
     if params.multi_gpu:
         logger.info("Initializing PyTorch distributed")
-        torch.distributed.init_process_group(
-            init_method="env://", backend="nccl",
-        )
+        torch.distributed.init_process_group(init_method="env://", backend="nccl")
 
 
 def set_seed(args):

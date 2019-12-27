@@ -86,7 +86,7 @@ def glue_convert_examples_to_features(
             example = processor.get_example_from_tensor_dict(example)
             example = processor.tfds_map(example)
 
-        inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length,)
+        inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length)
         input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real

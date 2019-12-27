@@ -176,9 +176,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             inputs = [input_ids, input_mask]
             outputs = model(inputs)
             sequence_output = outputs[0]
-            result = {
-                "sequence_output": sequence_output.numpy(),
-            }
+            result = {"sequence_output": sequence_output.numpy()}
             self.parent.assertListEqual(
                 list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -201,9 +199,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
             logits = outputs[0]
 
-            result = {
-                "logits": logits.numpy(),
-            }
+            result = {"logits": logits.numpy()}
 
             self.parent.assertListEqual(
                 list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size]
@@ -226,10 +222,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
             start_logits, end_logits = model(inputs)
 
-            result = {
-                "start_logits": start_logits.numpy(),
-                "end_logits": end_logits.numpy(),
-            }
+            result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()}
 
             self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
@@ -251,9 +244,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
             (logits,) = model(inputs)
 
-            result = {
-                "logits": logits.numpy(),
-            }
+            result = {"logits": logits.numpy()}
 
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
 

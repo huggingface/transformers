@@ -26,19 +26,14 @@ from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
-}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-vocab.json"},
     "merges_file": {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-merges.txt"},
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai-gpt": 512,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"openai-gpt": 512}
 
 
 def get_pairs(word):

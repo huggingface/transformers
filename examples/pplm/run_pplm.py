@@ -718,7 +718,7 @@ if __name__ == "__main__":
     parser.add_argument("--cond_text", type=str, default="The lake", help="Prefix texts to condition on")
     parser.add_argument("--uncond", action="store_true", help="Generate from end-of-text as prefix")
     parser.add_argument(
-        "--num_samples", type=int, default=1, help="Number of samples to generate from the modified latents",
+        "--num_samples", type=int, default=1, help="Number of samples to generate from the modified latents"
     )
     parser.add_argument(
         "--bag_of_words",
@@ -741,9 +741,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--discrim_meta", type=str, default=None, help="Meta information for the generic discriminator"
     )
-    parser.add_argument(
-        "--class_label", type=int, default=-1, help="Class label used for the discriminator",
-    )
+    parser.add_argument("--class_label", type=int, default=-1, help="Class label used for the discriminator")
     parser.add_argument("--length", type=int, default=100)
     parser.add_argument("--stepsize", type=float, default=0.02)
     parser.add_argument("--temperature", type=float, default=1.0)
@@ -757,9 +755,7 @@ if __name__ == "__main__":
         default=0,
         help="Length of past which is being optimized; " "0 corresponds to infinite window length",
     )
-    parser.add_argument(
-        "--horizon_length", type=int, default=1, help="Length of future to optimize over",
-    )
+    parser.add_argument("--horizon_length", type=int, default=1, help="Length of future to optimize over")
     parser.add_argument("--decay", action="store_true", help="whether to decay or not")
     parser.add_argument("--gamma", type=float, default=1.5)
     parser.add_argument("--gm_scale", type=float, default=0.9)

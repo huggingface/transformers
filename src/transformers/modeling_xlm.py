@@ -896,10 +896,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        outputs = (
-            start_logits,
-            end_logits,
-        )
+        outputs = (start_logits, end_logits)
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:

@@ -185,9 +185,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             outputs = model(input_ids, langs=token_type_ids)
             outputs = model(input_ids)
             sequence_output = outputs[0]
-            result = {
-                "sequence_output": sequence_output,
-            }
+            result = {"sequence_output": sequence_output}
             self.parent.assertListEqual(
                 list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -209,10 +207,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
 
             loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
 
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
+            result = {"loss": loss, "logits": logits}
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
@@ -239,11 +234,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
             loss, start_logits, end_logits = outputs
 
-            result = {
-                "loss": loss,
-                "start_logits": start_logits,
-                "end_logits": end_logits,
-            }
+            result = {"loss": loss, "start_logits": start_logits, "end_logits": end_logits}
             self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
@@ -333,10 +324,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             (logits,) = model(input_ids)
             loss, logits = model(input_ids, labels=sequence_labels)
 
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
+            result = {"loss": loss, "logits": logits}
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(

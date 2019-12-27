@@ -20,6 +20,7 @@
 import logging
 
 import numpy as np
+
 import tensorflow as tf
 
 from .configuration_xlnet import XLNetConfig
@@ -1074,7 +1075,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + transformer_outputs[
+        outputs = (start_logits, end_logits) + transformer_outputs[
             1:
         ]  # Keep mems, hidden states, attentions if there are in it
 

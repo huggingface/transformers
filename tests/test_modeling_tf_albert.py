@@ -141,10 +141,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
 
             sequence_output, pooled_output = model(input_ids)
 
-            result = {
-                "sequence_output": sequence_output.numpy(),
-                "pooled_output": pooled_output.numpy(),
-            }
+            result = {"sequence_output": sequence_output.numpy(), "pooled_output": pooled_output.numpy()}
             self.parent.assertListEqual(
                 list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -156,9 +153,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFAlbertForMaskedLM(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             (prediction_scores,) = model(inputs)
-            result = {
-                "prediction_scores": prediction_scores.numpy(),
-            }
+            result = {"prediction_scores": prediction_scores.numpy()}
             self.parent.assertListEqual(
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )
@@ -170,9 +165,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFAlbertForSequenceClassification(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             (logits,) = model(inputs)
-            result = {
-                "logits": logits.numpy(),
-            }
+            result = {"logits": logits.numpy()}
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
         def prepare_config_and_inputs_for_common(self):

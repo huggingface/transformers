@@ -19,6 +19,7 @@
 import logging
 
 import numpy as np
+
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
@@ -568,7 +569,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
+        outputs = (sequence_output, pooled_output) + encoder_outputs[
             1:
         ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
@@ -766,7 +767,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
         seq_relationship_score = self.nsp(pooled_output)
 
-        outputs = (prediction_scores, seq_relationship_score,) + outputs[
+        outputs = (prediction_scores, seq_relationship_score) + outputs[
             2:
         ]  # add hidden states and attention if they are here
 
@@ -1139,6 +1140,6 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + outputs[2:]
+        outputs = (start_logits, end_logits) + outputs[2:]
 
         return outputs  # start_logits, end_logits, (hidden_states), (attentions)

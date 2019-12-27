@@ -698,7 +698,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         pooled_output = self.pooler(sequence_output[:, 0])
 
         # add hidden_states and attentions if they are here
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[1:]
+        outputs = (sequence_output, pooled_output) + encoder_outputs[1:]
         # sequence_output, pooled_output, (hidden_states), (attentions)
         return outputs
 

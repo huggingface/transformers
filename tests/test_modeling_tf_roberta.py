@@ -138,9 +138,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 
             sequence_output = model(input_ids)[0]
 
-            result = {
-                "sequence_output": sequence_output.numpy(),
-            }
+            result = {"sequence_output": sequence_output.numpy()}
             self.parent.assertListEqual(
                 list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -150,9 +148,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
         ):
             model = TFRobertaForMaskedLM(config=config)
             prediction_scores = model([input_ids, input_mask, token_type_ids])[0]
-            result = {
-                "prediction_scores": prediction_scores.numpy(),
-            }
+            result = {"prediction_scores": prediction_scores.numpy()}
             self.parent.assertListEqual(
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )
@@ -164,9 +160,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFRobertaForTokenClassification(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
             (logits,) = model(inputs)
-            result = {
-                "logits": logits.numpy(),
-            }
+            result = {"logits": logits.numpy()}
             self.parent.assertListEqual(
                 list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels]
             )

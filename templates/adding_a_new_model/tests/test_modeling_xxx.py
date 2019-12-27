@@ -141,10 +141,7 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids)
 
-            result = {
-                "sequence_output": sequence_output,
-                "pooled_output": pooled_output,
-            }
+            result = {"sequence_output": sequence_output, "pooled_output": pooled_output}
             self.parent.assertListEqual(
                 list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -159,10 +156,7 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
             loss, prediction_scores = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
             )
-            result = {
-                "loss": loss,
-                "prediction_scores": prediction_scores,
-            }
+            result = {"loss": loss, "prediction_scores": prediction_scores}
             self.parent.assertListEqual(
                 list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
@@ -181,11 +175,7 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
                 start_positions=sequence_labels,
                 end_positions=sequence_labels,
             )
-            result = {
-                "loss": loss,
-                "start_logits": start_logits,
-                "end_logits": end_logits,
-            }
+            result = {"loss": loss, "start_logits": start_logits, "end_logits": end_logits}
             self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
@@ -200,10 +190,7 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
             )
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
+            result = {"loss": loss, "logits": logits}
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
@@ -217,10 +204,7 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
+            result = {"loss": loss, "logits": logits}
             self.parent.assertListEqual(
                 list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels]
             )

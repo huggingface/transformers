@@ -34,7 +34,7 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-pytorch_model.bin",
+    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-pytorch_model.bin"
 }
 
 
@@ -921,7 +921,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
                 softmax_output = softmax_output.view(bsz, tgt_len)
                 outputs = [softmax_output, None] + outputs
 
-        return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
+        return (
+            outputs
+        )  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
 
     def get_output_embeddings(self):
         """ Double-check if you are using adaptive softmax.

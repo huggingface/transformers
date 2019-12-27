@@ -20,6 +20,7 @@ import logging
 import math
 
 import numpy as np
+
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
@@ -822,5 +823,5 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + distilbert_output[1:]
+        outputs = (start_logits, end_logits) + distilbert_output[1:]
         return outputs  # start_logits, end_logits, (hidden_states), (attentions)

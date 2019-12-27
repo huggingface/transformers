@@ -21,6 +21,7 @@ import os
 from functools import lru_cache
 
 import regex as re
+
 import tokenizers as tk
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
@@ -28,10 +29,7 @@ from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
-}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {

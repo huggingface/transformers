@@ -109,10 +109,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 input_ids, decoder_attention_mask=input_mask, encoder_input_ids=input_ids
             )
 
-            result = {
-                "encoder_output": encoder_output.numpy(),
-                "decoder_output": decoder_output.numpy(),
-            }
+            result = {"encoder_output": encoder_output.numpy(), "decoder_output": decoder_output.numpy()}
             self.parent.assertListEqual(
                 list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -128,9 +125,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask": input_mask,
             }
             prediction_scores, decoder_output = model(inputs)
-            result = {
-                "prediction_scores": prediction_scores.numpy(),
-            }
+            result = {"prediction_scores": prediction_scores.numpy()}
             self.parent.assertListEqual(
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )

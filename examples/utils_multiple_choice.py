@@ -320,7 +320,7 @@ def convert_examples_to_features(
             else:
                 text_b = example.question + " " + ending
 
-            inputs = tokenizer.encode_plus(text_a, text_b, add_special_tokens=True, max_length=max_length,)
+            inputs = tokenizer.encode_plus(text_a, text_b, add_special_tokens=True, max_length=max_length)
             if "num_truncated_tokens" in inputs and inputs["num_truncated_tokens"] > 0:
                 logger.info(
                     "Attention! you are cropping tokens (swag task is ok). "
@@ -362,7 +362,7 @@ def convert_examples_to_features(
                 logger.info("token_type_ids: {}".format(" ".join(map(str, token_type_ids))))
                 logger.info("label: {}".format(label))
 
-        features.append(InputFeatures(example_id=example.example_id, choices_features=choices_features, label=label,))
+        features.append(InputFeatures(example_id=example.example_id, choices_features=choices_features, label=label))
 
     return features
 

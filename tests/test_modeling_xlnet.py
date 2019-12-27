@@ -187,10 +187,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             _, _ = model(input_ids_1, token_type_ids=segment_ids)
             outputs, mems_1 = model(input_ids_1)
 
-            result = {
-                "mems_1": mems_1,
-                "outputs": outputs,
-            }
+            result = {"mems_1": mems_1, "outputs": outputs}
 
             config.mem_len = 0
             model = XLNetModel(config)
@@ -385,11 +382,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             logits, mems_1 = model(input_ids_1)
             loss, logits, mems_1 = model(input_ids_1, labels=token_labels)
 
-            result = {
-                "loss": loss,
-                "mems_1": mems_1,
-                "logits": logits,
-            }
+            result = {"loss": loss, "mems_1": mems_1, "logits": logits}
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
@@ -422,11 +415,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             logits, mems_1 = model(input_ids_1)
             loss, logits, mems_1 = model(input_ids_1, labels=sequence_labels)
 
-            result = {
-                "loss": loss,
-                "mems_1": mems_1,
-                "logits": logits,
-            }
+            result = {"loss": loss, "mems_1": mems_1, "logits": logits}
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(

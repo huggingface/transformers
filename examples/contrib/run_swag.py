@@ -51,9 +51,7 @@ logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in [BertConfig]), ())
 
-MODEL_CLASSES = {
-    "bert": (BertConfig, BertForMultipleChoice, BertTokenizer),
-}
+MODEL_CLASSES = {"bert": (BertConfig, BertForMultipleChoice, BertTokenizer)}
 
 
 class SwagExample(object):
@@ -63,12 +61,7 @@ class SwagExample(object):
         self.swag_id = swag_id
         self.context_sentence = context_sentence
         self.start_ending = start_ending
-        self.endings = [
-            ending_0,
-            ending_1,
-            ending_2,
-            ending_3,
-        ]
+        self.endings = [ending_0, ending_1, ending_2, ending_3]
         self.label = label
 
     def __str__(self):

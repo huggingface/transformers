@@ -72,14 +72,8 @@ class XnliProcessor(DataProcessor):
         return ["contradiction", "entailment", "neutral"]
 
 
-xnli_processors = {
-    "xnli": XnliProcessor,
-}
+xnli_processors = {"xnli": XnliProcessor}
 
-xnli_output_modes = {
-    "xnli": "classification",
-}
+xnli_output_modes = {"xnli": "classification"}
 
-xnli_tasks_num_labels = {
-    "xnli": 3,
-}
+xnli_tasks_num_labels = {"xnli": 3}

@@ -1495,9 +1495,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_overflowing_tokens=False,
         return_special_tokens_mask=False,
     ):
-        encoding_dict = {
-            "input_ids": encoding.ids,
-        }
+        encoding_dict = {"input_ids": encoding.ids}
         if return_token_type_ids:
             encoding_dict["token_type_ids"] = encoding.type_ids
         if return_attention_mask:

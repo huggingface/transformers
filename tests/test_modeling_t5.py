@@ -136,10 +136,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids
             )
 
-            result = {
-                "encoder_output": encoder_output,
-                "decoder_output": decoder_output,
-            }
+            result = {"encoder_output": encoder_output, "decoder_output": decoder_output}
             self.parent.assertListEqual(
                 list(result["encoder_output"].size()), [self.batch_size, self.encoder_seq_length, self.hidden_size]
             )
@@ -165,10 +162,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 decoder_lm_labels=decoder_lm_labels,
             )
             loss, prediction_scores = outputs[0], outputs[1]
-            result = {
-                "loss": loss,
-                "prediction_scores": prediction_scores,
-            }
+            result = {"loss": loss, "prediction_scores": prediction_scores}
             self.parent.assertListEqual(
                 list(result["prediction_scores"].size()), [self.batch_size, self.decoder_seq_length, self.vocab_size]
             )

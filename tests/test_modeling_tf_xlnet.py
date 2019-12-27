@@ -183,10 +183,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
             outputs, mems_1 = model(inputs)
 
-            result = {
-                "mems_1": [mem.numpy() for mem in mems_1],
-                "outputs": outputs.numpy(),
-            }
+            result = {"mems_1": [mem.numpy() for mem in mems_1], "outputs": outputs.numpy()}
 
             config.mem_len = 0
             model = TFXLNetModel(config)
@@ -302,10 +299,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
             logits, mems_1 = model(input_ids_1)
 
-            result = {
-                "mems_1": [mem.numpy() for mem in mems_1],
-                "logits": logits.numpy(),
-            }
+            result = {"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()}
 
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
             self.parent.assertListEqual(
@@ -335,10 +329,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 # 'token_type_ids': token_type_ids
             }
             logits, mems_1 = model(inputs)
-            result = {
-                "mems_1": [mem.numpy() for mem in mems_1],
-                "logits": logits.numpy(),
-            }
+            result = {"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()}
             self.parent.assertListEqual(
                 list(result["logits"].shape), [self.batch_size, self.seq_length, config.num_labels]
             )

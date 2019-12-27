@@ -42,15 +42,7 @@ class TokenizerTesterMixin:
 
     def test_tokenizers_common_properties(self):
         tokenizer = self.get_tokenizer()
-        attributes_list = [
-            "bos_token",
-            "eos_token",
-            "unk_token",
-            "sep_token",
-            "pad_token",
-            "cls_token",
-            "mask_token",
-        ]
+        attributes_list = ["bos_token", "eos_token", "unk_token", "sep_token", "pad_token", "cls_token", "mask_token"]
         for attr in attributes_list:
             self.assertTrue(hasattr(tokenizer, attr))
             self.assertTrue(hasattr(tokenizer, attr + "_id"))
@@ -280,7 +272,7 @@ class TokenizerTesterMixin:
         num_added_tokens = tokenizer.num_added_tokens()
         total_length = len(sequence) + num_added_tokens
         information = tokenizer.encode_plus(
-            seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride, return_overflowing_tokens=True,
+            seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride, return_overflowing_tokens=True
         )
 
         truncated_sequence = information["input_ids"]
@@ -303,7 +295,7 @@ class TokenizerTesterMixin:
 
         sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
         truncated_second_sequence = tokenizer.build_inputs_with_special_tokens(
-            tokenizer.encode(seq_0, add_special_tokens=False), tokenizer.encode(seq_1, add_special_tokens=False)[:-2],
+            tokenizer.encode(seq_0, add_special_tokens=False), tokenizer.encode(seq_1, add_special_tokens=False)[:-2]
         )
 
         information = tokenizer.encode_plus(

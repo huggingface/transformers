@@ -142,9 +142,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
             (sequence_output,) = model(inputs)
 
-            result = {
-                "sequence_output": sequence_output.numpy(),
-            }
+            result = {"sequence_output": sequence_output.numpy()}
             self.parent.assertListEqual(
                 list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
             )
@@ -155,9 +153,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFDistilBertForMaskedLM(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask}
             (prediction_scores,) = model(inputs)
-            result = {
-                "prediction_scores": prediction_scores.numpy(),
-            }
+            result = {"prediction_scores": prediction_scores.numpy()}
             self.parent.assertListEqual(
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )
@@ -168,10 +164,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFDistilBertForQuestionAnswering(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask}
             start_logits, end_logits = model(inputs)
-            result = {
-                "start_logits": start_logits.numpy(),
-                "end_logits": end_logits.numpy(),
-            }
+            result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()}
             self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
@@ -182,9 +175,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFDistilBertForSequenceClassification(config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask}
             (logits,) = model(inputs)
-            result = {
-                "logits": logits.numpy(),
-            }
+            result = {"logits": logits.numpy()}
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
         def prepare_config_and_inputs_for_common(self):

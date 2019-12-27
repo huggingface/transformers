@@ -48,10 +48,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 ####################################################
 # Mapping from model shortcut names to max length of inputs
 ####################################################
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xxx-base-uncased": 512,
-    "xxx-large-uncased": 512,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"xxx-base-uncased": 512, "xxx-large-uncased": 512}
 
 ####################################################
 # Mapping from model shortcut names to a dictionary of additional

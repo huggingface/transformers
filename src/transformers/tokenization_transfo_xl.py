@@ -40,16 +40,14 @@ VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "pretrained_vocab_file": {
-        "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.bin",
+        "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.bin"
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "transfo-xl-wt103": None,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"transfo-xl-wt103": None}
 
 PRETRAINED_CORPUS_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-corpus.bin",
+    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-corpus.bin"
 }
 CORPUS_NAME = "corpus.bin"
 

@@ -32,13 +32,11 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model",
+        "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model"
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": None,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"camembert-base": None}
 
 
 class CamembertTokenizer(PreTrainedTokenizer):

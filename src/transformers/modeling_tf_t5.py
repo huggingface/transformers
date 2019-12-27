@@ -352,7 +352,9 @@ class TFT5Block(tf.keras.layers.Layer):
             hidden_states = self.layer[2](hidden_states, training=training)
 
         outputs = (hidden_states,) + outputs  # add attentions if we output them
-        return outputs  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        return (
+            outputs
+        )  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
 ####################################################

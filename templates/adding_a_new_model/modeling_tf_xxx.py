@@ -527,6 +527,6 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + outputs[2:]
+        outputs = (start_logits, end_logits) + outputs[2:]
 
         return outputs  # start_logits, end_logits, (hidden_states), (attentions)

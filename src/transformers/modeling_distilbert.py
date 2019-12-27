@@ -707,7 +707,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         start_logits = start_logits.squeeze(-1)  # (bs, max_query_len)
         end_logits = end_logits.squeeze(-1)  # (bs, max_query_len)
 
-        outputs = (start_logits, end_logits,) + distilbert_output[1:]
+        outputs = (start_logits, end_logits) + distilbert_output[1:]
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:

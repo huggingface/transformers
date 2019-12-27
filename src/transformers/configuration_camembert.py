@@ -24,7 +24,7 @@ from .configuration_roberta import RobertaConfig
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-config.json",
+    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-config.json"
 }
 
 

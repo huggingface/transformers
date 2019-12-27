@@ -32,7 +32,7 @@ from .modeling_roberta import (
 logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
+    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin"
 }
 
 

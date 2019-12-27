@@ -34,10 +34,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlnet-base-cased": None,
-    "xlnet-large-cased": None,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"xlnet-base-cased": None, "xlnet-large-cased": None}
 
 SPIECE_UNDERLINE = "▁"
 
