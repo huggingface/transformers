@@ -325,7 +325,7 @@ class Model2Model(PreTrainedEncoderDecoder):
             encoder_pretrained_model_name_or_path=pretrained_model_name_or_path,
             decoder_pretrained_model_name_or_path=pretrained_model_name_or_path,
             *args,
-            **kwargs
+            **kwargs,
         )
 
         return model

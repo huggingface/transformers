@@ -355,7 +355,7 @@ class PreTrainedModel(nn.Module):
                 force_download=force_download,
                 resume_download=resume_download,
                 proxies=proxies,
-                **kwargs
+                **kwargs,
             )
         else:
             model_kwargs = kwargs
