@@ -367,10 +367,10 @@ class T5LayerSelfAttention(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, head_mask=None):
+    def forward(self, hidden_states, cache=None, attention_mask=None, position_bias=None, head_mask=None):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
-            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask
+            norm_x, cache=cache, mask=attention_mask, position_bias=position_bias, head_mask=head_mask
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y)
@@ -411,6 +411,7 @@ class T5Block(nn.Module):
     def forward(
         self,
         hidden_states,
+        cache=None,
         attention_mask=None,
         position_bias=None,
         encoder_hidden_states=None,
@@ -419,7 +420,7 @@ class T5Block(nn.Module):
         head_mask=None,
     ):
         self_attention_outputs = self.layer[0](
-            hidden_states, attention_mask=attention_mask, position_bias=position_bias, head_mask=head_mask
+            hidden_states, cache=cache, attention_mask=attention_mask, position_bias=position_bias, head_mask=head_mask
         )
         hidden_states = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
@@ -516,6 +517,7 @@ class T5Stack(T5PreTrainedModel):
     def forward(
         self,
         hidden_states,
+        cache=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -608,6 +610,7 @@ class T5Stack(T5PreTrainedModel):
 
             layer_outputs = layer_module(
                 hidden_states,
+                cache=cache,
                 attention_mask=extended_attention_mask,
                 position_bias=position_bias,
                 encoder_hidden_states=encoder_hidden_states,
@@ -854,7 +857,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, **kwargs):
+    def forward(self, ignore_index=-1, **kwargs):
         # keyword arguments come in 3 flavors: encoder-specific (prefixed by
         # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
         # that apply to the model as whole.
@@ -905,10 +908,54 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss_fct = CrossEntropyLoss(ignore_index=ignore_index)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             decoder_outputs = (
                 loss,
             ) + decoder_outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         return decoder_outputs + encoder_outputs
+
+    def encode(self, input_ids, **kwargs):
+        hidden_states = self.shared(input_ids)  # Convert inputs in embeddings
+        encoder_outputs = self.encoder(hidden_states, **kwargs)
+        encoder_hidden_states = encoder_outputs[0]
+        return encoder_hidden_states
+
+    def init_state_from_encoder(self, encoder_hidden_states, **kwargs):
+        cache = {'slen': 0, 'encoder_hidden_states': encoder_hidden_states}
+        cache.update(kwargs)
+        return cache
+
+    def decode_step(self, cache, **kwargs):
+        """
+        Decode one step based on current input, previous decoder states and encoder states.
+
+        Examples:
+            encoder_hidden_states = model.encode(input_ids)
+            cache = model.init_state_from_encoder(encoder_hidden_states)
+            next_token = input_ids.new_full((batch_size, 1), tokenizer.bos_token_id)
+            generated = [next_token]
+            for i in range(100):
+                output, cache = model.decode_step(cache, input_ids=next_token)
+                next_token = torch.argmax(logits, dim=-1).unsqueeze(-1)
+                generated += [next_token]
+            generated = torch.cat(generated, dim=1).tolist()
+        """
+        hidden_states = kwargs.pop("inputs_embeds", None)
+        if hidden_states is None:
+            decoder_inputs_ids = kwargs.pop("input_ids")
+            hidden_states = self.shared(decoder_inputs_ids)
+        kwargs["encoder_hidden_states"] = cache.get("encoder_hidden_states")
+        kwargs["encoder_attention_mask"] = cache.get("encoder_attention_mask", None)
+        decoder_outputs = self.decoder(hidden_states, cache=cache, **kwargs)
+        cache['slen'] += 1
+
+        sequence_output = decoder_outputs[0]
+        # Rescale output before projecting on vocab
+        # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+        sequence_output = sequence_output * (self.model_dim ** -0.5)
+        lm_logits = self.lm_head(sequence_output)
+        decoder_outputs = (lm_logits, cache) + decoder_outputs[1:]  # Add hidden states and attention if they are here
+
+        return decoder_outputs

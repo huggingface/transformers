@@ -78,6 +78,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
+        bos_token="<s>",
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
@@ -92,6 +93,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids)])
 
         super(T5Tokenizer, self).__init__(
+            bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
@@ -166,6 +168,18 @@ class T5Tokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        """
+        Build model inputs from a sequence or a pair of sequence for seq-to-seq tasks
+        by concatenating and adding special tokens.
+        A encoder-decoder sequence has the following format:
+            single sequence: <s> X </s>
+            pair of sequences: <s> A </s></s> B </s>
+        """
+        if token_ids_1 is None:
+            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+        return [self.bos_token_id] + token_ids_0 + [self.eos_token_id] + [self.bos_token_id] + token_ids_1 + [self.eos_token_id]
 
     def save_vocabulary(self, save_directory):
         """ Save the sentencepiece vocabulary (copy original file) and special tokens file
