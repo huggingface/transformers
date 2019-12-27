@@ -22,10 +22,14 @@ from functools import lru_cache
 
 import regex as re
 
-import tokenizers as tk
-
+from .file_utils import is_fast_tokenizers_available
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
+
+if is_fast_tokenizers_available():
+    import tokenizers as tk
+else:
+    tk = None
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +274,15 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs
         )
 
-        self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
+        if is_fast_tokenizers_available():
+            self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
+        else:
+            logger.error(
+                "Using fast Tokenizers requires the `tokenizers` library. "
+                "Please install it with `pip install tokenizers`."
+            )
+            raise ImportError()
+
         self._update_special_tokens()
         self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
         self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())

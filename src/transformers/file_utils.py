@@ -56,6 +56,20 @@ except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
 try:
+    os.environ.setdefault("USE_FAST_TOKENIZERS", "YES")
+    if os.environ["USE_FAST_TOKENIZERS"].upper() in ("1", "ON", "YES"):
+        import tokenizers
+
+        _fast_tokenizers_available = True  # pylint: disable=invalid-name
+        logger.info("Fast Tokenizers version {} available.".format(tokenizers.__version__))
+    else:
+        logger.info("USE_FAST_TOKENIZERS override through env variable, disabling fast Tokenizers")
+        _fast_tokenizers_available = False
+except ImportError:
+    _fast_tokenizers_available = False  # pylint: disable=invalid-name
+
+
+try:
     from torch.hub import _get_torch_home
 
     torch_cache_home = _get_torch_home()
@@ -95,6 +109,10 @@ CLOUDFRONT_DISTRIB_PREFIX = "https://d2ws9o8vfrpkyk.cloudfront.net"
 
 def is_torch_available():
     return _torch_available
+
+
+def is_fast_tokenizers_available():
+    return _fast_tokenizers_available
 
 
 def is_tf_available():

@@ -68,6 +68,7 @@ from .file_utils import (
     add_end_docstrings,
     add_start_docstrings,
     cached_path,
+    is_fast_tokenizers_available,
     is_tf_available,
     is_torch_available,
 )

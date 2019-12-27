@@ -20,10 +20,14 @@ import logging
 import os
 import unicodedata
 
-import tokenizers as tk
-
+from .file_utils import is_fast_tokenizers_available
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
+
+if is_fast_tokenizers_available():
+    import tokenizers as tk
+else:
+    tk = None
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +567,15 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             **kwargs
         )
 
-        self._tokenizer = tk.Tokenizer(tk.models.WordPiece.from_files(vocab_file, unk_token=unk_token))
+        if is_fast_tokenizers_available():
+            self._tokenizer = tk.Tokenizer(tk.models.WordPiece.from_files(vocab_file, unk_token=unk_token))
+        else:
+            logger.error(
+                "Using fast Tokenizers requires the `tokenizers` library. "
+                "Please install it with `pip install tokenizers`."
+            )
+            raise ImportError()
+
         self._update_special_tokens()
         self._tokenizer.with_pre_tokenizer(
             tk.pre_tokenizers.BertPreTokenizer.new(
