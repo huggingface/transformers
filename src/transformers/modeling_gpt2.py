@@ -559,6 +559,15 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if "past" in kwargs and kwargs["past"]:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        inputs = {"input_ids": input_ids}
+        inputs.update(kwargs)
+        return inputs
+
     def forward(
         self,
         input_ids=None,

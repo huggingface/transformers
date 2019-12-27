@@ -1028,7 +1028,13 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         )
         target_mapping[0, 0, -1] = 1.0
 
-        return {"input_ids": input_ids, "perm_mask": perm_mask, "target_mapping": target_mapping}
+        inputs = {"input_ids": input_ids, "perm_mask": perm_mask, "target_mapping": target_mapping}
+
+        # if past is defined in model kwargs then use it for faster decoding
+        if "past" in model_kwargs and model_kwargs["past"]:
+            inputs["mems"] = model_kwargs["past"]
+
+        return inputs
 
     def forward(
         self,
