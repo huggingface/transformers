@@ -441,9 +441,7 @@ class T5Block(nn.Module):
             hidden_states = self.layer[2](hidden_states)
 
         outputs = (hidden_states,) + outputs  # add attentions if we output them
-        return (
-            outputs
-        )  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        return outputs  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
 class T5PreTrainedModel(PreTrainedModel):
