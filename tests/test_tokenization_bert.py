@@ -84,7 +84,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_special_tokens=False)
 
-        sequence = u"UNwant\u00E9d,running"
+        sequence = "UNwant\u00E9d,running"
 
         tokens = tokenizer.tokenize(sequence)
         rust_tokens = rust_tokenizer.tokenize(sequence)
