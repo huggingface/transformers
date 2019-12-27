@@ -643,7 +643,7 @@ class QuestionAnsweringPipeline(Pipeline):
             framework=framework,
             args_parser=QuestionAnsweringArgumentHandler(),
             device=device,
-            **kwargs
+            **kwargs,
         )
 
     @staticmethod
