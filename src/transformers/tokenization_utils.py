@@ -870,7 +870,7 @@ class PreTrainedTokenizer(object):
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
-            return_attention_mask: (optional) Set to False to avoir returning attention mask (default True)
+            return_attention_mask: (optional) Set to False to avoid returning attention mask (default True)
             return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
             return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
             **kwargs: passed to the `self.tokenize()` method
