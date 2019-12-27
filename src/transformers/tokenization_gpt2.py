@@ -21,8 +21,9 @@ import os
 from functools import lru_cache
 
 import regex as re
+import tokenizers as tk
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -246,3 +247,42 @@ class GPT2Tokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+
+class GPT2TokenizerFast(PreTrainedTokenizerFast):
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def __init__(
+        self,
+        vocab_file,
+        merges_file,
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        pad_to_max_length=False,
+        add_prefix_space=False,
+        max_length=None,
+        stride=0,
+        truncation_strategy="longest_first",
+        **kwargs
+    ):
+        super(GPT2TokenizerFast, self).__init__(
+            bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs
+        )
+
+        self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
+        self._update_special_tokens()
+        self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
+        self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())
+        if max_length:
+            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
+        self._tokenizer.with_padding(
+            max_length=max_length if pad_to_max_length else None,
+            direction=self.padding_side,
+            pad_id=self.pad_token_id if self.pad_token_id is not None else 0,
+            pad_type_id=self.pad_token_type_id,
+            pad_token=self.pad_token if self.pad_token is not None else "",
+        )
+        self._decoder = tk.decoders.ByteLevel.new()

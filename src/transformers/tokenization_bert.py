@@ -20,7 +20,9 @@ import logging
 import os
 import unicodedata
 
-from .tokenization_utils import PreTrainedTokenizer
+import tokenizers as tk
+
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -525,3 +527,68 @@ def _is_punctuation(char):
     if cat.startswith("P"):
         return True
     return False
+
+
+class BertTokenizerFast(PreTrainedTokenizerFast):
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def __init__(
+        self,
+        vocab_file,
+        do_lower_case=True,
+        do_basic_tokenize=True,
+        never_split=None,
+        unk_token="[UNK]",
+        sep_token="[SEP]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
+        tokenize_chinese_chars=True,
+        max_length=None,
+        pad_to_max_length=False,
+        stride=0,
+        truncation_strategy="longest_first",
+        add_special_tokens=True,
+        **kwargs
+    ):
+        super(BertTokenizerFast, self).__init__(
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            **kwargs
+        )
+
+        self._tokenizer = tk.Tokenizer(tk.models.WordPiece.from_files(vocab_file, unk_token=unk_token))
+        self._update_special_tokens()
+        self._tokenizer.with_pre_tokenizer(
+            tk.pre_tokenizers.BertPreTokenizer.new(
+                do_basic_tokenize=do_basic_tokenize,
+                do_lower_case=do_lower_case,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                never_split=never_split if never_split is not None else [],
+            )
+        )
+        self._tokenizer.with_decoder(tk.decoders.WordPiece.new())
+
+        if add_special_tokens:
+            self._tokenizer.with_post_processor(
+                tk.processors.BertProcessing.new(
+                    (sep_token, self._tokenizer.token_to_id(sep_token)),
+                    (cls_token, self._tokenizer.token_to_id(cls_token)),
+                )
+            )
+        if max_length is not None:
+            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
+        self._tokenizer.with_padding(
+            max_length=max_length if pad_to_max_length else None,
+            direction=self.padding_side,
+            pad_id=self.pad_token_id,
+            pad_type_id=self.pad_token_type_id,
+            pad_token=self.pad_token,
+        )
+        self._decoder = tk.decoders.WordPiece.new()
