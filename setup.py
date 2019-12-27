@@ -65,13 +65,12 @@ extras["torch"] = ["torch"]
 extras["fast"] = ["tokenizers == 0.0.10"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi"]
-extras["all"] = extras["serving"] + ["tensorflow", "torch"] + extras["fast"]
+extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
 extras["testing"] = ["pytest", "pytest-xdist"]
 extras["quality"] = ["black", "isort", "flake8"]
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
-extras["dev"] = extras["testing"] + extras["quality"] + extras["fast"] \
-    + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
