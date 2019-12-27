@@ -109,7 +109,7 @@ class ServeCommand(BaseTransformersCLICommand):
         if not _serve_dependancies_installed:
             raise RuntimeError(
                 "Using serve command requires FastAPI and unicorn. "
-                "Please install transformers with [serving]: pip install transformers[serving]."
+                "Please install transformers with [serving]: pip install \"transformers[serving]\"."
                 "Or install FastAPI and unicorn separately."
             )
         else:

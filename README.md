@@ -120,14 +120,14 @@ Depending on which framework is installed (TensorFlow 2.0 and/or PyTorch), the i
 Here's the easiest way to run tests for the library:
 
 ```bash
-pip install -e .[testing]
+pip install -e ".[testing]"
 make test
 ```
 
 and for the examples:
 
 ```bash
-pip install -e .[testing]
+pip install -e ".[testing]"
 pip install -r examples/requirements.txt
 make test-examples
 ```
