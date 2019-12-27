@@ -121,7 +121,7 @@ Follow these steps to start contributing:
 4. Set up a development environment by running the following command in a virtual environment:
 
    ```bash
-   $ pip install -e .[dev]
+   $ pip install -e ".[dev]"
    ```
 
    (If transformers was already installed in the virtual environment, remove
