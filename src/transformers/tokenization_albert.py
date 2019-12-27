@@ -87,7 +87,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
-            **kwargs
+            **kwargs,
         )
 
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens

@@ -817,7 +817,7 @@ class PreTrainedTokenizer(object):
             truncation_strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
             return_tensors=return_tensors,
-            **kwargs
+            **kwargs,
         )
 
         return encoded_inputs["input_ids"]

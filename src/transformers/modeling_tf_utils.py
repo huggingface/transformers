@@ -250,7 +250,7 @@ class TFPreTrainedModel(tf.keras.Model):
                 return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
-                **kwargs
+                **kwargs,
             )
         else:
             model_kwargs = kwargs

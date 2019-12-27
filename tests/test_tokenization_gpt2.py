@@ -96,7 +96,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_special_tokens=False, add_prefix_space=True)
 
-        sequence = u"lower newer"
+        sequence = "lower newer"
 
         # Testing tokenization
         tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
