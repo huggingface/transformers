@@ -12,14 +12,20 @@ from transformers.hf_api import HfApi, HfFolder
 class UserCommands(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
-        login_parser = parser.add_parser("login")
+        login_parser = parser.add_parser("login", help="Log in using the same credentials as on huggingface.co")
         login_parser.set_defaults(func=lambda args: LoginCommand(args))
-        whoami_parser = parser.add_parser("whoami")
+        whoami_parser = parser.add_parser("whoami", help="Find out which huggingface.co account you are logged in as.")
         whoami_parser.set_defaults(func=lambda args: WhoamiCommand(args))
-        logout_parser = parser.add_parser("logout")
+        logout_parser = parser.add_parser("logout", help="Log out")
         logout_parser.set_defaults(func=lambda args: LogoutCommand(args))
-        list_parser = parser.add_parser("ls")
-        list_parser.set_defaults(func=lambda args: ListObjsCommand(args))
+        # s3
+        s3_parser = parser.add_parser("s3", help="{ls, rm} Commands to interact with the files you upload on S3.")
+        s3_subparsers = s3_parser.add_subparsers(help="s3 related commands")
+        ls_parser = s3_subparsers.add_parser("ls")
+        ls_parser.set_defaults(func=lambda args: ListObjsCommand(args))
+        rm_parser = s3_subparsers.add_parser("rm")
+        rm_parser.add_argument("filename", type=str, help="individual object filename to delete from S3.")
+        rm_parser.set_defaults(func=lambda args: DeleteObjCommand(args))
         # upload
         upload_parser = parser.add_parser("upload")
         upload_parser.add_argument("path", type=str, help="Local path of the folder or individual file to upload.")
@@ -131,13 +137,27 @@ class ListObjsCommand(BaseUserCommand):
         print(self.tabulate(rows, headers=["Filename", "LastModified", "ETag", "Size"]))
 
 
+class DeleteObjCommand(BaseUserCommand):
+    def run(self):
+        token = HfFolder.get_token()
+        if token is None:
+            print("Not logged in")
+            exit(1)
+        try:
+            self._api.delete_obj(token, filename=self.args.filename)
+        except HTTPError as a:
+            print(e)
+            exit(1)
+        print("Done")
+
+
 class UploadCommand(BaseUserCommand):
     def walk_dir(self, rel_path):
         """
         Recursively list all files in a folder.
         """
         entries: List[os.DirEntry] = list(os.scandir(rel_path))
-        files = [(os.path.join(os.getcwd(), f.path), f.path) for f in entries if f.is_file()]  # filepath  # filename
+        files = [(os.path.join(os.getcwd(), f.path), f.path) for f in entries if f.is_file()]  # (filepath, filename)
         for f in entries:
             if f.is_dir():
                 files += self.walk_dir(f.path)
