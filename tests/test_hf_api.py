@@ -60,6 +60,11 @@ class HfApiEndpointsTest(HfApiCommonTest):
         """
         cls._token = cls._api.login(username=USER, password=PASS)
 
+    @classmethod
+    def tearDownClass(cls):
+        for FILE_KEY, FILE_PATH in FILES:
+            cls._api.delete_obj(token=cls._token, filename=FILE_KEY)
+
     def test_whoami(self):
         user = self._api.whoami(token=self._token)
         self.assertEqual(user, USER)
