@@ -34,7 +34,7 @@ model = AutoModel.from_pretrained("username/pretrained_model")
 
 Finally, list all your files on S3:
 ```shell
-transformers-cli ls
+transformers-cli s3 ls
 # List all your S3 objects.
 ```
 
