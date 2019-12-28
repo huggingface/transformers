@@ -9,6 +9,9 @@ from transformers.commands import BaseTransformersCLICommand
 from transformers.hf_api import HfApi, HfFolder
 
 
+UPLOAD_MAX_FILES = 15
+
+
 class UserCommands(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
@@ -179,6 +182,14 @@ class UploadCommand(BaseUserCommand):
             files = [(local_path, filename)]
         else:
             raise ValueError("Not a valid file or directory: {}".format(local_path))
+
+        if len(files) > UPLOAD_MAX_FILES:
+            print(
+                "About to upload {} files to S3. This is probably wrong. Please filter files before uploading.".format(
+                    ANSI.bold(len(files))
+                )
+            )
+            exit(1)
 
         for filepath, filename in files:
             print("About to upload file {} to S3 under filename {}".format(ANSI.bold(filepath), ANSI.bold(filename)))
