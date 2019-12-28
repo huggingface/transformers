@@ -103,6 +103,7 @@ class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
         super(Attention, self).__init__()
         self.output_attentions = config.output_attentions
+        self.output_past = config.output_past
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -159,10 +160,11 @@ class Attention(nn.Module):
         if head_mask is not None:
             w = w * head_mask
 
-        outputs = [torch.matmul(w, v)]
+        x = torch.matmul(w, v)
         if self.output_attentions:
-            outputs.append(w)
-        return outputs
+            return (x, w)
+        else:
+            return (x,)
 
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -187,7 +189,8 @@ class Attention(nn.Module):
             past_key, past_value = layer_past[0].transpose(-2, -1), layer_past[1]  # transpose back cf below
             key = torch.cat((past_key, key), dim=-1)
             value = torch.cat((past_value, value), dim=-2)
-        present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
+        if self.output_past:
+            present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
 
         attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
         a = attn_outputs[0]
@@ -196,8 +199,11 @@ class Attention(nn.Module):
         a = self.c_proj(a)
         a = self.resid_dropout(a)
 
-        outputs = [a, present] + attn_outputs[1:]
-        return outputs  # a, present, (attentions)
+        if self.output_past:
+            outputs = (a, present) + attn_outputs[1:]
+        else:
+            outputs = (a,) + attn_outputs[1:]
+        return outputs  # a, (present), (attentions)
 
 
 class MLP(nn.Module):
@@ -228,14 +234,14 @@ class Block(nn.Module):
         output_attn = self.attn(
             self.ln_1(x), layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask
         )
-        a = output_attn[0]  # output_attn: a, present, (attentions)
+        a = output_attn[0]  # output_attn: a, (present), (attentions)
 
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
 
-        outputs = [x] + output_attn[1:]
-        return outputs  # x, present, (attentions)
+        outputs = (x,) + output_attn[1:]
+        return outputs  # x, (present), (attentions)
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -465,7 +471,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_shape = input_shape + (hidden_states.size(-1),)
 
         presents = ()
-        all_attentions = []
+        all_attentions = ()
         all_hidden_states = ()
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
             if self.output_hidden_states:
@@ -475,12 +481,12 @@ class GPT2Model(GPT2PreTrainedModel):
                 hidden_states, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
             )
 
-            hidden_states, present = outputs[:2]
+            hidden_states = outputs[0]
             if self.output_past:
-                presents = presents + (present,)
+                presents = presents + (outputs[1],)
 
             if self.output_attentions:
-                all_attentions.append(outputs[2])
+                all_attentions = all_attentions + (outputs[2 if self.output_past else 1],)
 
         hidden_states = self.ln_f(hidden_states)
 
