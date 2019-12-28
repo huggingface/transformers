@@ -148,7 +148,7 @@ class DeleteObjCommand(BaseUserCommand):
             exit(1)
         try:
             self._api.delete_obj(token, filename=self.args.filename)
-        except HTTPError as a:
+        except HTTPError as e:
             print(e)
             exit(1)
         print("Done")
