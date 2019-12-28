@@ -84,7 +84,7 @@ class TextDataset(Dataset):
         assert os.path.isfile(file_path)
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
-            directory, args.model_name_or_path + "_cached_lm_" + str(block_size) + "_" + filename + '.bin'
+            directory, args.model_name_or_path + "_cached_lm_" + str(block_size) + "_" + filename + ".bin"
         )
 
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
@@ -628,7 +628,7 @@ def main():
 
     # Desactivate past output for now (reduce memory)
     # we use it only for GPT/GPT2 generation or specific XLNet/Transformer-XL trainings (not implemented currently)
-    if hasattr(config, 'output_past'):
+    if hasattr(config, "output_past"):
         config.output_past = False
 
     tokenizer = tokenizer_class.from_pretrained(
