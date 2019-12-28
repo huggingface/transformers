@@ -79,7 +79,7 @@ class HfApi:
         r = requests.post(path, headers={"authorization": "Bearer {}".format(token)})
         r.raise_for_status()
 
-    def presign(self, token: str, filename) -> PresignedUrl:
+    def presign(self, token: str, filename: str) -> PresignedUrl:
         """
         Call HF API to get a presigned url to upload `filename` to S3.
         """
@@ -89,7 +89,7 @@ class HfApi:
         d = r.json()
         return PresignedUrl(**d)
 
-    def presign_and_upload(self, token: str, filename, filepath) -> str:
+    def presign_and_upload(self, token: str, filename: str, filepath: str) -> str:
         """
         Get a presigned url, then upload file to S3.
 
@@ -111,7 +111,7 @@ class HfApi:
             pf.close()
         return urls.access
 
-    def list_objs(self, token) -> List[S3Obj]:
+    def list_objs(self, token: str) -> List[S3Obj]:
         """
         Call HF API to list all stored files for user.
         """
@@ -120,6 +120,14 @@ class HfApi:
         r.raise_for_status()
         d = r.json()
         return [S3Obj(**x) for x in d]
+
+    def delete_obj(self, token: str, filename: str):
+        """
+        Call HF API to delete a file stored by user
+        """
+        path = "{}/api/deleteObj".format(self.endpoint)
+        r = requests.delete(path, headers={"authorization": "Bearer {}".format(token)}, json={"filename": filename})
+        r.raise_for_status()
 
 
 class TqdmProgressFileReader:
