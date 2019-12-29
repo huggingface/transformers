@@ -81,7 +81,7 @@ def glue_convert_examples_to_features(
     features = []
     for (ex_index, example) in enumerate(examples):
         if ex_index % 10000 == 0:
-            logger.info("Writing example %d" % (ex_index))
+            logger.info("Writing example %d/%d" % (ex_index, len(examples)))
         if is_tf_dataset:
             example = processor.get_example_from_tensor_dict(example)
             example = processor.tfds_map(example)
