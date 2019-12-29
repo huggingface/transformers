@@ -98,7 +98,6 @@ def is_torch_available():
 
 
 def is_tf_available():
-
     return _tf_available
 
 
@@ -274,6 +273,10 @@ def s3_get(url, temp_file, proxies=None):
 
 def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
+    if is_torch_available():
+        ua += "; torch/{}".format(torch.__version__)
+    if is_tf_available():
+        ua += "; tensorflow/{}".format(tf.__version__)
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
     elif isinstance(user_agent, str):
