@@ -253,7 +253,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         features = []
         for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, self.examples)):
             if ex_index % 10000 == 0:
-                logger.info("Writing example %d/%d" % (ex_index, len(examples)))
+                logger.info("Writing example %d/%d" % (ex_index, len(self.examples)))
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
             attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
