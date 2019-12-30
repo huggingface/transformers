@@ -110,6 +110,7 @@ def save_summaries(summaries, path, original_document_name):
     """
     for summary, document_name in zip(summaries, original_document_name):
         # Prepare the summary file's name
+        document_name=os.path.basename(document_name)
         if "." in document_name:
             bare_document_name = ".".join(document_name.split(".")[:-1])
             extension = document_name.split(".")[-1]

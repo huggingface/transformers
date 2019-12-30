@@ -29,7 +29,7 @@ from torch.nn.init import xavier_uniform_
 
 from configuration_bertabs import BertAbsConfig
 from transformers import BertConfig, BertModel, PreTrainedModel
-
+from packaging.version import parse as parse_version
 
 MAX_SIZE = 5000
 
@@ -325,7 +325,10 @@ class TransformerDecoderLayer(nn.Module):
             * all_input `[batch_size x current_step x model_dim]`
 
         """
-        dec_mask = torch.gt(tgt_pad_mask + self.mask[:, : tgt_pad_mask.size(1), : tgt_pad_mask.size(1)], 0)
+        if parse_version(torch.__version__)<parse_version('1.2.0'):
+            dec_mask = torch.gt(tgt_pad_mask+ self.mask[:, : tgt_pad_mask.size(1), : tgt_pad_mask.size(1)], 0)
+        else:
+            dec_mask = torch.gt(tgt_pad_mask.int() + (self.mask[:, : tgt_pad_mask.size(1), : tgt_pad_mask.size(1)]).int(), 0)
         input_norm = self.layer_norm_1(inputs)
         all_input = input_norm
         if previous_input is not None:
