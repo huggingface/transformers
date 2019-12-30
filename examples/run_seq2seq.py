@@ -329,6 +329,11 @@ def main():
             args.output_dir, "amp.{0}.bin".format(recover_step)), map_location='cpu')
         amp.load_state_dict(amp_recover)
 
+        logger.info("***** Recover scheduler: %d *****", recover_step)
+        scheduler_recover = torch.load(os.path.join(
+            args.output_dir, "sched.{0}.bin".format(recover_step)), map_location='cpu')
+        scheduler.load_state_dict(scheduler_recover)
+
     logger.info("***** CUDA.empty_cache() *****")
     torch.cuda.empty_cache()
 
@@ -397,6 +402,9 @@ def main():
                     output_amp_file = os.path.join(
                         args.output_dir, "amp.{0}.bin".format(i_epoch))
                     torch.save(amp.state_dict(), output_amp_file)
+                output_sched_file = os.path.join(
+                    args.output_dir, "sched.{0}.bin".format(i_epoch))
+                torch.save(scheduler.state_dict(), output_sched_file)
 
                 logger.info("***** CUDA.empty_cache() *****")
                 torch.cuda.empty_cache()
