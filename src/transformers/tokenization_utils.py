@@ -934,6 +934,7 @@ class PreTrainedTokenizer(object):
         max_length=None,
         stride=0,
         truncation_strategy="longest_first",
+        pad_to_max_length=False,
         return_tensors=None,
         return_input_lengths=False,
         return_attention_masks=False,
@@ -959,6 +960,12 @@ class PreTrainedTokenizer(object):
                 - 'only_first': Only truncate the first sequence
                 - 'only_second': Only truncate the second sequence
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
+            pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
+                padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
+                The tokenizer padding sides are handled by the following strings:
+                - 'left': pads on the left of the sequences
+                - 'right': pads on the right of the sequences
+                Defaults to False: no padding. 
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             **kwargs: passed to the `self.tokenize()` method
@@ -977,6 +984,7 @@ class PreTrainedTokenizer(object):
                 max_length=max_length,
                 stride=stride,
                 truncation_strategy=truncation_strategy,
+                pad_to_max_length=pad_to_max_length,
                 return_tensors=None,
             )
 
