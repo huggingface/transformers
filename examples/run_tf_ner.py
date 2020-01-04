@@ -9,7 +9,10 @@ import re
 import numpy as np
 import tensorflow as tf
 from absl import app, flags, logging
-from fastprogress import master_bar, progress_bar
+try:
+    from fastprogress import master_bar, progress_bar
+except ImportError:
+    from fastprogress.fastprogress import master_bar, progress_bar
 from seqeval import metrics
 
 from transformers import (
