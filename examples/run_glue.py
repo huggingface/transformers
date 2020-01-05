@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
+""" Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa, Albert, XLM-RoBERTa)."""
 
 
 import argparse
@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 ALL_MODELS = sum(
     (
         tuple(conf.pretrained_config_archive_map.keys())
-        for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig, DistilBertConfig)
+        for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig, DistilBertConfig, AlbertConfig, XLMRobertaConfig)
     ),
     (),
 )
@@ -200,8 +200,8 @@ def train(args, train_dataset, model, tokenizer):
             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
             if args.model_type != "distilbert":
                 inputs["token_type_ids"] = (
-                    batch[2] if args.model_type in ["bert", "xlnet"] else None
-                )  # XLM, DistilBERT and RoBERTa don't use segment_ids
+                    batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
+                )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -316,8 +316,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                 inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
                 if args.model_type != "distilbert":
                     inputs["token_type_ids"] = (
-                        batch[2] if args.model_type in ["bert", "xlnet"] else None
-                    )  # XLM, DistilBERT and RoBERTa don't use segment_ids
+                        batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
+                    )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
