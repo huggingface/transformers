@@ -24,6 +24,8 @@ pip install -r ./examples/requirements.txt
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
 | [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
+| [Adversarial evaluation of model performances](#adversarial-evaluation-of-model-performances) | Testing a model with adversarial evaluation of natural language
+inference on the Heuristic Analysis for NLI Systems (HANS) dataset (McCoy et al., 2019.) |
 
 ## TensorFlow 2.0 Bert models on GLUE
 
@@ -758,4 +760,33 @@ python run_mmimdb.py \
     --patience 5
 ```
 
+## Adversarial evaluation of model performances (HANS dataset)
 
+Here is an example on evaluating a model using adversarial evaluation of natural language inference with the Heuristic Analysis for NLI Systems (HANS) dataset [McCoy et al., 2019](https://arxiv.org/abs/1902.01007). The example was gracefully provided by [Nafise Sadat Moosavi](https://github.com/ns-moosavi).
+
+The HANS dataset can be downloaded from [this location](https://github.com/tommccoy1/hans).
+
+```bash
+export HANS_DIR=/path/to/HANS
+
+python ./hans/test_hans.py \
+  --model_type bert \
+  --model_name_or_path bert-base-multilingual-cased \
+  --language de \
+  --train_language en \
+  --do_train \
+  --do_eval \
+  --data_dir $XNLI_DIR \
+  --per_gpu_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --num_train_epochs 2.0 \
+  --max_seq_length 128 \
+  --output_dir /tmp/debug_xnli/ \
+  --save_steps -1
+```
+
+Evaluating with the previously defined hyper-parameters yields the following results:
+
+```bash
+acc = 0.7093812375249501
+```
