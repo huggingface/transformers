@@ -145,8 +145,27 @@ def swish(x):
     return x * torch.sigmoid(x)
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
+@torch.jit.script
+def _mish_jit_fwd(x): return x.mul(torch.tanh(nn.functional.softplus(x)))
+
+@torch.jit.script
+def _mish_jit_bwd(x, grad_output):
+    x_sigmoid = torch.sigmoid(x)
+    x_tanh_sp = nn.functional.softplus(x).tanh()
+    return grad_output.mul(x_tanh_sp + x * x_sigmoid * (1 - x_tanh_sp * x_tanh_sp))
+
+class MishJitAutoFn(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return _mish_jit_fwd(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_variables[0]
+        return _mish_jit_bwd(x, grad_output)
+
+def mish(x): return MishJitAutoFn.apply(x)
 
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
