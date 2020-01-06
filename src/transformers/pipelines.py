@@ -714,8 +714,9 @@ class QuestionAnsweringPipeline(Pipeline):
                     start, end = self.model(**fw_args)
                     start, end = start.cpu().numpy(), end.cpu().numpy()
 
-        answers = []
+        all_answers = []     #Holds answers to multiple questions
         for (example, feature, start_, end_) in zip(examples, features, start, end):
+            answers = []     #Holds top-k answers
             # Normalize logits and spans to retrieve the answer
             start_ = np.exp(start_) / np.sum(np.exp(start_))
             end_ = np.exp(end_) / np.sum(np.exp(end_))
@@ -742,9 +743,11 @@ class QuestionAnsweringPipeline(Pipeline):
                 }
                 for s, e, score in zip(starts, ends, scores)
             ]
-        if len(answers) == 1:
-            return answers[0]
-        return answers
+            all_answers.append(answers)
+            
+        if len(all_answers)==1 and len(answers) == 1:
+            return all_answers[0][0]
+        return all_answers
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
         """
