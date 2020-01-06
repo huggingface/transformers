@@ -17,7 +17,6 @@
 import copy
 import csv
 import json
-import sys
 
 
 class InputExample(object):
@@ -118,7 +117,5 @@ class DataProcessor(object):
             reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
             lines = []
             for line in reader:
-                if sys.version_info[0] == 2:
-                    line = list(unicode(cell, "utf-8") for cell in line)
                 lines.append(line)
             return lines
