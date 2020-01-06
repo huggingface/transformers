@@ -19,7 +19,6 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob
-import json
 import logging
 import os
 import random
@@ -56,16 +55,12 @@ from transformers import (
     XLNetTokenizer,
     get_linear_schedule_with_warmup,
 )
-from transformers import glue_compute_metrics as compute_metrics
 
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except:
+except ImportError:
     from tensorboardX import SummaryWriter
-
-
-
 
 
 logger = logging.getLogger(__name__)
@@ -374,7 +369,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
 def main():
     parser = argparse.ArgumentParser()
 
-    ## Required parameters
+    # Required parameters
     parser.add_argument(
         "--data_dir",
         default=None,
@@ -411,7 +406,7 @@ def main():
         help="The output directory where the model predictions and checkpoints will be written.",
     )
 
-    ## Other parameters
+    # Other parameters
     parser.add_argument(
         "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
     )
