@@ -760,7 +760,7 @@ python run_mmimdb.py \
     --patience 5
 ```
 
-## Adversarial evaluation of model performances (HANS dataset)
+## Adversarial evaluation of model performances
 
 Here is an example on evaluating a model using adversarial evaluation of natural language inference with the Heuristic Analysis for NLI Systems (HANS) dataset [McCoy et al., 2019](https://arxiv.org/abs/1902.01007). The example was gracefully provided by [Nafise Sadat Moosavi](https://github.com/ns-moosavi).
 
