@@ -468,7 +468,7 @@ class XLNetLayer(nn.Module):
 
 class XLNetPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = XLNetConfig
@@ -514,7 +514,7 @@ XLNET_START_DOCSTRING = r"""    The XLNet model was proposed in
 
     The specific attention pattern can be controlled at training and test time using the `perm_mask` input.
 
-    Do to the difficulty of training a fully auto-regressive model over various factorization order,
+    Due to the difficulty of training a fully auto-regressive model over various factorization order,
     XLNet is pretrained using only a sub-set of the output tokens as target which are selected
     with the `target_mapping` input.
 
