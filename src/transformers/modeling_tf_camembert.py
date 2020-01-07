@@ -31,7 +31,6 @@ from .modeling_tf_roberta import (
 logger = logging.getLogger(__name__)
 
 TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    # "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-tf_model.h5"
 }
 
 
