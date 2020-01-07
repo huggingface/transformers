@@ -29,6 +29,7 @@ from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 
@@ -209,6 +210,13 @@ if is_torch_available():
         RobertaForQuestionAnswering,
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
+    from .modeling_camembert import (
+        CamembertForMaskedLM,
+        CamembertModel,
+        CamembertForSequenceClassification,
+        CamembertForTokenClassification,
+        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
     from .modeling_distilbert import (
         DistilBertPreTrainedModel,
         DistilBertForMaskedLM,
@@ -355,6 +363,14 @@ if is_tf_available():
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_tf_camembert import (
+        TFCamembertModel,
+        TFCamembertForMaskedLM,
+        TFCamembertForSequenceClassification,
+        TFCamembertForTokenClassification,
+        TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     from .modeling_tf_distilbert import (
