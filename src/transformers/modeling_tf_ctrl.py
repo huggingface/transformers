@@ -344,7 +344,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
 class TFCTRLPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = CTRLConfig
