@@ -30,8 +30,7 @@ from .modeling_tf_roberta import (
 
 logger = logging.getLogger(__name__)
 
-TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-}
+TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {}
 
 
 CAMEMBERT_START_DOCSTRING = r"""    The CamemBERT model was proposed in
