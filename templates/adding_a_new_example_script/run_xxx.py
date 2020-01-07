@@ -52,7 +52,6 @@ from utils_squad import (
     write_predictions,
     write_predictions_extended,
 )
-
 # The follwing import is the official SQuAD evaluation script (2.0).
 # You can remove it from the dependencies if you are using this script outside of the library
 # We've added it here for automated tests (see examples/test_examples.py file)
@@ -333,7 +332,8 @@ def evaluate(args, model, tokenizer, prefix=""):
 
 def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
     if args.local_rank not in [-1, 0] and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset,
+        # and the others will use the cache
 
     # Load data features from cache or dataset file
     input_file = args.predict_file if evaluate else args.train_file
@@ -366,7 +366,8 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             torch.save(features, cached_features_file)
 
     if args.local_rank == 0 and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset,
+        # and the others will use the cache
 
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -620,7 +621,8 @@ def main():
 
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()  # Make sure only the first process in distributed training will
+        # download model & vocab
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
@@ -641,15 +643,16 @@ def main():
     )
 
     if args.local_rank == 0:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()  # Make sure only the first process in distributed training will
+        # download model & vocab
 
     model.to(args.device)
 
     logger.info("Training/evaluation parameters %s", args)
 
-    # Before we do anything with models, we want to ensure that we get fp16 execution of torch.einsum if args.fp16 is set.
-    # Otherwise it'll default to "promote" mode, and we'll get fp32 operations. Note that running `--fp16_opt_level="O2"` will
-    # remove the need for this code, but it is still valid.
+    # Before we do anything with models, we want to ensure that we get fp16 execution of torch.einsum
+    # if args.fp16 is set. Otherwise it'll default to "promote" mode, and we'll get fp32 operations.
+    # Note that running `--fp16_opt_level="O2"` will remove the need for this code, but it is still valid.
     if args.fp16:
         try:
             import apex
