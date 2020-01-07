@@ -478,7 +478,7 @@ def main():
         "--cache_dir",
         default="",
         type=str,
-        help="Optional directory to store the pre-trained models downloaded from s3 (instread of the default one)",
+        help="Optional directory to store the pre-trained models downloaded from s3 (instead of the default one)",
     )
     parser.add_argument(
         "--block_size",
