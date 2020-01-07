@@ -21,6 +21,7 @@ import os
 import torch
 from torch import nn
 
+from .configuration_auto import AutoConfig
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 
 
@@ -148,8 +149,11 @@ class PreTrainedEncoderDecoder(nn.Module):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
+            decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+            decoder_config.is_decoder = True
+            kwargs_decoder["config"] = decoder_config
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
-        decoder.config.is_decoder = True
+        # decoder.config.is_decoder = True
 
         model = cls(encoder, decoder)
 
