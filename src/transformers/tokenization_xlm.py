@@ -474,7 +474,7 @@ def replace_unicode_punct(text):
     text = text.replace("！", "!")
     text = text.replace("（", "(")
     text = text.replace("；", ";")
-    text = text.replace("１", '"')
+    text = text.replace("１", '1')
     text = text.replace("」", '"')
     text = text.replace("「", '"')
     text = text.replace("０", "0")
