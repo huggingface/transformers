@@ -1,6 +1,7 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
-#
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors, Musixmatch spa and the HuggingFace Inc. team.
+# This code is referring to the Camembert code, just to simplify not for copying
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,7 +15,7 @@
 # limitations under the License
 
 """ Tokenization classes for Umberto model."""
-# This code is referring to the Camembert code, just to simplify
+
 
 import logging
 import os

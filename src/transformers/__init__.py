@@ -263,6 +263,15 @@ if is_torch_available():
         get_linear_schedule_with_warmup,
     )
 
+    from .modeling_umberto import (
+        UmbertoForMaskedLM,
+        UmbertoModel,
+        UmbertoForSequenceClassification,
+        UmbertoForMultipleChoice,
+        UmbertoForTokenClassification,
+        UMBERTO_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
 
 # TensorFlow
 if is_tf_available():
@@ -375,18 +384,11 @@ if is_tf_available():
     )
 
     from .modeling_tf_t5 import TFT5PreTrainedModel, TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
-
+    
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
 
-    from .modeling_umberto import (
-        UmbertoForMaskedLM,
-        UmbertoModel,
-        UmbertoForSequenceClassification,
-        UmbertoForMultipleChoice,
-        UmbertoForTokenClassification,
-        UMBERTO_PRETRAINED_MODEL_ARCHIVE_MAP,
-    )
+    
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(

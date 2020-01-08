@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2019 Inria, Facebook AI Research and the HuggingFace Inc. team.
+# Copyright 2019 Inria, Facebook AI Research, Musixmatch spa and the HuggingFace Inc. team.
+# This code is referring to the Camembert code, just to simplify not for copying
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +18,6 @@
 # not for copying it, but as reference
 
 """PyTorch UmBERTo model. """
-# This code is referring to the Camembert code, just to simplify
 
 
 import logging
