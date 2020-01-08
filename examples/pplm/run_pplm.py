@@ -344,7 +344,7 @@ def full_text_generation(
     gamma=1.5,
     gm_scale=0.9,
     kl_scale=0.01,
-    repetition_penalty=1.5,
+    repetition_penalty=1.0,
     **kwargs
 ):
     classifier, class_id = get_classifier(discrim, class_label, device)
@@ -446,7 +446,7 @@ def generate_text_pplm(
     gamma=1.5,
     gm_scale=0.9,
     kl_scale=0.01,
-    repetition_penalty=1.5,
+    repetition_penalty=1.0,
 ):
     output_so_far = None
     if context:
@@ -605,7 +605,7 @@ def run_pplm_example(
     seed=0,
     no_cuda=False,
     colorama=False,
-    repetition_penalty=1.5,
+    repetition_penalty=1.0,
 ):
     # set Random seed
     torch.manual_seed(seed)
@@ -786,7 +786,12 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no_cuda", action="store_true", help="no cuda")
     parser.add_argument("--colorama", action="store_true", help="colors keywords")
-    parser.add_argument("--repetition_penalty", type=float, default=1.8, help="Penalize repetition")
+    parser.add_argument(
+        "--repetition_penalty",
+        type=float,
+        default=1.0,
+        help="Penalize repetition. More than 1.0 -> less repetition"
+    )
 
     args = parser.parse_args()
     run_pplm_example(**vars(args))
