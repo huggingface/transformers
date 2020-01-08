@@ -464,7 +464,7 @@ class WordpieceTokenizer(object):
                 continue
             if dropout == 1:
                 output_tokens.append(chars[0])
-                output_tokens.extend(f"##{char}" for char in chars[1:])
+                output_tokens.extend("##{}".format(char) for char in chars[1:])
                 continue
 
             is_bad = False
