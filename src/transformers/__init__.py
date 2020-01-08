@@ -31,7 +31,6 @@ from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, Open
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
-
 # Configurations
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
@@ -56,7 +55,6 @@ from .data import (
     xnli_processors,
     xnli_tasks_num_labels,
 )
-
 # Files and general utilities
 from .file_utils import (
     CONFIG_NAME,
@@ -73,10 +71,8 @@ from .file_utils import (
     is_tf_available,
     is_torch_available,
 )
-
 # Model Cards
 from .modelcard import ModelCard
-
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (
     convert_tf_weight_name_to_pt_weight_name,
@@ -87,7 +83,6 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_model_in_pytorch_model,
     load_tf2_weights_in_pytorch_model,
 )
-
 # Pipelines
 from .pipelines import (
     CsvPipelineDataFormat,
@@ -113,7 +108,6 @@ from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
-
 # Tokenizers
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
@@ -249,6 +243,7 @@ if is_torch_available():
         XLMRobertaForMultipleChoice,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
+        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
 
@@ -336,6 +331,14 @@ if is_tf_available():
         TFXLMForSequenceClassification,
         TFXLMForQuestionAnsweringSimple,
         TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_tf_xlm_roberta import (
+        TFXLMRobertaForMaskedLM,
+        TFXLMRobertaModel,
+        TFXLMRobertaForSequenceClassification,
+        TFXLMRobertaForTokenClassification,
+        TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     from .modeling_tf_roberta import (
