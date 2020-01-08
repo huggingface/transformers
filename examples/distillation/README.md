@@ -170,6 +170,8 @@ python -m torch.distributed.launch \
 
 Happy distillation!
 
+You can check out an example using Tensorflow [here](https://colab.research.google.com/drive/1m710fy2OjF9V-7SEUeGPJZhUxDKD-Jp0).
+
 ## Citation
 
 If you find the ressource useful, you should cite the following paper:
