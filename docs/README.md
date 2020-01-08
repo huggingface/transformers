@@ -1,25 +1,25 @@
 # Generating the documentation
 
 To generate the documentation, you first have to build it. Several packages are necessary to build the doc,
-you can install them using:
+you can install them with the following command, at the root of the code repository:
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[docs]"
 ```
- 
+
 ## Packages installed
 
-Here's an overview of all the packages installed. If you ran the previous command installing all packages from 
+Here's an overview of all the packages installed. If you ran the previous command installing all packages from
 `requirements.txt`, you do not need to run the following commands.
 
-Building it requires the package `sphinx` that you can 
+Building it requires the package `sphinx` that you can
 install using:
 
 ```bash
 pip install -U sphinx
 ```
 
-You would also need the custom installed [theme](https://github.com/readthedocs/sphinx_rtd_theme) by 
+You would also need the custom installed [theme](https://github.com/readthedocs/sphinx_rtd_theme) by
 [Read The Docs](https://readthedocs.org/). You can install it using the following command:
 
 ```bash
@@ -34,7 +34,7 @@ pip install recommonmark
 
 ## Building the documentation
 
-Make sure that there is a symlink from the `example` file (in /examples) inside the source folder. Run the following 
+Make sure that there is a symlink from the `example` file (in /examples) inside the source folder. Run the following
 command to generate it:
 
 ```bash

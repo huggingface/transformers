@@ -14,21 +14,21 @@
 # limitations under the License.
 """Convert XXX checkpoint."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import argparse
+import logging
+
 import torch
 
 from transformers import XxxConfig, XxxForPreTraining, load_tf_weights_in_xxx
 
-import logging
+
 logging.basicConfig(level=logging.INFO)
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, xxx_config_file, pytorch_dump_path):
+
+def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = XxxConfig.from_json_file(xxx_config_file)
+    config = XxxConfig.from_json_file(config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
     model = XxxForPreTraining(config)
 
@@ -42,24 +42,20 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, xxx_config_file, pytorc
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    ## Required parameters
-    parser.add_argument("--tf_checkpoint_path",
-                        default = None,
-                        type = str,
-                        required = True,
-                        help = "Path to the TensorFlow checkpoint path.")
-    parser.add_argument("--xxx_config_file",
-                        default = None,
-                        type = str,
-                        required = True,
-                        help = "The config json file corresponding to the pre-trained XXX model. \n"
-                            "This specifies the model architecture.")
-    parser.add_argument("--pytorch_dump_path",
-                        default = None,
-                        type = str,
-                        required = True,
-                        help = "Path to the output PyTorch model.")
+    # Required parameters
+    parser.add_argument(
+        "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
+    )
+    parser.add_argument(
+        "--config_file",
+        default=None,
+        type=str,
+        required=True,
+        help="The config json file corresponding to the pre-trained model. \n"
+        "This specifies the model architecture.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
-    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path,
-                                     args.xxx_config_file,
-                                     args.pytorch_dump_path)
+    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.config_file, args.pytorch_dump_path)

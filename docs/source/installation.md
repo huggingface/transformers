@@ -1,6 +1,6 @@
 # Installation
 
-Transformers is tested on Python 2.7 and 3.5+ (examples are tested only on python 3.5+) and PyTorch 1.1.0
+Transformers is tested on Python 3.5+ and PyTorch 1.1.0
 
 ## With pip
 
@@ -17,25 +17,18 @@ To install from source, clone the repository and install with:
 ``` bash
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install [--editable] .
+pip install .
 ```
 
 ## Tests
 
-An extensive test suite is included to test the library behavior and several examples. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/transformers/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
+An extensive test suite is included to test the library behavior and several examples. Library tests can be found in the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
-Tests can be run using `pytest` (install pytest if needed with `pip install pytest`).
-
-Run all the tests from the root of the cloned repository with the commands:
-
-``` bash
-python -m pytest -sv ./transformers/tests/
-python -m pytest -sv ./examples/
-```
+Refer to the [contributing guide](https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md#tests) for details about running tests.
 
 ## OpenAI GPT original tokenization workflow
 
-If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install `ftfy` (use version 4.4.3 if you are using Python 2) and `SpaCy`:
+If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install `ftfy` and `SpaCy`:
 
 ``` bash
 pip install spacy ftfy==4.4.3

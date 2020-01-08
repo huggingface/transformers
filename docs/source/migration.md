@@ -104,6 +104,6 @@ for batch in train_data:
     loss = model(batch)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
-    scheduler.step()
     optimizer.step()
+    scheduler.step()
 ```

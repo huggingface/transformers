@@ -22,47 +22,53 @@
           --model_name openai-gpt \
           --do_train \
           --do_eval \
-          --train_dataset $ROC_STORIES_DIR/cloze_test_val__spring2016\ -\ cloze_test_ALL_val.csv \
-          --eval_dataset $ROC_STORIES_DIR/cloze_test_test__spring2016\ -\ cloze_test_ALL_test.csv \
+          --train_dataset "$ROC_STORIES_DIR/cloze_test_val__spring2016 - cloze_test_ALL_val.csv" \
+          --eval_dataset "$ROC_STORIES_DIR/cloze_test_test__spring2016 - cloze_test_ALL_test.csv" \
           --output_dir ../log \
           --train_batch_size 16 \
 """
 import argparse
-import os
 import csv
-import random
 import logging
-from tqdm import tqdm, trange
+import os
+import random
 
 import numpy as np
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from tqdm import tqdm, trange
 
-from transformers import (OpenAIGPTDoubleHeadsModel, OpenAIGPTTokenizer,
-                                     AdamW, cached_path, WEIGHTS_NAME, CONFIG_NAME,
-                                     get_linear_schedule_with_warmup)
+from transformers import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    AdamW,
+    OpenAIGPTDoubleHeadsModel,
+    OpenAIGPTTokenizer,
+    get_linear_schedule_with_warmup,
+)
 
-ROCSTORIES_URL = "https://s3.amazonaws.com/datasets.huggingface.co/ROCStories.tar.gz"
 
-logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt = '%m/%d/%Y %H:%M:%S',
-                    level = logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO
+)
 logger = logging.getLogger(__name__)
+
 
 def accuracy(out, labels):
     outputs = np.argmax(out, axis=1)
     return np.sum(outputs == labels)
 
+
 def load_rocstories_dataset(dataset_path):
     """ Output a list of tuples(story, 1st continuation, 2nd continuation, label) """
-    with open(dataset_path, encoding='utf_8') as f:
+    with open(dataset_path, encoding="utf_8") as f:
         f = csv.reader(f)
         output = []
-        next(f) # skip the first line
+        next(f)  # skip the first line
         for line in tqdm(f):
-            output.append((' '.join(line[1:5]), line[5], line[6], int(line[-1])-1))
+            output.append((" ".join(line[1:5]), line[5], line[6], int(line[-1]) - 1))
     return output
+
 
 def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, delimiter_token, clf_token):
     """ Pre-process datasets containing lists of tuples(story, 1st continuation, 2nd continuation, label)
@@ -75,61 +81,73 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
         n_batch = len(dataset)
         input_ids = np.zeros((n_batch, 2, input_len), dtype=np.int64)
         mc_token_ids = np.zeros((n_batch, 2), dtype=np.int64)
-        lm_labels = np.full((n_batch, 2, input_len), fill_value=-1, dtype=np.int64)
+        lm_labels = np.full((n_batch, 2, input_len), fill_value=-100, dtype=np.int64)
         mc_labels = np.zeros((n_batch,), dtype=np.int64)
         for i, (story, cont1, cont2, mc_label), in enumerate(dataset):
             with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
             with_cont2 = [start_token] + story[:cap_length] + [delimiter_token] + cont2[:cap_length] + [clf_token]
-            input_ids[i, 0, :len(with_cont1)] = with_cont1
-            input_ids[i, 1, :len(with_cont2)] = with_cont2
+            input_ids[i, 0, : len(with_cont1)] = with_cont1
+            input_ids[i, 1, : len(with_cont2)] = with_cont2
             mc_token_ids[i, 0] = len(with_cont1) - 1
             mc_token_ids[i, 1] = len(with_cont2) - 1
-            lm_labels[i, 0, :len(with_cont1)] = with_cont1
-            lm_labels[i, 1, :len(with_cont2)] = with_cont2
+            lm_labels[i, 0, : len(with_cont1)] = with_cont1
+            lm_labels[i, 1, : len(with_cont2)] = with_cont2
             mc_labels[i] = mc_label
         all_inputs = (input_ids, mc_token_ids, lm_labels, mc_labels)
         tensor_datasets.append(tuple(torch.tensor(t) for t in all_inputs))
     return tensor_datasets
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, default='openai-gpt',
-                        help='pretrained model name')
-    parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
-    parser.add_argument("--do_eval", action='store_true', help="Whether to run eval on the dev set.")
-    parser.add_argument("--output_dir", default=None, type=str, required=True,
-                        help="The output directory where the model predictions and checkpoints will be written.")
-    parser.add_argument('--train_dataset', type=str, default='')
-    parser.add_argument('--eval_dataset', type=str, default='')
-    parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_train_epochs', type=int, default=3)
-    parser.add_argument('--train_batch_size', type=int, default=8)
-    parser.add_argument('--eval_batch_size', type=int, default=16)
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float,
-                        help="Epsilon for Adam optimizer.")
-    parser.add_argument('--max_grad_norm', type=int, default=1)
-    parser.add_argument("--max_steps", default=-1, type=int,
-                        help="If > 0: set total number of training \
-                        steps to perform. Override num_train_epochs.")
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
-                        help="Number of updates steps to accumulate before\
-                        performing a backward/update pass.")
-    parser.add_argument('--learning_rate', type=float, default=6.25e-5)
-    parser.add_argument("--warmup_steps", default=0, type=int,
-                        help="Linear warmup over warmup_steps.")
-    parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
-    parser.add_argument('--weight_decay', type=float, default=0.01)
-    parser.add_argument('--lm_coef', type=float, default=0.9)
-    parser.add_argument('--n_valid', type=int, default=374)
+    parser.add_argument("--model_name", type=str, default="openai-gpt", help="pretrained model name")
+    parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
+    parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
+    parser.add_argument(
+        "--output_dir",
+        default=None,
+        type=str,
+        required=True,
+        help="The output directory where the model predictions and checkpoints will be written.",
+    )
+    parser.add_argument("--train_dataset", type=str, default="")
+    parser.add_argument("--eval_dataset", type=str, default="")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--num_train_epochs", type=int, default=3)
+    parser.add_argument("--train_batch_size", type=int, default=8)
+    parser.add_argument("--eval_batch_size", type=int, default=16)
+    parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument("--max_grad_norm", type=int, default=1)
+    parser.add_argument(
+        "--max_steps",
+        default=-1,
+        type=int,
+        help="If > 0: set total number of training \
+                        steps to perform. Override num_train_epochs.",
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before\
+                        performing a backward/update pass.",
+    )
+    parser.add_argument("--learning_rate", type=float, default=6.25e-5)
+    parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
+    parser.add_argument("--lr_schedule", type=str, default="warmup_linear")
+    parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--lm_coef", type=float, default=0.9)
+    parser.add_argument("--n_valid", type=int, default=374)
 
-    parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
-    parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
+    parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
     args = parser.parse_args()
     print(args)
 
     if args.server_ip and args.server_port:
         # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
         import ptvsd
+
         print("Waiting for debugger attach")
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
@@ -152,7 +170,7 @@ def main():
     # Load tokenizer and model
     # This loading functions also add new tokens and embeddings called `special tokens`
     # These new embeddings will be fine-tuned on the RocStories dataset
-    special_tokens = ['_start_', '_delimiter_', '_classify_']
+    special_tokens = ["_start_", "_delimiter_", "_classify_"]
     tokenizer = OpenAIGPTTokenizer.from_pretrained(args.model_name)
     tokenizer.add_tokens(special_tokens)
     special_tokens_ids = tokenizer.convert_tokens_to_ids(special_tokens)
@@ -161,8 +179,6 @@ def main():
     model.to(device)
 
     # Load and encode the datasets
-    if not args.train_dataset and not args.eval_dataset:
-        roc_stories = cached_path(ROCSTORIES_URL)
     def tokenize_and_encode(obj):
         """ Tokenize and encode a nested object """
         if isinstance(obj, str):
@@ -170,6 +186,7 @@ def main():
         elif isinstance(obj, int):
             return obj
         return list(tokenize_and_encode(o) for o in obj)
+
     logger.info("Encoding dataset...")
     train_dataset = load_rocstories_dataset(args.train_dataset)
     eval_dataset = load_rocstories_dataset(args.eval_dataset)
@@ -178,8 +195,11 @@ def main():
 
     # Compute the max input length for the Transformer
     max_length = model.config.n_positions // 2 - 2
-    input_length = max(len(story[:max_length]) + max(len(cont1[:max_length]), len(cont2[:max_length])) + 3  \
-                           for dataset in encoded_datasets for story, cont1, cont2, _ in dataset)
+    input_length = max(
+        len(story[:max_length]) + max(len(cont1[:max_length]), len(cont2[:max_length])) + 3
+        for dataset in encoded_datasets
+        for story, cont1, cont2, _ in dataset
+    )
     input_length = min(input_length, model.config.n_positions)  # Max size of input for the pre-trained model
 
     # Prepare inputs tensors and dataloaders
@@ -198,20 +218,23 @@ def main():
     if args.do_train:
         if args.max_steps > 0:
             t_total = args.max_steps
-            args.num_train_epochs = args.max_steps //\
-                (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+            args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
         else:
-            t_total = len(train_dataloader)\
-                // args.gradient_accumulation_steps * args.num_train_epochs
+            t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
         param_optimizer = list(model.named_parameters())
-        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-            ]
+            {
+                "params": [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
+                "weight_decay": args.weight_decay,
+            },
+            {"params": [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+        )
 
     if args.do_train:
         nb_tr_steps, tr_loss, exp_average_loss = 0, 0, None
@@ -230,14 +253,16 @@ def main():
                 optimizer.step()
                 optimizer.zero_grad()
                 tr_loss += loss.item()
-                exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
+                exp_average_loss = (
+                    loss.item() if exp_average_loss is None else 0.7 * exp_average_loss + 0.3 * loss.item()
+                )
                 nb_tr_steps += 1
                 tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, scheduler.get_lr()[0])
 
     # Save a trained model
     if args.do_train:
         # Save a trained model, configuration and tokenizer
-        model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model itself
+        model_to_save = model.module if hasattr(model, "module") else model  # Only save the model itself
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
@@ -260,10 +285,12 @@ def main():
             batch = tuple(t.to(device) for t in batch)
             input_ids, mc_token_ids, lm_labels, mc_labels = batch
             with torch.no_grad():
-               _, mc_loss, _, mc_logits = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
+                _, mc_loss, _, mc_logits = model(
+                    input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels
+                )
 
             mc_logits = mc_logits.detach().cpu().numpy()
-            mc_labels = mc_labels.to('cpu').numpy()
+            mc_labels = mc_labels.to("cpu").numpy()
             tmp_eval_accuracy = accuracy(mc_logits, mc_labels)
 
             eval_loss += mc_loss.mean().item()
@@ -274,10 +301,8 @@ def main():
 
         eval_loss = eval_loss / nb_eval_steps
         eval_accuracy = eval_accuracy / nb_eval_examples
-        train_loss = tr_loss/nb_tr_steps if args.do_train else None
-        result = {'eval_loss': eval_loss,
-                  'eval_accuracy': eval_accuracy,
-                  'train_loss': train_loss}
+        train_loss = tr_loss / nb_tr_steps if args.do_train else None
+        result = {"eval_loss": eval_loss, "eval_accuracy": eval_accuracy, "train_loss": train_loss}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
@@ -286,5 +311,6 @@ def main():
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
