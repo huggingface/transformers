@@ -705,55 +705,65 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Convert inputs to features
         examples = self._args_parser(*texts, **kwargs)
-        features = squad_convert_examples_to_features(
-            examples, self.tokenizer, kwargs["max_seq_len"], kwargs["doc_stride"], kwargs["max_question_len"], False
-        )
-        fw_args = self.inputs_for_model([f.__dict__ for f in features])
+        features_list = [ squad_convert_examples_to_features(
+                            [example], 
+                            self.tokenizer, 
+                            kwargs["max_seq_len"], 
+                            kwargs["doc_stride"], 
+                            kwargs["max_question_len"], 
+                            False
+                            ) for example in examples ]
+        all_answers = []
+        for features, example in zip(features_list, examples):
+            fw_args = self.inputs_for_model([f.__dict__ for f in features])
 
-        # Manage tensor allocation on correct device
-        with self.device_placement():
-            if self.framework == "tf":
-                fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-                start, end = self.model(fw_args)
-                start, end = start.numpy(), end.numpy()
-            else:
-                with torch.no_grad():
-                    # Retrieve the score for the context tokens only (removing question tokens)
-                    fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                    start, end = self.model(**fw_args)
-                    start, end = start.cpu().numpy(), end.cpu().numpy()
+            # Manage tensor allocation on correct device
+            with self.device_placement():
+                if self.framework == "tf":
+                    fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
+                    start, end = self.model(fw_args)
+                    start, end = start.numpy(), end.numpy()
+                else:
+                    with torch.no_grad():
+                        # Retrieve the score for the context tokens only (removing question tokens)
+                        fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
+                        start, end = self.model(**fw_args)
+                        start, end = start.cpu().numpy(), end.cpu().numpy()
 
-        answers = []
-        for (example, feature, start_, end_) in zip(examples, features, start, end):
-            # Normalize logits and spans to retrieve the answer
-            start_ = np.exp(start_) / np.sum(np.exp(start_))
-            end_ = np.exp(end_) / np.sum(np.exp(end_))
+            answers = []
+            for (feature, start_, end_) in zip(features, start, end):
+                # Normalize logits and spans to retrieve the answer
+                start_ = np.exp(start_) / np.sum(np.exp(start_))
+                end_ = np.exp(end_) / np.sum(np.exp(end_))
 
-            # Mask padding and question
-            start_, end_ = start_ * np.abs(np.array(feature.p_mask) - 1), end_ * np.abs(np.array(feature.p_mask) - 1)
+                # Mask padding and question
+                start_, end_ = start_ * np.abs(np.array(feature.p_mask) - 1), end_ * np.abs(np.array(feature.p_mask) - 1)
 
-            # TODO : What happens if not possible
-            # Mask CLS
-            start_[0] = end_[0] = 0
+                # TODO : What happens if not possible
+                # Mask CLS
+                start_[0] = end_[0] = 0
 
-            starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
-            char_to_word = np.array(example.char_to_word_offset)
+                starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
+                char_to_word = np.array(example.char_to_word_offset)
 
-            # Convert the answer (tokens) back to the original text
-            answers += [
-                {
-                    "score": score.item(),
-                    "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                    "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                    "answer": " ".join(
-                        example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                    ),
-                }
-                for s, e, score in zip(starts, ends, scores)
-            ]
-        if len(answers) == 1:
-            return answers[0]
-        return answers
+                # Convert the answer (tokens) back to the original text
+                answers += [
+                    {
+                        "score": score.item(),
+                        "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                        "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                        "answer": " ".join(
+                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                        ),
+                    }
+                    for s, e, score in zip(starts, ends, scores)
+                ]
+            answers = sorted(answers, key = lambda x:x['score'], reverse=True)[:kwargs["topk"]]    
+            all_answers+=answers
+            
+        if len(all_answers) == 1:
+           return all_answers[0]
+        return all_answers
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
         """
