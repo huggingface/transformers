@@ -206,7 +206,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
                 if not pairs:
                     break
         word = " ".join(word)
-        self.cache[token] = word
+        if dropout == 0:
+            self.cache[token] = word
         return word
 
     def _tokenize(self, text, add_prefix_space=False, **kwargs):
