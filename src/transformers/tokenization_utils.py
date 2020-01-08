@@ -1511,14 +1511,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
             encoding_dict["input_ids"] = tf.constant([encoding_dict["input_ids"]])
-            encoding_dict["token_type_ids"] = tf.constant([encoding_dict["token_type_ids"]])
+            if "token_type_ids" in encoding_dict:
+                encoding_dict["token_type_ids"] = tf.constant([encoding_dict["token_type_ids"]])
 
             if "attention_mask" in encoding_dict:
                 encoding_dict["attention_mask"] = tf.constant([encoding_dict["attention_mask"]])
 
         elif return_tensors == "pt" and is_torch_available():
             encoding_dict["input_ids"] = torch.tensor([encoding_dict["input_ids"]])
-            encoding_dict["token_type_ids"] = torch.tensor([encoding_dict["token_type_ids"]])
+            if "token_type_ids" in encoding_dict:
+                encoding_dict["token_type_ids"] = torch.tensor([encoding_dict["token_type_ids"]])
 
             if "attention_mask" in encoding_dict:
                 encoding_dict["attention_mask"] = torch.tensor([encoding_dict["attention_mask"]])
