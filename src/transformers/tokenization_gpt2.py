@@ -157,7 +157,22 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             return self.cache[token]
 
         word = tuple(token)
-        pairs = [pair for pair in get_pairs(word) if random.random() > dropout and pair in self.bpe_ranks]
+        if dropout != 1:
+            pairs = [pair for pair in get_pairs(word) if random.random() >= dropout and pair in self.bpe_ranks]
+        else:
+            # we should merge space byte with first token char
+            new_word = []
+            token_index = 0
+            while token_index < len(token):
+                if token[token_index] != self.byte_encoder[32]:
+                    new_word.append(token[token_index])
+                    token_index += 1
+                else:
+                    new_word.append(token[token_index:token_index + 2])
+                    token_index += 2
+
+            return " ".join(new_word)
+
         if not pairs:
             return token
 
@@ -187,7 +202,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             if len(word) == 1:
                 break
             else:
-                pairs = [pair for pair in get_pairs(word) if random.random() > dropout and pair in self.bpe_ranks]
+                pairs = [pair for pair in get_pairs(word) if random.random() >= dropout and pair in self.bpe_ranks]
                 if not pairs:
                     break
         word = " ".join(word)

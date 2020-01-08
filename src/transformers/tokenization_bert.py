@@ -462,6 +462,10 @@ class WordpieceTokenizer(object):
             if len(chars) > self.max_input_chars_per_word:
                 output_tokens.append(self.unk_token)
                 continue
+            if dropout == 1:
+                output_tokens.append(chars[0])
+                output_tokens.extend(f"##{char}" for char in chars[1:])
+                continue
 
             is_bad = False
             start = 0
@@ -473,7 +477,7 @@ class WordpieceTokenizer(object):
                     substr = "".join(chars[start:end])
                     if start > 0:
                         substr = "##" + substr
-                    if substr in self.vocab and random.random() > dropout:
+                    if substr in self.vocab and random.random() >= dropout:
                         cur_substr = substr
                         break
                     end -= 1
