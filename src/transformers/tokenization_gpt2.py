@@ -168,7 +168,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
                     new_word.append(token[token_index])
                     token_index += 1
                 else:
-                    new_word.append(token[token_index:token_index + 2])
+                    new_word.append(token[token_index : token_index + 2])
                     token_index += 2
 
             return " ".join(new_word)
