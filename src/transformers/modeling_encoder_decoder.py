@@ -232,7 +232,7 @@ class PreTrainedEncoderDecoder(nn.Module):
             encoder_outputs = ()
 
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        decoder_outputs = self.decoder(decoder_input_ids, encoder_hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
 
