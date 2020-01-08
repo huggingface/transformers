@@ -3,6 +3,12 @@ Converting Tensorflow Checkpoints
 
 A command-line interface is provided to convert original Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM checkpoints in models than be loaded using the ``from_pretrained`` methods of the library.
 
+.. note::
+    Since 2.3.0 the conversion script is now part of the transformers CLI (**transformers-cli**)
+    available in any transformers >= 2.3.0 installation.
+
+    The documentation below reflects the **transformers-cli convert** command format.
+
 BERT
 ^^^^
 
@@ -20,10 +26,10 @@ Here is an example of the conversion process for a pre-trained ``BERT-Base Uncas
 
    export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
-   transformers bert \
-     $BERT_BASE_DIR/bert_model.ckpt \
-     $BERT_BASE_DIR/bert_config.json \
-     $BERT_BASE_DIR/pytorch_model.bin
+   transformers-cli convert --model_type bert \
+     --tf_checkpoint $BERT_BASE_DIR/bert_model.ckpt \
+     --config $BERT_BASE_DIR/bert_config.json \
+     --pytorch_dump_output $BERT_BASE_DIR/pytorch_model.bin
 
 You can download Google's pre-trained models for the conversion `here <https://github.com/google-research/bert#pre-trained-models>`__.
 
@@ -36,10 +42,12 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT model,
 
    export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
 
-   transformers gpt \
-     $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
-     $PYTORCH_DUMP_OUTPUT \
-     [OPENAI_GPT_CONFIG]
+   transformers-cli convert --model_type gpt \
+     --tf_checkpoint $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
+     --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
+     [--config OPENAI_GPT_CONFIG] \
+     [--finetuning_task_name OPENAI_GPT_FINETUNED_TASK] \
+
 
 OpenAI GPT-2
 ^^^^^^^^^^^^
@@ -50,10 +58,11 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT-2 mode
 
    export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
 
-   transformers gpt2 \
-     $OPENAI_GPT2_CHECKPOINT_PATH \
-     $PYTORCH_DUMP_OUTPUT \
-     [OPENAI_GPT2_CONFIG]
+   transformers-cli convert --model_type gpt2 \
+     --tf_checkpoint $OPENAI_GPT2_CHECKPOINT_PATH \
+     --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
+     [--config OPENAI_GPT2_CONFIG] \
+     [--finetuning_task_name OPENAI_GPT2_FINETUNED_TASK]
 
 Transformer-XL
 ^^^^^^^^^^^^^^
@@ -64,27 +73,28 @@ Here is an example of the conversion process for a pre-trained Transformer-XL mo
 
    export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
 
-   transformers transfo_xl \
-     $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
-     $PYTORCH_DUMP_OUTPUT \
-     [TRANSFO_XL_CONFIG]
+   transformers-cli convert --model_type transfo_xl \
+     --tf_checkpoint $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
+     --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
+     [--config TRANSFO_XL_CONFIG] \
+     [--finetuning_task_name TRANSFO_XL_FINETUNED_TASK]
 
 
 XLNet
 ^^^^^
 
-Here is an example of the conversion process for a pre-trained XLNet model, fine-tuned on STS-B using the TensorFlow script:
+Here is an example of the conversion process for a pre-trained XLNet model:
 
 .. code-block:: shell
 
    export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
    export TRANSFO_XL_CONFIG_PATH=/path/to/xlnet/config
 
-   transformers xlnet \
-     $TRANSFO_XL_CHECKPOINT_PATH \
-     $TRANSFO_XL_CONFIG_PATH \
-     $PYTORCH_DUMP_OUTPUT \
-     STS-B \
+   transformers-cli convert --model_type xlnet \
+     --tf_checkpoint $TRANSFO_XL_CHECKPOINT_PATH \
+     --config $TRANSFO_XL_CONFIG_PATH \
+     --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
+     [--finetuning_task_name XLNET_FINETUNED_TASK] \
 
 
 XLM
@@ -96,6 +106,8 @@ Here is an example of the conversion process for a pre-trained XLM model:
 
    export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
 
-   transformers xlm \
-     $XLM_CHECKPOINT_PATH \
-     $PYTORCH_DUMP_OUTPUT \
+   transformers-cli convert --model_type xlm \
+     --tf_checkpoint $XLM_CHECKPOINT_PATH \
+     --pytorch_dump_output $PYTORCH_DUMP_OUTPUT
+    [--config XML_CONFIG] \
+    [--finetuning_task_name XML_FINETUNED_TASK]
