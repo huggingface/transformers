@@ -31,6 +31,7 @@ from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, Open
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+from .configuration_umberto import UMBERTO_PRETRAINED_CONFIG_ARCHIVE_MAP, UmbertoConfig
 
 # Configurations
 from .configuration_utils import PretrainedConfig
@@ -113,6 +114,7 @@ from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
+from .tokenization_umberto import UmbertoTokenizer
 
 # Tokenizers
 from .tokenization_utils import PreTrainedTokenizer
@@ -377,6 +379,14 @@ if is_tf_available():
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
 
+    from .modeling_umberto import (
+        UmbertoForMaskedLM,
+        UmbertoModel,
+        UmbertoForSequenceClassification,
+        UmbertoForMultipleChoice,
+        UmbertoForTokenClassification,
+        UMBERTO_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(
