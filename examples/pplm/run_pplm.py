@@ -519,11 +519,11 @@ def generate_text_pplm(
         pert_logits, past, pert_all_hidden = model(last, past=pert_past)
         pert_logits = pert_logits[:, -1, :] / temperature  # + SMALL_CONST
 
-        for j in set(output_so_far[0].tolist()):
-            if pert_logits[0, j] < 0:
-                pert_logits[0, j] *= repetition_penalty
+        for token_idx in set(output_so_far[0].tolist()):
+            if pert_logits[0, token_idx] < 0:
+                pert_logits[0, token_idx] *= repetition_penalty
             else:
-                pert_logits[0, j] /= repetition_penalty
+                pert_logits[0, token_idx] /= repetition_penalty
 
         pert_probs = F.softmax(pert_logits, dim=-1)
 
@@ -790,7 +790,7 @@ if __name__ == "__main__":
         "--repetition_penalty",
         type=float,
         default=1.0,
-        help="Penalize repetition. More than 1.0 -> less repetition"
+        help="Penalize repetition. More than 1.0 -> less repetition",
     )
 
     args = parser.parse_args()
