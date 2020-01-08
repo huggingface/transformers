@@ -1194,14 +1194,18 @@ class PreTrainedTokenizer(object):
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
             encoded_inputs["input_ids"] = tf.constant([encoded_inputs["input_ids"]])
-            encoded_inputs["token_type_ids"] = tf.constant([encoded_inputs["token_type_ids"]])
+
+            if "token_type_ids" in encoded_inputs:
+                encoded_inputs["token_type_ids"] = tf.constant([encoded_inputs["token_type_ids"]])
 
             if "attention_mask" in encoded_inputs:
                 encoded_inputs["attention_mask"] = tf.constant([encoded_inputs["attention_mask"]])
 
         elif return_tensors == "pt" and is_torch_available():
             encoded_inputs["input_ids"] = torch.tensor([encoded_inputs["input_ids"]])
-            encoded_inputs["token_type_ids"] = torch.tensor([encoded_inputs["token_type_ids"]])
+
+            if "token_type_ids" in encoded_inputs:
+                encoded_inputs["token_type_ids"] = torch.tensor([encoded_inputs["token_type_ids"]])
 
             if "attention_mask" in encoded_inputs:
                 encoded_inputs["attention_mask"] = torch.tensor([encoded_inputs["attention_mask"]])
