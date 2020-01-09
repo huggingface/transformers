@@ -25,3 +25,6 @@ from .processors import (
     japanese_tasks_num_labels,
     japanese_convert_examples_to_features
 )
+
+if is_sklearn_available():
+    from .metrics import glue_compute_metrics, xnli_compute_metrics, japanese_compute_metrics
