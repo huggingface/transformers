@@ -787,10 +787,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_cuda", action="store_true", help="no cuda")
     parser.add_argument("--colorama", action="store_true", help="colors keywords")
     parser.add_argument(
-        "--repetition_penalty",
-        type=float,
-        default=1.0,
-        help="Penalize repetition. More than 1.0 -> less repetition",
+        "--repetition_penalty", type=float, default=1.0, help="Penalize repetition. More than 1.0 -> less repetition",
     )
 
     args = parser.parse_args()
