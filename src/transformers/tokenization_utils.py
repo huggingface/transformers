@@ -460,7 +460,7 @@ class PreTrainedTokenizer(object):
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
         except OSError:
-            OSError(
+            raise OSError(
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
