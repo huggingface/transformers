@@ -99,3 +99,5 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
+        self.assertEqual(model.num_parameters(), 14830)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
