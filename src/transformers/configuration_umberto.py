@@ -26,8 +26,10 @@ from .configuration_roberta import RobertaConfig
 logger = logging.getLogger(__name__)
 
 UMBERTO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "umberto-commoncrawl-cased-v1": "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-config.json",
-    "umberto-wikipedia-uncased-v1" : "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia-uncased-v1-config.json"
+    "umberto-commoncrawl-cased-v1": 
+        "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-config.json",
+    "umberto-wikipedia-uncased-v1" : 
+        "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia-uncased-v1-config.json"
 }
 
 

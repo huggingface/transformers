@@ -1,6 +1,5 @@
 # coding=utf-8
 # Copyright 2019 Inria, Facebook AI Research, Musixmatch spa and the HuggingFace Inc. team.
-# This code is referring to the Camembert code, just to simplify not for copying
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# This code refers to the file modeling_camembert.py trying to replicate it
-# not for copying it, but as reference
-
-"""PyTorch UmBERTo model. """
-
+"""PyTorch UmBERTo model. 
+   Adapted from ./modeling_camembert.py"""
 
 import logging
 
 from .configuration_umberto import UmbertoConfig
 from .file_utils import add_start_docstrings
-
 from .modeling_roberta import (
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
@@ -37,8 +32,11 @@ from .modeling_roberta import (
 logger = logging.getLogger(__name__)
 
 UMBERTO_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "umberto-wikipedia-uncased-v1" : "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia-uncased-v1-pytorch_model.bin",
-    "umberto-commoncrawl-cased-v1" : "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-pytorch_model.bin"
+    "umberto-wikipedia-uncased-v1" : 
+        "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia-uncased-v1-pytorch_model.bin",
+
+    "umberto-commoncrawl-cased-v1" : 
+        "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-pytorch_model.bin"
 }
 
 
@@ -61,7 +59,7 @@ class UmbertoModel(RobertaModel):
 
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
         model = UmbertoModel.from_pretrained('umberto-commoncrawl-cased-v1')
-        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore")).unsqueeze(0)
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
@@ -79,7 +77,7 @@ class UmbertoForMaskedLM(RobertaForMaskedLM):
     r"""
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
         model = UmbertoModel.from_pretrained('umberto-commoncrawl-cased-v1')
-        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore")).unsqueeze(0)
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
@@ -100,7 +98,7 @@ class UmbertoForSequenceClassification(RobertaForSequenceClassification):
 
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
         model = UmbertoModel.from_pretrained('umberto-commoncrawl-cased-v1')
-        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore")).unsqueeze(0)
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, logits = outputs[:2]
@@ -124,7 +122,7 @@ class UmbertoForMultipleChoice(RobertaForMultipleChoice):
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
         model = UmbertoModel.from_pretrained('umberto-commoncrawl-cased-v1')
         choices = ["Umberto Eco è stato un grande scrittore", "Umberto Eco è stato un grande autore"]
-        input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, classification_scores = outputs[:2]
@@ -147,7 +145,8 @@ class UmbertoForTokenClassification(RobertaForTokenClassification):
 
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
         model = UmbertoModel.from_pretrained('umberto-commoncrawl-cased-v1')
-        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Umberto Eco è stato un grande scrittore",
+             add_special_tokens=True)).unsqueeze(0)
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, scores = outputs[:2]

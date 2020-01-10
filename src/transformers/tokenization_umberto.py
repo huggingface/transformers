@@ -1,7 +1,7 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors, Musixmatch spa and the HuggingFace Inc. team.
-# This code is referring to the Camembert code, just to simplify not for copying
-
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors, 
+# Musixmatch spa and the HuggingFace Inc. team.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
-""" Tokenization classes for Umberto model."""
+""" Tokenization classes for Umberto model.
+    Adapted from ./tokenization_camembert.py"""
 
 
 import logging
@@ -34,8 +35,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "umberto-wikipedia-uncased-v1" : "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia.uncased-v1-sentencepiece.bpe.model",
-        "umberto-commoncrawl-cased-v1" : "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-sentencepiece.bpe.model"
+        "umberto-wikipedia-uncased-v1" : 
+            "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia.uncased-v1-sentencepiece.bpe.model",
+        "umberto-commoncrawl-cased-v1" : 
+            "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-sentencepiece.bpe.model"
     }
 }
 
