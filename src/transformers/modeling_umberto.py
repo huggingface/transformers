@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch UmBERTo model. 
+"""PyTorch UmBERTo model.
    Adapted from ./modeling_camembert.py"""
 
 import logging
@@ -41,7 +41,7 @@ UMBERTO_START_DOCSTRING = r"""
 """
 
 UMBERTO_INPUTS_DOCSTRING = r"""
-    
+
 """
 
 
@@ -109,7 +109,7 @@ class UmbertoForSequenceClassification(RobertaForSequenceClassification):
 )
 class UmbertoForMultipleChoice(RobertaForMultipleChoice):
     r"""
-    
+
     Examples::
 
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
@@ -133,7 +133,7 @@ class UmbertoForMultipleChoice(RobertaForMultipleChoice):
 )
 class UmbertoForTokenClassification(RobertaForTokenClassification):
     r"""
-    
+
     Examples::
 
         tokenizer = UmbertoTokenizer.from_pretrained('umberto-commoncrawl-cased-v1')
