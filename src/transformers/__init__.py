@@ -388,7 +388,6 @@ if is_tf_available():
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
 
-    
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(

@@ -32,11 +32,8 @@ from .modeling_roberta import (
 logger = logging.getLogger(__name__)
 
 UMBERTO_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "umberto-wikipedia-uncased-v1" : 
-        "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia-uncased-v1-pytorch_model.bin",
-
-    "umberto-commoncrawl-cased-v1" : 
-        "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-pytorch_model.bin"
+    "umberto-wikipedia-uncased-v1": "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia-uncased-v1-pytorch_model.bin",
+    "umberto-commoncrawl-cased-v1": "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-pytorch_model.bin",
 }
 
 
@@ -49,9 +46,7 @@ UMBERTO_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "",
-    UMBERTO_START_DOCSTRING,
-    UMBERTO_INPUTS_DOCSTRING,
+    "", UMBERTO_START_DOCSTRING, UMBERTO_INPUTS_DOCSTRING,
 )
 class UmbertoModel(RobertaModel):
     r"""
@@ -69,9 +64,7 @@ class UmbertoModel(RobertaModel):
 
 
 @add_start_docstrings(
-    """umBERTo Model with a `language modeling` head on top. """,
-    UMBERTO_START_DOCSTRING,
-    UMBERTO_INPUTS_DOCSTRING,
+    """umBERTo Model with a `language modeling` head on top. """, UMBERTO_START_DOCSTRING, UMBERTO_INPUTS_DOCSTRING,
 )
 class UmbertoForMaskedLM(RobertaForMaskedLM):
     r"""

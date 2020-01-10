@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors, 
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors,
 # Musixmatch spa and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,18 +35,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "umberto-wikipedia-uncased-v1" : 
-            "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia.uncased-v1-sentencepiece.bpe.model",
-        "umberto-commoncrawl-cased-v1" : 
-            "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-sentencepiece.bpe.model"
+        "umberto-wikipedia-uncased-v1": "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-wikipedia.uncased-v1-sentencepiece.bpe.model",
+        "umberto-commoncrawl-cased-v1": "https://mxmdownloads.s3.amazonaws.com/umberto/umberto-commoncrawl-cased-v1-sentencepiece.bpe.model",
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-
-        "umberto-wikipedia-uncased-v1" : None,
-        "umberto-commoncrawl-cased-v1" : None
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"umberto-wikipedia-uncased-v1": None, "umberto-commoncrawl-cased-v1": None}
 
 
 class UmbertoTokenizer(PreTrainedTokenizer):
