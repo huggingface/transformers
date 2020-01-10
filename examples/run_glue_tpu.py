@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE (Bert, XLNet, RoBERTa)."""
+""" Finetuning the library models for sequence classification on GLUE (Bert, DistilBert, XLNet, RoBERTa)."""
 
 from __future__ import absolute_import, division, print_function
 
@@ -63,19 +63,21 @@ logger = logging.getLogger(__name__)
 script_start_time = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (
-    BertConfig, XLNetConfig, RobertaConfig)), ())
+    BertConfig, XLNetConfig, XLMConfig, RobertaConfig, DistilBertConfig)), ())
 
 MODEL_CLASSES = {
     'bert': (BertConfig, BertForSequenceClassification, BertTokenizer),
     'xlnet': (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
+    'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
+    'distilbert': (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
 }
 
 
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def get_sampler(dataset):
@@ -127,7 +129,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
     loss = None
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=disable_logging)
-    set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+    set_seed(args.seed)  # Added here for reproductibility (even between python 2 and 3)
     for epoch in train_iterator:
         # Get TPU parallel loader which sends data to TPU in background.
         train_dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
@@ -278,7 +280,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         label_list = processor.get_labels()
         if task in ['mnli', 'mnli-mm'] and args.model_type in ['roberta']:
             # HACK(label indices are swapped in RoBERTa pretrained model)
-            label_list[1], label_list[2] = label_list[2], label_list[1] 
+            label_list[1], label_list[2] = label_list[2], label_list[1]
         examples = processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
         features = convert_examples_to_features(examples,
                                                 tokenizer,
@@ -328,7 +330,7 @@ def main(args):
             xm.get_ordinal(), args.device, args.num_cores)
 
     # Set seed to have same initialization
-    set_seed(args)
+    set_seed(args.seed)
 
     # Prepare GLUE task
     args.task_name = args.task_name.lower()
@@ -362,6 +364,7 @@ def main(args):
 
     logger.info("Training/evaluation parameters %s", args)
 
+    output_dir = os.path.join(args.output_dir, 'final-xla{}'.format(xm.get_ordinal()))
     if args.do_train:
         # Train the model.
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
@@ -370,7 +373,6 @@ def main(args):
 
         # Save trained model.
         # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-        output_dir = os.path.join(args.output_dir, 'final-xla{}'.format(xm.get_ordinal()))
 
         # Create output directory if needed
         if not os.path.exists(output_dir):
@@ -403,7 +405,7 @@ def main(args):
         for checkpoint in checkpoints:
             global_step = checkpoint.split('-')[-1] if len(checkpoints) > 1 else ""
             prefix = checkpoint.split('/')[-1] if checkpoint.find('checkpoint') != -1 else ""
-            
+
             model = model_class.from_pretrained(checkpoint, xla_device=True)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix, disable_logging=disable_logging)

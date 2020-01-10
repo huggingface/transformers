@@ -479,6 +479,11 @@ class PreTrainedModel(nn.Module):
             loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys, "error_msgs": error_msgs}
             return model, loading_info
 
+        if xla_device:
+            import torch_xla.core.xla_model as xm
+            model = xm.send_cpu_data_to_device(model, xm.xla_device())
+            model = model.to(xm.xla_device())
+
         return model
 
 
