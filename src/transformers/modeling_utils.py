@@ -53,7 +53,7 @@ except ImportError:
             return input
 
 
-class ModuleUtils:
+class ModuleUtilsMixin:
     """
     A few utilities for torch.nn.Modules, to be used as a mixin.
     """
@@ -66,7 +66,7 @@ class ModuleUtils:
         return sum(p.numel() for p in params)
 
 
-class PreTrainedModel(nn.Module, ModuleUtils):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     r""" Base class for all models.
 
         :class:`~transformers.PreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
