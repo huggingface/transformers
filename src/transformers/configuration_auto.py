@@ -16,6 +16,7 @@
 
 
 import logging
+from collections import OrderedDict
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
@@ -27,6 +28,7 @@ from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, Open
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
@@ -56,17 +58,38 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 )
 
 
-class AutoConfig(object):
+CONFIG_MAPPING = OrderedDict(
+    [
+        ("t5", T5Config,),
+        ("distilbert", DistilBertConfig,),
+        ("albert", AlbertConfig,),
+        ("camembert", CamembertConfig,),
+        ("xlm-roberta", XLMRobertaConfig,),
+        ("roberta", RobertaConfig,),
+        ("bert", BertConfig,),
+        ("openai-gpt", OpenAIGPTConfig,),
+        ("gpt2", GPT2Config,),
+        ("transfo-xl", TransfoXLConfig,),
+        ("xlnet", XLNetConfig,),
+        ("xlm", XLMConfig,),
+        ("ctrl", CTRLConfig,),
+    ]
+)
+
+
+class AutoConfig:
     r""":class:`~transformers.AutoConfig` is a generic configuration class
         that will be instantiated as one of the configuration classes of the library
         when created with the `AutoConfig.from_pretrained(pretrained_model_name_or_path)`
         class method.
 
         The `from_pretrained()` method take care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
-        The base model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
+        When using string matching, the configuration class is matched on
+        the `pretrained_model_name_or_path` string in the following order:
+            - contains `t5`: T5Config (T5 model)
             - contains `distilbert`: DistilBertConfig (DistilBERT model)
             - contains `albert`: AlbertConfig (ALBERT model)
             - contains `camembert`: CamembertConfig (CamemBERT model)
@@ -90,41 +113,23 @@ class AutoConfig(object):
 
     @classmethod
     def for_model(cls, model_type, *args, **kwargs):
-        if "distilbert" in model_type:
-            return DistilBertConfig(*args, **kwargs)
-        elif "roberta" in model_type:
-            return RobertaConfig(*args, **kwargs)
-        elif "bert" in model_type:
-            return BertConfig(*args, **kwargs)
-        elif "openai-gpt" in model_type:
-            return OpenAIGPTConfig(*args, **kwargs)
-        elif "gpt2" in model_type:
-            return GPT2Config(*args, **kwargs)
-        elif "transfo-xl" in model_type:
-            return TransfoXLConfig(*args, **kwargs)
-        elif "xlnet" in model_type:
-            return XLNetConfig(*args, **kwargs)
-        elif "xlm" in model_type:
-            return XLMConfig(*args, **kwargs)
-        elif "ctrl" in model_type:
-            return CTRLConfig(*args, **kwargs)
-        elif "albert" in model_type:
-            return AlbertConfig(*args, **kwargs)
-        elif "camembert" in model_type:
-            return CamembertConfig(*args, **kwargs)
+        for pattern, config_class in CONFIG_MAPPING.items():
+            if pattern in model_type:
+                return config_class(*args, **kwargs)
         raise ValueError(
-            "Unrecognized model identifier in {}. Should contains one of "
-            "'distilbert', 'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-            "'xlm', 'roberta', 'ctrl', 'camembert', 'albert'".format(model_type)
+            "Unrecognized model identifier in {}. Should contain one of {}".format(
+                model_type, ", ".join(CONFIG_MAPPING.keys())
+            )
         )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r""" Instantiate a one of the configuration classes of the library
+        r""" Instantiate one of the configuration classes of the library
         from a pre-trained model configuration.
 
-        The configuration class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
+        The configuration class to instantiate is selected
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
             - contains `t5`: T5Config (T5 model)
             - contains `distilbert`: DistilBertConfig (DistilBERT model)
             - contains `albert`: AlbertConfig (ALBERT model)
@@ -183,36 +188,21 @@ class AutoConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        if "t5" in pretrained_model_name_or_path:
-            return T5Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "distilbert" in pretrained_model_name_or_path:
-            return DistilBertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "albert" in pretrained_model_name_or_path:
-            return AlbertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "camembert" in pretrained_model_name_or_path:
-            return CamembertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "xlm-roberta" in pretrained_model_name_or_path:
-            return XLMRobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "roberta" in pretrained_model_name_or_path:
-            return RobertaConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "bert" in pretrained_model_name_or_path:
-            return BertConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "openai-gpt" in pretrained_model_name_or_path:
-            return OpenAIGPTConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "gpt2" in pretrained_model_name_or_path:
-            return GPT2Config.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "transfo-xl" in pretrained_model_name_or_path:
-            return TransfoXLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "xlnet" in pretrained_model_name_or_path:
-            return XLNetConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "xlm" in pretrained_model_name_or_path:
-            return XLMConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif "ctrl" in pretrained_model_name_or_path:
-            return CTRLConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = PretrainedConfig.resolved_config_dict(
+            pretrained_model_name_or_path, pretrained_config_archive_map=ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, **kwargs
+        )
+
+        if "model_type" in config_dict:
+            config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            return config_class.from_dict(config_dict, **kwargs)
+        else:
+            # Fallback: use pattern matching on the string.
+            for pattern, config_class in CONFIG_MAPPING.items():
+                if pattern in pretrained_model_name_or_path:
+                    return config_class.from_dict(config_dict, **kwargs)
+
         raise ValueError(
-            "Unrecognized model identifier in {}. Should contains one of "
-            "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
-            "'xlm-roberta', 'xlm', 'roberta', 'distilbert', 'camembert', 'ctrl', 'albert'".format(
-                pretrained_model_name_or_path
+            "Unrecognized model identifier in {}. Should have a `model_type` key in its config.json, or contain one of {}".format(
+                pretrained_model_name_or_path, ", ".join(CONFIG_MAPPING.keys())
             )
         )

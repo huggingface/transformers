@@ -20,6 +20,7 @@ import copy
 import json
 import logging
 import os
+from typing import Dict, Optional, Tuple
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 
@@ -36,7 +37,7 @@ class PretrainedConfig(object):
             It only affects the model's configuration.
 
         Class attributes (overridden by derived classes):
-            - ``pretrained_config_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
+            - ``pretrained_config_archive_map``: a python ``dict`` with `shortcut names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
 
         Parameters:
             ``finetuning_task``: string, default `None`. Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow or PyTorch) checkpoint.
@@ -154,14 +155,32 @@ class PretrainedConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
+        config_dict, kwargs = cls.resolved_config_dict(pretrained_model_name_or_path, **kwargs)
+        return cls.from_dict(config_dict, **kwargs)
+
+    @classmethod
+    def resolved_config_dict(
+        cls, pretrained_model_name_or_path: str, pretrained_config_archive_map: Optional[Dict] = None, **kwargs
+    ) -> Tuple[Dict, Dict]:
+        """
+        From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used
+        for instantiating a Config using `from_dict`.
+
+        Parameters:
+            pretrained_config_archive_map: (`optional`) Dict:
+                A map of `shortcut names` to `url`.
+                By default, will use the current class attribute.
+        """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
-            config_file = cls.pretrained_config_archive_map[pretrained_model_name_or_path]
+        if pretrained_config_archive_map is None:
+            pretrained_config_archive_map = cls.pretrained_config_archive_map
+
+        if pretrained_model_name_or_path in pretrained_config_archive_map:
+            config_file = pretrained_config_archive_map[pretrained_model_name_or_path]
         elif os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -178,23 +197,20 @@ class PretrainedConfig(object):
                 proxies=proxies,
                 resume_download=resume_download,
             )
-            # Load config
-            config = cls.from_json_file(resolved_config_file)
+            # Load config dict
+            config_dict = cls._dict_from_json_file(resolved_config_file)
 
         except EnvironmentError:
-            if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
+            if pretrained_model_name_or_path in pretrained_config_archive_map:
                 msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
                     config_file
                 )
             else:
                 msg = (
-                    "Model name '{}' was not found in model name list ({}). "
+                    "Model name '{}' was not found in model name list. "
                     "We assumed '{}' was a path or url to a configuration file named {} or "
                     "a directory containing such a file but couldn't find any such file at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ", ".join(cls.pretrained_config_archive_map.keys()),
-                        config_file,
-                        CONFIG_NAME,
+                        pretrained_model_name_or_path, config_file, CONFIG_NAME,
                     )
                 )
             raise EnvironmentError(msg)
@@ -211,6 +227,15 @@ class PretrainedConfig(object):
             logger.info("loading configuration file {}".format(config_file))
         else:
             logger.info("loading configuration file {} from cache at {}".format(config_file, resolved_config_file))
+
+        return config_dict, kwargs
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict, **kwargs):
+        """Constructs a `Config` from a Python dictionary of parameters."""
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        config = cls(**config_dict)
 
         if hasattr(config, "pruned_heads"):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
@@ -231,17 +256,16 @@ class PretrainedConfig(object):
             return config
 
     @classmethod
-    def from_dict(cls, json_object):
-        """Constructs a `Config` from a Python dictionary of parameters."""
-        return cls(**json_object)
+    def from_json_file(cls, json_file: str):
+        """Constructs a `Config` from a json file of parameters."""
+        config_dict = cls._dict_from_json_file(json_file)
+        return cls(**config_dict)
 
     @classmethod
-    def from_json_file(cls, json_file):
-        """Constructs a `Config` from a json file of parameters."""
+    def _dict_from_json_file(cls, json_file: str):
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
-        dict_obj = json.loads(text)
-        return cls(**dict_obj)
+        return json.loads(text)
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
