@@ -140,11 +140,10 @@ class ConvertCommand(BaseTransformersCLICommand):
             )
 
             convert_xlm_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
-        elif self._model_type == 't5':
-            from transformers.convert_t5_original_tf_checkpoint_to_pytorch import (
-                convert_tf_checkpoint_to_pytorch
-            )
-            
+        elif self._model_type == "t5":
+            from transformers.convert_t5_original_tf_checkpoint_to_pytorch import convert_tf_checkpoint_to_pytorch
+
             convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         else:
-            raise ValueError("--model_type should be selected in the list [bert, gpt, gpt2, transfo_xl, xlnet, xlm, t5]")
+            msg = "--model_type should be selected in the list " "[bert, gpt, gpt2, transfo_xl, xlnet, xlm, t5]"
+            raise ValueError(msg)
