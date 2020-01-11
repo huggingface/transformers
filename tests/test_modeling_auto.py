@@ -19,7 +19,7 @@ import unittest
 
 from transformers import is_torch_available
 
-from .utils import SMALL_MODEL_IDENTIFIER, require_torch, slow
+from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_torch, slow
 
 
 if is_torch_available():
@@ -30,6 +30,7 @@ if is_torch_available():
         BertModel,
         AutoModelWithLMHead,
         BertForMaskedLM,
+        RobertaForMaskedLM,
         AutoModelForSequenceClassification,
         BertForSequenceClassification,
         AutoModelForQuestionAnswering,
@@ -100,5 +101,12 @@ class AutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, BertForMaskedLM)
+        self.assertEqual(model.num_parameters(), 14830)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+
+    def test_from_identifier_from_model_type(self):
+        logging.basicConfig(level=logging.INFO)
+        model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        self.assertIsInstance(model, RobertaForMaskedLM)
         self.assertEqual(model.num_parameters(), 14830)
         self.assertEqual(model.num_parameters(only_trainable=True), 14830)
