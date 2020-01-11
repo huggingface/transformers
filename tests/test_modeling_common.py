@@ -592,7 +592,6 @@ class ModelTesterMixin:
                 model(**inputs_dict)
 
 
-
 global_rng = random.Random()
 
 
