@@ -35,3 +35,4 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RobertaConfig(BertConfig):
     pretrained_config_archive_map = ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "roberta"
