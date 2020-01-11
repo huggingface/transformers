@@ -276,6 +276,8 @@ class PretrainedConfig(object):
     def to_dict(self):
         """Serializes this instance to a Python dictionary."""
         output = copy.deepcopy(self.__dict__)
+        if hasattr(self.__class__, "model_type"):
+            output["model_type"] = self.__class__.model_type
         return output
 
     def to_json_string(self):
