@@ -19,6 +19,7 @@ import logging
 
 from .configuration_auto import (
     AlbertConfig,
+    AutoConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
@@ -26,11 +27,13 @@ from .configuration_auto import (
     GPT2Config,
     OpenAIGPTConfig,
     RobertaConfig,
+    T5Config,
     TransfoXLConfig,
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
 )
+from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
     ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     AlbertForMaskedLM,
@@ -129,7 +132,8 @@ class AutoModel(object):
         or the `AutoModel.from_config(config)` class methods.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -286,32 +290,36 @@ class AutoModel(object):
             model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if "t5" in pretrained_model_name_or_path:
-            return T5Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "distilbert" in pretrained_model_name_or_path:
-            return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "albert" in pretrained_model_name_or_path:
-            return AlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "camembert" in pretrained_model_name_or_path:
-            return CamembertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlm-roberta" in pretrained_model_name_or_path:
-            return XLMRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "roberta" in pretrained_model_name_or_path:
-            return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "bert" in pretrained_model_name_or_path:
-            return BertModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "openai-gpt" in pretrained_model_name_or_path:
-            return OpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "gpt2" in pretrained_model_name_or_path:
-            return GPT2Model.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "transfo-xl" in pretrained_model_name_or_path:
-            return TransfoXLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlnet" in pretrained_model_name_or_path:
-            return XLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlm" in pretrained_model_name_or_path:
-            return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "ctrl" in pretrained_model_name_or_path:
-            return CTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        if isinstance(config, T5Config):
+            return T5Model.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, DistilBertConfig):
+            return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, AlbertConfig):
+            return AlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, CamembertConfig):
+            return CamembertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, XLMRobertaConfig):
+            return XLMRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, RobertaConfig):
+            return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, BertConfig):
+            return BertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, OpenAIGPTConfig):
+            return OpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, GPT2Config):
+            return GPT2Model.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, TransfoXLConfig):
+            return TransfoXLModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, XLNetConfig):
+            return XLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, XLMConfig):
+            return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, CTRLConfig):
+            return CTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized model identifier in {}. Should contains one of "
             "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
@@ -329,7 +337,8 @@ class AutoModelWithLMHead(object):
         class method.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -407,7 +416,8 @@ class AutoModelWithLMHead(object):
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -484,32 +494,56 @@ class AutoModelWithLMHead(object):
             model = AutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if "t5" in pretrained_model_name_or_path:
-            return T5WithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "distilbert" in pretrained_model_name_or_path:
-            return DistilBertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "albert" in pretrained_model_name_or_path:
-            return AlbertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "camembert" in pretrained_model_name_or_path:
-            return CamembertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlm-roberta" in pretrained_model_name_or_path:
-            return XLMRobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "roberta" in pretrained_model_name_or_path:
-            return RobertaForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "bert" in pretrained_model_name_or_path:
-            return BertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "openai-gpt" in pretrained_model_name_or_path:
-            return OpenAIGPTLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "gpt2" in pretrained_model_name_or_path:
-            return GPT2LMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "transfo-xl" in pretrained_model_name_or_path:
-            return TransfoXLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlnet" in pretrained_model_name_or_path:
-            return XLNetLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlm" in pretrained_model_name_or_path:
-            return XLMWithLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "ctrl" in pretrained_model_name_or_path:
-            return CTRLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        if isinstance(config, T5Config):
+            return T5WithLMHeadModel.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, DistilBertConfig):
+            return DistilBertForMaskedLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, AlbertConfig):
+            return AlbertForMaskedLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, CamembertConfig):
+            return CamembertForMaskedLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLMRobertaConfig):
+            return XLMRobertaForMaskedLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, RobertaConfig):
+            return RobertaForMaskedLM.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, BertConfig):
+            return BertForMaskedLM.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, OpenAIGPTConfig):
+            return OpenAIGPTLMHeadModel.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, GPT2Config):
+            return GPT2LMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        elif isinstance(config, TransfoXLConfig):
+            return TransfoXLLMHeadModel.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLNetConfig):
+            return XLNetLMHeadModel.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLMConfig):
+            return XLMWithLMHeadModel.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, CTRLConfig):
+            return CTRLLMHeadModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized model identifier in {}. Should contains one of "
             "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "
@@ -527,7 +561,8 @@ class AutoModelForSequenceClassification(object):
         class method.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -592,7 +627,8 @@ class AutoModelForSequenceClassification(object):
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -665,32 +701,42 @@ class AutoModelForSequenceClassification(object):
             model = AutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if "distilbert" in pretrained_model_name_or_path:
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        if isinstance(config, DistilBertConfig):
             return DistilBertForSequenceClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "albert" in pretrained_model_name_or_path:
+        elif isinstance(config, AlbertConfig):
             return AlbertForSequenceClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "camembert" in pretrained_model_name_or_path:
+        elif isinstance(config, CamembertConfig):
             return CamembertForSequenceClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "xlm-roberta" in pretrained_model_name_or_path:
+        elif isinstance(config, XLMRobertaConfig):
             return XLMRobertaForSequenceClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "roberta" in pretrained_model_name_or_path:
+        elif isinstance(config, RobertaConfig):
             return RobertaForSequenceClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "bert" in pretrained_model_name_or_path:
-            return BertForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlnet" in pretrained_model_name_or_path:
-            return XLNetForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlm" in pretrained_model_name_or_path:
-            return XLMForSequenceClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif isinstance(config, BertConfig):
+            return BertForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLNetConfig):
+            return XLNetForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLMConfig):
+            return XLMForSequenceClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
 
         raise ValueError(
             "Unrecognized model identifier in {}. Should contains one of "
@@ -708,7 +754,8 @@ class AutoModelForQuestionAnswering(object):
         class method.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -763,7 +810,8 @@ class AutoModelForQuestionAnswering(object):
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -830,16 +878,30 @@ class AutoModelForQuestionAnswering(object):
             model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if "distilbert" in pretrained_model_name_or_path:
-            return DistilBertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "albert" in pretrained_model_name_or_path:
-            return AlbertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "bert" in pretrained_model_name_or_path:
-            return BertForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlnet" in pretrained_model_name_or_path:
-            return XLNetForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlm" in pretrained_model_name_or_path:
-            return XLMForQuestionAnswering.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        if isinstance(config, DistilBertConfig):
+            return DistilBertForQuestionAnswering.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, AlbertConfig):
+            return AlbertForQuestionAnswering.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, BertConfig):
+            return BertForQuestionAnswering.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLNetConfig):
+            return XLNetForQuestionAnswering.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLMConfig):
+            return XLMForQuestionAnswering.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
 
         raise ValueError(
             "Unrecognized model identifier in {}. Should contains one of "
@@ -893,7 +955,8 @@ class AutoModelForTokenClassification:
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
-        using pattern matching on the `pretrained_model_name_or_path` string.
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
@@ -959,24 +1022,34 @@ class AutoModelForTokenClassification:
             model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
-        if "camembert" in pretrained_model_name_or_path:
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        if isinstance(config, CamembertConfig):
             return CamembertForTokenClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "distilbert" in pretrained_model_name_or_path:
+        elif isinstance(config, DistilBertConfig):
             return DistilBertForTokenClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "xlm-roberta" in pretrained_model_name_or_path:
+        elif isinstance(config, XLMRobertaConfig):
             return XLMRobertaForTokenClassification.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
-        elif "roberta" in pretrained_model_name_or_path:
-            return RobertaForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "bert" in pretrained_model_name_or_path:
-            return BertForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        elif "xlnet" in pretrained_model_name_or_path:
-            return XLNetForTokenClassification.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif isinstance(config, RobertaConfig):
+            return RobertaForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, BertConfig):
+            return BertForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        elif isinstance(config, XLNetConfig):
+            return XLNetForTokenClassification.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
 
         raise ValueError(
             "Unrecognized model identifier in {}. Should contains one of "

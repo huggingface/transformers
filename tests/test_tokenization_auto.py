@@ -29,7 +29,7 @@ from .utils import SMALL_MODEL_IDENTIFIER, slow
 
 
 class AutoTokenizerTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:
