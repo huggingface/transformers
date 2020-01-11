@@ -20,6 +20,8 @@ from transformers.configuration_auto import AutoConfig
 from transformers.configuration_bert import BertConfig
 from transformers.configuration_roberta import RobertaConfig
 
+from .utils import DUMMY_UNKWOWN_IDENTIFIER
+
 
 SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
 
@@ -29,8 +31,12 @@ class AutoConfigTest(unittest.TestCase):
         config = AutoConfig.from_pretrained("bert-base-uncased")
         self.assertIsInstance(config, BertConfig)
 
-    def test_config_from_model_type(self):
+    def test_config_model_type_from_local_file(self):
         config = AutoConfig.from_pretrained(SAMPLE_ROBERTA_CONFIG)
+        self.assertIsInstance(config, RobertaConfig)
+
+    def test_config_model_type_from_model_identifier(self):
+        config = AutoConfig.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(config, RobertaConfig)
 
     def test_config_for_model_str(self):

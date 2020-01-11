@@ -19,7 +19,7 @@ import unittest
 
 from transformers import is_tf_available
 
-from .utils import SMALL_MODEL_IDENTIFIER, require_tf, slow
+from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_tf, slow
 
 
 if is_tf_available():
@@ -30,6 +30,7 @@ if is_tf_available():
         TFBertModel,
         TFAutoModelWithLMHead,
         TFBertForMaskedLM,
+        TFRobertaForMaskedLM,
         TFAutoModelForSequenceClassification,
         TFBertForSequenceClassification,
         TFAutoModelForQuestionAnswering,
@@ -99,5 +100,12 @@ class TFAutoModelTest(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
+        self.assertEqual(model.num_parameters(), 14830)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+
+    def test_from_identifier_from_model_type(self):
+        logging.basicConfig(level=logging.INFO)
+        model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        self.assertIsInstance(model, TFRobertaForMaskedLM)
         self.assertEqual(model.num_parameters(), 14830)
         self.assertEqual(model.num_parameters(only_trainable=True), 14830)
