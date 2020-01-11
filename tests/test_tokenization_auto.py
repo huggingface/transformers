@@ -25,7 +25,7 @@ from transformers import (
     GPT2Tokenizer,
 )
 
-from .utils import SMALL_MODEL_IDENTIFIER, slow
+from .utils import SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
 
 
 class AutoTokenizerTest(unittest.TestCase):
