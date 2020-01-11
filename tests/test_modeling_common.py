@@ -15,13 +15,11 @@
 
 
 import copy
-import json
 import logging
 import os.path
 import random
 import tempfile
 import unittest
-import uuid
 
 from transformers import is_torch_available
 
