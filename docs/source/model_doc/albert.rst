@@ -1,7 +1,7 @@
 ALBERT
 ----------------------------------------------------
 
-``AlbrtConfig``
+``AlbertConfig``
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AlbertConfig

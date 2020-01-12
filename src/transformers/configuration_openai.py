@@ -30,27 +30,45 @@ OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OpenAIGPTConfig(PretrainedConfig):
     """
-    Configuration class to store the configuration of a `OpenAIGPTModel`.
+        This is the configuration class to store the configuration of an :class:`~transformers.OpenAIGPTModel`.
+        It is used to instantiate an GPT model according to the specified arguments, defining the model
+        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+        the GPT architecture from OpenAI.
 
-    Args:
-        vocab_size: Vocabulary size of `inputs_ids` in `OpenAIGPTModel` or a configuration json file.
-        n_positions: Number of positional embeddings.
-        n_ctx: Size of the causal mask (usually same as n_positions).
-        n_embd: Dimensionality of the embeddings and hidden states.
-        n_layer: Number of hidden layers in the Transformer encoder.
-        n_head: Number of attention heads for each attention layer in
-            the Transformer encoder.
-        afn: The non-linear activation function (function or string) in the
-            encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-        resid_pdrop: The dropout probabilitiy for all fully connected
-            layers in the embeddings, encoder, and pooler.
-        attn_pdrop: The dropout ratio for the attention
-            probabilities.
-        embd_pdrop: The dropout ratio for the embeddings.
-        layer_norm_epsilon: epsilon to use in the layer norm layers
-        initializer_range: The sttdev of the truncated_normal_initializer for
-            initializing all weight matrices.
-        predict_special_tokens: should we predict special tokens (when the model has a LM head)
+        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+        for more information.
+
+        Args:
+            vocab_size (:obj:`int`, optional, defaults to 40478):
+                Vocabulary size of the GPT model. Defines the different tokens that
+                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.CTRLModel`.
+            n_positions (:obj:`int`, optional, defaults to 512):
+                The maximum sequence length that this model might ever be used with.
+                Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            n_ctx (:obj:`int`, optional, defaults to 512):
+                Size of the causal mask (usually same as n_positions).
+            n_embd (:obj:`int`, optional, defaults to 768):
+                Dimensionality of the embeddings and hidden states.
+            n_layer (:obj:`int`, optional, defaults to 12):
+                Number of hidden layers in the Transformer encoder.
+            n_head (:obj:`int`, optional, defaults to 12):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            afn (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
+                The non-linear activation function (function or string) in the encoder and pooler.
+                If string, "gelu", "relu", "swish" and "gelu_new" are supported.
+            resid_pdrop (:obj:`float`, optional, defaults to 0.1):
+                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            embd_pdrop (:obj:`int`, optional, defaults to 0.1):
+                The dropout ratio for the embeddings.
+            attn_pdrop (:obj:`float`, optional, defaults to 0.1):
+                The dropout ratio for the attention.
+            layer_norm_epsilon (:obj:`float`, optional, defaults to 1e-5):
+                The epsilon to use in the layer normalization layers
+            initializer_range (:obj:`float`, optional, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            predict_special_tokens (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Whether special tokens should be predicted when the model is has a language modeling head.
     """
 
     pretrained_config_archive_map = OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -77,9 +95,8 @@ class OpenAIGPTConfig(PretrainedConfig):
         summary_first_dropout=0.1,
         **kwargs
     ):
-        """Constructs OpenAIGPTConfig.
-        """
         super(OpenAIGPTConfig, self).__init__(**kwargs)
+
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions

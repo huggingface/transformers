@@ -30,42 +30,60 @@ XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class XLNetConfig(PretrainedConfig):
-    """Configuration class to store the configuration of a ``XLNetModel``.
+    """
+        This is the configuration class to store the configuration of a :class:`~transformers.XLNetModel`.
+        It is used to instantiate an XLNet model according to the specified arguments, defining the model
+        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+        the `xlnet-large-cased <https://huggingface.co/xlnet-large-cased>`__ architecture.
 
-    Args:
-        vocab_size: Vocabulary size of ``inputs_ids`` in ``XLNetModel``.
-        d_model: Size of the encoder layers and the pooler layer.
-        n_layer: Number of hidden layers in the Transformer encoder.
-        n_head: Number of attention heads for each attention layer in
-            the Transformer encoder.
-        d_inner: The size of the "intermediate" (i.e., feed-forward)
-            layer in the Transformer encoder.
-        ff_activation: The non-linear activation function (function or string) in the
-            encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-        untie_r: untie relative position biases
-        attn_type: 'bi' for XLNet, 'uni' for Transformer-XL
+        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+        for more information.
 
-        dropout: The dropout probabilitiy for all fully connected
-            layers in the embeddings, encoder, and pooler.
-        initializer_range: The sttdev of the truncated_normal_initializer for
-            initializing all weight matrices.
-        layer_norm_eps: The epsilon used by LayerNorm.
-
-        dropout: float, dropout rate.
-        init: str, the initialization scheme, either "normal" or "uniform".
-        init_range: float, initialize the parameters with a uniform distribution
-            in [-init_range, init_range]. Only effective when init="uniform".
-        init_std: float, initialize the parameters with a normal distribution
-            with mean 0 and stddev init_std. Only effective when init="normal".
-        mem_len: int, the number of tokens to cache.
-        reuse_len: int, the number of tokens in the currect batch to be cached
-            and reused in the future.
-        bi_data: bool, whether to use bidirectional input pipeline.
-            Usually set to True during pretraining and False during finetuning.
-        clamp_len: int, clamp all relative distances larger than clamp_len.
-            -1 means no clamping.
-        same_length: bool, whether to use the same attention length for each token.
-        finetuning_task: name of the glue task on which the model was fine-tuned if any
+        Args:
+            vocab_size (:obj:`int`, optional, defaults to 32000):
+                Vocabulary size of the XLNet model. Defines the different tokens that
+                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLNetModel`.
+            d_model (:obj:`int`, optional, defaults to 1024):
+                Size of the encoder layers and the pooler layer.
+            n_layer (:obj:`int`, optional, defaults to 24):
+                Number of hidden layers in the Transformer encoder.
+            n_head (:obj:`int`, optional, defaults to 16):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            d_inner (:obj:`int`, optional, defaults to 4096):
+                The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            ff_activation (:obj:`string`, optional, defaults to "gelu"):
+                The non-linear activation function (function or string) in the
+                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
+            untie_r (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Untie relative position biases
+            attn_type (:obj:`string`, optional, defaults to "bi"):
+                The attention type used by the model. Set 'bi' for XLNet, 'uni' for Transformer-XL.
+            initializer_range (:obj:`float`, optional, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
+                The epsilon used by the layer normalization layers.
+            dropout (:obj:`float`, optional, defaults to 0.1):
+                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            mem_len (:obj:`int` or :obj:`None`, optional, defaults to :obj:`None`):
+                The number of tokens to cache. The key/value pairs that have already been pre-computed
+                in a previous forward pass won't be re-computed. See the
+                `quickstart <https://huggingface.co/transformers/quickstart.html#using-the-past>`__
+                for more information.
+            reuse_len (:obj:`int` or :obj:`None`, optional, defaults to :obj:`None`):
+                The number of tokens in the current batch to be cached and reused in the future.
+            bi_data (:obj:`boolean`, optional, defaults to :obj:`False`):
+                Whether to use bidirectional input pipeline. Usually set to `True` during
+                pretraining and `False` during finetuning.
+            clamp_len (:obj:`int`, optional, defaults to -1):
+                Clamp all relative distances larger than clamp_len.
+                Setting this attribute to -1 means no clamping.
+            same_length (:obj:`boolean`, optional, defaults to :obj:`False`):
+                Whether to use the same attention length for each token.
+            start_n_top (:obj:`int`, optional, defaults to 5):
+                TODO
+            end_n_top (:obj:`int`, optional, defaults to 5):
+                TODO
     """
 
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
