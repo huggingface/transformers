@@ -37,44 +37,81 @@ XLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class XLMConfig(PretrainedConfig):
-    """Configuration class to store the configuration of a `XLMModel`.
+    """
+        This is the configuration class to store the configuration of a :class:`~transformers.XLMModel`.
+        It is used to instantiate an XLM model according to the specified arguments, defining the model
+        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+        the `xlm-mlm-en-2048 <https://huggingface.co/xlm-mlm-en-2048>`__ architecture.
 
-    Args:
-        vocab_size: Vocabulary size of `inputs_ids` in `XLMModel`.
-        d_model: Size of the encoder layers and the pooler layer.
-        n_layer: Number of hidden layers in the Transformer encoder.
-        n_head: Number of attention heads for each attention layer in
-            the Transformer encoder.
-        d_inner: The size of the "intermediate" (i.e., feed-forward)
-            layer in the Transformer encoder.
-        ff_activation: The non-linear activation function (function or string) in the
-            encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-        untie_r: untie relative position biases
-        attn_type: 'bi' for XLM, 'uni' for Transformer-XL
+        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+        for more information.
 
-        dropout: The dropout probabilitiy for all fully connected
-            layers in the embeddings, encoder, and pooler.
-        max_position_embeddings: The maximum sequence length that this model might
-            ever be used with. Typically set this to something large just in case
-            (e.g., 512 or 1024 or 2048).
-        initializer_range: The sttdev of the truncated_normal_initializer for
-            initializing all weight matrices.
-        layer_norm_eps: The epsilon used by LayerNorm.
-
-        dropout: float, dropout rate.
-        init: str, the initialization scheme, either "normal" or "uniform".
-        init_range: float, initialize the parameters with a uniform distribution
-            in [-init_range, init_range]. Only effective when init="uniform".
-        init_std: float, initialize the parameters with a normal distribution
-            with mean 0 and stddev init_std. Only effective when init="normal".
-        mem_len: int, the number of tokens to cache.
-        reuse_len: int, the number of tokens in the currect batch to be cached
-            and reused in the future.
-        bi_data: bool, whether to use bidirectional input pipeline.
-            Usually set to True during pretraining and False during finetuning.
-        clamp_len: int, clamp all relative distances larger than clamp_len.
-            -1 means no clamping.
-        same_length: bool, whether to use the same attention length for each token.
+        Args:
+            vocab_size (:obj:`int`, optional, defaults to 30145):
+                Vocabulary size of the XLM model. Defines the different tokens that
+                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLMModel`.
+            emb_dim (:obj:`int`, optional, defaults to 2048):
+                Dimensionality of the encoder layers and the pooler layer.
+            n_layer (:obj:`int`, optional, defaults to 12):
+                Number of hidden layers in the Transformer encoder.
+            n_head (:obj:`int`, optional, defaults to 16):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            dropout (:obj:`float`, optional, defaults to 0.1):
+                The dropout probability for all fully connected
+                layers in the embeddings, encoder, and pooler.
+            attention_dropout (:obj:`float`, optional, defaults to 0.1):
+                The dropout probability for the attention mechanism
+            gelu_activation (:obj:`boolean`, optional, defaults to :obj:`True`):
+                The non-linear activation function (function or string) in the
+                encoder and pooler. If set to `True`, "gelu" will be used instead of "relu".
+            sinusoidal_embeddings (:obj:`boolean`, optional, defaults to :obj:`False`):
+                Whether to use sinusoidal positional embeddings instead of absolute positional embeddings.
+            causal (:obj:`boolean`, optional, defaults to :obj:`False`):
+                Set this to `True` for the model to behave in a causal manner.
+                Causal models use a triangular attention mask in order to only attend to the left-side context instead
+                if a bidirectional context.
+            asm (:obj:`boolean`, optional, defaults to :obj:`False`):
+                TODO
+            n_langs (:obj:`int`, optional, defaults to 1):
+                The number of languages the model handles. Set to 1 for monolingual models.
+            use_lang_emb (:obj:`boolean`, optional, defaults to :obj:`True`)
+                Whether to use language embeddings. Some models use additional language embeddings, see
+                `the multilingual models page <http://huggingface.co/transformers/multilingual.html#xlm-language-embeddings>`__
+                for information on how to use them.
+            max_position_embeddings (:obj:`int`, optional, defaults to 512):
+                The maximum sequence length that this model might
+                ever be used with. Typically set this to something large just in case
+                (e.g., 512 or 1024 or 2048).
+            embed_init_std (:obj:`float`, optional, defaults to 2048^-0.5):
+                The standard deviation of the truncated_normal_initializer for
+                initializing the embedding matrices.
+            init_std (:obj:`int`, optional, defaults to 50257):
+                The standard deviation of the truncated_normal_initializer for
+                initializing all weight matrices except the embedding matrices.
+            layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
+                The epsilon used by the layer normalization layers.
+            bos_index (:obj:`int`, optional, defaults to 0):
+                The index of the beginning of sentence token in the vocabulary.
+            eos_index (:obj:`int`, optional, defaults to 1):
+                The index of the end of sentence token in the vocabulary.
+            pad_index (:obj:`int`, optional, defaults to 2):
+                The index of the padding token in the vocabulary.
+            unk_index (:obj:`int`, optional, defaults to 3):
+                The index of the unknown token in the vocabulary.
+            mask_index (:obj:`int`, optional, defaults to 5):
+                The index of the masking token in the vocabulary.
+            is_encoder(:obj:`boolean`, optional, defaults to :obj:`True`):
+                Whether the initialized model should be a transformer encoder or decoder as seen in Vaswani et al.
+            start_n_top (:obj:`int`, optional, defaults to 5):
+                TODO
+            end_n_top (:obj:`int`, optional, defaults to 5):
+                TODO
+            mask_token_id (:obj:`int`, optional, defaults to 0):
+                Model agnostic parameter to identify masked tokens when generating text in an MLM context.
+            lang_id (:obj:`int`, optional, defaults to 1):
+                The ID of the language used by the model. This parameter is used when generating
+                text in a given language.
     """
 
     pretrained_config_archive_map = XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
