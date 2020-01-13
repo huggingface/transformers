@@ -38,6 +38,7 @@ class PretrainedConfig(object):
 
         Class attributes (overridden by derived classes):
             - ``pretrained_config_archive_map``: a python ``dict`` with `shortcut names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
+            - ``model_type``: a string that identifies the model type, that we serialize into the JSON file, and that we use to recreate the correct object in :class:`~transformers.AutoConfig`.
 
         Parameters:
             ``finetuning_task``: string, default `None`. Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow or PyTorch) checkpoint.
@@ -46,8 +47,8 @@ class PretrainedConfig(object):
             ``output_hidden_states``: string, default `False`. Should the model returns all hidden-states.
             ``torchscript``: string, default `False`. Is the model used with Torchscript.
     """
-    pretrained_config_archive_map: Dict[str, str] = {}
-    model_type: str
+    pretrained_config_archive_map = {} # type: Dict[str, str]
+    model_type = "" # type: str
 
     def __init__(self, **kwargs):
         # Attributes with defaults
