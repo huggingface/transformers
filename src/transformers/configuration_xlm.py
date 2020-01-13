@@ -129,7 +129,7 @@ class XLMConfig(PretrainedConfig):
                 :class:`~transformers.XLMForSequenceClassification`.
                 Add a dropout before the projection and activation
             start_n_top (:obj:`int`, optional, defaults to 5):
-                Used in the SQuAD evaluation script for XLM and XLNetV.
+                Used in the SQuAD evaluation script for XLM and XLNet.
             end_n_top (:obj:`int`, optional, defaults to 5):
                 Used in the SQuAD evaluation script for XLM and XLNet.
             mask_token_id (:obj:`int`, optional, defaults to 0):
@@ -137,6 +137,23 @@ class XLMConfig(PretrainedConfig):
             lang_id (:obj:`int`, optional, defaults to 1):
                 The ID of the language used by the model. This parameter is used when generating
                 text in a given language.
+
+        Example::
+
+            from transformers import XLMConfig, XLMModel
+
+            # Initializing a XLM configuration
+            configuration = XLMConfig()
+
+            # Initializing a model from the configuration
+            model = XLMModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
 
     pretrained_config_archive_map = XLM_PRETRAINED_CONFIG_ARCHIVE_MAP

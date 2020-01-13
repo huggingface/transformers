@@ -106,9 +106,26 @@ class XLNetConfig(PretrainedConfig):
                 :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
                 Add a dropout after the projection and activation
             start_n_top (:obj:`int`, optional, defaults to 5):
-                Used in the SQuAD evaluation script for XLM and XLNetV.
+                Used in the SQuAD evaluation script for XLM and XLNet.
             end_n_top (:obj:`int`, optional, defaults to 5):
                 Used in the SQuAD evaluation script for XLM and XLNet.
+
+        Example::
+
+            from transformers import XLNetConfig, XLNetModel
+
+            # Initializing a XLNet configuration
+            configuration = XLNetConfig()
+
+            # Initializing a model from the configuration
+            model = XLNetModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
 
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP

@@ -97,6 +97,23 @@ class TransfoXLConfig(PretrainedConfig):
                 Parameters initialized by N(0, init_std)
             layer_norm_epsilon (:obj:`float`, optional, defaults to 1e-5):
                 The epsilon to use in the layer normalization layers
+
+        Example::
+
+            from transformers import TransfoXLConfig, TransfoXLModel
+
+            # Initializing a Transformer XL configuration
+            configuration = TransfoXLConfig()
+
+            # Initializing a model from the configuration
+            model = TransfoXLModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
 
     pretrained_config_archive_map = TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
