@@ -46,5 +46,22 @@ class RobertaConfig(BertConfig):
 
         The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`.
         It reuses the same defaults. Please check the parent class for more information.
+
+        Example::
+
+            from transformers import RobertaConfig, RobertaModel
+
+            # Initializing a RoBERTa configuration
+            configuration = RobertaConfig()
+
+            # Initializing a model from the configuration
+            model = RobertaModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
     pretrained_config_archive_map = ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
