@@ -705,14 +705,17 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Convert inputs to features
         examples = self._args_parser(*texts, **kwargs)
-        features_list = [ squad_convert_examples_to_features(
-                            [example], 
-                            self.tokenizer, 
-                            kwargs["max_seq_len"], 
-                            kwargs["doc_stride"], 
-                            kwargs["max_question_len"], 
-                            False
-                            ) for example in examples ]
+        features_list = [
+            squad_convert_examples_to_features(
+                [example],
+                self.tokenizer,
+                kwargs["max_seq_len"],
+                kwargs["doc_stride"],
+                kwargs["max_question_len"],
+                False,
+            )
+            for example in examples
+        ]
         all_answers = []
         for features, example in zip(features_list, examples):
             fw_args = self.inputs_for_model([f.__dict__ for f in features])
@@ -737,7 +740,10 @@ class QuestionAnsweringPipeline(Pipeline):
                 end_ = np.exp(end_) / np.sum(np.exp(end_))
 
                 # Mask padding and question
-                start_, end_ = start_ * np.abs(np.array(feature.p_mask) - 1), end_ * np.abs(np.array(feature.p_mask) - 1)
+                start_, end_ = (
+                    start_ * np.abs(np.array(feature.p_mask) - 1),
+                    end_ * np.abs(np.array(feature.p_mask) - 1),
+                )
 
                 # TODO : What happens if not possible
                 # Mask CLS
@@ -758,11 +764,11 @@ class QuestionAnsweringPipeline(Pipeline):
                     }
                     for s, e, score in zip(starts, ends, scores)
                 ]
-            answers = sorted(answers, key = lambda x:x['score'], reverse=True)[:kwargs["topk"]]    
-            all_answers+=answers
-            
+            answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: kwargs["topk"]]
+            all_answers += answers
+
         if len(all_answers) == 1:
-           return all_answers[0]
+            return all_answers[0]
         return all_answers
 
     def decode(self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int) -> Tuple:
