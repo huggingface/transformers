@@ -36,6 +36,27 @@ XLNet
     :members:
 
 
+``XLNetForTokenClassification``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLNetForTokenClassification`
+    :members:
+
+
+``XLNetForMultipleChoice``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLNetForMultipleChoice`
+    :members:
+
+
+``XLNetForQuestionAnsweringSimple``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLNetForQuestionAnsweringSimple
+    :members:
+
+
 ``XLNetForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
