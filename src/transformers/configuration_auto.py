@@ -202,7 +202,7 @@ class AutoConfig:
                     return config_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
-            "Unrecognized model identifier in {}. Should have a `model_type` key in its config.json, or contain one of {}".format(
-                pretrained_model_name_or_path, ", ".join(CONFIG_MAPPING.keys())
-            )
+            "Unrecognized model in {}. "
+            "Should have a `model_type` key in its config.json, or contain one of the following strings "
+            "in its name: {}".format(pretrained_model_name_or_path, ", ".join(CONFIG_MAPPING.keys()))
         )

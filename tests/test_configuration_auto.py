@@ -51,4 +51,4 @@ class AutoConfigTest(unittest.TestCase):
         # no key string should be included in a later key string (typical failure case)
         keys = list(CONFIG_MAPPING.keys())
         for i, key in enumerate(keys):
-            self.assertFalse(any(key in later_key for later_key in keys[i+1:]))
+            self.assertFalse(any(key in later_key for later_key in keys[i + 1 :]))
