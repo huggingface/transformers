@@ -39,14 +39,14 @@ XLNet
 ``XLNetForTokenClassification``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.XLNetForTokenClassification`
+.. autoclass:: transformers.XLNetForTokenClassification
     :members:
 
 
 ``XLNetForMultipleChoice``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.XLNetForMultipleChoice`
+.. autoclass:: transformers.XLNetForMultipleChoice
     :members:
 
 

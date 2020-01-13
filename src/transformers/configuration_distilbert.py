@@ -74,6 +74,23 @@ class DistilBertConfig(PretrainedConfig):
             seq_classif_dropout (:obj:`float`, optional, defaults to 0.2):
                 The dropout probabilities used in the sequence classification model
                 :class:`~tranformers.DistilBertForSequenceClassification`.
+
+        Example::
+
+            from transformers import DistilBertModel, DistilBertConfig
+
+            # Initializing a DistilBERT configuration
+            configuration = DistilBertConfig()
+
+            # Initializing a model from the configuration
+            model = DistilBertModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
     pretrained_config_archive_map = DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 

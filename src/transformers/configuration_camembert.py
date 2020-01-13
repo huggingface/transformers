@@ -41,5 +41,22 @@ class CamembertConfig(RobertaConfig):
 
         The :class:`~transformers.CamembertConfig` class directly inherits :class:`~transformers.BertConfig`.
         It reuses the same defaults. Please check the parent class for more information.
+
+        Example::
+
+            from transformers import CamembertModel, CamembertConfig
+
+            # Initializing a CamemBERT configuration
+            configuration = CamembertConfig()
+
+            # Initializing a model from the configuration
+            model = CamembertModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
     pretrained_config_archive_map = CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP

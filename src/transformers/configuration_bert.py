@@ -88,6 +88,23 @@ class BertConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
+
+        Example::
+
+            from transformers import BertModel, BertConfig
+
+            # Initializing a BERT bert-base-uncased style configuration
+            configuration = BertConfig()
+
+            # Initializing a model from the bert-base-uncased style configuration
+            model = BertModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
     pretrained_config_archive_map = BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 
