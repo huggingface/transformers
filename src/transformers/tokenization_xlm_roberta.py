@@ -103,7 +103,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.fairseq_tokens_to_ids)
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
