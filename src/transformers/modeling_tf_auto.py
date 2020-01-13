@@ -17,7 +17,6 @@
 
 import logging
 from collections import OrderedDict
-from typing import Dict, Type
 
 from .configuration_auto import (
     AlbertConfig,
@@ -72,7 +71,6 @@ from .modeling_tf_transfo_xl import (
     TFTransfoXLLMHeadModel,
     TFTransfoXLModel,
 )
-from .modeling_tf_utils import TFPreTrainedModel
 from .modeling_tf_xlm import (
     TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFXLMForQuestionAnsweringSimple,
@@ -111,8 +109,9 @@ TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
     for key, value, in pretrained_map.items()
 )
 
-TF_MODEL_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedModel]] = OrderedDict(
+TF_MODEL_MAPPING = OrderedDict(
     [
+        (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
         (RobertaConfig, TFRobertaModel),
@@ -126,8 +125,9 @@ TF_MODEL_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedModel]] = Ordere
     ]
 )
 
-TF_MODEL_WITH_LM_HEAD_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedModel]] = OrderedDict(
+TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        (T5Config, TFT5WithLMHeadModel),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
@@ -141,7 +141,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedMod
     ]
 )
 
-TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedModel]] = OrderedDict(
+TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
@@ -152,7 +152,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING: Dict[Type[PretrainedConfig], Type[
     ]
 )
 
-TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedModel]] = OrderedDict(
+TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (BertConfig, TFBertForQuestionAnswering),
@@ -161,7 +161,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING: Dict[Type[PretrainedConfig], Type[TFPre
     ]
 )
 
-TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING: Dict[Type[PretrainedConfig], Type[TFPreTrainedModel]] = OrderedDict(
+TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (RobertaConfig, TFRobertaForTokenClassification),
