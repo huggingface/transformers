@@ -37,7 +37,7 @@ class GPT2Config(PretrainedConfig):
         This is the configuration class to store the configuration of a :class:`~transformers.GPT2Model`.
         It is used to instantiate an GPT-2 model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the GPT-2 small architecture.
+        the GPT-2 `small <https://huggingface.co/gpt2>`__ architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`

@@ -33,7 +33,7 @@ class OpenAIGPTConfig(PretrainedConfig):
         This is the configuration class to store the configuration of an :class:`~transformers.OpenAIGPTModel`.
         It is used to instantiate an GPT model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the GPT architecture from OpenAI.
+        the `GPT <https://huggingface.co/openai-gpt>`__ architecture from OpenAI.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`

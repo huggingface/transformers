@@ -35,7 +35,7 @@ class DistilBertConfig(PretrainedConfig):
         This is the configuration class to store the configuration of a :class:`~transformers.DistilBertModel`.
         It is used to instantiate a DistilBERT model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the DistilBERT distilbert-base-uncased architecture.
+        the DistilBERT `distilbert-base-uncased <https://huggingface.co/distilbert-base-uncased>`__ architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
