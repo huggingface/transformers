@@ -316,8 +316,7 @@ def get_from_cache(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
 
     # Get eTag to add to filename, if it exists.
     if url.startswith("s3://"):
