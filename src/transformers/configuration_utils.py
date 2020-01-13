@@ -47,8 +47,8 @@ class PretrainedConfig(object):
             ``output_hidden_states``: string, default `False`. Should the model returns all hidden-states.
             ``torchscript``: string, default `False`. Is the model used with Torchscript.
     """
-    pretrained_config_archive_map = {} # type: Dict[str, str]
-    model_type = "" # type: str
+    pretrained_config_archive_map = {}  # type: Dict[str, str]
+    model_type = ""  # type: str
 
     def __init__(self, **kwargs):
         # Attributes with defaults
@@ -273,7 +273,7 @@ class PretrainedConfig(object):
         return self.__dict__ == other.__dict__
 
     def __repr__(self):
-        return str(self.to_json_string())
+        return "{} {}".format(self.__class__.__name__, self.to_json_string())
 
     def to_dict(self):
         """Serializes this instance to a Python dictionary."""
