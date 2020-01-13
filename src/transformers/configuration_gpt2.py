@@ -94,6 +94,23 @@ class GPT2Config(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.GPT2DoubleHeadsModel`.
                 Add a dropout before the projection and activation
+
+        Example::
+
+            from transformers import GPT2Model, GPT2Config
+
+            # Initializing a GPT2 configuration
+            configuration = GPT2Config()
+
+            # Initializing a model from the configuration
+            model = GPT2Model(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
 
     pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP

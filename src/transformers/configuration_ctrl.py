@@ -63,6 +63,23 @@ class CTRLConfig(PretrainedConfig):
                 The epsilon to use in the layer normalization layers
             initializer_range (:obj:`float`, optional, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+        Example::
+
+            from transformers import CTRLModel, CTRLConfig
+
+            # Initializing a CTRL configuration
+            configuration = CTRLConfig()
+
+            # Initializing a model from the configuration
+            model = CTRLModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
 
     pretrained_config_archive_map = CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP

@@ -94,6 +94,23 @@ class OpenAIGPTConfig(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
                 Add a dropout before the projection and activation
+
+        Example::
+
+            from transformers import OpenAIGPTConfig, OpenAIGPTModel
+
+            # Initializing a GPT configuration
+            configuration = OpenAIGPTConfig()
+
+            # Initializing a model from the configuration
+            model = OpenAIGPTModel(configuration)
+
+            # Accessing the model configuration
+            configuration = model.config
+
+        Attributes:
+            pretrained_config_archive_map (Dict[str, str]):
+                A dictionary containing all the available pre-trained checkpoints.
     """
 
     pretrained_config_archive_map = OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
