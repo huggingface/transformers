@@ -53,7 +53,7 @@ class BertConfig(PretrainedConfig):
         This is the configuration class to store the configuration of a :class:`~transformers.BertModel`.
         It is used to instantiate an BERT model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the BERT bert-base-uncased architecture.
+        the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`

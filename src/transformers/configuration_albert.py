@@ -35,7 +35,7 @@ class AlbertConfig(PretrainedConfig):
         This is the configuration class to store the configuration of an :class:`~transformers.AlbertModel`.
         It is used to instantiate an ALBERT model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the ALBERT xxlarge architecture.
+        the ALBERT `xxlarge <https://huggingface.co/albert-xxlarge-v2>`__ architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
