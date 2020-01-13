@@ -103,10 +103,35 @@ class XLMConfig(PretrainedConfig):
                 The index of the masking token in the vocabulary.
             is_encoder(:obj:`boolean`, optional, defaults to :obj:`True`):
                 Whether the initialized model should be a transformer encoder or decoder as seen in Vaswani et al.
+            summary_type (:obj:`string`, optional, defaults to "first"):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLMForSequenceClassification`.
+                Is one of the following options:
+                    - 'last' => take the last token hidden state (like XLNet)
+                    - 'first' => take the first token hidden state (like Bert)
+                    - 'mean' => take the mean of all tokens hidden states
+                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                    - 'attn' => Not implemented now, use multi-head attention
+            summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLMForSequenceClassification`.
+                Add a projection after the vector extraction
+            summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLMForSequenceClassification`.
+                'tanh' => add a tanh activation to the output, Other => no activation.
+            summary_proj_to_labels (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLMForSequenceClassification`.
+                If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
+            summary_first_dropout (:obj:`float`, optional, defaults to 0.1):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLMForSequenceClassification`.
+                Add a dropout before the projection and activation
             start_n_top (:obj:`int`, optional, defaults to 5):
-                TODO
+                Used in the SQuAD evaluation script for XLM and XLNetV.
             end_n_top (:obj:`int`, optional, defaults to 5):
-                TODO
+                Used in the SQuAD evaluation script for XLM and XLNet.
             mask_token_id (:obj:`int`, optional, defaults to 0):
                 Model agnostic parameter to identify masked tokens when generating text in an MLM context.
             lang_id (:obj:`int`, optional, defaults to 1):
