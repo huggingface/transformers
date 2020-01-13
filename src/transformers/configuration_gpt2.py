@@ -69,6 +69,31 @@ class GPT2Config(PretrainedConfig):
                 The epsilon to use in the layer normalization layers
             initializer_range (:obj:`float`, optional, defaults to 16):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            summary_type (:obj:`string`, optional, defaults to "cls_index"):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.GPT2DoubleHeadsModel`.
+                Is one of the following options:
+                    - 'last' => take the last token hidden state (like XLNet)
+                    - 'first' => take the first token hidden state (like Bert)
+                    - 'mean' => take the mean of all tokens hidden states
+                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                    - 'attn' => Not implemented now, use multi-head attention
+            summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.GPT2DoubleHeadsModel`.
+                Add a projection after the vector extraction
+            summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.GPT2DoubleHeadsModel`.
+                'tanh' => add a tanh activation to the output, Other => no activation.
+            summary_proj_to_labels (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.GPT2DoubleHeadsModel`.
+                If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
+            summary_first_dropout (:obj:`float`, optional, defaults to 0.1):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.GPT2DoubleHeadsModel`.
+                Add a dropout before the projection and activation
     """
 
     pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP

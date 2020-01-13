@@ -80,10 +80,35 @@ class XLNetConfig(PretrainedConfig):
                 Setting this attribute to -1 means no clamping.
             same_length (:obj:`boolean`, optional, defaults to :obj:`False`):
                 Whether to use the same attention length for each token.
+            summary_type (:obj:`string`, optional, defaults to "last"):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                Is one of the following options:
+                    - 'last' => take the last token hidden state (like XLNet)
+                    - 'first' => take the first token hidden state (like Bert)
+                    - 'mean' => take the mean of all tokens hidden states
+                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                    - 'attn' => Not implemented now, use multi-head attention
+            summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                Add a projection after the vector extraction
+            summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                'tanh' => add a tanh activation to the output, Other => no activation.
+            summary_proj_to_labels (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
+            summary_last_dropout (:obj:`float`, optional, defaults to 0.1):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                Add a dropout after the projection and activation
             start_n_top (:obj:`int`, optional, defaults to 5):
-                TODO
+                Used in the SQuAD evaluation script for XLM and XLNetV.
             end_n_top (:obj:`int`, optional, defaults to 5):
-                TODO
+                Used in the SQuAD evaluation script for XLM and XLNet.
     """
 
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
