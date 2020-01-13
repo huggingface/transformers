@@ -33,7 +33,7 @@ class CamembertConfig(RobertaConfig):
         This is the configuration class to store the configuration of an :class:`~transformers.CamembertModel`.
         It is used to instantiate an Camembert model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the BERT bert-base-uncased architecture.
+        the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`

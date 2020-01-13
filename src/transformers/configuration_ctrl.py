@@ -30,7 +30,7 @@ class CTRLConfig(PretrainedConfig):
         This is the configuration class to store the configuration of an :class:`~transformers.CTRLModel`.
         It is used to instantiate an CTRL model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the CTRL architecture from SalesForce.
+        the `ctrl <https://huggingface.co/ctrl>`__ architecture from SalesForce.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
