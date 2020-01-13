@@ -65,6 +65,7 @@ class TransfoXLConfig(PretrainedConfig):
     """
 
     pretrained_config_archive_map = TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "transfo-xl"
 
     def __init__(
         self,

@@ -48,6 +48,7 @@ class CTRLConfig(PretrainedConfig):
     """
 
     pretrained_config_archive_map = CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "ctrl"
 
     def __init__(
         self,

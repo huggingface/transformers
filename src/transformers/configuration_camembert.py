@@ -30,3 +30,4 @@ CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CamembertConfig(RobertaConfig):
     pretrained_config_archive_map = CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "camembert"
