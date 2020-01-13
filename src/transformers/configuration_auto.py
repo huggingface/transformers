@@ -188,7 +188,7 @@ class AutoConfig:
             assert unused_kwargs == {'foo': False}
 
         """
-        config_dict, _ = PretrainedConfig.resolved_config_dict(
+        config_dict, _ = PretrainedConfig.get_config_dict(
             pretrained_model_name_or_path, pretrained_config_archive_map=ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, **kwargs
         )
 

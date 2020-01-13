@@ -32,6 +32,7 @@ DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DistilBertConfig(PretrainedConfig):
     pretrained_config_archive_map = DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "distilbert"
 
     def __init__(
         self,

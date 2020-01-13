@@ -37,6 +37,7 @@ class AlbertConfig(PretrainedConfig):
     """
 
     pretrained_config_archive_map = ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "albert"
 
     def __init__(
         self,

@@ -62,6 +62,7 @@ class BertAbsConfig(PretrainedConfig):
     """
 
     pretrained_config_archive_map = BERTABS_FINETUNED_CONFIG_MAP
+    model_type = "bertabs"
 
     def __init__(
         self,

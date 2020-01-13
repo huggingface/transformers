@@ -16,6 +16,8 @@
 
 
 import logging
+from collections import OrderedDict
+from typing import Type
 
 from .configuration_auto import (
     AlbertConfig,
@@ -76,6 +78,7 @@ from .modeling_roberta import (
 )
 from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadModel
 from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
+from .modeling_utils import PreTrainedModel
 from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMForQuestionAnswering,
@@ -121,6 +124,35 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
+)
+
+MODEL_MAPPING: OrderedDict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+    [
+        (T5Config, T5Model),
+        (DistilBertConfig, DistilBertModel),
+        (AlbertConfig, AlbertModel),
+        (CamembertConfig, CamembertModel),
+        (RobertaConfig, XLMRobertaModel),
+        (XLMRobertaConfig, RobertaModel),
+        (BertConfig, BertModel),
+        (OpenAIGPTConfig, OpenAIGPTModel),
+        (GPT2Config, GPT2Model),
+        (TransfoXLConfig, TransfoXLModel),
+        (XLNetConfig, XLNetModel),
+        (XLMConfig, XLMModel),
+        (CTRLConfig, CTRLModel),
+    ]
+)
+
+MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING: OrderedDict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+    [
+        (DistilBertConfig, DistilBertForTokenClassification),
+        (CamembertConfig, CamembertForTokenClassification),
+        (RobertaConfig, XLMRobertaForTokenClassification),
+        (XLMRobertaConfig, RobertaForTokenClassification),
+        (BertConfig, BertForTokenClassification),
+        (XLNetConfig, XLNetForTokenClassification),
+    ]
 )
 
 
@@ -183,30 +215,9 @@ class AutoModel(object):
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             model = AutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
-        if isinstance(config, DistilBertConfig):
-            return DistilBertModel(config)
-        elif isinstance(config, RobertaConfig):
-            return RobertaModel(config)
-        elif isinstance(config, BertConfig):
-            return BertModel(config)
-        elif isinstance(config, OpenAIGPTConfig):
-            return OpenAIGPTModel(config)
-        elif isinstance(config, GPT2Config):
-            return GPT2Model(config)
-        elif isinstance(config, TransfoXLConfig):
-            return TransfoXLModel(config)
-        elif isinstance(config, XLNetConfig):
-            return XLNetModel(config)
-        elif isinstance(config, XLMConfig):
-            return XLMModel(config)
-        elif isinstance(config, CTRLConfig):
-            return CTRLModel(config)
-        elif isinstance(config, AlbertConfig):
-            return AlbertModel(config)
-        elif isinstance(config, CamembertConfig):
-            return CamembertModel(config)
-        elif isinstance(config, XLMRobertaConfig):
-            return XLMRobertaModel(config)
+        for config_class, model_class in MODEL_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
         raise ValueError("Unrecognized configuration class {}".format(config))
 
     @classmethod
@@ -294,32 +305,9 @@ class AutoModel(object):
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if isinstance(config, T5Config):
-            return T5Model.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, DistilBertConfig):
-            return DistilBertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, AlbertConfig):
-            return AlbertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, CamembertConfig):
-            return CamembertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, XLMRobertaConfig):
-            return XLMRobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, RobertaConfig):
-            return RobertaModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, BertConfig):
-            return BertModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, OpenAIGPTConfig):
-            return OpenAIGPTModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, GPT2Config):
-            return GPT2Model.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, TransfoXLConfig):
-            return TransfoXLModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, XLNetConfig):
-            return XLNetModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, XLMConfig):
-            return XLMModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
-        elif isinstance(config, CTRLConfig):
-            return CTRLModel.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        for config_class, model_class in MODEL_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized model identifier in {}. Should contains one of "
             "'bert', 'openai-gpt', 'gpt2', 'transfo-xl', 'xlnet', "

@@ -46,7 +46,8 @@ class PretrainedConfig(object):
             ``output_hidden_states``: string, default `False`. Should the model returns all hidden-states.
             ``torchscript``: string, default `False`. Is the model used with Torchscript.
     """
-    pretrained_config_archive_map = {}
+    pretrained_config_archive_map: Dict[str, str] = {}
+    model_type: str
 
     def __init__(self, **kwargs):
         # Attributes with defaults
@@ -155,11 +156,11 @@ class PretrainedConfig(object):
             assert unused_kwargs == {'foo': False}
 
         """
-        config_dict, kwargs = cls.resolved_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
-    def resolved_config_dict(
+    def get_config_dict(
         cls, pretrained_model_name_or_path: str, pretrained_config_archive_map: Optional[Dict] = None, **kwargs
     ) -> Tuple[Dict, Dict]:
         """
@@ -257,7 +258,7 @@ class PretrainedConfig(object):
 
     @classmethod
     def from_json_file(cls, json_file: str):
-        """Constructs a `Config` from a json file of parameters."""
+        """Constructs a `Config` from the path to a json file of parameters."""
         config_dict = cls._dict_from_json_file(json_file)
         return cls(**config_dict)
 

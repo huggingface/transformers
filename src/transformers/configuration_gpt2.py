@@ -54,6 +54,7 @@ class GPT2Config(PretrainedConfig):
     """
 
     pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "gpt2"
 
     def __init__(
         self,

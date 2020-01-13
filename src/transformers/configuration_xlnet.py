@@ -69,6 +69,7 @@ class XLNetConfig(PretrainedConfig):
     """
 
     pretrained_config_archive_map = XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "xlnet"
 
     def __init__(
         self,

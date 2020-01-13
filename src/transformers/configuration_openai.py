@@ -54,6 +54,7 @@ class OpenAIGPTConfig(PretrainedConfig):
     """
 
     pretrained_config_archive_map = OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "openai-gpt"
 
     def __init__(
         self,
