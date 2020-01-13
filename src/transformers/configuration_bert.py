@@ -64,7 +64,7 @@ class BertConfig(PretrainedConfig):
                 layer in the Transformer encoder.
             hidden_act: The non-linear activation function (function or string) in the
                 encoder and pooler. If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-            hidden_dropout_prob: The dropout probabilitiy for all fully connected
+            hidden_dropout_prob: The dropout probability for all fully connected
                 layers in the embeddings, encoder, and pooler.
             attention_probs_dropout_prob: The dropout ratio for the attention
                 probabilities.
