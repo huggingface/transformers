@@ -17,7 +17,6 @@
 
 import logging
 from collections import OrderedDict
-from typing import Dict, Type
 
 from .configuration_auto import (
     AlbertConfig,
@@ -78,7 +77,6 @@ from .modeling_roberta import (
 )
 from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadModel
 from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
-from .modeling_utils import PreTrainedModel
 from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMForQuestionAnswering,
@@ -126,7 +124,7 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
     for key, value, in pretrained_map.items()
 )
 
-MODEL_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+MODEL_MAPPING = OrderedDict(
     [
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
@@ -144,7 +142,7 @@ MODEL_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict
     ]
 )
 
-MODEL_WITH_LM_HEAD_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         (T5Config, T5WithLMHeadModel),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -162,7 +160,7 @@ MODEL_WITH_LM_HEAD_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] 
     ]
 )
 
-MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
@@ -175,7 +173,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING: Dict[Type[PretrainedConfig], Type[Pre
     ]
 )
 
-MODEL_FOR_QUESTION_ANSWERING_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
@@ -185,7 +183,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrain
     ]
 )
 
-MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedModel]] = OrderedDict(
+MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),

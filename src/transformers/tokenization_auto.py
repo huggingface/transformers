@@ -17,7 +17,6 @@
 
 import logging
 from collections import OrderedDict
-from typing import Dict, Type
 
 from .configuration_auto import (
     AlbertConfig,
@@ -47,7 +46,6 @@ from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
-from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
@@ -56,7 +54,7 @@ from .tokenization_xlnet import XLNetTokenizer
 logger = logging.getLogger(__name__)
 
 
-TOKENIZER_MAPPING: Dict[Type[PretrainedConfig], Type[PreTrainedTokenizer]] = OrderedDict(
+TOKENIZER_MAPPING = OrderedDict(
     [
         (T5Config, T5Tokenizer),
         (DistilBertConfig, DistilBertTokenizer),
@@ -183,6 +181,6 @@ class AutoTokenizer(object):
         raise ValueError(
             "Unrecognized configuration class {} to build an AutoTokenizer.\n"
             "Model type should be one of {}.".format(
-                config.__class__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
+                config.__class__, ", ".join(c.__name__ for c in TOKENIZER_MAPPING.keys())
             )
         )
