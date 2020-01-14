@@ -56,7 +56,7 @@ class DistilBertConfig(PretrainedConfig):
             n_heads (:obj:`int`, optional, defaults to 12):
                 Number of attention heads for each attention layer in the Transformer encoder.
             dim (:obj:`int`, optional, defaults to 768):
-                Size of the encoder layers and the pooler layer.
+                Dimensionality of the encoder layers and the pooler layer.
             intermediate_size (:obj:`int`, optional, defaults to 3072):
                 The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             dropout (:obj:`float`, optional, defaults to 0.1):

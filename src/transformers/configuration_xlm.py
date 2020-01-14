@@ -72,7 +72,8 @@ class XLMConfig(PretrainedConfig):
                 Causal models use a triangular attention mask in order to only attend to the left-side context instead
                 if a bidirectional context.
             asm (:obj:`boolean`, optional, defaults to :obj:`False`):
-                TODO
+                Whether to use an adaptive log softmax projection layer instead of a linear layer for the prediction
+                layer.
             n_langs (:obj:`int`, optional, defaults to 1):
                 The number of languages the model handles. Set to 1 for monolingual models.
             use_lang_emb (:obj:`boolean`, optional, defaults to :obj:`True`)
