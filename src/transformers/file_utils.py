@@ -384,16 +384,13 @@ def get_from_cache(
                 else:
                     http_get(url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
 
-                # we are copying the file before closing it, so flush to avoid truncation
-                temp_file.flush()
+            logger.info("storing %s in cache at %s", url, cache_path)
+            os.rename(temp_file.name, cache_path)
 
-                logger.info("storing %s in cache at %s", url, cache_path)
-                os.rename(temp_file.name, cache_path)
-
-                logger.info("creating metadata file for %s", cache_path)
-                meta = {"url": url, "etag": etag}
-                meta_path = cache_path + ".json"
-                with open(meta_path, "w") as meta_file:
-                    json.dump(meta, meta_file)
+            logger.info("creating metadata file for %s", cache_path)
+            meta = {"url": url, "etag": etag}
+            meta_path = cache_path + ".json"
+            with open(meta_path, "w") as meta_file:
+                json.dump(meta, meta_file)
 
     return cache_path
