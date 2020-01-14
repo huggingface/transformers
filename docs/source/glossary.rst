@@ -24,6 +24,7 @@ The tokenizer takes care of splitting the sequence into tokens available in the 
 
 ::
 
+    # Continuation of the previous script
     tokenized_sequence = tokenizer.tokenize(sequence)
     assert tokenized_sequence == ['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
 
@@ -33,6 +34,7 @@ this, the recommended being `encode` or `encode_plus`, which leverage the Rust i
 
 ::
 
+    # Continuation of the previous script
     encoded_sequence = tokenizer.encode(sequence)
     assert encoded_sequence == [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 
@@ -47,6 +49,9 @@ model which tokens should be attended to, and which should not.
 For example, consider these two sequences:
 
 ::
+
+    from transformers import BertTokenizer
+    tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
     sequence_a = "This is a short sequence."
     sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
@@ -65,10 +70,11 @@ In the first case, the list of IDs will be extended by the padding indices:
 
 ::
 
+    # Continuation of the previous script
     padded_sequence_a = tokenizer.encode(sequence_a, max_length=19, pad_to_max_length=True)
 
-    assert padded_sequence_a = [101, 1188, 1110, 170, 1603, 4954,  119, 102,    0,    0,    0,    0,    0,    0,    0,    0,   0,   0,   0]
-    assert encoded_sequence_b = [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]
+    assert padded_sequence_a == [101, 1188, 1110, 170, 1603, 4954,  119, 102,    0,    0,    0,    0,    0,    0,    0,    0,   0,   0,   0]
+    assert encoded_sequence_b == [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]
 
 These can then be converted into a tensor in PyTorch or TensorFlow. The attention mask is a binary tensor indicating
 the position of the padded indices so that the model does not attend to them. For the
@@ -79,6 +85,7 @@ The method :func:`~transformers.PreTrainedTokenizer.encode_plus` may be used to 
 
 ::
 
+    # Continuation of the previous script
     sequence_a_dict = tokenizer.encode_plus(sequence_a, max_length=19, pad_to_max_length=True)
 
     assert sequence_a_dict['input_ids'] == [101, 1188, 1110, 170, 1603, 4954, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -93,6 +100,9 @@ be encoded in the same input IDs. They are usually separated by special tokens, 
 tokens. For example, the BERT model builds its two sequence input as such:
 
 ::
+
+    from transformers import BertTokenizer
+    tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
     # [CLS] SEQ_A [SEP] SEQ_B [SEP]
 
@@ -110,10 +120,11 @@ We can leverage :func:`~transformers.PreTrainedTokenizer.encode_plus` to output 
 
 ::
 
+    # Continuation of the previous script
     encoded_dict = tokenizer.encode_plus(sequence_a, sequence_b)
 
-    assert sequence_a_dict['input_ids'] == [101, 20164, 10932, 2271, 7954, 1110, 1359, 1107, 17520, 102, 2777, 1110, 20164, 10932, 2271, 7954, 1359, 136, 102]
-    assert sequence_a_dict['token_type_ids'] == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    assert encoded_dict['input_ids'] == [101, 20164, 10932, 2271, 7954, 1110, 1359, 1107, 17520, 102, 2777, 1110, 20164, 10932, 2271, 7954, 1359, 136, 102]
+    assert encoded_dict['token_type_ids'] == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 
 The first sequence, the "context" used for the question, has all its tokens represented by :obj:`0`, whereas the
 question has all its tokens represented by :obj:`1`. Some models, like :class:`~transformers.XLNetModel` use an

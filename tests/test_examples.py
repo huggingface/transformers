@@ -15,6 +15,8 @@
 
 import os
 import unittest
+from typing import List, Union
+
 from .utils import require_torch
 
 
@@ -26,34 +28,84 @@ def get_examples_from_file(file):
     for i, line in enumerate(file):
         if example_mode:
             current_indentation = len(line) - len(line.strip()) - 1
-            if current_indentation == example_indentation or '"""' in line:
+
+            # Check if the indentation is 0 for the example, so that we don't exit as soon as there's a line return.
+            empty_line = example_indentation == 0 and len(line) == 1
+
+            # If we're back to the example indentation or if it's the end of the docstring.
+            if (current_indentation == example_indentation and not empty_line) or '"""' in line:
+                # Exit the example mode and add the example to the examples list
                 example_mode = False
                 example_indentation = None
                 examples.append(example)
                 example = []
             else:
+                # If line is not empty, add it to the current example
                 if line is not "\n":
                     example.append(line[example_indentation + 4 : -1])
+
+        # Detect the example from '::' or 'example::'
         if "example::" in line.lower():
             example_mode = True
             example_indentation = line.lower().find("example::")
+        elif "examples::" in line.lower():
+            example_mode = True
+            example_indentation = line.lower().find("examples::")
+        elif "::" in line.lower():
+            example_mode = True
+            example_indentation = line.lower().find("::")
 
-    return ['\n'.join(example) for example in examples]
+    return ["\n".join(example) for example in examples]
 
 
 @require_torch
 class TestCodeExamples(unittest.TestCase):
-    def test_configuration_examples(self):
-        transformers_directory = "../src/transformers"
-        configuration_files = [file for file in os.listdir(transformers_directory) if "configuration" in file]
+    def analyze_directory(
+        self, directory: str, identifier: Union[str, None] = None, ignore_files: Union[List[str], None] = None
+    ):
+        files = [file for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]
 
-        for configuration_file in configuration_files:
-            with open(os.path.join(transformers_directory, configuration_file)) as f:
+        if identifier is not None:
+            files = [file for file in files if identifier in file]
+
+        if ignore_files is not None:
+            files = [file for file in files if file not in ignore_files]
+
+        for file in files:
+            # Open all files
+            with open(os.path.join(directory, file)) as f:
+                # Retrieve examples
                 examples = get_examples_from_file(f)
-                print("Testing", configuration_file, str(len(examples)) + "/" + str(len(examples)))
+                joined_examples = []
 
                 def execute_example(code_example):
                     exec(code_example)
 
-                with self.subTest(msg=configuration_file):
-                    [execute_example(code_example) for code_example in examples]
+                # Some examples are the continuation of others.
+                if len(examples) > 1:
+                    joined_examples.append(examples[0])
+                    joined_examples_index = 0
+                    for example in examples[1:]:
+                        # If they contain this line, then they're a continuation of the previous script
+                        if "# Continuation of the previous script" in example:
+                            joined_examples[joined_examples_index] += "\n" + example
+                        # If not, create a new example and increment the index
+                        else:
+                            joined_examples.append(example)
+                            joined_examples_index += 1
+
+                print("Testing", file, str(len(joined_examples)) + "/" + str(len(joined_examples)))
+
+                # Execute sub tests with every example.
+                with self.subTest(msg=file):
+                    [execute_example(code_example) for code_example in joined_examples]
+
+    def test_configuration_examples(self):
+        transformers_directory = "src/transformers"
+        configuration_files = "configuration"
+        ignore_files = ["configuration_auto.py", "configuration_utils.py"]
+        self.analyze_directory(transformers_directory, identifier=configuration_files, ignore_files=ignore_files)
+
+    def test_main_doc_examples(self):
+        doc_directory = "docs/source"
+        self.analyze_directory(doc_directory)
