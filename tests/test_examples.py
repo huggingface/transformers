@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 import os
+import unittest
 
 
 def get_examples_from_file(file):
@@ -37,7 +37,7 @@ def get_examples_from_file(file):
             example_mode = True
             example_indentation = line.lower().find("example::")
 
-    return examples
+    return ['\n'.join(example) for example in examples]
 
 
 class TestCodeExamples(unittest.TestCase):
@@ -51,8 +51,7 @@ class TestCodeExamples(unittest.TestCase):
                 print("Testing", configuration_file, str(len(examples)) + "/" + str(len(examples)))
 
                 def execute_example(code_example):
-                    for line in code_example:
-                        exec(line)
+                    exec(code_example)
 
                 with self.subTest(msg=configuration_file):
                     [execute_example(code_example) for code_example in examples]
