@@ -33,7 +33,7 @@ class AutoTokenizerTest(unittest.TestCase):
     # @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ["bert-base-uncased"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, BertTokenizer)
