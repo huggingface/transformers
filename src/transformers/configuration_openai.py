@@ -47,7 +47,7 @@ class OpenAIGPTConfig(PretrainedConfig):
                 The maximum sequence length that this model might ever be used with.
                 Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
             n_ctx (:obj:`int`, optional, defaults to 512):
-                Size of the causal mask (usually same as n_positions).
+                Dimensionality of the causal mask (usually same as n_positions).
             n_embd (:obj:`int`, optional, defaults to 768):
                 Dimensionality of the embeddings and hidden states.
             n_layer (:obj:`int`, optional, defaults to 12):

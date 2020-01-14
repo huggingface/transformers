@@ -44,11 +44,11 @@ class CTRLConfig(PretrainedConfig):
                 The maximum sequence length that this model might ever be used with.
                 Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
             n_ctx (:obj:`int`, optional, defaults to 256):
-                Size of the causal mask (usually same as n_positions).
+                Dimensionality of the causal mask (usually same as n_positions).
             n_embd (:obj:`int`, optional, defaults to 1280):
                 Dimensionality of the embeddings and hidden states.
             dff (:obj:`int`, optional, defaults to 8192):
-                Size of the inner dimension of the FFN.
+                Dimensionality of the inner dimension of the FFN.
             n_layer (:obj:`int`, optional, defaults to 48):
                 Number of hidden layers in the Transformer encoder.
             n_head (:obj:`int`, optional, defaults to 16):

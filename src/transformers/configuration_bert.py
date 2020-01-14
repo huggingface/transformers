@@ -65,13 +65,13 @@ class BertConfig(PretrainedConfig):
                 Vocabulary size of the BERT model. Defines the different tokens that
                 can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
             hidden_size (:obj:`int`, optional, defaults to 768):
-                Size of the encoder layers and the pooler layer.
+                Dimensionality of the encoder layers and the pooler layer.
             num_hidden_layers (:obj:`int`, optional, defaults to 12):
                 Number of hidden layers in the Transformer encoder.
             num_attention_heads (:obj:`int`, optional, defaults to 12):
                 Number of attention heads for each attention layer in the Transformer encoder.
             intermediate_size (:obj:`int`, optional, defaults to 3072):
-                The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
                 The non-linear activation function (function or string) in the encoder and pooler.
                 If string, "gelu", "relu", "swish" and "gelu_new" are supported.
