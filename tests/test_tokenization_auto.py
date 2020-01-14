@@ -33,7 +33,7 @@ class AutoTokenizerTest(unittest.TestCase):
     # @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in [x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP if not "japanese" in x]:
+        for model_name in [x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if not "japanese" in x]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, BertTokenizer)
