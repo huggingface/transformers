@@ -34,6 +34,13 @@ XLM
     :members:
 
 
+``XLMForQuestionAnsweringSimple``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLMForQuestionAnsweringSimple
+    :members:
+
+
 ``XLMForQuestionAnswering``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
