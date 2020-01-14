@@ -863,7 +863,7 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
                 padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
-                The tokenizer padding sides are handled by the following strings:
+                The tokenizer padding sides are handled by the class attribute `padding_side` which can be set to the following strings:
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
