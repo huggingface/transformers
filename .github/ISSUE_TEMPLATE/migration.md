@@ -34,7 +34,7 @@ Details of the issue:
 * PyTorch version:
 * PyTorch Transformers version (or branch):
 * Using GPU ?
-* Distributed of parallel setup ?
+* Distributed or parallel setup ?
 * Any other relevant information:
 
 ## Checklist
