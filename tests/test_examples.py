@@ -15,6 +15,7 @@
 
 import os
 import unittest
+from .utils import require_torch
 
 
 def get_examples_from_file(file):
@@ -40,6 +41,7 @@ def get_examples_from_file(file):
     return ['\n'.join(example) for example in examples]
 
 
+@require_torch
 class TestCodeExamples(unittest.TestCase):
     def test_configuration_examples(self):
         transformers_directory = "../src/transformers"
