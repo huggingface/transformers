@@ -45,13 +45,13 @@ class XLNetConfig(PretrainedConfig):
                 Vocabulary size of the XLNet model. Defines the different tokens that
                 can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLNetModel`.
             d_model (:obj:`int`, optional, defaults to 1024):
-                Size of the encoder layers and the pooler layer.
+                Dimensionality of the encoder layers and the pooler layer.
             n_layer (:obj:`int`, optional, defaults to 24):
                 Number of hidden layers in the Transformer encoder.
             n_head (:obj:`int`, optional, defaults to 16):
                 Number of attention heads for each attention layer in the Transformer encoder.
             d_inner (:obj:`int`, optional, defaults to 4096):
-                The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             ff_activation (:obj:`string`, optional, defaults to "gelu"):
                 The non-linear activation function (function or string) in the
                 encoder and pooler. If string, "gelu", "relu" and "swish" are supported.

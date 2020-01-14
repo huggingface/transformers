@@ -47,9 +47,9 @@ class AlbertConfig(PretrainedConfig):
                 Vocabulary size of the ALBERT model. Defines the different tokens that
                 can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.AlbertModel`.
             embedding_size (:obj:`int`, optional, defaults to 128):
-                Size of vocabulary embeddings.
+                Dimensionality of vocabulary embeddings.
             hidden_size (:obj:`int`, optional, defaults to 4096):
-                Size of the encoder layers and the pooler layer.
+                Dimensionality of the encoder layers and the pooler layer.
             num_hidden_layers (:obj:`int`, optional, defaults to 12):
                 Number of hidden layers in the Transformer encoder.
             num_hidden_groups (:obj:`int`, optional, defaults to 1):
@@ -57,7 +57,7 @@ class AlbertConfig(PretrainedConfig):
             num_attention_heads (:obj:`int`, optional, defaults to 64):
                 Number of attention heads for each attention layer in the Transformer encoder.
             intermediate_size (:obj:`int`, optional, defaults to 16384):
-                The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+                The dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             inner_group_num (:obj:`int`, optional, defaults to 1):
                 The number of inner repetition of attention and ffn.
             hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu_new"):
