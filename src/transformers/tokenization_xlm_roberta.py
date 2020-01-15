@@ -75,7 +75,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs
     ):
-        super(XLMRobertaTokenizer, self).__init__(
+        super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

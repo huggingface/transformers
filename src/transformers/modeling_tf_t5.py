@@ -50,13 +50,13 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
         """ Construct a layernorm module in the T5 style
             No bias and no substraction of mean.
         """
-        super(TFT5LayerNorm, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.variance_epsilon = epsilon
 
     def build(self, input_shape):
         """Build shared word embedding layer """
         self.weight = self.add_weight("weight", shape=(input_shape[-1],), initializer="ones")
-        super(TFT5LayerNorm, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, x):
         variance = tf.math.reduce_mean(tf.math.square(x), axis=-1, keepdims=True)
@@ -66,7 +66,7 @@ class TFT5LayerNorm(tf.keras.layers.Layer):
 
 class TFT5DenseReluDense(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFT5DenseReluDense, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.wi = tf.keras.layers.Dense(config.d_ff, use_bias=False, name="wi")
         self.wo = tf.keras.layers.Dense(config.d_model, use_bias=False, name="wo")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
@@ -82,7 +82,7 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
 
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFT5LayerFF, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
@@ -98,7 +98,7 @@ class TFT5Attention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
-        super(TFT5Attention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.layer_id = next(TFT5Attention.NEW_ID)
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -259,7 +259,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
 class TFT5LayerSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
-        super(TFT5LayerSelfAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.SelfAttention = TFT5Attention(
             config, has_relative_attention_bias=has_relative_attention_bias, name="SelfAttention"
         )
@@ -279,7 +279,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
 
 class TFT5LayerCrossAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
-        super(TFT5LayerCrossAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.EncDecAttention = TFT5Attention(
             config, has_relative_attention_bias=has_relative_attention_bias, name="EncDecAttention"
         )
@@ -299,7 +299,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
 
 class TFT5Block(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
-        super(TFT5Block, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.is_decoder = config.is_decoder
         self.layer = []
         self.layer.append(
@@ -361,7 +361,7 @@ class TFT5Block(tf.keras.layers.Layer):
 ####################################################
 class TFT5MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFT5MainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.is_decoder = config.is_decoder
@@ -633,7 +633,7 @@ class TFT5Model(TFT5PreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFT5Model, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
 
         encoder_config = copy.deepcopy(config)
@@ -724,7 +724,7 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFT5WithLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
 
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")

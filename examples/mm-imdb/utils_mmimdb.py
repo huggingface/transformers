@@ -31,7 +31,7 @@ POOLING_BREAKDOWN = {1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (2, 2), 5: (5, 1), 6: (
 
 class ImageEncoder(nn.Module):
     def __init__(self, args):
-        super(ImageEncoder, self).__init__()
+        super().__init__()
         model = torchvision.models.resnet152(pretrained=True)
         modules = list(model.children())[:-2]
         self.model = nn.Sequential(*modules)

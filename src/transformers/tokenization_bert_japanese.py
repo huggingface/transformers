@@ -107,7 +107,7 @@ class BertJapaneseTokenizer(BertTokenizer):
             **subword_tokenizer_type**: (`optional`) string (default "wordpiece")
                 Type of subword tokenizer.
         """
-        super(BertTokenizer, self).__init__(
+        super().__init__(
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,

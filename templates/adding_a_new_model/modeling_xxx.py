@@ -138,7 +138,7 @@ XxxOutput = nn.Module
 
 class XxxLayer(nn.Module):
     def __init__(self, config):
-        super(XxxLayer, self).__init__()
+        super().__init__()
         self.attention = XxxAttention(config)
         self.intermediate = XxxIntermediate(config)
         self.output = XxxOutput(config)
@@ -298,7 +298,7 @@ class XxxModel(XxxPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XxxModel, self).__init__(config)
+        super().__init__(config)
 
         self.embeddings = XxxEmbeddings(config)
         self.encoder = XxxEncoder(config)
@@ -426,7 +426,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XxxForMaskedLM, self).__init__(config)
+        super().__init__(config)
 
         self.transformer = XxxModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
@@ -507,7 +507,7 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XxxForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XxxModel(config)
@@ -593,7 +593,7 @@ class XxxForTokenClassification(XxxPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XxxForTokenClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XxxModel(config)
@@ -692,7 +692,7 @@ class XxxForQuestionAnswering(XxxPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XxxForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XxxModel(config)

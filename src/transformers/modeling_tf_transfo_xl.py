@@ -36,7 +36,7 @@ TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 class TFPositionalEmbedding(tf.keras.layers.Layer):
     def __init__(self, demb, **kwargs):
-        super(TFPositionalEmbedding, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.inv_freq = 1 / (10000 ** (tf.range(0, demb, 2.0) / demb))
 
@@ -52,7 +52,7 @@ class TFPositionalEmbedding(tf.keras.layers.Layer):
 
 class TFPositionwiseFF(tf.keras.layers.Layer):
     def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5, init_std=0.02, **kwargs):
-        super(TFPositionwiseFF, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.d_model = d_model
         self.d_inner = d_inner
@@ -112,7 +112,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         init_std=0.02,
         **kwargs
     ):
-        super(TFRelPartialLearnableMultiHeadAttn, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.output_attentions = output_attentions
         self.n_head = n_head
@@ -155,7 +155,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             self.r_w_bias = self.add_weight(
                 shape=(self.n_head, self.d_head), initializer="zeros", trainable=True, name="r_w_bias"
             )
-        super(TFRelPartialLearnableMultiHeadAttn, self).build(input_shape)
+        super().build(input_shape)
 
     def _rel_shift(self, x):
         x_size = shape_list(x)
@@ -267,7 +267,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         init_std=0.02,
         **kwargs
     ):
-        super(TFRelPartialLearnableDecoderLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.dec_attn = TFRelPartialLearnableMultiHeadAttn(
             n_head,
@@ -308,7 +308,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
 
 class TFAdaptiveEmbedding(tf.keras.layers.Layer):
     def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, init_std=0.02, sample_softmax=False, **kwargs):
-        super(TFAdaptiveEmbedding, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.n_token = n_token
         self.d_embed = d_embed
@@ -350,7 +350,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                     name="emb_projs_._{}".format(i),
                 )
             )
-        super(TFAdaptiveEmbedding, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inp):
         if self.div_val == 1:
@@ -380,7 +380,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
 
 class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFTransfoXLMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -455,7 +455,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             self.r_r_bias = self.add_weight(
                 shape=(self.n_head, self.d_head), initializer="zeros", trainable=True, name="r_r_bias"
             )
-        super(TFTransfoXLMainLayer, self).build(input_shape)
+        super().build(input_shape)
 
     def get_input_embeddings(self):
         return self.word_emb
@@ -728,7 +728,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFTransfoXLModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
@@ -774,7 +774,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(TFTransfoXLLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
         self.sample_softmax = config.sample_softmax
         # use sampled softmax

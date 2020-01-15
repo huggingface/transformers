@@ -29,7 +29,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
 
     def setUp(self):
-        super(GPT2TokenizationTest, self).setUp()
+        super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [

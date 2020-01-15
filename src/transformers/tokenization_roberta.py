@@ -84,7 +84,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         mask_token="<mask>",
         **kwargs
     ):
-        super(RobertaTokenizer, self).__init__(
+        super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
             errors=errors,

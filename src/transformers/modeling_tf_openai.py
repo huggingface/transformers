@@ -66,7 +66,7 @@ ACT_FNS = {
 
 class TFAttention(tf.keras.layers.Layer):
     def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
-        super(TFAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
@@ -160,7 +160,7 @@ class TFAttention(tf.keras.layers.Layer):
 
 class TFMLP(tf.keras.layers.Layer):
     def __init__(self, n_state, config, **kwargs):
-        super(TFMLP, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
@@ -176,7 +176,7 @@ class TFMLP(tf.keras.layers.Layer):
 
 class TFBlock(tf.keras.layers.Layer):
     def __init__(self, n_ctx, config, scale=False, **kwargs):
-        super(TFBlock, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         nx = config.n_embd
         self.attn = TFAttention(nx, n_ctx, config, scale, name="attn")
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
@@ -199,7 +199,7 @@ class TFBlock(tf.keras.layers.Layer):
 
 class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFOpenAIGPTMainLayer, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.num_hidden_layers = config.n_layer
@@ -453,7 +453,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFOpenAIGPTModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
@@ -494,7 +494,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFOpenAIGPTLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
@@ -563,7 +563,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFOpenAIGPTDoubleHeadsModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         config.num_labels = 1
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
         self.multiple_choice_head = TFSequenceSummary(

@@ -91,7 +91,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                 additional_special_tokens = []
             additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids)])
 
-        super(T5Tokenizer, self).__init__(
+        super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,

@@ -69,7 +69,7 @@ TFXxxOutput = tf.keras.layers.Layer
 
 class TFXxxLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXxxLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.attention = TFXxxAttention(config, name="attention")
         self.intermediate = TFXxxIntermediate(config, name="intermediate")
         self.transformer_output = TFXxxOutput(config, name="output")
@@ -91,7 +91,7 @@ class TFXxxLayer(tf.keras.layers.Layer):
 ####################################################
 class TFXxxMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXxxMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -307,7 +307,7 @@ class TFXxxModel(TFXxxPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXxxModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXxxMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
@@ -348,7 +348,7 @@ class TFXxxForMaskedLM(TFXxxPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXxxForMaskedLM, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.transformer = TFXxxMainLayer(config, name="transformer")
         self.mlm = TFXxxMLMHead(config, self.transformer.embeddings, name="mlm")
@@ -397,7 +397,7 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXxxForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.transformer = TFXxxMainLayer(config, name="transformer")
@@ -452,7 +452,7 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXxxForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.transformer = TFXxxMainLayer(config, name="transformer")
@@ -509,7 +509,7 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXxxForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.transformer = TFXxxMainLayer(config, name="transformer")

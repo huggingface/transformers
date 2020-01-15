@@ -31,7 +31,7 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = XLNetTokenizer
 
     def setUp(self):
-        super(XLNetTokenizationTest, self).setUp()
+        super().setUp()
 
         # We have a SentencePiece fixture for testing
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)

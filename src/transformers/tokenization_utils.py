@@ -1425,7 +1425,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     _decoder = None
 
     def __init__(self, **kwargs):
-        super(PreTrainedTokenizerFast, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     @property
     def tokenizer(self):
