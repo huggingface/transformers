@@ -126,7 +126,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
     control_codes = CONTROL_CODES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super(CTRLTokenizer, self).__init__(unk_token=unk_token, **kwargs)
+        super().__init__(unk_token=unk_token, **kwargs)
         self.max_len_single_sentence = (
             self.max_len
         )  # no default special tokens - you can update this value if you add special tokens

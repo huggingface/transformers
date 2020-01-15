@@ -159,7 +159,7 @@ class XLNetConfig(PretrainedConfig):
     ):
         """Constructs XLNetConfig.
         """
-        super(XLNetConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_layer = n_layer

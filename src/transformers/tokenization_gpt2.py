@@ -122,7 +122,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         eos_token="<|endoftext|>",
         **kwargs
     ):
-        super(GPT2Tokenizer, self).__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
+        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
         self.max_len_single_sentence = (
             self.max_len
         )  # no default special tokens - you can update this value if you add special tokens
@@ -268,7 +268,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         truncation_strategy="longest_first",
         **kwargs
     ):
-        super(GPT2TokenizerFast, self).__init__(
+        super().__init__(
             bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs
         )
 

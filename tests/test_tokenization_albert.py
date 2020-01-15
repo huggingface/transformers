@@ -30,7 +30,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = AlbertTokenizer
 
     def setUp(self):
-        super(AlbertTokenizationTest, self).setUp()
+        super().setUp()
 
         # We have a SentencePiece fixture for testing
         tokenizer = AlbertTokenizer(SAMPLE_VOCAB)

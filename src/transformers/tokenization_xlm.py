@@ -578,7 +578,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         do_lowercase_and_remove_accent=True,
         **kwargs
     ):
-        super(XLMTokenizer, self).__init__(
+        super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
             sep_token=sep_token,

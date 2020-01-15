@@ -113,7 +113,7 @@ class DistilBertConfig(PretrainedConfig):
         seq_classif_dropout=0.2,
         **kwargs
     ):
-        super(DistilBertConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.sinusoidal_pos_embds = sinusoidal_pos_embds

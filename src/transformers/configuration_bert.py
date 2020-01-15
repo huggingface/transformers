@@ -125,7 +125,7 @@ class BertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         **kwargs
     ):
-        super(BertConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

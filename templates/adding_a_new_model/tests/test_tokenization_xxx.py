@@ -27,7 +27,7 @@ class XxxTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = XxxTokenizer
 
     def setUp(self):
-        super(XxxTokenizationTest, self).setUp()
+        super().setUp()
 
         vocab_tokens = [
             "[UNK]",

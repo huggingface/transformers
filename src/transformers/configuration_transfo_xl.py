@@ -151,7 +151,7 @@ class TransfoXLConfig(PretrainedConfig):
         layer_norm_epsilon=1e-5,
         **kwargs
     ):
-        super(TransfoXLConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.cutoffs = []

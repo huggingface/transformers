@@ -31,7 +31,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = T5Tokenizer
 
     def setUp(self):
-        super(T5TokenizationTest, self).setUp()
+        super().setUp()
 
         # We have a SentencePiece fixture for testing
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
