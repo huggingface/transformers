@@ -121,7 +121,7 @@ def add_start_docstrings_to_callable(*docstr):
         Although the recipe for forward pass needs to be defined within
         this function, one should call the :class:`Module` instance afterwards
         instead of this since the former takes care of running the
-        registered hooks while the latter silently ignores them.
+        pre and post processing steps while the latter silently ignores them.
         """
         fn.__doc__ = intro + note + "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
         return fn
