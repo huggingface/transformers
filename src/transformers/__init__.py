@@ -25,6 +25,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
@@ -108,6 +109,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenize
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -259,6 +261,15 @@ if is_torch_available():
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
+
+    from .modeling_flaubert import (
+        FlaubertModel,
+        FlaubertWithLMHeadModel,
+        FlaubertForSequenceClassification,
+        FlaubertForQuestionAnswering,
+        FlaubertForQuestionAnsweringSimple,
+        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
     # Optimization
     from .optimization import (
