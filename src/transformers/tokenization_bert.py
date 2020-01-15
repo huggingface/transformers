@@ -163,7 +163,7 @@ class BertTokenizer(PreTrainedTokenizer):
                 This should likely be deactivated for Japanese:
                 see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
         """
-        super(BertTokenizer, self).__init__(
+        super().__init__(
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,

@@ -264,7 +264,7 @@ class PreTrainedTokenizer(object):
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
-                - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
+                - (not applicable to all derived classes, deprecated) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
@@ -331,57 +331,42 @@ class PreTrainedTokenizer(object):
             # Get the vocabulary from local files
             logger.info(
                 "Model name '{}' not found in model shortcut name list ({}). "
-                "Assuming '{}' is a path or url to a directory containing tokenizer files.".format(
+                "Assuming '{}' is a path, a model identifier, or url to a directory containing tokenizer files.".format(
                     pretrained_model_name_or_path, ", ".join(s3_models), pretrained_model_name_or_path
                 )
             )
 
-            # Look for the tokenizer main vocabulary files
-            for file_id, file_name in cls.vocab_files_names.items():
-                if os.path.isdir(pretrained_model_name_or_path):
-                    # If a directory is provided we look for the standard filenames
-                    full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                    if not os.path.exists(full_file_name):
-                        logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                        full_file_name = None
-                elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-                    # If a path to a file is provided we use it (will only work for non-BPE tokenizer using a single vocabulary file)
-                    full_file_name = pretrained_model_name_or_path
-                else:
-                    full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
-
-                vocab_files[file_id] = full_file_name
-
-            # Look for the additional tokens files
-            additional_files_names = {
-                "added_tokens_file": ADDED_TOKENS_FILE,
-                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
-                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-            }
-
-            # If a path to a file was provided, get the parent directory
-            saved_directory = pretrained_model_name_or_path
-            if os.path.exists(saved_directory) and not os.path.isdir(saved_directory):
-                saved_directory = os.path.dirname(saved_directory)
-
-            for file_id, file_name in additional_files_names.items():
-                full_file_name = os.path.join(saved_directory, file_name)
-                if not os.path.exists(full_file_name):
-                    logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                    full_file_name = None
-                vocab_files[file_id] = full_file_name
-
-            if all(full_file_name is None for full_file_name in vocab_files.values()):
-                raise EnvironmentError(
-                    "Model name '{}' was not found in tokenizers model name list ({}). "
-                    "We assumed '{}' was a path or url to a directory containing vocabulary files "
-                    "named {} but couldn't find such vocabulary files at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ", ".join(s3_models),
-                        pretrained_model_name_or_path,
-                        list(cls.vocab_files_names.values()),
+            if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+                if len(cls.vocab_files_names) > 1:
+                    raise ValueError(
+                        "Calling {}.from_pretrained() with the path to a single file or url is not supported."
+                        "Use a model identifier or the path to a directory instead.".format(cls.__name__)
+                    )
+                logger.warning(
+                    "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
+                        cls.__name__
                     )
                 )
+                file_id = list(cls.vocab_files_names.keys())[0]
+                vocab_files[file_id] = pretrained_model_name_or_path
+            else:
+                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+                additional_files_names = {
+                    "added_tokens_file": ADDED_TOKENS_FILE,
+                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
+                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                }
+                # Look for the tokenizer main vocabulary files + the additional tokens files
+                for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+                    if os.path.isdir(pretrained_model_name_or_path):
+                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                        if not os.path.exists(full_file_name):
+                            logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
+                            full_file_name = None
+                    else:
+                        full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
+
+                    vocab_files[file_id] = full_file_name
 
         # Get files from url, cache, or disk depending on the case
         try:
@@ -413,6 +398,18 @@ class PreTrainedTokenizer(object):
                 )
 
             raise EnvironmentError(msg)
+
+        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
+            raise EnvironmentError(
+                "Model name '{}' was not found in tokenizers model name list ({}). "
+                "We assumed '{}' was a path, a model identifier, or url to a directory containing vocabulary files "
+                "named {} but couldn't find such vocabulary files at this path or url.".format(
+                    pretrained_model_name_or_path,
+                    ", ".join(s3_models),
+                    pretrained_model_name_or_path,
+                    list(cls.vocab_files_names.values()),
+                )
+            )
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:

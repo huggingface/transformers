@@ -56,3 +56,17 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(tokenizer, RobertaTokenizer)
         self.assertEqual(len(tokenizer), 20)
+
+    def test_tokenizer_identifier_with_correct_config(self):
+        logging.basicConfig(level=logging.INFO)
+        for tokenizer_class in [BertTokenizer, AutoTokenizer]:
+            tokenizer = tokenizer_class.from_pretrained("wietsedv/bert-base-dutch-cased")
+            self.assertIsInstance(tokenizer, BertTokenizer)
+            self.assertEqual(tokenizer.basic_tokenizer.do_lower_case, False)
+            self.assertEqual(tokenizer.max_len, 512)
+
+    def test_tokenizer_identifier_non_existent(self):
+        logging.basicConfig(level=logging.INFO)
+        for tokenizer_class in [BertTokenizer, AutoTokenizer]:
+            with self.assertRaises(EnvironmentError):
+                _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")
