@@ -870,10 +870,10 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
             "model": {
-                "pt": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
-                "tf": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
+                "pt": "distilbert-base-uncased-finetuned-sst-2-english",
+                "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
-            "config": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json",
+            "config": "distilbert-base-uncased-finetuned-sst-2-english",
             "tokenizer": "distilbert-base-uncased",
         },
     },
