@@ -58,6 +58,7 @@ class XxxConfig(PretrainedConfig):
             layer_norm_eps: The epsilon used by LayerNorm.
     """
     pretrained_config_archive_map = XXX_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "xxx"
 
     def __init__(
         self,

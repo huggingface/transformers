@@ -286,6 +286,7 @@ class T5Attention(nn.Module):
             bidirectional=not self.is_decoder,
             num_buckets=self.relative_attention_num_buckets,
         )
+        rp_bucket = rp_bucket.to(self.relative_attention_bias.weight.device)
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, qlen, klen)
         return values
@@ -446,7 +447,7 @@ class T5Block(nn.Module):
 
 class T5PreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = T5Config
@@ -905,7 +906,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             decoder_outputs = (
                 loss,

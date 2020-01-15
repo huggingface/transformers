@@ -449,7 +449,7 @@ class AdaptiveEmbedding(nn.Module):
 
 class TransfoXLPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = TransfoXLConfig
@@ -930,3 +930,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             return self.out_layer
         else:
             return self.crit.out_layers[-1]
+
+    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
+        inputs = {"input_ids": input_ids}
+
+        # if past is defined in model kwargs then use it for faster decoding
+        if "past" in model_kwargs and model_kwargs["past"]:
+            inputs["mems"] = model_kwargs["past"]
+
+        return inputs

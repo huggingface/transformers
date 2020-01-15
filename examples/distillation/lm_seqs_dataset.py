@@ -42,6 +42,7 @@ class LmSeqsDataset(Dataset):
         self.check()
         self.remove_long_sequences()
         self.remove_empty_sequences()
+        self.remove_unknown_sequences()
         self.check()
         self.print_statistics()
 
@@ -108,6 +109,22 @@ class LmSeqsDataset(Dataset):
         self.lengths = self.lengths[indices]
         new_size = len(self)
         logger.info(f"Remove {init_size - new_size} too short (<=11 tokens) sequences.")
+
+    def remove_unknown_sequences(self):
+        """
+        Remove sequences with a (too) high level of unknown tokens.
+        """
+        if "unk_token" not in self.params.special_tok_ids:
+            return
+        else:
+            unk_token_id = self.params.special_tok_ids["unk_token"]
+        init_size = len(self)
+        unk_occs = np.array([np.count_nonzero(a == unk_token_id) for a in self.token_ids])
+        indices = (unk_occs / self.lengths) < 0.5
+        self.token_ids = self.token_ids[indices]
+        self.lengths = self.lengths[indices]
+        new_size = len(self)
+        logger.info(f"Remove {init_size - new_size} sequences with a high level of unknown tokens (50%).")
 
     def print_statistics(self):
         """

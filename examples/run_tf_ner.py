@@ -8,6 +8,8 @@ import re
 
 import numpy as np
 from fastprogress import master_bar, progress_bar
+import tensorflow as tf
+from absl import app, flags, logging
 from seqeval import metrics
 
 import tensorflow as tf
@@ -27,6 +29,12 @@ from transformers import (
     create_optimizer,
 )
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
+
+
+try:
+    from fastprogress import master_bar, progress_bar
+except ImportError:
+    from fastprogress.fastprogress import master_bar, progress_bar
 
 
 ALL_MODELS = sum(

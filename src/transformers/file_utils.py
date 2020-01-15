@@ -98,7 +98,6 @@ def is_torch_available():
 
 
 def is_tf_available():
-
     return _tf_available
 
 
@@ -274,6 +273,10 @@ def s3_get(url, temp_file, proxies=None):
 
 def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
+    if is_torch_available():
+        ua += "; torch/{}".format(torch.__version__)
+    if is_tf_available():
+        ua += "; tensorflow/{}".format(tf.__version__)
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
     elif isinstance(user_agent, str):
@@ -313,8 +316,7 @@ def get_from_cache(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
 
     # Get eTag to add to filename, if it exists.
     if url.startswith("s3://"):
@@ -382,16 +384,13 @@ def get_from_cache(
                 else:
                     http_get(url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
 
-                # we are copying the file before closing it, so flush to avoid truncation
-                temp_file.flush()
+            logger.info("storing %s in cache at %s", url, cache_path)
+            os.rename(temp_file.name, cache_path)
 
-                logger.info("storing %s in cache at %s", url, cache_path)
-                os.rename(temp_file.name, cache_path)
-
-                logger.info("creating metadata file for %s", cache_path)
-                meta = {"url": url, "etag": etag}
-                meta_path = cache_path + ".json"
-                with open(meta_path, "w") as meta_file:
-                    json.dump(meta, meta_file)
+            logger.info("creating metadata file for %s", cache_path)
+            meta = {"url": url, "etag": etag}
+            meta_path = cache_path + ".json"
+            with open(meta_path, "w") as meta_file:
+                json.dump(meta, meta_file)
 
     return cache_path

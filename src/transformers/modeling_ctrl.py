@@ -163,7 +163,7 @@ class EncoderLayer(torch.nn.Module):
 
 class CTRLPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = CTRLConfig
@@ -444,7 +444,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
+            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
 
@@ -489,6 +489,15 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if "past" in kwargs and kwargs["past"]:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        inputs = {"input_ids": input_ids}
+        inputs.update(kwargs)
+        return inputs
 
     def forward(
         self,

@@ -96,7 +96,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs
+            **kwargs,
         )
 
         try:

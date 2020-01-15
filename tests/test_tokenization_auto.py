@@ -23,16 +23,17 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     GPT2Tokenizer,
+    RobertaTokenizer,
 )
 
-from .utils import SMALL_MODEL_IDENTIFIER, slow
+from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
 
 
 class AutoTokenizerTest(unittest.TestCase):
-    @slow
+    # @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:
+        for model_name in [x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, BertTokenizer)
@@ -49,3 +50,9 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(tokenizer, BertTokenizer)
         self.assertEqual(len(tokenizer), 12)
+
+    def test_tokenizer_from_model_type(self):
+        logging.basicConfig(level=logging.INFO)
+        tokenizer = AutoTokenizer.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
+        self.assertIsInstance(tokenizer, RobertaTokenizer)
+        self.assertEqual(len(tokenizer), 20)
