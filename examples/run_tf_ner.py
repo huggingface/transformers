@@ -7,13 +7,10 @@ import os
 import re
 
 import numpy as np
-from fastprogress import master_bar, progress_bar
 import tensorflow as tf
 from absl import app, flags, logging
 from seqeval import metrics
 
-import tensorflow as tf
-from absl import app, flags, logging
 from transformers import (
     TF2_WEIGHTS_NAME,
     BertConfig,

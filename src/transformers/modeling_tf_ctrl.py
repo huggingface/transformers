@@ -19,7 +19,6 @@
 import logging
 
 import numpy as np
-
 import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
