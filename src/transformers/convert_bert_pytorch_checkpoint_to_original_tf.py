@@ -19,9 +19,9 @@ import argparse
 import os
 
 import numpy as np
+import tensorflow as tf
 import torch
 
-import tensorflow as tf
 from transformers import BertModel
 
 
