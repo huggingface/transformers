@@ -16,7 +16,7 @@
 
 try:
     from scipy.stats import pearsonr, spearmanr
-    from sklearn.metrics import matthews_corrcoef, f1_score
+    from sklearn.metrics import matthews_corrcoef, f1_score, accuracy_score
 
     _has_sklearn = True
 except (AttributeError, ImportError):
@@ -30,7 +30,7 @@ def is_sklearn_available():
 if _has_sklearn:
 
     def simple_accuracy(preds, labels):
-        return (preds == labels).mean()
+        return accuracy_score(labels,preds)
 
     def acc_and_f1(preds, labels):
         acc = simple_accuracy(preds, labels)
