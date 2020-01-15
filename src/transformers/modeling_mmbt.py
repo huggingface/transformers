@@ -84,7 +84,7 @@ MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
     refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     .. _`Supervised Multimodal Bitransformers for Classifying Images and Text`:
-        https://www.github.com/salesforce/ctrl
+        https://github.com/facebookresearch/mmbt
 
     .. _`torch.nn.Module`:
         https://pytorch.org/docs/stable/nn.html#module
