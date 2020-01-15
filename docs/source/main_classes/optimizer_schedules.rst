@@ -20,14 +20,12 @@ The ``.optimization`` module provides:
     :members:
 
 .. autofunction:: transformers.create_optimizer
-    :members:
 
 Schedules
 ----------------------------------------------------
 
 Learning Rate Schedules
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. autofunction:: transformers.get_constant_schedule
 
 
@@ -39,7 +37,6 @@ Learning Rate Schedules
 
 
 .. autofunction:: transformers.get_cosine_schedule_with_warmup
-    :members:
 
 .. image:: /imgs/warmup_cosine_schedule.png
     :target: /imgs/warmup_cosine_schedule.png
@@ -63,7 +60,7 @@ Learning Rate Schedules
 ``Warmup``
 ~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Warmup
+.. autoclass:: transformers.WarmUp
     :members:
 
 Gradient Strategies

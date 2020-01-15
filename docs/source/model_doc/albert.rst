@@ -59,7 +59,7 @@ AlbertForMaskedLM
 
 
 AlbertForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AlbertForSequenceClassification
     :members:
