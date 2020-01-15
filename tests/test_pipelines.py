@@ -21,16 +21,16 @@ TF_QA_FINETUNED_MODELS = {
 TF_NER_FINETUNED_MODELS = {
     (
         "bert-base-cased",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-tf_model.h5",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json",
+        "dbmdz/bert-large-cased-finetuned-conll03-english",
+        "dbmdz/bert-large-cased-finetuned-conll03-english",
     )
 }
 
 NER_FINETUNED_MODELS = {
     (
         "bert-base-cased",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json",
+        "dbmdz/bert-large-cased-finetuned-conll03-english",
+        "dbmdz/bert-large-cased-finetuned-conll03-english",
     )
 }
 
