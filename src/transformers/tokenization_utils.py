@@ -513,12 +513,10 @@ class PreTrainedTokenizer(object):
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.special_tokens_map, ensure_ascii=False))
 
-        with open(added_tokens_file, "w", encoding="utf-8") as f:
-            if self.added_tokens_encoder:
+        if len(self.added_tokens_encoder) > 0:
+            with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(self.added_tokens_encoder, ensure_ascii=False)
-            else:
-                out_str = "{}"
-            f.write(out_str)
+                f.write(out_str)
 
         vocab_files = self.save_vocabulary(save_directory)
 

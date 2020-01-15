@@ -33,13 +33,13 @@ class AutoTokenizerTest(unittest.TestCase):
     # @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in [x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x]:
+        for model_name in (x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, BertTokenizer)
             self.assertGreater(len(tokenizer), 0)
 
-        for model_name in list(GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:
+        for model_name in GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, GPT2Tokenizer)
