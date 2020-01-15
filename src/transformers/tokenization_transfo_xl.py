@@ -78,7 +78,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         additional_special_tokens=["<formula>"],
         **kwargs
     ):
-        super(TransfoXLTokenizer, self).__init__(
+        super().__init__(
             unk_token=unk_token, eos_token=eos_token, additional_special_tokens=additional_special_tokens, **kwargs
         )
 

@@ -97,7 +97,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config, **kwargs):
-        super(TFMultiHeadAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.layer_id = next(TFMultiHeadAttention.NEW_ID)
         self.output_attentions = config.output_attentions
         self.dim = dim
@@ -182,7 +182,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
 class TFTransformerFFN(tf.keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
-        super(TFTransformerFFN, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
         self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = tf.keras.layers.Activation(gelu) if config.gelu_activation else tf.keras.activations.relu
@@ -198,7 +198,7 @@ class TFTransformerFFN(tf.keras.layers.Layer):
 
 class TFXLMMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXLMMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -608,7 +608,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLMModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
@@ -622,7 +622,7 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFXLMPredLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.asm = config.asm
         self.n_words = config.n_words
         self.pad_index = config.pad_index
@@ -641,7 +641,7 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
     def build(self, input_shape):
         # The output weights are the same as the input embeddings, but there is an output-only bias for each token.
         self.bias = self.add_weight(shape=(self.n_words,), initializer="zeros", trainable=True, name="bias")
-        super(TFXLMPredLayer, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -682,7 +682,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLMWithLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
@@ -733,7 +733,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLMForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.transformer = TFXLMMainLayer(config, name="transformer")
@@ -784,7 +784,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLMForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"

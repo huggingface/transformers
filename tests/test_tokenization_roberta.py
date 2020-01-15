@@ -28,7 +28,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = RobertaTokenizer
 
     def setUp(self):
-        super(RobertaTokenizationTest, self).setUp()
+        super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [

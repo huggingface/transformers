@@ -57,7 +57,7 @@ ACT2FN = {
 
 class TFXLNetRelativeAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXLNetRelativeAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
 
         if config.d_model % config.n_head != 0:
@@ -104,7 +104,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.seg_embed = self.add_weight(
             shape=(2, self.n_head, self.d_head), initializer=initializer, trainable=True, name="seg_embed"
         )
-        super(TFXLNetRelativeAttention, self).build(input_shape)
+        super().build(input_shape)
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -280,7 +280,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
 class TFXLNetFeedForward(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXLNetFeedForward, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.layer_1 = tf.keras.layers.Dense(
             config.d_inner, kernel_initializer=get_initializer(config.initializer_range), name="layer_1"
@@ -307,7 +307,7 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
 
 class TFXLNetLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXLNetLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.rel_attn = TFXLNetRelativeAttention(config, name="rel_attn")
         self.ff = TFXLNetFeedForward(config, name="ff")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -326,7 +326,7 @@ class TFXLNetLayer(tf.keras.layers.Layer):
 
 class TFXLNetLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFXLNetLMHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -334,7 +334,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super(TFXLNetLMHead, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -344,7 +344,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
 class TFXLNetMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFXLNetMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.output_past = config.output_past
@@ -832,7 +832,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLNetModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
@@ -885,7 +885,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLNetLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
@@ -940,7 +940,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLNetForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.transformer = TFXLNetMainLayer(config, name="transformer")
@@ -1001,7 +1001,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLNetForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.transformer = TFXLNetMainLayer(config, name="transformer")
@@ -1058,7 +1058,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFXLNetForQuestionAnsweringSimple, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
@@ -1127,7 +1127,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
 
 #     """
 #     def __init__(self, config, *inputs, **kwargs):
-#         super(TFXLNetForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
+#         super().__init__(config, *inputs, **kwargs)
 #         self.start_n_top = config.start_n_top
 #         self.end_n_top = config.end_n_top
 

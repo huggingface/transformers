@@ -167,7 +167,7 @@ class AlbertEmbeddings(BertEmbeddings):
     """
 
     def __init__(self, config):
-        super(AlbertEmbeddings, self).__init__(config)
+        super().__init__(config)
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=0)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
@@ -177,7 +177,7 @@ class AlbertEmbeddings(BertEmbeddings):
 
 class AlbertAttention(BertSelfAttention):
     def __init__(self, config):
-        super(AlbertAttention, self).__init__(config)
+        super().__init__(config)
 
         self.output_attentions = config.output_attentions
         self.num_attention_heads = config.num_attention_heads
@@ -258,7 +258,7 @@ class AlbertAttention(BertSelfAttention):
 
 class AlbertLayer(nn.Module):
     def __init__(self, config):
-        super(AlbertLayer, self).__init__()
+        super().__init__()
 
         self.config = config
         self.full_layer_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -279,7 +279,7 @@ class AlbertLayer(nn.Module):
 
 class AlbertLayerGroup(nn.Module):
     def __init__(self, config):
-        super(AlbertLayerGroup, self).__init__()
+        super().__init__()
 
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -309,7 +309,7 @@ class AlbertLayerGroup(nn.Module):
 
 class AlbertTransformer(nn.Module):
     def __init__(self, config):
-        super(AlbertTransformer, self).__init__()
+        super().__init__()
 
         self.config = config
         self.output_attentions = config.output_attentions
@@ -471,7 +471,7 @@ class AlbertModel(AlbertPreTrainedModel):
     base_model_prefix = "albert"
 
     def __init__(self, config):
-        super(AlbertModel, self).__init__(config)
+        super().__init__(config)
 
         self.config = config
         self.embeddings = AlbertEmbeddings(config)
@@ -571,7 +571,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
 class AlbertMLMHead(nn.Module):
     def __init__(self, config):
-        super(AlbertMLMHead, self).__init__()
+        super().__init__()
 
         self.LayerNorm = nn.LayerNorm(config.embedding_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
@@ -619,7 +619,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(AlbertForMaskedLM, self).__init__(config)
+        super().__init__(config)
 
         self.albert = AlbertModel(config)
         self.predictions = AlbertMLMHead(config)
@@ -706,7 +706,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(AlbertForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.albert = AlbertModel(config)
@@ -804,7 +804,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(AlbertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.albert = AlbertModel(config)

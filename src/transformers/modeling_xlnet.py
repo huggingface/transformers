@@ -204,7 +204,7 @@ XLNetLayerNorm = nn.LayerNorm
 
 class XLNetRelativeAttention(nn.Module):
     def __init__(self, config):
-        super(XLNetRelativeAttention, self).__init__()
+        super().__init__()
         self.output_attentions = config.output_attentions
 
         if config.d_model % config.n_head != 0:
@@ -414,7 +414,7 @@ class XLNetRelativeAttention(nn.Module):
 
 class XLNetFeedForward(nn.Module):
     def __init__(self, config):
-        super(XLNetFeedForward, self).__init__()
+        super().__init__()
         self.layer_norm = XLNetLayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.layer_1 = nn.Linear(config.d_model, config.d_inner)
         self.layer_2 = nn.Linear(config.d_inner, config.d_model)
@@ -437,7 +437,7 @@ class XLNetFeedForward(nn.Module):
 
 class XLNetLayer(nn.Module):
     def __init__(self, config):
-        super(XLNetLayer, self).__init__()
+        super().__init__()
         self.rel_attn = XLNetRelativeAttention(config)
         self.ff = XLNetFeedForward(config)
         self.dropout = nn.Dropout(config.dropout)
@@ -631,7 +631,7 @@ class XLNetModel(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetModel, self).__init__(config)
+        super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.output_past = config.output_past
@@ -996,7 +996,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.attn_type = config.attn_type
         self.same_length = config.same_length
 
@@ -1119,7 +1119,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XLNetModel(config)
@@ -1234,7 +1234,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetForTokenClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XLNetModel(config)
@@ -1355,7 +1355,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetForMultipleChoice, self).__init__(config)
+        super().__init__(config)
 
         self.transformer = XLNetModel(config)
         self.sequence_summary = SequenceSummary(config)
@@ -1463,7 +1463,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetForQuestionAnsweringSimple, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XLNetModel(config)
@@ -1595,7 +1595,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLNetForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.start_n_top = config.start_n_top
         self.end_n_top = config.end_n_top
 

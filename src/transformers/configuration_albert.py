@@ -122,7 +122,7 @@ class AlbertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         **kwargs
     ):
-        super(AlbertConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size

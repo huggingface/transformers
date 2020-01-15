@@ -77,7 +77,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         additional_special_tokens=["<eop>", "<eod>"],
         **kwargs
     ):
-        super(XLNetTokenizer, self).__init__(
+        super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

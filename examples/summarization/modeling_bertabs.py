@@ -47,7 +47,7 @@ class BertAbsPreTrainedModel(PreTrainedModel):
 
 class BertAbs(BertAbsPreTrainedModel):
     def __init__(self, args, checkpoint=None, bert_extractive_checkpoint=None):
-        super(BertAbs, self).__init__(args)
+        super().__init__(args)
         self.args = args
         self.bert = Bert()
 
@@ -122,7 +122,7 @@ class Bert(nn.Module):
     """
 
     def __init__(self):
-        super(Bert, self).__init__()
+        super().__init__()
         config = BertConfig.from_pretrained("bert-base-uncased")
         self.model = BertModel(config)
 
@@ -151,7 +151,7 @@ class TransformerDecoder(nn.Module):
     """
 
     def __init__(self, num_layers, d_model, heads, d_ff, dropout, embeddings, vocab_size):
-        super(TransformerDecoder, self).__init__()
+        super().__init__()
 
         # Basic attributes.
         self.decoder_type = "transformer"
@@ -261,7 +261,7 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         pe = pe.unsqueeze(0)
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
         self.register_buffer("pe", pe)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
@@ -293,7 +293,7 @@ class TransformerDecoderLayer(nn.Module):
     """
 
     def __init__(self, d_model, heads, d_ff, dropout):
-        super(TransformerDecoderLayer, self).__init__()
+        super().__init__()
 
         self.self_attn = MultiHeadedAttention(heads, d_model, dropout=dropout)
 
@@ -410,7 +410,7 @@ class MultiHeadedAttention(nn.Module):
         self.dim_per_head = model_dim // head_count
         self.model_dim = model_dim
 
-        super(MultiHeadedAttention, self).__init__()
+        super().__init__()
         self.head_count = head_count
 
         self.linear_keys = nn.Linear(model_dim, head_count * self.dim_per_head)
@@ -639,7 +639,7 @@ class PositionwiseFeedForward(nn.Module):
     """
 
     def __init__(self, d_model, d_ff, dropout=0.1):
-        super(PositionwiseFeedForward, self).__init__()
+        super().__init__()
         self.w_1 = nn.Linear(d_model, d_ff)
         self.w_2 = nn.Linear(d_ff, d_model)
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)

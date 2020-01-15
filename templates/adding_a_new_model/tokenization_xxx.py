@@ -109,7 +109,7 @@ class XxxTokenizer(PreTrainedTokenizer):
                 Whether to lower case the input
                 Only has an effect when do_basic_tokenize=True
         """
-        super(XxxTokenizer, self).__init__(
+        super().__init__(
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,

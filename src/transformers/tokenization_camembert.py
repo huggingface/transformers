@@ -66,7 +66,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
         **kwargs
     ):
-        super(CamembertTokenizer, self).__init__(
+        super().__init__(
             max_len=512,
             bos_token=bos_token,
             eos_token=eos_token,

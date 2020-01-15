@@ -165,7 +165,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, demb):
-        super(PositionalEmbedding, self).__init__()
+        super().__init__()
 
         self.demb = demb
 
@@ -184,7 +184,7 @@ class PositionalEmbedding(nn.Module):
 
 class PositionwiseFF(nn.Module):
     def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5):
-        super(PositionwiseFF, self).__init__()
+        super().__init__()
 
         self.d_model = d_model
         self.d_inner = d_inner
@@ -236,7 +236,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         output_attentions=False,
         layer_norm_epsilon=1e-5,
     ):
-        super(RelPartialLearnableMultiHeadAttn, self).__init__()
+        super().__init__()
 
         self.output_attentions = output_attentions
         self.n_head = n_head
@@ -368,7 +368,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
 class RelPartialLearnableDecoderLayer(nn.Module):
     def __init__(self, n_head, d_model, d_head, d_inner, dropout, layer_norm_epsilon=1e-5, **kwargs):
-        super(RelPartialLearnableDecoderLayer, self).__init__()
+        super().__init__()
 
         self.dec_attn = RelPartialLearnableMultiHeadAttn(
             n_head, d_model, d_head, dropout, layer_norm_epsilon=layer_norm_epsilon, **kwargs
@@ -389,7 +389,7 @@ class RelPartialLearnableDecoderLayer(nn.Module):
 
 class AdaptiveEmbedding(nn.Module):
     def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, sample_softmax=False):
-        super(AdaptiveEmbedding, self).__init__()
+        super().__init__()
 
         self.n_token = n_token
         self.d_embed = d_embed
@@ -587,7 +587,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(TransfoXLModel, self).__init__(config)
+        super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -845,7 +845,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(TransfoXLLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.transformer = TransfoXLModel(config)
         self.sample_softmax = config.sample_softmax
         # use sampled softmax
