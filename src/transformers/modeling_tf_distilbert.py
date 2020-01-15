@@ -20,6 +20,7 @@ import logging
 import math
 
 import numpy as np
+
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
