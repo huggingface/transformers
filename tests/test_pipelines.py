@@ -49,16 +49,16 @@ TF_FEATURE_EXTRACT_FINETUNED_MODELS = {
 TF_TEXT_CLASSIF_FINETUNED_MODELS = {
     (
         "bert-base-uncased",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json",
+        "distilbert-base-uncased-finetuned-sst-2-english",
+        "distilbert-base-uncased-finetuned-sst-2-english",
     )
 }
 
 TEXT_CLASSIF_FINETUNED_MODELS = {
     (
         "bert-base-uncased",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
-        "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json",
+        "distilbert-base-uncased-finetuned-sst-2-english",
+        "distilbert-base-uncased-finetuned-sst-2-english",
     )
 }
 
