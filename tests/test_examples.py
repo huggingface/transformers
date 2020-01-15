@@ -41,7 +41,7 @@ def get_examples_from_file(file):
                 example = []
             else:
                 # If line is not empty, add it to the current example
-                if line is not "\n":
+                if line != "\n":
                     example.append(line[example_indentation + 4 : -1])
 
         # Detect the example from '::' or 'example::'
