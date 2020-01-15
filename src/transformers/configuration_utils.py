@@ -200,6 +200,8 @@ class PretrainedConfig(object):
                 resume_download=resume_download,
             )
             # Load config dict
+            if resolved_config_file is None:
+                raise EnvironmentError
             config_dict = cls._dict_from_json_file(resolved_config_file)
 
         except EnvironmentError:
@@ -210,7 +212,7 @@ class PretrainedConfig(object):
             else:
                 msg = (
                     "Model name '{}' was not found in model name list. "
-                    "We assumed '{}' was a path or url to a configuration file named {} or "
+                    "We assumed '{}' was a path, a model identifier, or url to a configuration file named {} or "
                     "a directory containing such a file but couldn't find any such file at this path or url.".format(
                         pretrained_model_name_or_path, config_file, CONFIG_NAME,
                     )
