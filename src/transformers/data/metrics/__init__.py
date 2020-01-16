@@ -30,7 +30,7 @@ def is_sklearn_available():
 if _has_sklearn:
 
     def simple_accuracy(preds, labels):
-        return accuracy_score(labels,preds)
+        return accuracy_score(labels, preds)
 
     def acc_and_f1(preds, labels):
         acc = simple_accuracy(preds, labels)
