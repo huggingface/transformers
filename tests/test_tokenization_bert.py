@@ -119,7 +119,6 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
         )
 
-
     def test_basic_tokenizer_respects_never_split_tokens(self):
         tokenizer = BasicTokenizer(do_lower_case=False, never_split=["[UNK]"])
 
