@@ -78,7 +78,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         return {"input_ids": tf.constant(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
@@ -385,7 +385,7 @@ class TFConv1D(tf.keras.layers.Layer):
         """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
             Basically works like a Linear layer but the weights are transposed
         """
-        super(TFConv1D, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.nf = nf
         self.nx = nx
         self.initializer_range = initializer_range
@@ -412,7 +412,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, vocab_size, hidden_size, initializer_range=None, **kwargs):
-        super(TFSharedEmbeddings, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
@@ -425,7 +425,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.weight = self.add_weight(
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
-        super(TFSharedEmbeddings, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
@@ -485,7 +485,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, initializer_range=0.02, **kwargs):
-        super(TFSequenceSummary, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.summary_type = config.summary_type if hasattr(config, "summary_use_proj") else "last"
         if self.summary_type == "attn":

@@ -46,7 +46,7 @@ class Discriminator(torch.nn.Module):
     """Transformer encoder followed by a Classification Head"""
 
     def __init__(self, class_size, pretrained_model="gpt2-medium", cached_mode=False, device="cpu"):
-        super(Discriminator, self).__init__()
+        super().__init__()
         self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
         self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
         self.embed_size = self.encoder.transformer.config.hidden_size

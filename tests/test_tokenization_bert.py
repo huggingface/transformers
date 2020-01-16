@@ -38,7 +38,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
 
     def setUp(self):
-        super(BertTokenizationTest, self).setUp()
+        super().setUp()
 
         vocab_tokens = [
             "[UNK]",

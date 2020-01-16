@@ -33,7 +33,7 @@ class ModalEmbeddings(nn.Module):
     """
 
     def __init__(self, config, encoder, embeddings):
-        super(ModalEmbeddings, self).__init__()
+        super().__init__()
         self.config = config
         self.encoder = encoder
         self.proj_embeddings = nn.Linear(config.modal_hidden_size, config.hidden_size)
@@ -175,7 +175,7 @@ class MMBTModel(nn.Module):
         """
 
     def __init__(self, config, transformer, encoder):
-        super(MMBTModel, self).__init__()
+        super().__init__()
         self.config = config
         self.transformer = transformer
         self.modal_encoder = ModalEmbeddings(config, encoder, transformer.embeddings)
@@ -359,7 +359,7 @@ class MMBTForClassification(nn.Module):
         """
 
     def __init__(self, config, transformer, encoder):
-        super(MMBTForClassification, self).__init__()
+        super().__init__()
         self.num_labels = config.num_labels
 
         self.mmbt = MMBTModel(config, transformer, encoder)
