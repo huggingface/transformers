@@ -33,7 +33,7 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
 
     def setUp(self):
-        super(TransfoXLTokenizationTest, self).setUp()
+        super().setUp()
 
         vocab_tokens = [
             "<unk>",

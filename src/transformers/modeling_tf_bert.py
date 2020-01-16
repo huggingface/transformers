@@ -93,7 +93,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, **kwargs):
-        super(TFBertEmbeddings, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         self.initializer_range = config.initializer_range
@@ -126,7 +126,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 shape=[self.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
-        super(TFBertEmbeddings, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inputs, mode="embedding", training=False):
         """Get token embeddings of inputs.
@@ -193,7 +193,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
 class TFBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertSelfAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -269,7 +269,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
 class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertSelfOutput, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -287,7 +287,7 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
 
 class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.self_attention = TFBertSelfAttention(config, name="self")
         self.dense_output = TFBertSelfOutput(config, name="output")
 
@@ -305,7 +305,7 @@ class TFBertAttention(tf.keras.layers.Layer):
 
 class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertIntermediate, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -322,7 +322,7 @@ class TFBertIntermediate(tf.keras.layers.Layer):
 
 class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertOutput, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -340,7 +340,7 @@ class TFBertOutput(tf.keras.layers.Layer):
 
 class TFBertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.attention = TFBertAttention(config, name="attention")
         self.intermediate = TFBertIntermediate(config, name="intermediate")
         self.bert_output = TFBertOutput(config, name="output")
@@ -358,7 +358,7 @@ class TFBertLayer(tf.keras.layers.Layer):
 
 class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertEncoder, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
@@ -392,7 +392,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
 class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertPooler, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -410,7 +410,7 @@ class TFBertPooler(tf.keras.layers.Layer):
 
 class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertPredictionHeadTransform, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -429,7 +429,7 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
 
 class TFBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFBertLMPredictionHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.transform = TFBertPredictionHeadTransform(config, name="transform")
 
@@ -439,7 +439,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super(TFBertLMPredictionHead, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -450,7 +450,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
 class TFBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFBertMLMHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
 
     def call(self, sequence_output):
@@ -460,7 +460,7 @@ class TFBertMLMHead(tf.keras.layers.Layer):
 
 class TFBertNSPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertNSPHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.seq_relationship = tf.keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="seq_relationship"
         )
@@ -472,7 +472,7 @@ class TFBertNSPHead(tf.keras.layers.Layer):
 
 class TFBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFBertMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
@@ -707,7 +707,7 @@ class TFBertModel(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.bert = TFBertMainLayer(config, name="bert")
 
     def call(self, inputs, **kwargs):
@@ -750,7 +750,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForPreTraining, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
@@ -803,7 +803,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForMaskedLM, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
@@ -854,7 +854,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForNextSentencePrediction, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
@@ -903,7 +903,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, name="bert")
@@ -960,7 +960,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForMultipleChoice, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -1064,7 +1064,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, name="bert")
@@ -1121,7 +1121,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFBertForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.bert = TFBertMainLayer(config, name="bert")

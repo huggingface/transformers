@@ -35,7 +35,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BertJapaneseTokenizer
 
     def setUp(self):
-        super(BertJapaneseTokenizationTest, self).setUp()
+        super().setUp()
 
         vocab_tokens = [
             "[UNK]",
@@ -135,7 +135,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
     tokenizer_class = BertJapaneseTokenizer
 
     def setUp(self):
-        super(BertJapaneseCharacterTokenizationTest, self).setUp()
+        super().setUp()
 
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こ", "ん", "に", "ち", "は", "ば", "世", "界", "、", "。"]
 

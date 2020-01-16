@@ -79,7 +79,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         **kwargs
     ):
-        super(AlbertTokenizer, self).__init__(
+        super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

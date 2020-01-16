@@ -65,7 +65,7 @@ def gelu_new(x):
 
 class TFEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFEmbeddings, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.dim = config.dim
         self.initializer_range = config.initializer_range
@@ -92,7 +92,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
             self.word_embeddings = self.add_weight(
                 "weight", shape=[self.vocab_size, self.dim], initializer=get_initializer(self.initializer_range)
             )
-        super(TFEmbeddings, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inputs, inputs_embeds=None, mode="embedding", training=False):
         """Get token embeddings of inputs.
@@ -169,7 +169,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
 class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFMultiHeadSelfAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.n_heads = config.n_heads
         self.dim = config.dim
@@ -259,7 +259,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
 
 class TFFFN(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFFFN, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.lin1 = tf.keras.layers.Dense(
             config.hidden_dim, kernel_initializer=get_initializer(config.initializer_range), name="lin1"
@@ -284,7 +284,7 @@ class TFFFN(tf.keras.layers.Layer):
 
 class TFTransformerBlock(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFTransformerBlock, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.n_heads = config.n_heads
         self.dim = config.dim
@@ -338,7 +338,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
 
 class TFTransformer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFTransformer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.n_layers = config.n_layers
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -399,7 +399,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
 class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFDistilBertMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
         self.embeddings = TFEmbeddings(config, name="embeddings")  # Embeddings
@@ -569,7 +569,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFDistilBertModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
     def call(self, inputs, **kwargs):
@@ -579,7 +579,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
 
 class TFDistilBertLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFDistilBertLMHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
 
         # The output weights are the same as the input embeddings, but there is
@@ -588,7 +588,7 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super(TFDistilBertLMHead, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -628,7 +628,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFDistilBertForMaskedLM, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.vocab_size = config.vocab_size
@@ -690,7 +690,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFDistilBertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
@@ -747,7 +747,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFDistilBertForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
@@ -804,7 +804,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFDistilBertForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
         self.qa_outputs = tf.keras.layers.Dense(

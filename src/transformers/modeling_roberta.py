@@ -45,7 +45,7 @@ class RobertaEmbeddings(BertEmbeddings):
     """
 
     def __init__(self, config):
-        super(RobertaEmbeddings, self).__init__(config)
+        super().__init__(config)
         self.padding_idx = 1
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(
@@ -60,7 +60,7 @@ class RobertaEmbeddings(BertEmbeddings):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        return super(RobertaEmbeddings, self).forward(
+        return super().forward(
             input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds
         )
 
@@ -204,7 +204,7 @@ class RobertaModel(BertModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(RobertaModel, self).__init__(config)
+        super().__init__(config)
 
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
@@ -254,7 +254,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(RobertaForMaskedLM, self).__init__(config)
+        super().__init__(config)
 
         self.roberta = RobertaModel(config)
         self.lm_head = RobertaLMHead(config)
@@ -299,7 +299,7 @@ class RobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
     def __init__(self, config):
-        super(RobertaLMHead, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -362,7 +362,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(RobertaForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.roberta = RobertaModel(config)
@@ -484,7 +484,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(RobertaForMultipleChoice, self).__init__(config)
+        super().__init__(config)
 
         self.roberta = RobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -571,7 +571,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(RobertaForTokenClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.roberta = RobertaModel(config)
@@ -625,7 +625,7 @@ class RobertaClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
-        super(RobertaClassificationHead, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
@@ -684,7 +684,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(RobertaForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.roberta = RobertaModel(config)

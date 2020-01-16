@@ -138,7 +138,7 @@ class OpenAIGPTConfig(PretrainedConfig):
         summary_first_dropout=0.1,
         **kwargs
     ):
-        super(OpenAIGPTConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx

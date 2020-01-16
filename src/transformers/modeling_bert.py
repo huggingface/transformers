@@ -160,7 +160,7 @@ class BertEmbeddings(nn.Module):
     """
 
     def __init__(self, config):
-        super(BertEmbeddings, self).__init__()
+        super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
@@ -197,7 +197,7 @@ class BertEmbeddings(nn.Module):
 
 class BertSelfAttention(nn.Module):
     def __init__(self, config):
-        super(BertSelfAttention, self).__init__()
+        super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -275,7 +275,7 @@ class BertSelfAttention(nn.Module):
 
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
-        super(BertSelfOutput, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -289,7 +289,7 @@ class BertSelfOutput(nn.Module):
 
 class BertAttention(nn.Module):
     def __init__(self, config):
-        super(BertAttention, self).__init__()
+        super().__init__()
         self.self = BertSelfAttention(config)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
@@ -335,7 +335,7 @@ class BertAttention(nn.Module):
 
 class BertIntermediate(nn.Module):
     def __init__(self, config):
-        super(BertIntermediate, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -350,7 +350,7 @@ class BertIntermediate(nn.Module):
 
 class BertOutput(nn.Module):
     def __init__(self, config):
-        super(BertOutput, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -364,7 +364,7 @@ class BertOutput(nn.Module):
 
 class BertLayer(nn.Module):
     def __init__(self, config):
-        super(BertLayer, self).__init__()
+        super().__init__()
         self.attention = BertAttention(config)
         self.is_decoder = config.is_decoder
         if self.is_decoder:
@@ -399,7 +399,7 @@ class BertLayer(nn.Module):
 
 class BertEncoder(nn.Module):
     def __init__(self, config):
-        super(BertEncoder, self).__init__()
+        super().__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -440,7 +440,7 @@ class BertEncoder(nn.Module):
 
 class BertPooler(nn.Module):
     def __init__(self, config):
-        super(BertPooler, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
@@ -455,7 +455,7 @@ class BertPooler(nn.Module):
 
 class BertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
-        super(BertPredictionHeadTransform, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
@@ -472,7 +472,7 @@ class BertPredictionHeadTransform(nn.Module):
 
 class BertLMPredictionHead(nn.Module):
     def __init__(self, config):
-        super(BertLMPredictionHead, self).__init__()
+        super().__init__()
         self.transform = BertPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
@@ -492,7 +492,7 @@ class BertLMPredictionHead(nn.Module):
 
 class BertOnlyMLMHead(nn.Module):
     def __init__(self, config):
-        super(BertOnlyMLMHead, self).__init__()
+        super().__init__()
         self.predictions = BertLMPredictionHead(config)
 
     def forward(self, sequence_output):
@@ -502,7 +502,7 @@ class BertOnlyMLMHead(nn.Module):
 
 class BertOnlyNSPHead(nn.Module):
     def __init__(self, config):
-        super(BertOnlyNSPHead, self).__init__()
+        super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, pooled_output):
@@ -512,7 +512,7 @@ class BertOnlyNSPHead(nn.Module):
 
 class BertPreTrainingHeads(nn.Module):
     def __init__(self, config):
-        super(BertPreTrainingHeads, self).__init__()
+        super().__init__()
         self.predictions = BertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
@@ -657,7 +657,7 @@ class BertModel(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertModel, self).__init__(config)
+        super().__init__(config)
         self.config = config
 
         self.embeddings = BertEmbeddings(config)
@@ -864,7 +864,7 @@ class BertForPreTraining(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForPreTraining, self).__init__(config)
+        super().__init__(config)
 
         self.bert = BertModel(config)
         self.cls = BertPreTrainingHeads(config)
@@ -954,7 +954,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForMaskedLM, self).__init__(config)
+        super().__init__(config)
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -1053,7 +1053,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForNextSentencePrediction, self).__init__(config)
+        super().__init__(config)
 
         self.bert = BertModel(config)
         self.cls = BertOnlyNSPHead(config)
@@ -1132,7 +1132,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
@@ -1221,7 +1221,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForMultipleChoice, self).__init__(config)
+        super().__init__(config)
 
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -1308,7 +1308,7 @@ class BertForTokenClassification(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForTokenClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
@@ -1406,7 +1406,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(BertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)

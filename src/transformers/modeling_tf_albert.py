@@ -45,7 +45,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, **kwargs):
-        super(TFAlbertEmbeddings, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.config = config
         self.position_embeddings = tf.keras.layers.Embedding(
@@ -76,7 +76,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
                 shape=[self.config.vocab_size, self.config.embedding_size],
                 initializer=get_initializer(self.config.initializer_range),
             )
-        super(TFAlbertEmbeddings, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inputs, mode="embedding", training=False):
         """Get token embeddings of inputs.
@@ -141,7 +141,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
 
 class TFAlbertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFAlbertSelfAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -217,7 +217,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
 
 class TFAlbertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFAlbertSelfOutput, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -235,7 +235,7 @@ class TFAlbertSelfOutput(tf.keras.layers.Layer):
 
 class TFAlbertAttention(TFBertSelfAttention):
     def __init__(self, config, **kwargs):
-        super(TFAlbertAttention, self).__init__(config, **kwargs)
+        super().__init__(config, **kwargs)
 
         self.hidden_size = config.hidden_size
         self.dense = tf.keras.layers.Dense(
@@ -303,7 +303,7 @@ class TFAlbertAttention(TFBertSelfAttention):
 
 class TFAlbertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFAlbertLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.attention = TFAlbertAttention(config, name="attention")
 
         self.ffn = tf.keras.layers.Dense(
@@ -341,7 +341,7 @@ class TFAlbertLayer(tf.keras.layers.Layer):
 
 class TFAlbertLayerGroup(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFAlbertLayerGroup, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -376,7 +376,7 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
 
 class TFAlbertTransformer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFAlbertTransformer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.config = config
         self.output_attentions = config.output_attentions
@@ -445,7 +445,7 @@ class TFAlbertPreTrainedModel(TFPreTrainedModel):
 
 class TFAlbertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFAlbertMLMHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
 
         self.dense = tf.keras.layers.Dense(
@@ -467,7 +467,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         self.decoder_bias = self.add_weight(
             shape=(self.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
         )
-        super(TFAlbertMLMHead, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -596,7 +596,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     """
 
     def __init__(self, config, **kwargs):
-        super(TFAlbertModel, self).__init__(config, **kwargs)
+        super().__init__(config, **kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
@@ -733,7 +733,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFAlbertForMaskedLM, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.albert = TFAlbertModel(config, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
@@ -786,7 +786,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFAlbertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertModel(config, name="albert")
