@@ -870,10 +870,10 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
             "model": {
-                "pt": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
-                "tf": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
+                "pt": "distilbert-base-uncased-finetuned-sst-2-english",
+                "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
-            "config": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json",
+            "config": "distilbert-base-uncased-finetuned-sst-2-english",
             "tokenizer": "distilbert-base-uncased",
         },
     },
@@ -883,10 +883,10 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForTokenClassification if is_torch_available() else None,
         "default": {
             "model": {
-                "pt": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-pytorch_model.bin",
-                "tf": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-tf_model.h5",
+                "pt": "dbmdz/bert-large-cased-finetuned-conll03-english",
+                "tf": "dbmdz/bert-large-cased-finetuned-conll03-english",
             },
-            "config": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-finetuned-conll03-english-config.json",
+            "config": "dbmdz/bert-large-cased-finetuned-conll03-english",
             "tokenizer": "bert-large-cased",
         },
     },
@@ -925,6 +925,7 @@ def pipeline(
         pipeline('sentiment-analysis')
         pipeline('question-answering', model='distilbert-base-uncased-distilled-squad', tokenizer='bert-base-cased')
         pipeline('ner', model=AutoModel.from_pretrained(...), tokenizer=AutoTokenizer.from_pretrained(...)
+        pipeline('ner', model='dbmdz/bert-large-cased-finetuned-conll03-english', tokenizer='bert-base-cased')
         pipeline('ner', model='https://...pytorch-model.bin', config='https://...config.json', tokenizer='bert-base-cased')
     """
     # Retrieve the task
