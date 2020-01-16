@@ -766,27 +766,36 @@ Here is an example on evaluating a model using adversarial evaluation of natural
 
 The HANS dataset can be downloaded from [this location](https://github.com/tommccoy1/hans).
 
-```bash
-export HANS_DIR=/path/to/HANS
+This is an example of using test_hans.py:
 
-python ./hans/test_hans.py \
-  --model_type bert \
-  --model_name_or_path bert-base-multilingual-cased \
-  --language de \
-  --train_language en \
-  --do_train \
-  --do_eval \
-  --data_dir $XNLI_DIR \
-  --per_gpu_train_batch_size 32 \
-  --learning_rate 5e-5 \
-  --num_train_epochs 2.0 \
-  --max_seq_length 128 \
-  --output_dir /tmp/debug_xnli/ \
-  --save_steps -1
+```bash
+export HANS_DIR=path-to-hans
+export MODEL_TYPE=type-of-the-model-e.g.-bert-roberta-xlnet-etc
+export MODEL_PATH=path-to-the-model-directory-that-is-trained-on-NLI-e.g.-by-using-run_glue.py
+
+python examples/test_hans.py \
+        --task_name hans \
+        --model_type $MODEL_TYPE \
+        --do_eval \
+        --do_lower_case \
+        --data_dir $HANS_DIR \
+        --model_name_or_path $MODEL_PATH \
+        --max_seq_length 128 \
+        -output_dir $MODEL_PATH \
 ```
 
-Evaluating with the previously defined hyper-parameters yields the following results:
+This will create the hans_predictions.txt file in MODEL_PATH, which can then be evaluated using hans/evaluate_heur_output.py from the HANS dataset.
+
+The results of the BERT-base model that is trained on MNLI using batch size 8 and the random seed 42 on the HANS dataset is as follows:
 
 ```bash
-acc = 0.7093812375249501
+Heuristic entailed results:
+lexical_overlap: 0.9702
+subsequence: 0.9942
+constituent: 0.9962
+
+Heuristic non-entailed results:
+lexical_overlap: 0.199
+subsequence: 0.0396
+constituent: 0.118
 ```
