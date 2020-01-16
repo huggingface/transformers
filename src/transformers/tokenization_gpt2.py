@@ -268,9 +268,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         truncation_strategy="longest_first",
         **kwargs
     ):
-        super().__init__(
-            bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs
-        )
+        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
         self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
         self._update_special_tokens()

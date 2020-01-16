@@ -78,9 +78,7 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        return super()._embedding(
-            [input_ids, position_ids, token_type_ids, inputs_embeds], training=training
-        )
+        return super()._embedding([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
 
 
 class TFRobertaMainLayer(TFBertMainLayer):

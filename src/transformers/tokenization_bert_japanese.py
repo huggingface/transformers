@@ -107,7 +107,7 @@ class BertJapaneseTokenizer(BertTokenizer):
             **subword_tokenizer_type**: (`optional`) string (default "wordpiece")
                 Type of subword tokenizer.
         """
-        super().__init__(
+        super(BertTokenizer, self).__init__(
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -115,6 +115,7 @@ class BertJapaneseTokenizer(BertTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
+        # ^^ We call the grandparent's init, not the parent's.
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
