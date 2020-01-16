@@ -963,6 +963,11 @@ class PreTrainedTokenizer(object):
                 or PyTorch torch.Tensor instead of a list of python integers.
             **kwargs: passed to the `self.tokenize()` method
         """
+        if return_attention_masks and return_tensors is None:
+            raise ValueError(
+                "You should specify attention mask tensor type ('tf' or 'pt') in return_tensors"
+            )
+
         batch_outputs = {}
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if isinstance(ids_or_pair_ids, (list, tuple)):
@@ -992,11 +997,11 @@ class PreTrainedTokenizer(object):
         # Compute longest sequence size
         max_seq_len = max(map(len, batch_outputs["input_ids"]))
 
-        if return_attention_masks:
-            # Allow the model to not give any special attention to padded input
-            batch_outputs["attention_mask"] = [[0] * len(v) for v in batch_outputs["input_ids"]]
-
         if return_tensors is not None:
+
+            if return_attention_masks:
+                # Allow the model to not give any special attention to padded input
+                batch_outputs["attention_mask"] = [[0] * len(v) for v in batch_outputs["input_ids"]]
 
             # Do the tensor conversion in batch
             for key, value in batch_outputs.items():
@@ -1020,12 +1025,12 @@ class PreTrainedTokenizer(object):
                         )
                     )
 
-        # encoder_attention_mask requires 1 for real token, 0 for padding, just invert value
-        if return_attention_masks:
-            if is_tf_available():
-                batch_outputs["attention_mask"] = tf.abs(batch_outputs["attention_mask"] - 1)
-            else:
-                batch_outputs["attention_mask"] = torch.abs(batch_outputs["attention_mask"] - 1)
+            # encoder_attention_mask requires 1 for real token, 0 for padding, just invert value
+            if return_attention_masks:
+                if is_tf_available():
+                    batch_outputs["attention_mask"] = tf.abs(batch_outputs["attention_mask"] - 1)
+                else:
+                    batch_outputs["attention_mask"] = torch.abs(batch_outputs["attention_mask"] - 1)
 
         return batch_outputs
 
