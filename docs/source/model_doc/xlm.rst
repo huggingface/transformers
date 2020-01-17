@@ -1,75 +1,88 @@
 XLM
 ----------------------------------------------------
 
-``XLMConfig``
+The XLM model was proposed in `Cross-lingual Language Model Pretraining`_
+by Guillaume Lample*, Alexis Conneau*. It's a transformer pre-trained using one of the following objectives:
+
+    - a causal language modeling (CLM) objective (next token prediction),
+    - a masked language modeling (MLM) objective (Bert-like), or
+    - a Translation Language Modeling (TLM) object (extension of Bert's MLM to multiple language inputs)
+
+Original code can be found `here <https://github.com/facebookresearch/XLM>`_.
+
+This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
+refer to the PyTorch documentation for all matter related to general usage and behavior.
+
+
+XLMConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMConfig
     :members:
 
-``XLMTokenizer``
+XLMTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMTokenizer
     :members:
 
-``XLMModel``
+XLMModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMModel
     :members:
 
 
-``XLMWithLMHeadModel``
+XLMWithLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMWithLMHeadModel
     :members:
 
 
-``XLMForSequenceClassification``
+XLMForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMForSequenceClassification
     :members:
 
 
-``XLMForQuestionAnsweringSimple``
+XLMForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMForQuestionAnsweringSimple
     :members:
 
 
-``XLMForQuestionAnswering``
+XLMForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMForQuestionAnswering
     :members:
 
 
-``TFXLMModel``
+TFXLMModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLMModel
     :members:
 
 
-``TFXLMWithLMHeadModel``
+TFXLMWithLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLMWithLMHeadModel
     :members:
 
 
-``TFXLMForSequenceClassification``
+TFXLMForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLMForSequenceClassification
     :members:
 
 
-``TFXLMForQuestionAnsweringSimple``
+TFXLMForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLMForQuestionAnsweringSimple
