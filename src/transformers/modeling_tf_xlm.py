@@ -24,7 +24,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, get_initializer, shape_list
 
 
@@ -484,44 +484,27 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
 
-XLM_START_DOCSTRING = r"""    The XLM model was proposed in
-    `Cross-lingual Language Model Pretraining`_
-    by Guillaume Lample*, Alexis Conneau*. It's a transformer pre-trained using one of the following objectives:
-
-        - a causal language modeling (CLM) objective (next token prediction),
-        - a masked language modeling (MLM) objective (Bert-like), or
-        - a Translation Language Modeling (TLM) object (extension of Bert's MLM to multiple language inputs)
-
-    Original code can be found `here`_.
-
-    This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
-    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
-
-    .. _`Cross-lingual Language Model Pretraining`:
-        https://arxiv.org/abs/1901.07291
-
-    .. _`here`:
-        https://github.com/facebookresearch/XLM
-
-    .. _`tf.keras.Model`:
-        https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
-
-    Note on the model inputs:
+XLM_START_DOCSTRING = r"""
+    
+    .. note::
+    
         TF 2.0 models accepts two formats as inputs:
 
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is usefull when using `tf.keras.Model.fit()` method which currently requires having all the tensors in the first argument of the model call function: `model(inputs)`.
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having 
+        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors 
+        in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
+        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-            `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
-            `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
-
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          
     Parameters:
         config (:class:`~transformers.XLMConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
@@ -529,48 +512,55 @@ XLM_START_DOCSTRING = r"""    The XLM model was proposed in
 """
 
 XLM_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-
-            XLM is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
-
-            Indices can be obtained using :class:`transformers.XLMTokenizer`.
+    Args:
+        input_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. 
+            
+            Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **langs**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
+            
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        langs (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are languages ids which can be obtained from the language names by using two conversion mappings
             provided in the configuration of the model (only provided for multilingual models).
             More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
             the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
-        **token_type_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
-            A parallel sequence of tokens (can be used to indicate various portions of the inputs).
-            The embeddings from these tokens will be summed with the respective token embeddings.
-            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
-        **position_ids**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
+            
+            See usage examples detailed in the `multilingual documentation <https://huggingface.co/transformers/multilingual.html>`__.
+        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+            
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **lengths**: (`optional`) ```Numpy array`` or ``tf.Tensor`` of shape ``(batch_size,)``:
+            
+            `What are position IDs? <../glossary.html#position-ids>`_
+        lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`): 
             Length of each sentence that can be used to avoid performing attention on padding token indices.
             You can also use `attention_mask` for the same result (see above), kept here for compatbility.
             Indices selected in ``[0, ..., input_ids.size(-1)]``:
-        **cache**:
-            dictionary with ``Numpy array`` or ``tf.Tensor`` that contains pre-computed
+        cache (:obj:`Dict[str, tf.Tensor]`, `optional`, defaults to :obj:`None`):
+            dictionary with ``tf.Tensor`` that contains pre-computed
             hidden-states (key and values in the attention blocks) as computed by the model
             (see `cache` output below). Can be used to speed up sequential decoding.
             The dictionary object will be modified in-place during the forward pass to add newly computed hidden-states.
-        **head_mask**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        head_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **inputs_embeds**: (`optional`) ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
-            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        input_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
 """
@@ -579,20 +569,31 @@ XLM_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare XLM Model transformer outputing raw hidden-states without any specific head on top.",
     XLM_START_DOCSTRING,
-    XLM_INPUTS_DOCSTRING,
 )
 class TFXLMModel(TFXLMPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the last layer of the model.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        last_hidden_state (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -605,13 +606,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
-    """
-
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name="transformer")
-
-    def call(self, inputs, **kwargs):
+        """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
@@ -653,20 +648,35 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
     """The XLM Model transformer with a language modeling head on top
     (linear layer with weights tied to the input embeddings). """,
     XLM_START_DOCSTRING,
-    XLM_INPUTS_DOCSTRING,
 )
 class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **prediction_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+
+    def get_output_embeddings(self):
+        return self.pred_layer.input_embeddings
+
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        prediction_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -679,17 +689,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
-    """
-
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name="transformer")
-        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
-
-    def get_output_embeddings(self):
-        return self.pred_layer.input_embeddings
-
-    def call(self, inputs, **kwargs):
+        """
         transformer_outputs = self.transformer(inputs, **kwargs)
 
         output = transformer_outputs[0]
@@ -703,20 +703,34 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     """XLM Model with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     XLM_START_DOCSTRING,
-    XLM_INPUTS_DOCSTRING,
 )
 class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **logits**: ``tf.Tensor`` of shape ``(batch_size, config.num_labels)``
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
+
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        logits (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -730,16 +744,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         outputs = model(input_ids)
         logits = outputs[0]
 
-    """
-
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.num_labels = config.num_labels
-
-        self.transformer = TFXLMMainLayer(config, name="transformer")
-        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
-
-    def call(self, inputs, **kwargs):
+        """
         transformer_outputs = self.transformer(inputs, **kwargs)
         output = transformer_outputs[0]
 
@@ -753,22 +758,36 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     """XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     XLM_START_DOCSTRING,
-    XLM_INPUTS_DOCSTRING,
 )
 class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **start_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFXLMMainLayer(config, name="transformer")
+        self.qa_outputs = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
+        )
+
+    @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (config) and inputs:
+        start_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):
             Span-start scores (before SoftMax).
-        **end_scores**: ``tf.Tensor`` of shape ``(batch_size, sequence_length,)``
+        end_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -781,16 +800,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
         outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]
 
-    """
-
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.transformer = TFXLMMainLayer(config, name="transformer")
-        self.qa_outputs = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
-        )
-
-    def call(self, inputs, **kwargs):
+        """
         transformer_outputs = self.transformer(inputs, **kwargs)
 
         sequence_output = transformer_outputs[0]
