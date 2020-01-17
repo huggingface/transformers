@@ -1092,7 +1092,8 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+    Return:
+        `tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:(batch_size, config.num_labels)`):
