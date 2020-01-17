@@ -283,7 +283,7 @@ GPT2_START_DOCSTRING = r"""
 
 GPT2_INPUTS_DOCSTRING = r"""    
     Args:
-        input_id (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. 
             
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
