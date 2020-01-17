@@ -66,7 +66,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
         **kwargs
     ):
-        super(CamembertTokenizer, self).__init__(
+        super().__init__(
             max_len=512,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -76,7 +76,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs
+            **kwargs,
         )
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens

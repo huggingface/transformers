@@ -35,3 +35,4 @@ XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class XLMRobertaConfig(RobertaConfig):
     pretrained_config_archive_map = XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "xlm-roberta"

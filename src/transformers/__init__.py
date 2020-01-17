@@ -103,12 +103,12 @@ from .pipelines import (
 )
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
+from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
-from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer

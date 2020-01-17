@@ -81,7 +81,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 class MultiHeadAttention(torch.nn.Module):
     def __init__(self, d_model_size, num_heads, output_attentions=False):
-        super(MultiHeadAttention, self).__init__()
+        super().__init__()
         self.output_attentions = output_attentions
         self.num_heads = num_heads
         self.d_model_size = d_model_size
@@ -132,7 +132,7 @@ def point_wise_feed_forward_network(d_model_size, dff):
 
 class EncoderLayer(torch.nn.Module):
     def __init__(self, d_model_size, num_heads, dff, rate=0.1, output_attentions=False):
-        super(EncoderLayer, self).__init__()
+        super().__init__()
 
         self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, output_attentions)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
@@ -163,7 +163,7 @@ class EncoderLayer(torch.nn.Module):
 
 class CTRLPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = CTRLConfig
@@ -274,7 +274,7 @@ class CTRLModel(CTRLPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(CTRLModel, self).__init__(config)
+        super().__init__(config)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.output_past = config.output_past
@@ -444,7 +444,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
+            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
 
@@ -481,7 +481,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(CTRLLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
 
@@ -489,6 +489,15 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if "past" in kwargs and kwargs["past"]:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        inputs = {"input_ids": input_ids}
+        inputs.update(kwargs)
+        return inputs
 
     def forward(
         self,

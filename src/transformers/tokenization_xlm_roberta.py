@@ -75,7 +75,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs
     ):
-        super(XLMRobertaTokenizer, self).__init__(
+        super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -83,7 +83,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            **kwargs
+            **kwargs,
         )
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens

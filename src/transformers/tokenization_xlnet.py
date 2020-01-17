@@ -77,7 +77,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         additional_special_tokens=["<eop>", "<eod>"],
         **kwargs
     ):
-        super(XLNetTokenizer, self).__init__(
+        super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -86,7 +86,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs
+            **kwargs,
         )
 
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens

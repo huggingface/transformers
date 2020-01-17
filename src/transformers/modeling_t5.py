@@ -142,7 +142,7 @@ class T5LayerNorm(nn.Module):
         """ Construct a layernorm module in the T5 style
             No bias and no substraction of mean.
         """
-        super(T5LayerNorm, self).__init__()
+        super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
@@ -154,7 +154,7 @@ class T5LayerNorm(nn.Module):
 
 class T5DenseReluDense(nn.Module):
     def __init__(self, config):
-        super(T5DenseReluDense, self).__init__()
+        super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -169,7 +169,7 @@ class T5DenseReluDense(nn.Module):
 
 class T5LayerFF(nn.Module):
     def __init__(self, config):
-        super(T5LayerFF, self).__init__()
+        super().__init__()
         self.DenseReluDense = T5DenseReluDense(config)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -185,7 +185,7 @@ class T5Attention(nn.Module):
     NEW_ID = itertools.count()
 
     def __init__(self, config, has_relative_attention_bias=False):
-        super(T5Attention, self).__init__()
+        super().__init__()
         self.layer_id = next(T5Attention.NEW_ID)
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -286,6 +286,7 @@ class T5Attention(nn.Module):
             bidirectional=not self.is_decoder,
             num_buckets=self.relative_attention_num_buckets,
         )
+        rp_bucket = rp_bucket.to(self.relative_attention_bias.weight.device)
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, qlen, klen)
         return values
@@ -362,7 +363,7 @@ class T5Attention(nn.Module):
 
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
-        super(T5LayerSelfAttention, self).__init__()
+        super().__init__()
         self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -380,7 +381,7 @@ class T5LayerSelfAttention(nn.Module):
 
 class T5LayerCrossAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
-        super(T5LayerCrossAttention, self).__init__()
+        super().__init__()
         self.EncDecAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -398,7 +399,7 @@ class T5LayerCrossAttention(nn.Module):
 
 class T5Block(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
-        super(T5Block, self).__init__()
+        super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
         self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
@@ -446,7 +447,7 @@ class T5Block(nn.Module):
 
 class T5PreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = T5Config
@@ -500,7 +501,7 @@ class T5PreTrainedModel(PreTrainedModel):
 
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config):
-        super(T5Stack, self).__init__(config)
+        super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.is_decoder = config.is_decoder
@@ -723,7 +724,7 @@ class T5Model(T5PreTrainedModel):
     """
 
     def __init__(self, config):
-        super(T5Model, self).__init__(config)
+        super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
@@ -829,7 +830,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
     """
 
     def __init__(self, config):
-        super(T5WithLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.model_dim = config.d_model
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -905,7 +906,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             decoder_outputs = (
                 loss,

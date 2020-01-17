@@ -60,6 +60,7 @@ class T5Config(PretrainedConfig):
             layer_norm_eps: The epsilon used by LayerNorm.
     """
     pretrained_config_archive_map = T5_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "t5"
 
     def __init__(
         self,
@@ -76,7 +77,7 @@ class T5Config(PretrainedConfig):
         initializer_factor=1.0,
         **kwargs
     ):
-        super(T5Config, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.d_model = d_model

@@ -20,6 +20,7 @@ import logging
 import os
 
 import h5py
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.saving import hdf5_format
 
@@ -31,7 +32,22 @@ from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 logger = logging.getLogger(__name__)
 
 
-class TFPreTrainedModel(tf.keras.Model):
+class TFModelUtilsMixin:
+    """
+    A few utilities for `tf.keras.Model`s, to be used as a mixin.
+    """
+
+    def num_parameters(self, only_trainable: bool = False) -> int:
+        """
+        Get number of (optionally, trainable) parameters in the model.
+        """
+        if only_trainable:
+            return int(sum(np.prod(w.shape.as_list()) for w in self.trainable_variables))
+        else:
+            return self.count_params()
+
+
+class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
     r""" Base class for all TF models.
 
         :class:`~transformers.TFPreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
@@ -62,7 +78,7 @@ class TFPreTrainedModel(tf.keras.Model):
         return {"input_ids": tf.constant(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFPreTrainedModel, self).__init__(*inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
@@ -250,7 +266,7 @@ class TFPreTrainedModel(tf.keras.Model):
                 return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
-                **kwargs
+                **kwargs,
             )
         else:
             model_kwargs = kwargs
@@ -369,7 +385,7 @@ class TFConv1D(tf.keras.layers.Layer):
         """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
             Basically works like a Linear layer but the weights are transposed
         """
-        super(TFConv1D, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.nf = nf
         self.nx = nx
         self.initializer_range = initializer_range
@@ -396,7 +412,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, vocab_size, hidden_size, initializer_range=None, **kwargs):
-        super(TFSharedEmbeddings, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
@@ -409,7 +425,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.weight = self.add_weight(
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
-        super(TFSharedEmbeddings, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
@@ -469,7 +485,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, initializer_range=0.02, **kwargs):
-        super(TFSequenceSummary, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.summary_type = config.summary_type if hasattr(config, "summary_use_proj") else "last"
         if self.summary_type == "attn":

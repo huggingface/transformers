@@ -40,6 +40,7 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-pytorch_model.bin",
     "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-pytorch_model.bin",
     "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-pytorch_model.bin",
+    "distilbert-base-uncased-finetuned-sst-2-english": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
 }
 
 
@@ -58,7 +59,7 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
 
 class Embeddings(nn.Module):
     def __init__(self, config):
-        super(Embeddings, self).__init__()
+        super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=0)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
         if config.sinusoidal_pos_embds:
@@ -96,7 +97,7 @@ class Embeddings(nn.Module):
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, config):
-        super(MultiHeadSelfAttention, self).__init__()
+        super().__init__()
 
         self.n_heads = config.n_heads
         self.dim = config.dim
@@ -194,7 +195,7 @@ class MultiHeadSelfAttention(nn.Module):
 
 class FFN(nn.Module):
     def __init__(self, config):
-        super(FFN, self).__init__()
+        super().__init__()
         self.dropout = nn.Dropout(p=config.dropout)
         self.lin1 = nn.Linear(in_features=config.dim, out_features=config.hidden_dim)
         self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
@@ -213,7 +214,7 @@ class FFN(nn.Module):
 
 class TransformerBlock(nn.Module):
     def __init__(self, config):
-        super(TransformerBlock, self).__init__()
+        super().__init__()
 
         self.n_heads = config.n_heads
         self.dim = config.dim
@@ -265,7 +266,7 @@ class TransformerBlock(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, config):
-        super(Transformer, self).__init__()
+        super().__init__()
         self.n_layers = config.n_layers
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -423,7 +424,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(DistilBertModel, self).__init__(config)
+        super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
@@ -496,7 +497,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     r"""
         **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
-            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
 
@@ -524,7 +525,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(DistilBertForMaskedLM, self).__init__(config)
+        super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -599,7 +600,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(DistilBertForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.distilbert = DistilBertModel(config)
@@ -678,7 +679,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(DistilBertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
 
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
@@ -765,7 +766,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(DistilBertForTokenClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.distilbert = DistilBertModel(config)

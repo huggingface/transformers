@@ -15,13 +15,11 @@
 
 
 import copy
-import json
 import logging
 import os.path
 import random
 import tempfile
 import unittest
-import uuid
 
 from transformers import is_torch_available
 
@@ -238,11 +236,14 @@ class ModelTesterMixin:
             loaded_model.to(torch_device)
             loaded_model.eval()
 
-            model_params = model.parameters()
-            loaded_model_params = loaded_model.parameters()
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
             models_equal = True
-            for p1, p2 in zip(model_params, loaded_model_params):
+            for layer_name, p1 in model_state_dict.items():
+                p2 = loaded_model_state_dict[layer_name]
                 if p1.data.ne(p2.data).sum() > 0:
                     models_equal = False
 
@@ -487,12 +488,19 @@ class ModelTesterMixin:
             self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**inputs_dict)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
             self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**inputs_dict)
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
@@ -590,39 +598,6 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 model(**inputs_dict)
-
-
-class ConfigTester(object):
-    def __init__(self, parent, config_class=None, **kwargs):
-        self.parent = parent
-        self.config_class = config_class
-        self.inputs_dict = kwargs
-
-    def create_and_test_config_common_properties(self):
-        config = self.config_class(**self.inputs_dict)
-        self.parent.assertTrue(hasattr(config, "vocab_size"))
-        self.parent.assertTrue(hasattr(config, "hidden_size"))
-        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
-        self.parent.assertTrue(hasattr(config, "num_hidden_layers"))
-
-    def create_and_test_config_to_json_string(self):
-        config = self.config_class(**self.inputs_dict)
-        obj = json.loads(config.to_json_string())
-        for key, value in self.inputs_dict.items():
-            self.parent.assertEqual(obj[key], value)
-
-    def create_and_test_config_to_json_file(self):
-        config_first = self.config_class(**self.inputs_dict)
-        json_file_path = os.path.join(os.getcwd(), "config_" + str(uuid.uuid4()) + ".json")
-        config_first.to_json_file(json_file_path)
-        config_second = self.config_class.from_json_file(json_file_path)
-        os.remove(json_file_path)
-        self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
-
-    def run_common_tests(self):
-        self.create_and_test_config_common_properties()
-        self.create_and_test_config_to_json_string()
-        self.create_and_test_config_to_json_file()
 
 
 global_rng = random.Random()

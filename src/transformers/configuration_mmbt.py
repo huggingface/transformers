@@ -26,9 +26,13 @@ class MMBTConfig(object):
     """Configuration class to store the configuration of a `MMBT Model`.
 
     Args:
-        config: config of the underlying Transformer models. It's values are copied over to use a single config.
-        num_labels: Size of final Linear layer for classification.
-        modal_hidden_size: Embedding dimension of the non-text modality encoder.
+        config (:obj:`~transformers.PreTrainedConfig`):
+            Config of the underlying Transformer models. Its values are
+            copied over to use a single config.
+        num_labels (:obj:`int` or :obj:`None`, optional, defaults to `None`):
+            Size of final Linear layer for classification.
+        modal_hidden_size (:obj:`int`, optional, defautls to 2048):
+            Embedding dimension of the non-text modality encoder.
     """
 
     def __init__(self, config, num_labels=None, modal_hidden_size=2048):

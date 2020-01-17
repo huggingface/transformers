@@ -84,7 +84,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         mask_token="<mask>",
         **kwargs
     ):
-        super(RobertaTokenizer, self).__init__(
+        super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
             errors=errors,
@@ -95,7 +95,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            **kwargs
+            **kwargs,
         )
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
@@ -144,9 +144,7 @@ class RobertaTokenizer(GPT2Tokenizer):
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A RoBERTa sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence
+        RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
 
         if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
@@ -155,4 +153,4 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep) * [0] + len(token_ids_1 + sep) * [1]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]

@@ -58,6 +58,7 @@ class XxxConfig(PretrainedConfig):
             layer_norm_eps: The epsilon used by LayerNorm.
     """
     pretrained_config_archive_map = XXX_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "xxx"
 
     def __init__(
         self,
@@ -79,7 +80,7 @@ class XxxConfig(PretrainedConfig):
         summary_first_dropout=0.1,
         **kwargs
     ):
-        super(XxxConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions

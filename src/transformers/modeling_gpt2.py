@@ -101,7 +101,7 @@ def gelu(x):
 
 class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
-        super(Attention, self).__init__()
+        super().__init__()
         self.output_attentions = config.output_attentions
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
@@ -202,7 +202,7 @@ class Attention(nn.Module):
 
 class MLP(nn.Module):
     def __init__(self, n_state, config):  # in MLP: n_state=3072 (4 * n_embd)
-        super(MLP, self).__init__()
+        super().__init__()
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
@@ -217,7 +217,7 @@ class MLP(nn.Module):
 
 class Block(nn.Module):
     def __init__(self, n_ctx, config, scale=False):
-        super(Block, self).__init__()
+        super().__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.attn = Attention(nx, n_ctx, config, scale)
@@ -240,7 +240,7 @@ class Block(nn.Module):
 
 class GPT2PreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = GPT2Config
@@ -249,7 +249,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):
-        super(GPT2PreTrainedModel, self).__init__(*inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
 
     def _init_weights(self, module):
         """ Initialize the weights.
@@ -355,7 +355,7 @@ class GPT2Model(GPT2PreTrainedModel):
     """
 
     def __init__(self, config):
-        super(GPT2Model, self).__init__(config)
+        super().__init__(config)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.output_past = config.output_past
@@ -513,7 +513,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
+            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
 
@@ -550,7 +550,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     """
 
     def __init__(self, config):
-        super(GPT2LMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
@@ -558,6 +558,15 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if "past" in kwargs and kwargs["past"]:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        inputs = {"input_ids": input_ids}
+        inputs.update(kwargs)
+        return inputs
 
     def forward(
         self,
@@ -669,7 +678,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """
 
     def __init__(self, config):
-        super(GPT2DoubleHeadsModel, self).__init__(config)
+        super().__init__(config)
         config.num_labels = 1
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)

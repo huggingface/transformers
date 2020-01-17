@@ -29,7 +29,7 @@ import torch.nn.functional as F
 
 class ProjectedAdaptiveLogSoftmax(nn.Module):
     def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, keep_order=False):
-        super(ProjectedAdaptiveLogSoftmax, self).__init__()
+        super().__init__()
 
         self.n_token = n_token
         self.d_embed = d_embed

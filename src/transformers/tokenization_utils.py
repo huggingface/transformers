@@ -39,7 +39,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 class PreTrainedTokenizer(object):
     """ Base class for all tokenizers.
-    Handle all the shared methods for tokenization and special tokens as well as methods dowloading/caching/loading pretrained tokenizers as well as adding tokens to the vocabulary.
+    Handle all the shared methods for tokenization and special tokens as well as methods downloading/caching/loading pretrained tokenizers as well as adding tokens to the vocabulary.
 
     This class also contain the added tokens in a unified way on top of all tokenizers so we don't have to handle the specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
 
@@ -264,7 +264,7 @@ class PreTrainedTokenizer(object):
                 - a string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing vocabulary files required by the tokenizer, for instance saved using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.: ``./my_model_directory/``.
-                - (not applicable to all derived classes) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
+                - (not applicable to all derived classes, deprecated) a path or url to a single saved vocabulary file if and only if the tokenizer only requires a single vocabulary file (e.g. Bert, XLNet), e.g.: ``./my_model_directory/vocab.txt``.
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the standard cache should not be used.
@@ -331,57 +331,42 @@ class PreTrainedTokenizer(object):
             # Get the vocabulary from local files
             logger.info(
                 "Model name '{}' not found in model shortcut name list ({}). "
-                "Assuming '{}' is a path or url to a directory containing tokenizer files.".format(
+                "Assuming '{}' is a path, a model identifier, or url to a directory containing tokenizer files.".format(
                     pretrained_model_name_or_path, ", ".join(s3_models), pretrained_model_name_or_path
                 )
             )
 
-            # Look for the tokenizer main vocabulary files
-            for file_id, file_name in cls.vocab_files_names.items():
-                if os.path.isdir(pretrained_model_name_or_path):
-                    # If a directory is provided we look for the standard filenames
-                    full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                    if not os.path.exists(full_file_name):
-                        logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                        full_file_name = None
-                elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-                    # If a path to a file is provided we use it (will only work for non-BPE tokenizer using a single vocabulary file)
-                    full_file_name = pretrained_model_name_or_path
-                else:
-                    full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
-
-                vocab_files[file_id] = full_file_name
-
-            # Look for the additional tokens files
-            additional_files_names = {
-                "added_tokens_file": ADDED_TOKENS_FILE,
-                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
-                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-            }
-
-            # If a path to a file was provided, get the parent directory
-            saved_directory = pretrained_model_name_or_path
-            if os.path.exists(saved_directory) and not os.path.isdir(saved_directory):
-                saved_directory = os.path.dirname(saved_directory)
-
-            for file_id, file_name in additional_files_names.items():
-                full_file_name = os.path.join(saved_directory, file_name)
-                if not os.path.exists(full_file_name):
-                    logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                    full_file_name = None
-                vocab_files[file_id] = full_file_name
-
-            if all(full_file_name is None for full_file_name in vocab_files.values()):
-                raise EnvironmentError(
-                    "Model name '{}' was not found in tokenizers model name list ({}). "
-                    "We assumed '{}' was a path or url to a directory containing vocabulary files "
-                    "named {} but couldn't find such vocabulary files at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ", ".join(s3_models),
-                        pretrained_model_name_or_path,
-                        list(cls.vocab_files_names.values()),
+            if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+                if len(cls.vocab_files_names) > 1:
+                    raise ValueError(
+                        "Calling {}.from_pretrained() with the path to a single file or url is not supported."
+                        "Use a model identifier or the path to a directory instead.".format(cls.__name__)
+                    )
+                logger.warning(
+                    "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
+                        cls.__name__
                     )
                 )
+                file_id = list(cls.vocab_files_names.keys())[0]
+                vocab_files[file_id] = pretrained_model_name_or_path
+            else:
+                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+                additional_files_names = {
+                    "added_tokens_file": ADDED_TOKENS_FILE,
+                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
+                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                }
+                # Look for the tokenizer main vocabulary files + the additional tokens files
+                for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+                    if os.path.isdir(pretrained_model_name_or_path):
+                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                        if not os.path.exists(full_file_name):
+                            logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
+                            full_file_name = None
+                    else:
+                        full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
+
+                    vocab_files[file_id] = full_file_name
 
         # Get files from url, cache, or disk depending on the case
         try:
@@ -413,6 +398,18 @@ class PreTrainedTokenizer(object):
                 )
 
             raise EnvironmentError(msg)
+
+        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
+            raise EnvironmentError(
+                "Model name '{}' was not found in tokenizers model name list ({}). "
+                "We assumed '{}' was a path, a model identifier, or url to a directory containing vocabulary files "
+                "named {} but couldn't find such vocabulary files at this path or url.".format(
+                    pretrained_model_name_or_path,
+                    ", ".join(s3_models),
+                    pretrained_model_name_or_path,
+                    list(cls.vocab_files_names.values()),
+                )
+            )
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:
@@ -460,7 +457,7 @@ class PreTrainedTokenizer(object):
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
         except OSError:
-            OSError(
+            raise OSError(
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
@@ -503,7 +500,8 @@ class PreTrainedTokenizer(object):
         tokenizer_config_file = os.path.join(save_directory, TOKENIZER_CONFIG_FILE)
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
-        tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
+        if len(self.init_inputs) > 0:
+            tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
@@ -513,12 +511,10 @@ class PreTrainedTokenizer(object):
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.special_tokens_map, ensure_ascii=False))
 
-        with open(added_tokens_file, "w", encoding="utf-8") as f:
-            if self.added_tokens_encoder:
+        if len(self.added_tokens_encoder) > 0:
+            with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(self.added_tokens_encoder, ensure_ascii=False)
-            else:
-                out_str = "{}"
-            f.write(out_str)
+                f.write(out_str)
 
         vocab_files = self.save_vocabulary(save_directory)
 
@@ -800,7 +796,7 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
                 padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
-                The tokenizer padding sides are handled by the following strings:
+                The tokenizer padding sides are handled by the class attribute `padding_side` which can be set to the following strings:
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
@@ -817,7 +813,7 @@ class PreTrainedTokenizer(object):
             truncation_strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
             return_tensors=return_tensors,
-            **kwargs
+            **kwargs,
         )
 
         return encoded_inputs["input_ids"]
@@ -863,14 +859,14 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
                 padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
-                The tokenizer padding sides are handled by the following strings:
+                The tokenizer padding sides are handled by the class attribute `padding_side` which can be set to the following strings:
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
-            return_attention_mask: (optional) Set to False to avoir returning attention mask (default True)
+            return_attention_mask: (optional) Set to False to avoid returning attention mask (default True)
             return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
             return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
             **kwargs: passed to the `self.tokenize()` method
@@ -1194,14 +1190,18 @@ class PreTrainedTokenizer(object):
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
             encoded_inputs["input_ids"] = tf.constant([encoded_inputs["input_ids"]])
-            encoded_inputs["token_type_ids"] = tf.constant([encoded_inputs["token_type_ids"]])
+
+            if "token_type_ids" in encoded_inputs:
+                encoded_inputs["token_type_ids"] = tf.constant([encoded_inputs["token_type_ids"]])
 
             if "attention_mask" in encoded_inputs:
                 encoded_inputs["attention_mask"] = tf.constant([encoded_inputs["attention_mask"]])
 
         elif return_tensors == "pt" and is_torch_available():
             encoded_inputs["input_ids"] = torch.tensor([encoded_inputs["input_ids"]])
-            encoded_inputs["token_type_ids"] = torch.tensor([encoded_inputs["token_type_ids"]])
+
+            if "token_type_ids" in encoded_inputs:
+                encoded_inputs["token_type_ids"] = torch.tensor([encoded_inputs["token_type_ids"]])
 
             if "attention_mask" in encoded_inputs:
                 encoded_inputs["attention_mask"] = torch.tensor([encoded_inputs["attention_mask"]])
@@ -1414,3 +1414,201 @@ class PreTrainedTokenizer(object):
             .replace(" 're", "'re")
         )
         return out_string
+
+
+class PreTrainedTokenizerFast(PreTrainedTokenizer):
+    _tokenizer = None
+    _decoder = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @property
+    def tokenizer(self):
+        if self._tokenizer is None:
+            raise NotImplementedError
+        return self._tokenizer
+
+    @property
+    def decoder(self):
+        if self._decoder is None:
+            raise NotImplementedError
+        return self._decoder
+
+    @property
+    def vocab_size(self):
+        return self.tokenizer.get_vocab_size(with_added_tokens=False)
+
+    def __len__(self):
+        return self.tokenizer.get_vocab_size(with_added_tokens=True)
+
+    @PreTrainedTokenizer.bos_token.setter
+    def bos_token(self, value):
+        self._bos_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.eos_token.setter
+    def eos_token(self, value):
+        self._eos_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.unk_token.setter
+    def unk_token(self, value):
+        self._unk_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.sep_token.setter
+    def sep_token(self, value):
+        self._sep_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.pad_token.setter
+    def pad_token(self, value):
+        self._pad_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.cls_token.setter
+    def cls_token(self, value):
+        self._cls_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.mask_token.setter
+    def mask_token(self, value):
+        self._mask_token = value
+        self._update_special_tokens()
+
+    @PreTrainedTokenizer.additional_special_tokens.setter
+    def additional_special_tokens(self, value):
+        self._additional_special_tokens = value
+        self._update_special_tokens()
+
+    def _update_special_tokens(self):
+        if self._tokenizer is not None:
+            self._tokenizer.add_special_tokens(self.all_special_tokens)
+
+    @staticmethod
+    def _convert_encoding(
+        encoding,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+    ):
+        encoding_dict = {
+            "input_ids": encoding.ids,
+        }
+        if return_token_type_ids:
+            encoding_dict["token_type_ids"] = encoding.type_ids
+        if return_attention_mask:
+            encoding_dict["attention_mask"] = encoding.attention_mask
+        if return_overflowing_tokens:
+            overflowing = encoding.overflowing
+            encoding_dict["overflowing_tokens"] = overflowing.ids if overflowing is not None else []
+        if return_special_tokens_mask:
+            encoding_dict["special_tokens_mask"] = encoding.special_tokens_mask
+
+        # Prepare inputs as tensors if asked
+        if return_tensors == "tf" and is_tf_available():
+            encoding_dict["input_ids"] = tf.constant([encoding_dict["input_ids"]])
+            if "token_type_ids" in encoding_dict:
+                encoding_dict["token_type_ids"] = tf.constant([encoding_dict["token_type_ids"]])
+
+            if "attention_mask" in encoding_dict:
+                encoding_dict["attention_mask"] = tf.constant([encoding_dict["attention_mask"]])
+
+        elif return_tensors == "pt" and is_torch_available():
+            encoding_dict["input_ids"] = torch.tensor([encoding_dict["input_ids"]])
+            if "token_type_ids" in encoding_dict:
+                encoding_dict["token_type_ids"] = torch.tensor([encoding_dict["token_type_ids"]])
+
+            if "attention_mask" in encoding_dict:
+                encoding_dict["attention_mask"] = torch.tensor([encoding_dict["attention_mask"]])
+        elif return_tensors is not None:
+            logger.warning(
+                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
+                    return_tensors
+                )
+            )
+
+        return encoding_dict
+
+    def encode_plus(
+        self,
+        text,
+        text_pair=None,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+        **kwargs
+    ):
+        encoding = self.tokenizer.encode(text, text_pair)
+        return self._convert_encoding(
+            encoding,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+        )
+
+    def tokenize(self, text):
+        return self.tokenizer.encode(text).tokens
+
+    def _convert_token_to_id_with_added_voc(self, token):
+        id = self.tokenizer.token_to_id(token)
+        if id is None:
+            return self.unk_token_id
+        return id
+
+    def _convert_id_to_token(self, index):
+        return self.tokenizer.id_to_token(int(index))
+
+    def convert_tokens_to_string(self, tokens):
+        return self.decoder.decode(tokens)
+
+    def add_tokens(self, new_tokens):
+        self.tokenizer.add_tokens(new_tokens)
+
+    def add_special_tokens(self, special_tokens_dict):
+        added = super().add_special_tokens(special_tokens_dict)
+        self._update_special_tokens()
+        return added
+
+    def encode_batch(
+        self,
+        texts,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+    ):
+        return [
+            self._convert_encoding(
+                encoding,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+            )
+            for encoding in self.tokenizer.encode_batch(texts)
+        ]
+
+    def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
+        text = self.tokenizer.decode(token_ids, skip_special_tokens)
+
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
+
+    def decode_batch(self, ids_batch, skip_special_tokens=False, clear_up_tokenization_spaces=True):
+        return [
+            self.clean_up_tokenization(text) if clear_up_tokenization_spaces else text
+            for text in self.tokenizer.decode_batch(ids_batch, skip_special_tokens)
+        ]

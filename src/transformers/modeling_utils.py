@@ -47,13 +47,26 @@ except ImportError:
         """
 
         def __init__(self, *args, **kwargs):
-            super(Identity, self).__init__()
+            super().__init__()
 
         def forward(self, input):
             return input
 
 
-class PreTrainedModel(nn.Module):
+class ModuleUtilsMixin:
+    """
+    A few utilities for torch.nn.Modules, to be used as a mixin.
+    """
+
+    def num_parameters(self, only_trainable: bool = False) -> int:
+        """
+        Get number of (optionally, trainable) parameters in the module.
+        """
+        params = filter(lambda x: x.requires_grad, self.parameters()) if only_trainable else self.parameters()
+        return sum(p.numel() for p in params)
+
+
+class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     r""" Base class for all models.
 
         :class:`~transformers.PreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
@@ -84,7 +97,7 @@ class PreTrainedModel(nn.Module):
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
-        super(PreTrainedModel, self).__init__()
+        super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
@@ -355,7 +368,7 @@ class PreTrainedModel(nn.Module):
                 force_download=force_download,
                 resume_download=resume_download,
                 proxies=proxies,
-                **kwargs
+                **kwargs,
             )
         else:
             model_kwargs = kwargs
@@ -539,6 +552,17 @@ class PreTrainedModel(nn.Module):
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
+    def _do_output_past(self, outputs):
+        has_output_past = hasattr(self.config, "output_past") and self.config.output_past
+        has_mem_len = hasattr(self.config, "mem_len") and self.config.mem_len
+
+        if has_output_past and not has_mem_len and len(outputs) > 1:
+            return True
+        elif has_mem_len and self.config.mem_len > 0 and len(outputs) > 1:
+            return True
+
+        return False
+
     @torch.no_grad()
     def generate(
         self,
@@ -556,48 +580,89 @@ class PreTrainedModel(nn.Module):
         length_penalty=None,
         num_return_sequences=None,
     ):
-        """ Sequence generator for models with a LM head.
-
-        The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
+        r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
 
-        Adapted in part from Facebook's XLM beam search code: https://github.com/facebookresearch/XLM
+        Adapted in part from `Facebook's XLM beam search code`_.
 
-        Params:
-            **input_ids**: (`optional`) `torch.LongTensor` of shape (1, sequence_length)
+        .. _`Facebook's XLM beam search code`:
+           https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529
+
+
+        Parameters:
+
+            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape (1,)
-            **max_length**: (`optional`) int
+                it as an empty `torch.LongTensor` of shape `(1,)`.
+
+            max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
-            **do_sample**: (`optional`) bool
-                If set to `False` we use greedy decoding; otherwise sampling. Default to greedy sampling.
-            **num_beams**: (`optional`) int
-                Number of beams for beam search. 1 means no beam serach. Default to 1.
-            **temperature**: (`optional`) float
-                The value used to module the next token probabilities.
-            **top_k**: (`optional`) int
+
+            do_sample: (`optional`) bool
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Default to greedy sampling.
+
+            num_beams: (`optional`) int
+                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
+
+            temperature: (`optional`) float
+                The value used to module the next token probabilities. Must be strictely positive. Default to 1.0.
+
+            top_k: (`optional`) int
                 The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
-            **top_p**: (`optional`) float
+
+            top_p: (`optional`) float
                 The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
-            **repetition_penalty**: (`optional`) float
-                The parameter for repetition penalty. Between 1.0 and + infinity. 1.0 means no penalty. Default to 1.
-            **bos_token_id**: (`optional`) int
+
+            repetition_penalty: (`optional`) float
+                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
+
+            bos_token_id: (`optional`) int
                 Beginning of sentence token if no prompt is provided. Default to 0.
-            **eos_token_ids**: (`optional`) int or list of int
+
+            eos_token_ids: (`optional`) int or list of int
                 End of sequence token or list of tokens to stop the generation. Default to 0.
-            **length_penalty**: (`optional`) int
-                Exponential penalty to the length. Default to 0.
-            **length_penalty**: (`optional`) float
+            length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
-            **num_return_sequences**: (`optional`) int
-                The number of independantly computed returned sequences for each element in the batch. Default to 1.
+
+            num_return_sequences: (`optional`) int
+                The number of independently computed returned sequences for each element in the batch. Default to 1.
+
+        Examples::
+
+            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id)  # do greedy decoding without beam search
+            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+
+            tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
+            input_context = 'The dog'
+            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            outputs = model.generate(input_ids=input_ids, do_sample=True, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
+            for i in range(3): #  3 output sequences were generated
+                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[0][i], skip_special_tokens=True)))
+
+            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            input_context = 'The dog'
+            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, num_beams=3)  # generate sequences using greedy beam search decoding (3 beams)
+            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+
+            tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
+            input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
+            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences using using greedy search
+            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+
         """
 
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
             raise AttributeError(
                 "You tried to generate sequences with a model that does not have a LM Head."
-                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`)"
+                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`, `XLNetLMHeadModel`, `GPT2LMHeadModel`, `CTRLLMHeadModel`, `T5WithLMHeadModel`, `TransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
@@ -625,7 +690,7 @@ class PreTrainedModel(nn.Module):
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
-        # assert temperature >= 0, "`temperature` should be positive."
+        assert temperature > 0, "`temperature` should be strictely positive."
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
@@ -716,27 +781,30 @@ class PreTrainedModel(nn.Module):
         # current position / max lengths / length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
 
-        # TODO: add cached compute states
-        pasts = None
+        past = None
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._do_output_past(outputs):
+                past = outputs[1]
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 for i in range(batch_size):
-                    for previous_tokens in set(input_ids[i].tolist()):
+                    for previous_token in set(input_ids[i].tolist()):
                         # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
-                        if next_token_logits[i, previous_tokens] < 0:
-                            next_token_logits[i, previous_tokens] *= repetition_penalty
+                        if next_token_logits[i, previous_token] < 0:
+                            next_token_logits[i, previous_token] *= repetition_penalty
                         else:
-                            next_token_logits[i, previous_tokens] /= repetition_penalty
+                            next_token_logits[i, previous_token] /= repetition_penalty
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature > 0 and temperature != 1.0:
+                if temperature != 1.0:
                     next_token_logits = next_token_logits / temperature
                 # Top-p/top-k filtering
                 next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
@@ -797,29 +865,33 @@ class PreTrainedModel(nn.Module):
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
-        pasts = None  # self.prepare_pasts()
+        past = None
 
         # done sentences
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, pasts=pasts)
-            scores = self(**model_inputs)[0]  # (batch_size * num_beams, cur_len, vocab_size)
-            scores = scores[:, -1, :]  # (batch_size * num_beams, vocab_size)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
+            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
+            scores = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._do_output_past(outputs):
+                past = outputs[1]
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 for i in range(batch_size * num_beams):
-                    for previous_tokens in set(input_ids[i].tolist()):
+                    for previous_token in set(input_ids[i].tolist()):
                         # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
-                        if scores[i, previous_tokens] < 0:
-                            scores[i, previous_tokens] *= repetition_penalty
+                        if scores[i, previous_token] < 0:
+                            scores[i, previous_token] *= repetition_penalty
                         else:
-                            scores[i, previous_tokens] /= repetition_penalty
+                            scores[i, previous_token] /= repetition_penalty
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature > 0 and temperature != 1.0:
+                if temperature != 1.0:
                     scores = scores / temperature
                 # Top-p/top-k filtering
                 scores = top_k_top_p_filtering(
@@ -894,13 +966,22 @@ class PreTrainedModel(nn.Module):
             beam_words = input_ids.new([x[1] for x in next_batch_beam])
             beam_idx = input_ids.new([x[2] for x in next_batch_beam])
 
-            # re-order batch and internal states
+            # re-order batch
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_words.unsqueeze(1)], dim=-1)
-            # TODO: Activate cache
-            # for k in cache.keys():
-            #     if k != 'slen':
-            #         cache[k] = (cache[k][0][beam_idx], cache[k][1][beam_idx])
+
+            # re-order internal states
+            if past:
+                reordered_past = []
+                for layer_past in past:
+                    # get the correct batch idx from layer past batch dim
+                    # batch dim of `past` and `mems` is at 2nd position
+                    reordered_layer_past = [layer_past[:, i].unsqueeze(1).clone().detach() for i in beam_idx]
+                    reordered_layer_past = torch.cat(reordered_layer_past, dim=1)
+                    # check that shape matches
+                    assert reordered_layer_past.shape == layer_past.shape
+                    reordered_past.append(reordered_layer_past)
+                past = tuple(reordered_past)
 
             # update current length
             cur_len = cur_len + 1
@@ -1021,7 +1102,7 @@ class Conv1D(nn.Module):
         """ Conv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
             Basically works like a Linear layer but the weights are transposed
         """
-        super(Conv1D, self).__init__()
+        super().__init__()
         self.nf = nf
         w = torch.empty(nx, nf)
         nn.init.normal_(w, std=0.02)
@@ -1039,7 +1120,7 @@ class PoolerStartLogits(nn.Module):
     """ Compute SQuAD start_logits from sequence hidden states. """
 
     def __init__(self, config):
-        super(PoolerStartLogits, self).__init__()
+        super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
 
     def forward(self, hidden_states, p_mask=None):
@@ -1064,7 +1145,7 @@ class PoolerEndLogits(nn.Module):
     """
 
     def __init__(self, config):
-        super(PoolerEndLogits, self).__init__()
+        super().__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
         self.activation = nn.Tanh()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1110,7 +1191,7 @@ class PoolerAnswerClass(nn.Module):
     """ Compute SQuAD 2.0 answer class from classification and start tokens hidden states. """
 
     def __init__(self, config):
-        super(PoolerAnswerClass, self).__init__()
+        super().__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
         self.activation = nn.Tanh()
         self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
@@ -1195,7 +1276,7 @@ class SQuADHead(nn.Module):
     """
 
     def __init__(self, config):
-        super(SQuADHead, self).__init__()
+        super().__init__()
         self.start_n_top = config.start_n_top
         self.end_n_top = config.end_n_top
 
@@ -1287,7 +1368,7 @@ class SequenceSummary(nn.Module):
     """
 
     def __init__(self, config):
-        super(SequenceSummary, self).__init__()
+        super().__init__()
 
         self.summary_type = config.summary_type if hasattr(config, "summary_type") else "last"
         if self.summary_type == "attn":
