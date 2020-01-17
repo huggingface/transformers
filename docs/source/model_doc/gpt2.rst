@@ -30,6 +30,10 @@ Tips:
   See `reusing the past in generative models <../quickstart.html#using-the-past>`_ for more information on the usage
   of this argument.
 
+`Write With Transformer <https://transformer.huggingface.co/doc/gpt2-large>`__ is a webapp created and hosted by
+Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
+different sizes: small, medium, large, xl and a distilled version of the small checkpoint: distilgpt-2.
+
 
 ``GPT2Config``
 ~~~~~~~~~~~~~~~~~~~~~

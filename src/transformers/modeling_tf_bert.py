@@ -589,12 +589,6 @@ BERT_START_DOCSTRING = r"""
     Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
-    .. _`BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`:
-        https://arxiv.org/abs/1810.04805
-
-    .. _`tf.keras.Model`:
-        https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
-
     .. note::
     
         TF 2.0 models accepts two formats as inputs:
