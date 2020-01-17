@@ -82,7 +82,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super(OpenAIGPTTokenizer, self).__init__(unk_token=unk_token, **kwargs)
+        super().__init__(unk_token=unk_token, **kwargs)
 
         self.max_len_single_sentence = (
             self.max_len

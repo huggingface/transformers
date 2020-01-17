@@ -33,13 +33,13 @@ class AutoTokenizerTest(unittest.TestCase):
     # @slow
     def test_tokenizer_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in [x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x]:
+        for model_name in (x for x in BERT_PRETRAINED_CONFIG_ARCHIVE_MAP.keys() if "japanese" not in x):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, BertTokenizer)
             self.assertGreater(len(tokenizer), 0)
 
-        for model_name in list(GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP.keys())[:1]:
+        for model_name in GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP.keys():
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, GPT2Tokenizer)
@@ -56,3 +56,17 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(tokenizer, RobertaTokenizer)
         self.assertEqual(len(tokenizer), 20)
+
+    def test_tokenizer_identifier_with_correct_config(self):
+        logging.basicConfig(level=logging.INFO)
+        for tokenizer_class in [BertTokenizer, AutoTokenizer]:
+            tokenizer = tokenizer_class.from_pretrained("wietsedv/bert-base-dutch-cased")
+            self.assertIsInstance(tokenizer, BertTokenizer)
+            self.assertEqual(tokenizer.basic_tokenizer.do_lower_case, False)
+            self.assertEqual(tokenizer.max_len, 512)
+
+    def test_tokenizer_identifier_non_existent(self):
+        logging.basicConfig(level=logging.INFO)
+        for tokenizer_class in [BertTokenizer, AutoTokenizer]:
+            with self.assertRaises(EnvironmentError):
+                _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")

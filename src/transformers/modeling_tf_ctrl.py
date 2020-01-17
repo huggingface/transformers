@@ -75,7 +75,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 class TFMultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, d_model_size, num_heads, output_attentions=False, **kwargs):
-        super(TFMultiHeadAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = output_attentions
         self.num_heads = num_heads
         self.d_model_size = d_model_size
@@ -132,7 +132,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
     def __init__(
         self, d_model_size, num_heads, dff, rate=0.1, layer_norm_epsilon=1e-6, output_attentions=False, **kwargs
     ):
-        super(TFEncoderLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.multi_head_attention = TFMultiHeadAttention(
             d_model_size, num_heads, output_attentions, name="multi_head_attention"
@@ -166,7 +166,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
 class TFCTRLMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super(TFCTRLMainLayer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.output_past = config.output_past
@@ -443,7 +443,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFCTRLModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
     def call(self, inputs, **kwargs):
@@ -453,7 +453,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
 
 class TFCTRLLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFCTRLLMHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
 
         # The output weights are the same as the input embeddings, but there is
@@ -462,7 +462,7 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super(TFCTRLLMHead, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -508,7 +508,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFCTRLLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")

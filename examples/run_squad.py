@@ -671,6 +671,13 @@ def main():
     parser.add_argument("--threads", type=int, default=1, help="multiple threads for converting example to features")
     args = parser.parse_args()
 
+    if args.doc_stride >= args.max_seq_length - args.max_query_length:
+        logger.warning(
+            "WARNING - You've set a doc stride which may be superior to the document length in some "
+            "examples. This could result in errors when building features from the examples. Please reduce the doc "
+            "stride or increase the maximum length to ensure the features are correctly built."
+        )
+
     if (
         os.path.exists(args.output_dir)
         and os.listdir(args.output_dir)

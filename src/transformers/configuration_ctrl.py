@@ -106,7 +106,7 @@ class CTRLConfig(PretrainedConfig):
         summary_first_dropout=0.1,
         **kwargs
     ):
-        super(CTRLConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions

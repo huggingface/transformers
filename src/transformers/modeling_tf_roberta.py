@@ -42,7 +42,7 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
     """
 
     def __init__(self, config, **kwargs):
-        super(TFRobertaEmbeddings, self).__init__(config, **kwargs)
+        super().__init__(config, **kwargs)
         self.padding_idx = 1
 
     def create_position_ids_from_input_ids(self, x):
@@ -78,9 +78,7 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        return super(TFRobertaEmbeddings, self)._embedding(
-            [input_ids, position_ids, token_type_ids, inputs_embeds], training=training
-        )
+        return super()._embedding([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
 
 
 class TFRobertaMainLayer(TFBertMainLayer):
@@ -89,7 +87,7 @@ class TFRobertaMainLayer(TFBertMainLayer):
     """
 
     def __init__(self, config, **kwargs):
-        super(TFRobertaMainLayer, self).__init__(config, **kwargs)
+        super().__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
     def get_input_embeddings(self):
@@ -234,7 +232,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFRobertaModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.roberta = TFRobertaMainLayer(config, name="roberta")
 
     def call(self, inputs, **kwargs):
@@ -246,7 +244,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
     """Roberta Head for masked language modeling."""
 
     def __init__(self, config, input_embeddings, **kwargs):
-        super(TFRobertaLMHead, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
@@ -260,7 +258,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super(TFRobertaLMHead, self).build(input_shape)
+        super().build(input_shape)
 
     def call(self, features):
         x = self.dense(features)
@@ -305,7 +303,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFRobertaForMaskedLM, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.roberta = TFRobertaMainLayer(config, name="roberta")
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
@@ -328,7 +326,7 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
-        super(TFRobertaClassificationHead, self).__init__(config, **kwargs)
+        super().__init__(config, **kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -383,7 +381,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFRobertaForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.roberta = TFRobertaMainLayer(config, name="roberta")
@@ -433,7 +431,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
     """
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFRobertaForTokenClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.roberta = TFRobertaMainLayer(config, name="roberta")

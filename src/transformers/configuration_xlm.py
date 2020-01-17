@@ -197,7 +197,7 @@ class XLMConfig(PretrainedConfig):
     ):
         """Constructs XLMConfig.
         """
-        super(XLMConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
         self.n_layers = n_layers

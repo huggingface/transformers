@@ -80,7 +80,7 @@ class BertAbsConfig(PretrainedConfig):
         dec_dropout=0.2,
         **kwargs,
     ):
-        super(BertAbsConfig, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.max_pos = max_pos

@@ -96,7 +96,7 @@ class MultiHeadAttention(nn.Module):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config):
-        super(MultiHeadAttention, self).__init__()
+        super().__init__()
         self.layer_id = next(MultiHeadAttention.NEW_ID)
         self.output_attentions = config.output_attentions
         self.dim = dim
@@ -197,7 +197,7 @@ class MultiHeadAttention(nn.Module):
 
 class TransformerFFN(nn.Module):
     def __init__(self, in_dim, dim_hidden, out_dim, config):
-        super(TransformerFFN, self).__init__()
+        super().__init__()
         self.dropout = config.dropout
         self.lin1 = nn.Linear(in_dim, dim_hidden)
         self.lin2 = nn.Linear(dim_hidden, out_dim)
@@ -222,7 +222,7 @@ class XLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):
-        super(XLMPreTrainedModel, self).__init__(*inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
 
     @property
     def dummy_inputs(self):
@@ -354,7 +354,7 @@ class XLMModel(XLMPreTrainedModel):
     """
 
     def __init__(self, config):  # , dico, is_encoder, with_output):
-        super(XLMModel, self).__init__(config)
+        super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -585,7 +585,7 @@ class XLMPredLayer(nn.Module):
     """
 
     def __init__(self, config):
-        super(XLMPredLayer, self).__init__()
+        super().__init__()
         self.asm = config.asm
         self.n_words = config.n_words
         self.pad_index = config.pad_index
@@ -661,7 +661,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLMWithLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
 
@@ -754,7 +754,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLMForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.transformer = XLMModel(config)
@@ -856,7 +856,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLMForQuestionAnsweringSimple, self).__init__(config)
+        super().__init__(config)
 
         self.transformer = XLMModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
@@ -973,7 +973,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
     """
 
     def __init__(self, config):
-        super(XLMForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
 
         self.transformer = XLMModel(config)
         self.qa_outputs = SQuADHead(config)
