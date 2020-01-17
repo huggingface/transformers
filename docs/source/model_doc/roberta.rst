@@ -36,6 +36,12 @@ RoBERTa
     :members:
 
 
+RobertaForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaForTokenClassification
+    :members:
+
 ``TFRobertaModel``
 ~~~~~~~~~~~~~~~~~~~~
 
