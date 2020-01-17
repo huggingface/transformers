@@ -94,7 +94,7 @@ setup(
         # for downloading models over HTTPS
         "requests",
         # progress bars in model download and training scripts
-        "tqdm",
+        "tqdm >= 4.27",
         # for OpenAI GPT
         "regex != 2019.12.17",
         # for XLNet
