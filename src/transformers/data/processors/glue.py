@@ -80,11 +80,15 @@ def glue_convert_examples_to_features(
 
     features = []
     for (ex_index, example) in enumerate(examples):
-        if ex_index % 10000 == 0:
-            logger.info("Writing example %d/%d" % (ex_index, len(examples)))
+        len_examples = 0
         if is_tf_dataset:
             example = processor.get_example_from_tensor_dict(example)
             example = processor.tfds_map(example)
+            len_examples = tf.data.experimental.cardinality(examples)
+        else:
+            len_examples = len(examples)
+        if ex_index % 10000 == 0:
+            logger.info("Writing example %d/%d" % (ex_index, len_examples))
 
         inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length,)
         input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
