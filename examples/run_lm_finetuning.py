@@ -448,9 +448,6 @@ def main():
     parser.add_argument(
         "--model_type", type=str, required=True, help="The model architecture to be trained or fine-tuned.",
     )
-    parser.add_argument(
-        "--should_continue", action="store_true", help="Whether to continue from latest checkpoint in output_dir"
-    )
 
     # Other parameters
     parser.add_argument(
@@ -460,6 +457,10 @@ def main():
         help="An optional input evaluation data file to evaluate the perplexity on (a text file).",
     )
 
+    parser.add_argument(
+        "--should_continue", action="store_true", help="Whether to continue from latest checkpoint in output_dir"
+    )
+    
     parser.add_argument(
         "--model_name_or_path",
         default=None,
