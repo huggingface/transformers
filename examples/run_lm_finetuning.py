@@ -487,12 +487,6 @@ def main():
         help="Optional pretrained tokenizer name or path if not the same as model_name_or_path. If both are None, initialize a new tokenizer.",
     )
     parser.add_argument(
-        "--tokenizer_init_args",
-        default="",
-        type=str,
-        help="If instantiating a new tokenizer, comma-separated list of input args to feed the constructor.",
-    )
-    parser.add_argument(
         "--cache_dir",
         default=None,
         type=str,
@@ -661,11 +655,10 @@ def main():
     elif args.model_name_or_path:
         tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     else:
-        logger.warning(
-            "You are instantiating a new {} tokenizer from scratch. Are you sure this is what you meant to do?"
-            "To specifiy a pretrained tokenizer name, use --tokenizer_name".format(tokenizer_class.__name__)
+        raise ValueError(
+            "You are instantiating a new {} tokenizer. This is not supported, but you can do it from another script, save it,"
+            "and load it from here, using --tokenizer_name".format(tokenizer_class.__name__)
         )
-        tokenizer = tokenizer_class(*args.tokenizer_init_args.split(","))
 
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len_single_sentence
