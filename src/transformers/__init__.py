@@ -130,7 +130,7 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, fill_mask
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,
