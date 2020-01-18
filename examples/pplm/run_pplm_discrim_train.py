@@ -19,6 +19,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import time
 
 import numpy as np
@@ -220,6 +221,7 @@ def train_discriminator(
     dataset,
     dataset_fp=None,
     pretrained_model="gpt2-medium",
+    save_model_dir="./",
     epochs=10,
     batch_size=64,
     log_interval=10,
@@ -442,7 +444,9 @@ def train_discriminator(
         test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, collate_fn=collate_fn)
 
     if save_model:
-        with open("{}_classifier_head_meta.json".format(dataset), "w") as meta_file:
+        if not os.path.exists(save_model_dir):
+            os.makedirs(save_model_dir)
+        with open(os.path.join(save_model_dir, "{}_classifier_head_meta.json".format(dataset)), "w") as meta_file:
             json.dump(discriminator_meta, meta_file)
 
     optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
@@ -474,7 +478,7 @@ def train_discriminator(
             #               ))
             torch.save(
                 discriminator.get_classifier().state_dict(),
-                "{}_classifier_head_epoch_{}.pt".format(dataset, epoch + 1),
+                os.path.join(save_model_dir, "{}_classifier_head_epoch_{}.pt".format(dataset, epoch + 1)),
             )
 
 
@@ -510,6 +514,7 @@ if __name__ == "__main__":
         help="how many batches to wait before logging training status",
     )
     parser.add_argument("--save_model", action="store_true", help="whether to save the model")
+    parser.add_argument("--save_model_dir", type=str, default="./", help="Model save directory")
     parser.add_argument("--cached", action="store_true", help="whether to cache the input representations")
     parser.add_argument("--no_cuda", action="store_true", help="use to turn off cuda")
     args = parser.parse_args()
