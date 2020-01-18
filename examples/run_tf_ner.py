@@ -315,7 +315,7 @@ def train(
 def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode):
     eval_batch_size = args["per_device_eval_batch_size"] * args["n_device"]
     eval_dataset, size = load_and_cache_examples(
-        args, tokenizer, ['[PAD]']+labels, pad_token_label_id, eval_batch_size, mode=mode
+        args, tokenizer, ["[PAD]"] + labels, pad_token_label_id, eval_batch_size, mode=mode
     )
     eval_dataset = strategy.experimental_distribute_dataset(eval_dataset)
     preds = None
@@ -537,7 +537,7 @@ def main(_):
 
         train_batch_size = args["per_device_train_batch_size"] * args["n_device"]
         train_dataset, num_train_examples = load_and_cache_examples(
-            args, tokenizer, ['[PAD]']+labels, pad_token_label_id, train_batch_size, mode="train"
+            args, tokenizer, ["[PAD]"] + labels, pad_token_label_id, train_batch_size, mode="train"
         )
         train_dataset = strategy.experimental_distribute_dataset(train_dataset)
         train(
@@ -613,10 +613,6 @@ def main(_):
     if args["do_predict"]:
         tokenizer = tokenizer_class.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
         model = model_class.from_pretrained(args["output_dir"])
-        eval_batch_size = args["per_device_eval_batch_size"] * args["n_device"]
-        predict_dataset, _ = load_and_cache_examples(
-            args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test"
-        )
         y_true, y_pred, pred_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test")
         output_test_results_file = os.path.join(args["output_dir"], "test_results.txt")
         output_test_predictions_file = os.path.join(args["output_dir"], "test_predictions.txt")
