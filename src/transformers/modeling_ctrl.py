@@ -241,7 +241,6 @@ CTRL_INPUTS_DOCSTRING = r"""
     CTRL_START_DOCSTRING,
 )
 class CTRLModel(CTRLPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.output_hidden_states = config.output_hidden_states
@@ -439,7 +438,6 @@ class CTRLModel(CTRLPreTrainedModel):
     CTRL_START_DOCSTRING,
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = CTRLModel(config)
