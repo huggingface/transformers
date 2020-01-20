@@ -375,7 +375,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     ):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -522,7 +522,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             computed for labels in ``[0, ..., config.vocab_size]``
 
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.OpenAIGPTConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
             Language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -627,7 +627,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             of the input tensors. (see `input_ids` above)
 
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.OpenAIGPTConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         lm_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``lm_labels`` is provided):
             Language modeling loss.
         mc_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`multiple_choice_labels` is provided):

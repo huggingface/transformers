@@ -416,7 +416,7 @@ class XLMModel(XLMPreTrainedModel):
     ):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -665,7 +665,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             computed for labels in ``[0, ..., config.vocab_size]``
 
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
             Language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -747,7 +747,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
@@ -844,7 +844,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             Position outside of the sequence are not taken into account for computing the loss.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
@@ -969,7 +969,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             1.0 means token should be masked. 0.0 mean token is not masked.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
             Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
         start_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):

@@ -788,7 +788,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -841,7 +841,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -910,7 +910,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        `tuple(tf.Tensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
         logits (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -970,7 +970,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        `tuple(tf.Tensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
         logits (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:(batch_size, config.num_labels)`):
             Classification scores (before SoftMax).
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -1028,7 +1028,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
         loss (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         start_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):

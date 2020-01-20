@@ -579,7 +579,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -661,7 +661,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -714,7 +714,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         logits (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -768,7 +768,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         start_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):
             Span-start scores (before SoftMax).
         end_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):

@@ -187,7 +187,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
@@ -269,7 +269,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -346,7 +346,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -402,7 +402,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
