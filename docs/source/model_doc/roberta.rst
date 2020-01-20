@@ -71,3 +71,10 @@ TFRobertaForSequenceClassification
 
 .. autoclass:: transformers.TFRobertaForSequenceClassification
     :members:
+
+
+TFRobertaForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRobertaForTokenClassification
+    :members:
