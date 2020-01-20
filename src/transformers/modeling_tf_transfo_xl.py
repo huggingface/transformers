@@ -695,7 +695,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
@@ -759,7 +759,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, labels=None, training=False):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.GPT2Config`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
