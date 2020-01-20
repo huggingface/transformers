@@ -549,12 +549,6 @@ BERT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
 
-    .. _`BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`:
-        https://arxiv.org/abs/1810.04805
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
-
     Parameters:
         config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.

@@ -97,3 +97,4 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/ctrl
     model_doc/camembert
     model_doc/albert
+    model_doc/xlmroberta
