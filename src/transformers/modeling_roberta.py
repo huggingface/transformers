@@ -401,7 +401,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             of the input tensors. (see `input_ids` above)
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         loss (:obj:`torch.FloatTensor`` of shape ``(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
@@ -497,7 +497,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             Indices should be in ``[0, ..., config.num_labels - 1]``.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.RobertaConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
             Classification loss.
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
@@ -616,7 +616,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             Position outside of the sequence are not taken into account for computing the loss.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):

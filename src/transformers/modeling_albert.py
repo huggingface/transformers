@@ -494,7 +494,7 @@ class AlbertModel(AlbertPreTrainedModel):
     ):
         r"""
     Return:
-        :obj:`Tuple` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`torch.FloatTensor`: of shape :obj:`(batch_size, hidden_size)`):
@@ -726,7 +726,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         loss: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Classification (or regression if config.num_labels==1) loss.
         logits ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
@@ -824,7 +824,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             Position outside of the sequence are not taken into account for computing the loss.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         loss: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         start_scores ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``

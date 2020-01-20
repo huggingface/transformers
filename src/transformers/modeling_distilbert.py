@@ -351,6 +351,9 @@ class DistilBertPreTrainedModel(PreTrainedModel):
 
 
 DISTILBERT_START_DOCSTRING = r"""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. 
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general 
+    usage and behavior.
     
     Parameters:
         config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
@@ -416,7 +419,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None):
         r"""
     Return:
-        :obj:`Tuple` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -513,7 +516,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             in ``[0, ..., config.vocab_size]``
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
         loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
@@ -560,7 +563,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
 @add_start_docstrings(
     """DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
-                         the pooled output) e.g. for GLUE tasks. """,
+    the pooled output) e.g. for GLUE tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
@@ -585,7 +588,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
@@ -637,7 +640,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
 @add_start_docstrings(
     """DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-                         the hidden-states output to compute `span start logits` and `span end logits`). """,
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
@@ -672,7 +675,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             Position outside of the sequence are not taken into account for computing the loss.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (config) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
@@ -736,7 +739,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
 @add_start_docstrings(
     """DistilBert Model with a token classification head on top (a linear layer on top of
-                      the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
@@ -758,7 +761,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             Indices should be in ``[0, ..., config.num_labels - 1]``.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
             Classification loss.
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
