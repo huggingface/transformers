@@ -211,6 +211,10 @@ class AlbertAttention(BertSelfAttention):
         self.all_head_size = self.attention_head_size * self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    def merge_tensor(self, x):
+        s = x.size()[-2]
+        return torch.cat([x[:,:,i,:] for i in range(s)], dim=-1)
+
     def forward(self, input_ids, attention_mask=None, head_mask=None):
         mixed_query_layer = self.query(input_ids)
         mixed_key_layer = self.key(input_ids)
@@ -243,14 +247,15 @@ class AlbertAttention(BertSelfAttention):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
         # Should find a better way to do this
-        w = (
-            self.dense.weight.t()
-            .view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
-            .to(context_layer.dtype)
-        )
-        b = self.dense.bias.to(context_layer.dtype)
+        #w = (
+        #    self.dense.weight.t()
+        #    .view(self.num_attention_heads, self.attention_head_size, self.hidden_size)
+        #    .to(context_layer.dtype)
+        #)
+        #b = self.dense.bias.to(context_layer.dtype)
 
-        projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
+        #projected_context_layer = torch.einsum("bfnd,ndh->bfh", context_layer, w) + b
+        projected_context_layer = self.dense(self.merge_tensor(context_layer))
         projected_context_layer_dropout = self.dropout(projected_context_layer)
         layernormed_context_layer = self.LayerNorm(input_ids + projected_context_layer_dropout)
         return (layernormed_context_layer, attention_probs) if self.output_attentions else (layernormed_context_layer,)
