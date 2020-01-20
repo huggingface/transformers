@@ -25,6 +25,7 @@ from tqdm.auto import tqdm
 
 from . import __version__
 
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 try:
