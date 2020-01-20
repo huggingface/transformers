@@ -58,19 +58,20 @@ class CamembertModel(RobertaModel):
     This class overrides :class:`~transformers.RobertaModel`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top. """,
-    CAMEMBERT_START_DOCSTRING,
+    """CamemBERT Model with a `language modeling` head on top. """, CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForMaskedLM(RobertaForMaskedLM):
     """
     This class overrides :class:`~transformers.RobertaForMaskedLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -85,6 +86,7 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
     This class overrides :class:`~transformers.RobertaForSequenceClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -99,8 +101,10 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
     This class overrides :class:`~transformers.RobertaForMultipleChoice`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
 
 @add_start_docstrings(
     """CamemBERT Model with a token classification head on top (a linear layer on top of
@@ -112,6 +116,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
     This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = CamembertConfig
     pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-

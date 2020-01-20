@@ -687,7 +687,6 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
     TRANSFO_XL_START_DOCSTRING,
 )
 class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
@@ -737,7 +736,6 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")

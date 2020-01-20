@@ -571,7 +571,6 @@ XLM_INPUTS_DOCSTRING = r"""
     XLM_START_DOCSTRING,
 )
 class TFXLMModel(TFXLMPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
@@ -650,7 +649,6 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
     XLM_START_DOCSTRING,
 )
 class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
@@ -705,7 +703,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -760,7 +757,6 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")

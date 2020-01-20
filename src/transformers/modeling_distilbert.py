@@ -390,7 +390,6 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertModel(DistilBertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -484,11 +483,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top. """,
-    DISTILBERT_START_DOCSTRING,
+    """DistilBert Model with a `masked language modeling` head on top. """, DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.output_attentions = config.output_attentions
@@ -567,7 +564,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -645,7 +641,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -745,7 +740,6 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

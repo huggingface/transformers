@@ -269,12 +269,6 @@ GPT2_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
 
-    .. _`Language Models are Unsupervised Multitask Learners`:
-        https://openai.com/blog/better-language-models/
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
-
     Parameters:
         config (:class:`~transformers.GPT2Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
@@ -328,7 +322,6 @@ GPT2_INPUTS_DOCSTRING = r"""
     GPT2_START_DOCSTRING,
 )
 class GPT2Model(GPT2PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.output_hidden_states = config.output_hidden_states
@@ -514,7 +507,6 @@ class GPT2Model(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2LMHeadModel(GPT2PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPT2Model(config)
@@ -624,7 +616,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         config.num_labels = 1

@@ -550,7 +550,6 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLModel(TransfoXLPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.output_attentions = config.output_attentions
@@ -803,7 +802,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = TransfoXLModel(config)

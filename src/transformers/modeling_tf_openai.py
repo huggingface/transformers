@@ -427,7 +427,6 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
@@ -473,7 +472,6 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
@@ -531,7 +529,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         config.num_labels = 1

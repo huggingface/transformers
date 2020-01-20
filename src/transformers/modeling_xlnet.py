@@ -575,7 +575,6 @@ XLNET_INPUTS_DOCSTRING = r"""
     XLNET_START_DOCSTRING,
 )
 class XLNetModel(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.output_attentions = config.output_attentions
@@ -929,7 +928,6 @@ class XLNetModel(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.attn_type = config.attn_type
@@ -1060,7 +1058,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1161,7 +1158,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetForTokenClassification(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1262,7 +1258,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetForMultipleChoice(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1369,7 +1364,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1486,7 +1480,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.start_n_top = config.start_n_top
