@@ -38,5 +38,6 @@ class XLMRobertaConfig(RobertaConfig):
     This class overrides :class:`~transformers.RobertaConfig`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     pretrained_config_archive_map = XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "xlm-roberta"

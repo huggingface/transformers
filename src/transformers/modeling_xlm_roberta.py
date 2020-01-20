@@ -61,19 +61,20 @@ class XLMRobertaModel(RobertaModel):
     This class overrides :class:`~transformers.RobertaModel`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """,
-    XLM_ROBERTA_START_DOCSTRING,
+    """XLM-RoBERTa Model with a `language modeling` head on top. """, XLM_ROBERTA_START_DOCSTRING,
 )
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
     This class overrides :class:`~transformers.RobertaForMaskedLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -88,6 +89,7 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     This class overrides :class:`~transformers.RobertaForSequenceClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -102,6 +104,7 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     This class overrides :class:`~transformers.RobertaForMultipleChoice`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -116,5 +119,6 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP

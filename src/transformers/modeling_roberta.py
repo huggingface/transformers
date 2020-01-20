@@ -150,6 +150,7 @@ class RobertaModel(BertModel):
     This class overrides :class:`~transformers.BertModel`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = RobertaConfig
     pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
@@ -167,9 +168,7 @@ class RobertaModel(BertModel):
         self.embeddings.word_embeddings = value
 
 
-@add_start_docstrings(
-    """RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING
-)
+@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class RobertaForMaskedLM(BertPreTrainedModel):
     config_class = RobertaConfig
     pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
@@ -652,7 +651,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds
+            inputs_embeds=inputs_embeds,
         )
 
         sequence_output = outputs[0]

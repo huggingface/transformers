@@ -180,7 +180,6 @@ ROBERTA_INPUTS_DOCSTRING = r"""
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaModel(TFRobertaPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.roberta = TFRobertaMainLayer(config, name="roberta")
@@ -256,11 +255,8 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
         return x
 
 
-@add_start_docstrings(
-    """RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING
-)
+@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -340,7 +336,6 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -394,7 +389,6 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels

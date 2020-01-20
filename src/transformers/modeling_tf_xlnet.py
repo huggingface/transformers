@@ -780,7 +780,6 @@ XLNET_INPUTS_DOCSTRING = r"""
     XLNET_START_DOCSTRING,
 )
 class TFXLNetModel(TFXLNetPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
@@ -830,7 +829,6 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
@@ -896,7 +894,6 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -961,7 +958,6 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1015,11 +1011,12 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
         return outputs  # return logits, (mems), (hidden states), (attentions)
 
 
-@add_start_docstrings("""XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+@add_start_docstrings(
+    """XLNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XLNET_START_DOCSTRING)
+    XLNET_START_DOCSTRING,
+)
 class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")

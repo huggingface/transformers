@@ -536,7 +536,6 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertModel(TFDistilBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
@@ -594,11 +593,9 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top. """,
-    DISTILBERT_START_DOCSTRING,
+    """DistilBert Model with a `masked language modeling` head on top. """, DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.output_attentions = config.output_attentions
@@ -665,7 +662,6 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -730,7 +726,6 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -786,7 +781,6 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

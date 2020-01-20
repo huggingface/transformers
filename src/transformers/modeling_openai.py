@@ -338,7 +338,6 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.output_attentions = config.output_attentions
@@ -493,7 +492,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = OpenAIGPTModel(config)
@@ -587,7 +585,6 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
