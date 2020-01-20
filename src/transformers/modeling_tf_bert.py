@@ -660,7 +660,6 @@ BERT_INPUTS_DOCSTRING = r"""
     BERT_START_DOCSTRING,
 )
 class TFBertModel(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.bert = TFBertMainLayer(config, name="bert")
@@ -711,7 +710,6 @@ class TFBertModel(TFBertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class TFBertForPreTraining(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -767,11 +765,8 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         return outputs  # prediction_scores, seq_relationship_score, (hidden_states), (attentions)
 
 
-@add_start_docstrings(
-    """Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING
-)
+@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -822,11 +817,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top. """,
-    BERT_START_DOCSTRING,
+    """Bert Model with a `next sentence prediction (classification)` head on top. """, BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -879,7 +872,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class TFBertForSequenceClassification(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -938,7 +930,6 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class TFBertForMultipleChoice(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1049,7 +1040,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1108,7 +1098,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels

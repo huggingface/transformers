@@ -24,7 +24,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import Conv1D, PreTrainedModel
 
 
@@ -184,20 +184,9 @@ class CTRLPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-CTRL_START_DOCSTRING = r"""    CTRL model was proposed in
-    `CTRL: A Conditional Transformer Language Model for Controllable Generation`_
-    by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and Richard Socher.
-    It's a causal (unidirectional) transformer pre-trained using language modeling on a very large
-    corpus of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
-
+CTRL_START_DOCSTRING = r"""    
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
-
-    .. _`CTRL: A Conditional Transformer Language Model for Controllable Generation`:
-        https://www.github.com/salesforce/ctrl
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
         config (:class:`~transformers.CTRLConfig`): Model configuration class with all the parameters of the model.
@@ -205,36 +194,43 @@ CTRL_START_DOCSTRING = r"""    CTRL model was proposed in
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-CTRL_INPUTS_DOCSTRING = r"""    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-            CTRL is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
+CTRL_INPUTS_DOCSTRING = r"""    
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. 
+            
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer):
-            that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            
+            `What are input IDs? <../glossary.html#input-ids>`__
+        past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
+            Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            A parallel sequence of tokens (can be used to indicate various portions of the inputs).
-            The embeddings from these tokens will be summed with the respective token embeddings.
-            Indices are selected in the vocabulary (unlike BERT which has a specific vocabulary for segment indices).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+            
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+            
+            `What are position IDs? <../glossary.html#position-ids>`_
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
-            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
 """
@@ -243,35 +239,8 @@ CTRL_INPUTS_DOCSTRING = r"""    Inputs:
 @add_start_docstrings(
     "The bare CTRL Model transformer outputting raw hidden-states without any specific head on top.",
     CTRL_START_DOCSTRING,
-    CTRL_INPUTS_DOCSTRING,
 )
 class CTRLModel(CTRLPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the last layer of the model.
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
-            that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = CTRLModel.from_pretrained('ctrl')
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
-    """
 
     def __init__(self, config):
         super().__init__(config)
@@ -310,6 +279,7 @@ class CTRLModel(CTRLPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
+    @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -320,6 +290,36 @@ class CTRLModel(CTRLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
     ):
+        r"""
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`CTRLConfig`) and inputs:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the last layer of the model.
+        past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
+            Contains pre-computed hidden-states (key and values in the attention blocks).
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
+            should not be passed as input ids as they have already been computed.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
+        model = CTRLModel.from_pretrained('ctrl')
+        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+
+        """
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -435,50 +435,10 @@ class CTRLModel(CTRLPreTrainedModel):
 
 @add_start_docstrings(
     """The CTRL Model transformer with a language modeling head on top
-(linear layer with weights tied to the input embeddings). """,
+    (linear layer with weights tied to the input embeddings). """,
     CTRL_START_DOCSTRING,
-    CTRL_INPUTS_DOCSTRING,
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel):
-    r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
-            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Language modeling loss.
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **past**:
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(2, batch_size, num_heads, sequence_length, embed_size_per_head)``:
-            that contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import torch
-        from transformers import CTRLTokenizer, CTRLLMHeadModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = CTRLLMHeadModel.from_pretrained('ctrl')
-
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
-    """
 
     def __init__(self, config):
         super().__init__(config)
@@ -499,6 +459,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         inputs.update(kwargs)
         return inputs
 
+    @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -510,6 +471,49 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         inputs_embeds=None,
         labels=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for language modeling.
+            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
+            All labels set to ``-100`` are ignored (masked), the loss is only
+            computed for labels in ``[0, ..., config.vocab_size]``
+
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:obj:`~transformers.CTRLConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
+            Language modeling loss.
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
+            Contains pre-computed hidden-states (key and values in the attention blocks).
+            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
+            should not be passed as input ids as they have already been computed.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        import torch
+        from transformers import CTRLTokenizer, CTRLLMHeadModel
+
+        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
+        model = CTRLLMHeadModel.from_pretrained('ctrl')
+
+        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=input_ids)
+        loss, logits = outputs[:2]
+
+        """
         transformer_outputs = self.transformer(
             input_ids,
             past=past,

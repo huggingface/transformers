@@ -813,7 +813,6 @@ class BertModel(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForPreTraining(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -907,11 +906,8 @@ class BertForPreTraining(BertPreTrainedModel):
         return outputs  # (loss), prediction_scores, seq_relationship_score, (hidden_states), (attentions)
 
 
-@add_start_docstrings(
-    """Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING
-)
+@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class BertForMaskedLM(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1018,11 +1014,9 @@ class BertForMaskedLM(BertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top. """,
-    BERT_START_DOCSTRING,
+    """Bert Model with a `next sentence prediction (classification)` head on top. """, BERT_START_DOCSTRING,
 )
 class BertForNextSentencePrediction(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1105,7 +1099,6 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1198,7 +1191,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForMultipleChoice(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1294,7 +1286,6 @@ class BertForMultipleChoice(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForTokenClassification(BertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1386,7 +1377,6 @@ class BertForTokenClassification(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForQuestionAnswering(BertPreTrainedModel):
-
     def __init__(self, config):
         super(BertForQuestionAnswering, self).__init__(config)
         self.num_labels = config.num_labels

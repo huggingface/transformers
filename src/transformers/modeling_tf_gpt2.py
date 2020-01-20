@@ -444,7 +444,6 @@ GPT2_INPUTS_DOCSTRING = r"""
     GPT2_START_DOCSTRING,
 )
 class TFGPT2Model(TFGPT2PreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name="transformer")
@@ -494,7 +493,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name="transformer")
@@ -557,7 +555,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         config.num_labels = 1

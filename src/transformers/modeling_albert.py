@@ -607,7 +607,6 @@ class AlbertMLMHead(nn.Module):
     "Albert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING,
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -698,7 +697,6 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForSequenceClassification(AlbertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -794,7 +792,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForQuestionAnswering(AlbertPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

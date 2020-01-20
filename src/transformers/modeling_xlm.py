@@ -317,7 +317,6 @@ XLM_INPUTS_DOCSTRING = r"""
     XLM_START_DOCSTRING,
 )
 class XLMModel(XLMPreTrainedModel):
-
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
         self.output_attentions = config.output_attentions
@@ -620,7 +619,6 @@ class XLMPredLayer(nn.Module):
     XLM_START_DOCSTRING,
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = XLMModel(config)
@@ -718,7 +716,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForSequenceClassification(XLMPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -813,7 +810,6 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -929,7 +925,6 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForQuestionAnswering(XLMPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
