@@ -630,19 +630,19 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "transformer"
 
 
-TRANSFO_XL_START_DOCSTRING = r"""    
+TRANSFO_XL_START_DOCSTRING = r"""
 
     .. note::
-    
+
         TF 2.0 models accepts two formats as inputs:
 
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having 
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors 
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
@@ -660,12 +660,12 @@ TRANSFO_XL_START_DOCSTRING = r"""
 TRANSFO_XL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. 
-            
+            Indices of input sequence tokens in the vocabulary.
+
             Indices can be obtained using :class:`transformers.TransfoXLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            
+
             `What are input IDs? <../glossary.html#input-ids>`__
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model

@@ -41,9 +41,11 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-XLM_ROBERTA_START_DOCSTRING = r"""    
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
+XLM_ROBERTA_START_DOCSTRING = r"""
+
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
 
     Parameters:
         config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the

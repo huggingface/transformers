@@ -485,18 +485,18 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
 
 
 XLM_START_DOCSTRING = r"""
-    
+
     .. note::
-    
+
         TF 2.0 models accepts two formats as inputs:
 
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having 
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors 
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
@@ -504,7 +504,7 @@ XLM_START_DOCSTRING = r"""
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
           :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
-          
+
     Parameters:
         config (:class:`~transformers.XLMConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
@@ -514,39 +514,39 @@ XLM_START_DOCSTRING = r"""
 XLM_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. 
-            
+            Indices of input sequence tokens in the vocabulary.
+
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            
+
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
-        langs (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
+        langs (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             A parallel sequence of tokens to be used to indicate the language of each token in the input.
             Indices are languages ids which can be obtained from the language names by using two conversion mappings
             provided in the configuration of the model (only provided for multilingual models).
             More precisely, the `language name -> language id` mapping is in `model.config.lang2id` (dict str -> int) and
             the `language id -> language name` mapping is `model.config.id2lang` (dict int -> str).
-            
+
             See usage examples detailed in the `multilingual documentation <https://huggingface.co/transformers/multilingual.html>`__.
-        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
+        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-            
+
             `What are position IDs? <../glossary.html#position-ids>`_
-        lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`): 
+        lengths (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Length of each sentence that can be used to avoid performing attention on padding token indices.
             You can also use `attention_mask` for the same result (see above), kept here for compatbility.
             Indices selected in ``[0, ..., input_ids.size(-1)]``:

@@ -478,8 +478,8 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-ALBERT_START_DOCSTRING = r"""    
-    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class. 
+ALBERT_START_DOCSTRING = r"""
+    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
     Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
@@ -490,16 +490,16 @@ ALBERT_START_DOCSTRING = r"""
         https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
 
     .. note::
-    
+
         TF 2.0 models accepts two formats as inputs:
 
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having 
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors 
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
@@ -517,29 +517,29 @@ ALBERT_START_DOCSTRING = r"""
 ALBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. 
-            
+            Indices of input sequence tokens in the vocabulary.
+
             Indices can be obtained using :class:`transformers.AlbertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            
+
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-            
+
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.

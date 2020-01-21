@@ -29,35 +29,10 @@ CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class CamembertConfig(RobertaConfig):
-    r"""
-        This is the configuration class to store the configuration of an :class:`~transformers.CamembertModel`.
-        It is used to instantiate an Camembert model according to the specified arguments, defining the model
-        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
-
-        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-        for more information.
-
-        The :class:`~transformers.CamembertConfig` class directly inherits :class:`~transformers.BertConfig`.
-        It reuses the same defaults. Please check the parent class for more information.
-
-        Example::
-
-            from transformers import CamembertModel, CamembertConfig
-
-            # Initializing a CamemBERT configuration
-            configuration = CamembertConfig()
-
-            # Initializing a model from the configuration
-            model = CamembertModel(configuration)
-
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
     """
+    This class overrides :class:`~transformers.RobertaConfig`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
     pretrained_config_archive_map = CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "camembert"

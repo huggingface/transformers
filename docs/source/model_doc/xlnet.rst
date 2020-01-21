@@ -1,107 +1,123 @@
 XLNet
 ----------------------------------------------------
 
-The XLNet model was proposed in `XLNet: Generalized Autoregressive Pretraining for Language Understanding`_
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
+The XLNet model was proposed in `XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_
 by Zhilin Yang*, Zihang Dai*, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 XLnet is an extension of the Transformer-XL model pre-trained using an autoregressive method
 to learn bidirectional contexts by maximizing the expected likelihood over all permutations
 of the input sequence factorization order.
 
-The specific attention pattern can be controlled at training and test time using the `perm_mask` input.
+The abstract from the paper is the following:
 
-Due to the difficulty of training a fully auto-regressive model over various factorization order,
-XLNet is pretrained using only a sub-set of the output tokens as target which are selected
-with the `target_mapping` input.
+*With the capability of modeling bidirectional contexts, denoising autoencoding based pretraining like BERT achieves
+better performance than pretraining approaches based on autoregressive language modeling. However, relying on
+corrupting the input with masks, BERT neglects dependency between the masked positions and suffers from a
+pretrain-finetune discrepancy. In light of these pros and cons, we propose XLNet, a generalized autoregressive
+pretraining method that (1) enables learning bidirectional contexts by maximizing the expected likelihood over
+all permutations of the factorization order and (2) overcomes the limitations of BERT thanks to its autoregressive
+formulation. Furthermore, XLNet integrates ideas from Transformer-XL, the state-of-the-art autoregressive model,
+into pretraining. Empirically, under comparable experiment settings, XLNet outperforms BERT on 20 tasks, often by
+a large margin, including question answering, natural language inference, sentiment analysis, and document ranking.*
 
-To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the `perm_mask` and
-`target_mapping` inputs to control the attention span and outputs (see examples in `examples/run_generation.py`)
+Tips:
+
+- The specific attention pattern can be controlled at training and test time using the `perm_mask` input.
+- Due to the difficulty of training a fully auto-regressive model over various factorization order,
+  XLNet is pretrained using only a sub-set of the output tokens as target which are selected
+  with the `target_mapping` input.
+- To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the `perm_mask` and
+  `target_mapping` inputs to control the attention span and outputs (see examples in `examples/run_generation.py`)
+- XLNet is one of the few models that has no sequence length limit.
 
 
-``XLNetConfig``
+XLNetConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetConfig
     :members:
 
 
-``XLNetTokenizer``
+XLNetTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetTokenizer
     :members:
 
 
-``XLNetModel``
+XLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetModel
     :members:
 
 
-``XLNetLMHeadModel``
+XLNetLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetLMHeadModel
     :members:
 
 
-``XLNetForSequenceClassification``
+XLNetForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForSequenceClassification
     :members:
 
 
-``XLNetForTokenClassification``
+XLNetForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForTokenClassification
     :members:
 
 
-``XLNetForMultipleChoice``
+XLNetForMultipleChoice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForMultipleChoice
     :members:
 
 
-``XLNetForQuestionAnsweringSimple``
+XLNetForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForQuestionAnsweringSimple
     :members:
 
 
-``XLNetForQuestionAnswering``
+XLNetForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetForQuestionAnswering
     :members:
 
 
-``TFXLNetModel``
+TFXLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetModel
     :members:
 
 
-``TFXLNetLMHeadModel``
+TFXLNetLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetLMHeadModel
     :members:
 
 
-``TFXLNetForSequenceClassification``
+TFXLNetForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForSequenceClassification
     :members:
 
 
-``TFXLNetForQuestionAnsweringSimple``
+TFXLNetForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLNetForQuestionAnsweringSimple

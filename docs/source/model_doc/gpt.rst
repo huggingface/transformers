@@ -1,6 +1,9 @@
 OpenAI GPT
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 OpenAI GPT model was proposed in `Improving Language Understanding by Generative Pre-Training`_
 by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever. It's a causal (unidirectional)
 transformer pre-trained using language modeling on a large corpus will long range dependencies, the Toronto Book Corpus.
@@ -33,56 +36,56 @@ Tips:
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt>`__ is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT is one of them.
 
-``OpenAIGPTConfig``
+OpenAIGPTConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTConfig
     :members:
 
 
-``OpenAIGPTTokenizer``
+OpenAIGPTTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTTokenizer
     :members:
 
 
-``OpenAIGPTModel``
+OpenAIGPTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTModel
     :members:
 
 
-``OpenAIGPTLMHeadModel``
+OpenAIGPTLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTLMHeadModel
     :members:
 
 
-``OpenAIGPTDoubleHeadsModel``
+OpenAIGPTDoubleHeadsModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTDoubleHeadsModel
     :members:
 
 
-``TFOpenAIGPTModel``
+TFOpenAIGPTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTModel
     :members:
 
 
-``TFOpenAIGPTLMHeadModel``
+TFOpenAIGPTLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTLMHeadModel
     :members:
 
 
-``TFOpenAIGPTDoubleHeadsModel``
+TFOpenAIGPTDoubleHeadsModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTDoubleHeadsModel

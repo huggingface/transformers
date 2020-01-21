@@ -21,7 +21,7 @@ import logging
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 
@@ -105,21 +105,21 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
 
 
 ROBERTA_START_DOCSTRING = r"""
-    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class. 
+    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
     Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
     .. note::
-    
+
         TF 2.0 models accepts two formats as inputs:
 
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having 
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors 
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
@@ -137,20 +137,20 @@ ROBERTA_START_DOCSTRING = r"""
 ROBERTA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. 
-            
+            Indices of input sequence tokens in the vocabulary.
+
             Indices can be obtained using :class:`transformers.RobertaTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            
+
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
+        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
@@ -159,13 +159,13 @@ ROBERTA_INPUTS_DOCSTRING = r"""
         position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-            
+
             `What are position IDs? <../glossary.html#position-ids>`__
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        inputs_embeds (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, embedding_dim)`, `optional`, defaults to :obj:`None`): 
+        inputs_embeds (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, embedding_dim)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -184,6 +184,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.roberta = TFRobertaMainLayer(config, name="roberta")
 
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -266,6 +267,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -343,6 +345,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         self.roberta = TFRobertaMainLayer(config, name="roberta")
         self.classifier = TFRobertaClassificationHead(config, name="classifier")
 
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -399,6 +402,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
     Return:
