@@ -242,7 +242,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
                 token_to_orig_map=span["token_to_orig_map"],
                 start_position=start_position,
                 end_position=end_position,
-                is_impossible=span_is_impossible
+                is_impossible=span_is_impossible,
             )
         )
     return features
@@ -351,7 +351,7 @@ def squad_convert_examples_to_features(
                 all_end_positions,
                 all_cls_index,
                 all_p_mask,
-                all_is_impossible
+                all_is_impossible,
             )
 
         return features, dataset
@@ -372,7 +372,7 @@ def squad_convert_examples_to_features(
                         "end_position": ex.end_position,
                         "cls_index": ex.cls_index,
                         "p_mask": ex.p_mask,
-                        "is_impossible": ex.is_impossible
+                        "is_impossible": ex.is_impossible,
                     },
                 )
 
@@ -380,7 +380,13 @@ def squad_convert_examples_to_features(
             gen,
             (
                 {"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32},
-                {"start_position": tf.int64, "end_position": tf.int64, "cls_index": tf.int64, "p_mask": tf.int32, "is_impossible": tf.int32},
+                {
+                    "start_position": tf.int64,
+                    "end_position": tf.int64,
+                    "cls_index": tf.int64,
+                    "p_mask": tf.int32,
+                    "is_impossible": tf.int32,
+                },
             ),
             (
                 {
@@ -393,7 +399,7 @@ def squad_convert_examples_to_features(
                     "end_position": tf.TensorShape([]),
                     "cls_index": tf.TensorShape([]),
                     "p_mask": tf.TensorShape([None]),
-                    "is_impossible": tf.TensorShape([])
+                    "is_impossible": tf.TensorShape([]),
                 },
             ),
         )
@@ -663,7 +669,7 @@ class SquadFeatures(object):
         token_to_orig_map,
         start_position,
         end_position,
-        is_impossible
+        is_impossible,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -681,6 +687,7 @@ class SquadFeatures(object):
         self.start_position = start_position
         self.end_position = end_position
         self.is_impossible = is_impossible
+
 
 class SquadResult(object):
     """
