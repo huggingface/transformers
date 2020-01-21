@@ -35,56 +35,56 @@ Hugging Face showcasing the generative capabilities of several models. GPT-2 is 
 different sizes: small, medium, large, xl and a distilled version of the small checkpoint: distilgpt-2.
 
 
-``GPT2Config``
+GPT2Config
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Config
     :members:
 
 
-``GPT2Tokenizer``
+GPT2Tokenizer
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Tokenizer
     :members:
 
 
-``GPT2Model``
+GPT2Model
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Model
     :members:
 
 
-``GPT2LMHeadModel``
+GPT2LMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2LMHeadModel
     :members:
 
 
-``GPT2DoubleHeadsModel``
+GPT2DoubleHeadsModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2DoubleHeadsModel
     :members:
 
 
-``TFGPT2Model``
+TFGPT2Model
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFGPT2Model
     :members:
 
 
-``TFGPT2LMHeadModel``
+TFGPT2LMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFGPT2LMHeadModel
     :members:
 
 
-``TFGPT2DoubleHeadsModel``
+TFGPT2DoubleHeadsModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFGPT2DoubleHeadsModel
