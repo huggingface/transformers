@@ -240,7 +240,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         cls_segment_id = [2]
 
         if token_ids_1 is None:
-            return len(token_ids_0 + sep + cls) * [0]
+            return len(token_ids_0 + sep) * [0] + cls_segment_id
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
 
     def save_vocabulary(self, save_directory):
