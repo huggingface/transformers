@@ -236,7 +236,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None, only returns the first portion of the mask (0's).
         """
         sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
         cls_segment_id = [2]
 
         if token_ids_1 is None:
