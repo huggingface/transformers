@@ -368,7 +368,7 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "transformer"
 
 
-GPT2_START_DOCSTRING = r"""    
+GPT2_START_DOCSTRING = r"""
 
     .. note::
         TF 2.0 models accepts two formats as inputs:
@@ -376,10 +376,10 @@ GPT2_START_DOCSTRING = r"""
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having 
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
         all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors 
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
         in the first positional argument :
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
@@ -394,15 +394,15 @@ GPT2_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-GPT2_INPUTS_DOCSTRING = r"""    
+GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. 
-            
+            Indices of input sequence tokens in the vocabulary.
+
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            
+
             `What are input IDs? <../glossary.html#input-ids>`__
         past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
@@ -412,18 +412,18 @@ GPT2_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`): 
+        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
-            
+
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.

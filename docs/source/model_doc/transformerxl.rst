@@ -1,8 +1,11 @@
 Transformer XL
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The Transformer-XL model was proposed in
-`Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context`_
+`Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`__
 by Zihang Dai*, Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
 It's a causal (uni-directional) transformer with relative positioning (sinusoïdal) embeddings which can reuse
 previously computed hidden-states to attend to longer context (memory).
@@ -23,46 +26,47 @@ coherent, novel text articles with thousands of tokens.*
 
 Tips:
 
-- Transformer-XL uses relative sinusoidal positional embeddings so it's usually advised to pad the inputs on
-  the left rather than the right.
+- Transformer-XL uses relative sinusoidal positional embeddings. Padding can be done on the left or on the right.
+  The original implementation trains on SQuAD with padding on the left, therefore the padding defaults are set to left.
+- Transformer-XL is one of the few models that has no sequence length limit.
 
 
-``TransfoXLConfig``
+TransfoXLConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLConfig
     :members:
 
 
-``TransfoXLTokenizer``
+TransfoXLTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLTokenizer
     :members:
 
 
-``TransfoXLModel``
+TransfoXLModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLModel
     :members:
 
 
-``TransfoXLLMHeadModel``
+TransfoXLLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLLMHeadModel
     :members:
 
 
-``TFTransfoXLModel``
+TFTransfoXLModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTransfoXLModel
     :members:
 
 
-``TFTransfoXLLMHeadModel``
+TFTransfoXLLMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFTransfoXLLMHeadModel

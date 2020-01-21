@@ -36,10 +36,10 @@ CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-CAMEMBERT_START_DOCSTRING = r"""    
+CAMEMBERT_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. 
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general 
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
     Parameters:
