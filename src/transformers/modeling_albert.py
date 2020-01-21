@@ -211,6 +211,7 @@ class AlbertAttention(BertSelfAttention):
         self.all_head_size = self.attention_head_size * self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+	# got from https://github.com/graykode/ALBERT-Pytorch/blob/master/utils.py
     def merge_last_ndims(self, x, n_dims):
         s = x.size()
         assert n_dims > 1 and n_dims < len(s)
