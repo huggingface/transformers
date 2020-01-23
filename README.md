@@ -466,7 +466,7 @@ python ./examples/run_generation.py \
 
 ## Quick tour of model sharing
 
-New in `v2.2.2`: you can now upload and share your fine-tuned models with the community, using the <abbr title="Command-line interface">CLI</abbr> that's built-in to the library.
+Starting with `v2.2.2`, you can now upload and share your fine-tuned models with the community, using the <abbr title="Command-line interface">CLI</abbr> that's built-in to the library.
 
 **First, create an account on [https://huggingface.co/join](https://huggingface.co/join)**. Then:
 
@@ -489,7 +489,7 @@ transformers-cli upload ./config.json [--filename folder/foobar.json]
 
 Your model will then be accessible through its identifier, a concatenation of your username and the folder name above:
 ```python
-"username/model_name"
+"username/pretrained_model"
 ```
 
 Anyone can load it from code:
@@ -502,6 +502,12 @@ Finally, list all your files on S3:
 ```shell
 transformers-cli s3 ls
 # List all your S3 objects.
+```
+
+You can also delete files:
+
+```shell
+transformers-cli s3 rm …
 ```
 
 ## Quick tour of pipelines
