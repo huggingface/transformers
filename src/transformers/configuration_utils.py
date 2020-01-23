@@ -75,9 +75,9 @@ class PretrainedConfig(object):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.bos_token_id = kwargs.pop("bos_token_id", 0)
-        self.pad_token_id = kwargs.pop("pad_token_id", 0)
-        self.eos_token_ids = kwargs.pop("eos_token_ids", 0)
+        self.bos_token_id = kwargs.pop("bos_token_id", None)
+        self.pad_token_id = kwargs.pop("pad_token_id", None)
+        self.eos_token_ids = kwargs.pop("eos_token_ids", None)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
