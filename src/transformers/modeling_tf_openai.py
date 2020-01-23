@@ -582,6 +582,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
 
     Examples::
 
+        # For example purposes. Not runnable.
         import tensorflow as tf
         from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
 

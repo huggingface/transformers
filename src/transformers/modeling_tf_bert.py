@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 
 
@@ -938,6 +938,15 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def call(

@@ -388,6 +388,9 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
     Examples::
 
+        from transformers import OpenAIGPTTokenizer, OpenAIGPTModel
+        import torch
+
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = OpenAIGPTModel.from_pretrained('openai-gpt')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -541,6 +544,9 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
     Examples::
 
+        from transformers import OpenAIGPTTokenizer, OpenAIGPTLMHeadModel
+        import torch
+
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -649,6 +655,9 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             heads.
 
     Examples::
+
+        from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
+        import torch
 
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
         model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
