@@ -437,6 +437,9 @@ class XLMModel(XLMPreTrainedModel):
 
     Examples::
 
+        from transformers import XLMTokenizer, XLMModel
+        import torch
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
         model = XLMModel.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -688,6 +691,9 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
     Examples::
 
+        from transformers import XLMTokenizer, XLMWithLMHeadModel
+        import torch
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
         model = XLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -769,6 +775,9 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             heads.
 
     Examples::
+
+        from transformers import XLMTokenizer, XLMForSequenceClassification
+        import torch
 
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
         model = XLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
@@ -869,13 +878,16 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
     Examples::
 
+        from transformers import XLMTokenizer, XLMForQuestionAnsweringSimple
+        import torch
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
         model = XLMForQuestionAnsweringSimple.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss, start_scores, end_scores = outputs[:2]
+        loss = outputs[0]
 
         """
         transformer_outputs = self.transformer(
@@ -1000,13 +1012,16 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
     Examples::
 
+        from transformers import XLMTokenizer, XLMForQuestionAnswering
+        import torch
+
         tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
         model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
         outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss, start_scores, end_scores = outputs[:2]
+        loss = outputs[0]
 
         """
         transformer_outputs = self.transformer(

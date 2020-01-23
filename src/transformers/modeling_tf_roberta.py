@@ -293,7 +293,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids)
         prediction_scores = outputs[0]
 
         """
@@ -368,7 +368,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         import tensorflow as tf
         from transformers import RobertaTokenizer, TFRobertaForSequenceClassification
 
-        tokenizer = RoertaTokenizer.from_pretrained('roberta-base')
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = TFRobertaForSequenceClassification.from_pretrained('roberta-base')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
         labels = tf.constant([1])[None, :]  # Batch size 1

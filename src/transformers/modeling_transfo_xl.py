@@ -694,6 +694,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
     Examples::
 
+        from transformers import TransfoXLTokenizer, TransfoXLModel
+        import torch
+
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -882,6 +885,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             heads.
 
     Examples::
+
+        from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
+        import torch
 
         tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
         model = TransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')

@@ -224,6 +224,9 @@ class RobertaForMaskedLM(BertPreTrainedModel):
 
     Examples::
 
+        from transformers import RobertaTokenizer, RobertaForMaskedLM
+        import torch
+
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForMaskedLM.from_pretrained('roberta-base')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -332,6 +335,9 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 
     Examples::
 
+        from transformers import RobertaTokenizer, RobertaForSequenceClassification
+        import torch
+
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForSequenceClassification.from_pretrained('roberta-base')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -422,6 +428,9 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             heads.
 
     Examples::
+
+        from transformers import RobertaTokenizer, RobertaForMultipleChoice
+        import torch
 
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForMultipleChoice.from_pretrained('roberta-base')
@@ -515,14 +524,17 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-        Examples::
+    Examples::
 
-            tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-            model = RobertaForTokenClassification.from_pretrained('roberta-base')
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids, labels=labels)
-            loss, scores = outputs[:2]
+        from transformers import RobertaTokenizer, RobertaForTokenClassification
+        import torch
+
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        model = RobertaForTokenClassification.from_pretrained('roberta-base')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
 
         """
 
@@ -637,13 +649,23 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             heads.
 
     Examples::
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
-        model = RobertaForQuestionAnswering.from_pretrained('roberta-large')
+
+        # The checkpoint roberta-large is not fine-tuned for question answering. Please see the
+        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+
+        from transformers import RobertaTokenizer, RobertaForQuestionAnswering
+        import torch
+
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        model = RobertaForQuestionAnswering.from_pretrained('roberta-base')
+
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         input_ids = tokenizer.encode(question, text)
         start_scores, end_scores = model(torch.tensor([input_ids]))
+
         all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
+
         """
 
         outputs = self.roberta(

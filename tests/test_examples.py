@@ -17,7 +17,7 @@ import os
 import unittest
 from typing import List, Union
 
-from .utils import require_torch
+from .utils import require_tf, require_torch, slow
 
 
 def get_examples_from_file(file):
@@ -51,14 +51,19 @@ def get_examples_from_file(file):
         elif "examples::" in line.lower():
             example_mode = True
             example_indentation = line.lower().find("examples::")
-        elif "::" in line.lower():
-            example_mode = True
-            example_indentation = line.lower().find("::")
+        # elif "::" in line.lower() and len(line.strip()) == 2:
+        #     example_mode = True
+        #     example_indentation = line.lower().find("::")
 
-    return ["\n".join(example) for example in examples]
+    examples = ["\n".join(example) for example in examples]
+    examples = [example for example in examples if "not runnable" not in example.lower()]
+
+    return examples
 
 
 @require_torch
+@require_tf
+@slow
 class TestCodeExamples(unittest.TestCase):
     def analyze_directory(
         self, directory: str, identifier: Union[str, None] = None, ignore_files: Union[List[str], None] = None
@@ -79,10 +84,10 @@ class TestCodeExamples(unittest.TestCase):
                 joined_examples = []
 
                 def execute_example(code_example):
-                    exec(code_example)
+                    exec(code_example, {})
 
                 # Some examples are the continuation of others.
-                if len(examples) > 1:
+                if len(examples) > 0:
                     joined_examples.append(examples[0])
                     joined_examples_index = 0
                     for example in examples[1:]:
@@ -97,8 +102,9 @@ class TestCodeExamples(unittest.TestCase):
                 print("Testing", file, str(len(joined_examples)) + "/" + str(len(joined_examples)))
 
                 # Execute sub tests with every example.
-                with self.subTest(msg=file):
-                    [execute_example(code_example) for code_example in joined_examples]
+                for index, code_example in enumerate(joined_examples):
+                    with self.subTest(msg=file + " " + str(index) + "/" + str(len(joined_examples)) + code_example):
+                        execute_example(code_example)
 
     def test_configuration_examples(self):
         transformers_directory = "src/transformers"
@@ -109,3 +115,15 @@ class TestCodeExamples(unittest.TestCase):
     def test_main_doc_examples(self):
         doc_directory = "docs/source"
         self.analyze_directory(doc_directory)
+
+    def test_modeling_examples(self):
+        transformers_directory = "src/transformers"
+        modeling_files = "modeling"
+        ignore_files = [
+            "modeling_auto.py",
+            "modeling_t5.py",
+            "modeling_tf_auto.py",
+            "modeling_utils.py",
+            "modeling_tf_t5.py",
+        ]
+        self.analyze_directory(transformers_directory, identifier=modeling_files, ignore_files=ignore_files)

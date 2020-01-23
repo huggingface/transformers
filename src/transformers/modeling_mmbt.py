@@ -169,6 +169,8 @@ class MMBTModel(nn.Module):
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
         Examples::
+
+            # For example purposes. Not runnable.
             transformer = BertModel.from_pretrained('bert-base-uncased')
             encoder = ImageEncoder(args)
             mmbt = MMBTModel(config, transformer, encoder)
@@ -351,6 +353,7 @@ class MMBTForClassification(nn.Module):
 
         Examples::
 
+            # For example purposes. Not runnable.
             transformer = BertModel.from_pretrained('bert-base-uncased')
             encoder = ImageEncoder(args)
             model = MMBTForClassification(config, transformer, encoder)

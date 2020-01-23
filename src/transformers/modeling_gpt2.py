@@ -385,6 +385,9 @@ class GPT2Model(GPT2PreTrainedModel):
 
     Examples::
 
+        from transformers import GPT2Tokenizer, GPT2Model
+        import torch
+
         tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         model = GPT2Model.from_pretrained('gpt2')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
