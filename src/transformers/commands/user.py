@@ -1,4 +1,5 @@
 import os
+import sys
 from argparse import ArgumentParser
 from getpass import getpass
 from typing import List, Union
@@ -182,6 +183,9 @@ class UploadCommand(BaseUserCommand):
             files = [(local_path, filename)]
         else:
             raise ValueError("Not a valid file or directory: {}".format(local_path))
+
+        if sys.platform == "win32":
+            files = [(filepath, filename.replace(os.sep, "/")) for filepath, filename in files]
 
         if len(files) > UPLOAD_MAX_FILES:
             print(
