@@ -609,6 +609,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
     Examples::
 
+        # For example purposes. Not runnable.
         import tensorflow as tf
         from transformers import GPT2Tokenizer, TFGPT2DoubleHeadsModel
 

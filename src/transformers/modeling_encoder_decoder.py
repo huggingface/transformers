@@ -109,6 +109,7 @@ class PreTrainedEncoderDecoder(nn.Module):
 
         Examples::
 
+            # For example purposes. Not runnable.
             model = PreTrainedEncoderDecoder.from_pretained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """
 

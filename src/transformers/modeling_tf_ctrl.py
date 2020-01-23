@@ -530,14 +530,14 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
 
     Examples::
 
-        import torch
+        import tensorflow as tf
         from transformers import CTRLTokenizer, TFCTRLLMHeadModel
 
         tokenizer = CTRLTokenizer.from_pretrained('ctrl')
         model = TFCTRLLMHeadModel.from_pretrained('ctrl')
 
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
+        input_ids = tf.constant([tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)])
+        outputs = model(input_ids)
         loss, logits = outputs[:2]
 
         """

@@ -248,6 +248,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Examples::
 
+            # For example purposes. Not runnable.
             model = BertModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
             model = BertModel.from_pretrained('./test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
             model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading

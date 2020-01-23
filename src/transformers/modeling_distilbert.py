@@ -437,10 +437,15 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     Examples::
 
+        from transformers import DistilBertTokenizer, DistilBertModel
+        import torch
+
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
+
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
@@ -536,6 +541,9 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
     Examples::
 
+        from transformers import DistilBertTokenizer, DistilBertForMaskedLM
+        import torch
+
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -607,6 +615,9 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             heads.
 
     Examples::
+
+        from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+        import torch
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
@@ -697,6 +708,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
     Examples::
 
+        from transformers import DistilBertTokenizer, DistilBertForQuestionAnswering
+        import torch
+
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
@@ -780,6 +794,9 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             heads.
 
     Examples::
+
+        from transformers import DistilBertTokenizer, DistilBertForTokenClassification
+        import torch
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         model = DistilBertForTokenClassification.from_pretrained('distilbert-base-uncased')

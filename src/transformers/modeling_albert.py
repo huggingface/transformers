@@ -659,8 +659,8 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         from transformers import AlbertTokenizer, AlbertForMaskedLM
         import torch
 
-        tokenizer = BertTokenizer.from_pretrained('albert-base-v2')
-        model = BertForMaskedLM.from_pretrained('albert-base-v2')
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = AlbertForMaskedLM.from_pretrained('albert-base-v2')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
@@ -839,16 +839,19 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-        Examples::
+    Examples::
 
-            # The checkpoint albert-base-v2 is not fine-tuned for question answering. Please see the
-            # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+        # The checkpoint albert-base-v2 is not fine-tuned for question answering. Please see the
+        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
 
-            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            model = AlbertForQuestionAnswering.from_pretrained('albert-base-v2')
-            question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-            input_dict = tokenizer.encode_plus(question, text, return_tensors='pt')
-            start_scores, end_scores = model(**input_dict)
+        from transformers import AlbertTokenizer, AlbertForQuestionAnswering
+        import torch
+
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = AlbertForQuestionAnswering.from_pretrained('albert-base-v2')
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_dict = tokenizer.encode_plus(question, text, return_tensors='pt')
+        start_scores, end_scores = model(**input_dict)
 
         """
 
