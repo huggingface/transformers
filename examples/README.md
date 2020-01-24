@@ -135,21 +135,21 @@ Fine-tuning the library models for sequence classification on the GLUE benchmark
 Evaluation](https://gluebenchmark.com/). This script can fine-tune the following models: BERT, XLM, XLNet and RoBERTa. 
 
 GLUE is made up of a total of 9 different tasks. We get the following results on the dev set of the benchmark with an
-uncased  BERT base model (the checkpoint `bert-base-uncased`). All experiments ran on 8 V100 GPUs with a total train
-batch size of 24. Some of these tasks have a small dataset and training can lead to high variance in the results
+uncased  BERT base model (the checkpoint `bert-base-uncased`). All experiments ran single V100 GPUs with a total train
+batch sizes between 16 and 64. Some of these tasks have a small dataset and training can lead to high variance in the results
 between different runs. We report the median on 5 runs (with different seeds) for each of the metrics.
 
 | Task  | Metric                       | Result      |
 |-------|------------------------------|-------------|
-| CoLA  | Matthew's corr               | 48.87       |
-| SST-2 | Accuracy                     | 91.74       |
-| MRPC  | F1/Accuracy                  | 90.70/86.27 |
-| STS-B | Person/Spearman corr.        | 91.39/91.04 |
-| QQP   | Accuracy/F1                  | 90.79/87.66 |
-| MNLI  | Matched acc./Mismatched acc. | 83.70/84.83 |
-| QNLI  | Accuracy                     | 89.31       |
-| RTE   | Accuracy                     | 71.43       |
-| WNLI  | Accuracy                     | 43.66       |
+| CoLA  | Matthew's corr               | 49.23       |
+| SST-2 | Accuracy                     | 91.97       |
+| MRPC  | F1/Accuracy                  | 89.47/85.29 |
+| STS-B | Person/Spearman corr.        | 83.95/83.70 |
+| QQP   | Accuracy/F1                  | 88.40/84.31 |
+| MNLI  | Matched acc./Mismatched acc. | 80.61/81.08 |
+| QNLI  | Accuracy                     | 87.46       |
+| RTE   | Accuracy                     | 61.73       |
+| WNLI  | Accuracy                     | 45.07       |
 
 Some of these results are significantly different from the ones reported on the test set
 of GLUE benchmark on the website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the webite.
