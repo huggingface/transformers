@@ -202,7 +202,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
     def forward(self, encoder_input_ids, decoder_input_ids, **kwargs):
-        """ The forward pass on a seq2eq depends what we are performing:
+        """ The forward pass on a seq2seq depends what we are performing:
 
         - During training we perform one forward pass through both the encoder
           and decoder;
@@ -319,7 +319,7 @@ class Model2Model(PreTrainedEncoderDecoder):
             or "roberta" in pretrained_model_name_or_path
             or "distilbert" in pretrained_model_name_or_path
         ):
-            raise ValueError("Only the Bert model is currently supported.")
+            raise NotImplementedError("Only the Bert model is currently supported.")
 
         model = super().from_pretrained(
             encoder_pretrained_model_name_or_path=pretrained_model_name_or_path,

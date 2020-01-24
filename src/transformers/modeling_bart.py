@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch RoBERTa model. """
+"""PyTorch BART model, ported from the fairseq repo."""
 
 
 import logging
@@ -24,14 +24,18 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_bart import BARTConfig
 from .file_utils import add_start_docstrings
-from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
+from .modeling_bert import BertEmbeddings, BertLayerNorm, BertPreTrainedModel, gelu
+#import .f
+from .fairseq_utils import LearnedPositionalEmbedding, get_activation_fn
 
 
 logger = logging.getLogger(__name__)
 
-BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    #"transformer-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-pytorch_model.bin",
 
+BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
+    'bart.large': 'http://dl.fbaipublicfiles.com/fairseq/models/bart.large.tar.gz',
+    'bart.large.mnli': 'http://dl.fbaipublicfiles.com/fairseq/models/bart.large.mnli.tar.gz',
+    'bart.large.cnn': 'http://dl.fbaipublicfiles.com/fairseq/models/bart.large.cnn.tar.gz',
 }
 
 
@@ -161,55 +165,152 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 """
 
 
+
+
+class BARTClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+    # copied from fairseq
+
+    def __init__(
+        self,
+        input_dim,
+        inner_dim,
+        num_classes,
+        activation_fn,
+        pooler_dropout,
+    ):
+        super().__init__()
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.activation_fn = get_activation_fn(activation_fn)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
+
+    def forward(self, features, **kwargs):
+        x = features
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = self.activation_fn(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
+
+
+
 @add_start_docstrings(
     "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
-class BartModel(BertModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the output of the last layer of the model.
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during Bert pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+class BARTModel(TransformerModel):
 
-    Examples::
 
-        tokenizer = RobertaTokenizer.from_pretrained('transformer-base')
-        model = RobertaModel.from_pretrained('transformer-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
-    """
-    config_class = BARTConfig
-    pretrained_model_archive_map = BART_PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = "bart"
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, args, encoder, decoder):
+        super().__init__(args, encoder, decoder)
 
-        self.embeddings = BARTEmbeddings(config)
-        self.init_weights()
+        # We follow BERT's random weight initialization
+        self.apply(init_bert_params)
 
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        self.classification_heads = nn.ModuleDict()
 
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+    # @staticmethod
+    # def add_args(parser):
+    #     super(BARTModel, BARTModel).add_args(parser)
+    #     parser.add_argument(
+    #         '--pooler-dropout', type=float, metavar='D',
+    #         help='dropout probability in the masked_lm pooler layers'
+    #     )
+    #     parser.add_argument(
+    #         '--pooler-activation-fn',
+    #         choices=utils.get_available_activation_fns(),
+    #         help='activation function to use for pooler layer'
+    #     )
+
+    def _forward(
+        self, src_tokens, src_lengths, prev_output_tokens,
+        features_only=False, classification_head_name=None, **kwargs
+    ):
+        if classification_head_name is not None:
+            features_only = True
+
+        encoder_out = self.encoder(
+            src_tokens,
+            src_lengths=src_lengths,
+            **kwargs,
+        )
+        x, extra = self.decoder(
+            prev_output_tokens,
+            encoder_out=encoder_out,
+            features_only=features_only,
+            **kwargs,
+        )
+
+        if classification_head_name is not None:
+            sentence_representation = x[
+                src_tokens.eq(self.encoder.dictionary.eos()), :
+            ].view(x.size(0), -1, x.size(-1))[:, -1, :]
+            x = self.classification_heads[classification_head_name](
+                sentence_representation
+            )
+        return x, extra
+
+
+    def upgrade_state_dict_named(self, state_dict, name):
+        super().upgrade_state_dict_named(state_dict, name)
+
+        prefix = name + '.' if name != '' else ''
+        current_head_names = [] if not hasattr(self, 'classification_heads') else \
+            self.classification_heads.keys()
+
+        # Handle new classification heads present in the state dict.
+        keys_to_delete = []
+        for k in state_dict.keys():
+            if not k.startswith(prefix + 'classification_heads.'):
+                continue
+
+            head_name = k[len(prefix + 'classification_heads.'):].split('.')[0]
+            num_classes = state_dict[prefix + 'classification_heads.' + head_name + '.out_proj.weight'].size(0)
+            inner_dim = state_dict[prefix + 'classification_heads.' + head_name + '.dense.weight'].size(0)
+
+            if getattr(self.args, 'load_checkpoint_heads', False):
+                if head_name not in current_head_names:
+                    self.register_classification_head(head_name, num_classes, inner_dim)
+            else:
+                if head_name not in current_head_names:
+                    logger.warning(
+                        'deleting classification head ({}) from checkpoint '
+                        'not present in current model: {}'.format(head_name, k)
+                    )
+                    keys_to_delete.append(k)
+                elif (
+                    num_classes != self.classification_heads[head_name].out_proj.out_features
+                    or inner_dim != self.classification_heads[head_name].dense.out_features
+                ):
+                    logger.warning(
+                        'deleting classification head ({}) from checkpoint '
+                        'with different dimensions than current model: {}'.format(head_name, k)
+                    )
+                    keys_to_delete.append(k)
+        for k in keys_to_delete:
+            del state_dict[k]
+
+        # When finetuning on translation task, remove last row of
+        # embedding matrix that corresponds to mask_idx token.
+        loaded_dict_size = state_dict['encoder.embed_tokens.weight'].size(0)
+        if loaded_dict_size == len(self.encoder.dictionary) + 1 and '<mask>' not in self.encoder.dictionary:
+            state_dict['encoder.embed_tokens.weight'] = state_dict['encoder.embed_tokens.weight'][:loaded_dict_size-1, :]
+            state_dict['decoder.embed_tokens.weight'] = state_dict['decoder.embed_tokens.weight'][:loaded_dict_size-1, :]
+
+        # Copy any newly-added classification heads into the state dict
+        # with their current weights.
+        if hasattr(self, 'classification_heads'):
+            cur_state = self.classification_heads.state_dict()
+            for k, v in cur_state.items():
+                if prefix + 'classification_heads.' + k not in state_dict:
+                    logger.info('Overwriting', prefix + 'classification_heads.' + k)
+                    state_dict[prefix + 'classification_heads.' + k] = v
 
 
 

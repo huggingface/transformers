@@ -46,11 +46,11 @@ logger = logging.getLogger(__name__)
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
-def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_folder_path, classification_head):
+def convert_roberta_checkpoint_to_pytorch(checkpoint_path, pytorch_dump_folder_path, classification_head):
     """
     Copy/paste/tweak transformer's weights to our BERT structure.
     """
-    roberta = FairseqRobertaModel.from_pretrained(roberta_checkpoint_path)
+    roberta = FairseqRobertaModel.from_pretrained(checkpoint_path)
     roberta.eval()  # disable dropout
     roberta_sent_encoder = roberta.model.decoder.sentence_encoder
     config = BertConfig(
