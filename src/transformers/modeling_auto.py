@@ -45,11 +45,11 @@ from .modeling_albert import (
 from .modeling_bert import (
     BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertForMaskedLM,
+    BertForPreTraining,
     BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
     BertModel,
-    BertForPreTraining,
 )
 from .modeling_camembert import (
     CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
