@@ -319,7 +319,7 @@ class Model2Model(PreTrainedEncoderDecoder):
             or "roberta" in pretrained_model_name_or_path
             or "distilbert" in pretrained_model_name_or_path
         ):
-            raise NotImplementedError("Only the Bert model is currently supported.")
+            raise NotImplementedError("Only Bert, Distilbert, and Roberta are currently supported.")
 
         model = super().from_pretrained(
             encoder_pretrained_model_name_or_path=pretrained_model_name_or_path,
