@@ -42,11 +42,11 @@ from .modeling_tf_albert import (
 from .modeling_tf_bert import (
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertForMaskedLM,
+    TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
     TFBertForTokenClassification,
     TFBertModel,
-    TFBertForPreTraining,
 )
 from .modeling_tf_ctrl import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, TFCTRLLMHeadModel, TFCTRLModel
 from .modeling_tf_distilbert import (
