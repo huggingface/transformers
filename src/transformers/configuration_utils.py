@@ -117,7 +117,7 @@ class PretrainedConfig(object):
         logger.info("Configuration saved in {}".format(output_config_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> 'PretrainedConfig':
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> "PretrainedConfig":
         r"""
 
         Instantiate a :class:`~transformers.PretrainedConfig` (or a derived class) from a pre-trained model configuration.
@@ -255,7 +255,7 @@ class PretrainedConfig(object):
         return config_dict, kwargs
 
     @classmethod
-    def from_dict(cls, config_dict: Dict, **kwargs) -> 'PretrainedConfig':
+    def from_dict(cls, config_dict: Dict, **kwargs) -> "PretrainedConfig":
         """
         Constructs a `Config` from a Python dictionary of parameters.
 
@@ -293,7 +293,7 @@ class PretrainedConfig(object):
             return config
 
     @classmethod
-    def from_json_file(cls, json_file: str) -> 'PretrainedConfig':
+    def from_json_file(cls, json_file: str) -> "PretrainedConfig":
         """
         Constructs a `Config` from the path to a json file of parameters.
 
