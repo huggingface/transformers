@@ -29,6 +29,13 @@ Instantiating one of ``AutoModel``, ``AutoConfig`` and ``AutoTokenizer`` will di
     :members:
 
 
+``AutoModelForPreTraining``
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AutoModelForPreTraining
+    :members:
+
+
 ``AutoModelWithLMHead``
 ~~~~~~~~~~~~~~~~~~~~~
 
