@@ -133,6 +133,7 @@ if is_torch_available():
     from .modeling_utils import PreTrainedModel, prune_layer, Conv1D
     from .modeling_auto import (
         AutoModel,
+        AutoModelForPreTraining,
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelWithLMHead,
@@ -267,6 +268,7 @@ if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (
         TFAutoModel,
+        TFAutoModelForPreTraining,
         TFAutoModelForSequenceClassification,
         TFAutoModelForQuestionAnswering,
         TFAutoModelWithLMHead,
