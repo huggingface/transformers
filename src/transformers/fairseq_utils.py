@@ -1789,22 +1789,22 @@ class TransformerDecoder(FairseqIncrementalDecoder):
         return state_dict
 
 
-class BaseFairseqModel(nn.Module):
-    """Base class for fairseq models."""
+class FairseqEncoderDecoderModel(nn.Module):
+    """Base class for encoder-decoder models.
 
-    def __init__(self):
+    Args:
+        encoder (FairseqEncoder): the encoder
+        decoder (FairseqDecoder): the decoder
+    """
+
+    def __init__(self, encoder, decoder):
         super().__init__()
         self._is_generation_fast = False
 
-    @staticmethod
-    def add_args(parser):
-        """Add model-specific arguments to the parser."""
-        pass
-
-    @classmethod
-    def build_model(cls, args, task):
-        """Build a new model instance."""
-        raise NotImplementedError('Model must implement the build_model method')
+        self.encoder = encoder
+        self.decoder = decoder
+        assert isinstance(self.encoder, FairseqEncoder)
+        assert isinstance(self.decoder, FairseqDecoder)
 
     def get_targets(self, sample, net_output):
         """Get targets from either the sample or the net's output."""
@@ -1822,13 +1822,6 @@ class BaseFairseqModel(nn.Module):
                 return F.softmax(logits, dim=-1)
         raise NotImplementedError
 
-    def extract_features(self, *args, **kwargs):
-        """Similar to *forward* but only return features."""
-        return self(*args, **kwargs)
-
-    def max_positions(self):
-        """Maximum length supported by the model."""
-        return None
 
     def load_state_dict(self, state_dict, strict=True, args=None):
         """Copies parameters and buffers from *state_dict* into this module and
@@ -1951,22 +1944,6 @@ class BaseFairseqModel(nn.Module):
     def hub_models(cls):
         return {}
 
-
-class FairseqEncoderDecoderModel(BaseFairseqModel):
-    """Base class for encoder-decoder models.
-
-    Args:
-        encoder (FairseqEncoder): the encoder
-        decoder (FairseqDecoder): the decoder
-    """
-
-    def __init__(self, encoder, decoder):
-        super().__init__()
-
-        self.encoder = encoder
-        self.decoder = decoder
-        assert isinstance(self.encoder, FairseqEncoder)
-        assert isinstance(self.decoder, FairseqDecoder)
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
         """

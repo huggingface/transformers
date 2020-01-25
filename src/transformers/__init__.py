@@ -199,6 +199,7 @@ if is_torch_available():
         XLMForQuestionAnsweringSimple,
         XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
+    from .modeling_bart import BARTModel
     from .modeling_roberta import (
         RobertaForMaskedLM,
         RobertaModel,

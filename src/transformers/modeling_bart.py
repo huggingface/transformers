@@ -253,3 +253,5 @@ class BARTModel(TransformerModel):
                     state_dict[prefix + 'classification_heads.' + k] = v
 
 
+
+#if __name__ == '__main__':

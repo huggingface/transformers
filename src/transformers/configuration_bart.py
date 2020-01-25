@@ -23,8 +23,8 @@ from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    #"transformer-base": "https://s3.amazonaws.com/models.huggingface.co/bert/transformer-base-config.json",
+BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    #"bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/transformer-base-config.json",
 
 }
 
