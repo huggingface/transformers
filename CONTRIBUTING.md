@@ -246,7 +246,7 @@ tests for custom tokenizers, which don't run by default either.
 `pytest`-specific features in the test suite itself.
 
 This means `unittest` is fully supported. Here's how to run tests with
-`unittest`:
+`unittest`:xz
 
 ```bash
 $ python -m unittest discover -s tests -t . -v

@@ -1,6 +1,7 @@
 """"Taken from fairseq """
 import torch
 from torch import nn
+from collections import namedtuple
 import math
 import torch.nn.functional as F
 from typing import Callable, Dict, List, Optional
@@ -250,15 +251,20 @@ def log_softmax(x, dim, onnx_trace=False):
         return F.log_softmax(x.float(), dim=dim)
     else:
         return F.log_softmax(x, dim=dim, dtype=torch.float32)
-
-
 def _get_full_incremental_state_key(module_instance, key: str
 ) -> str:
     return "{}.{}.{}".format(
         module_instance.module_name, module_instance._fairseq_instance_id, key
     )
-
-
+def fill_with_neg_inf(t):
+    """FP16-compatible function that fills a tensor with -inf."""
+    return t.float().fill_(float("-inf")).type_as(t)
+def _item(tensor):
+    if hasattr(tensor, "item"):
+        return tensor.item()
+    if hasattr(tensor, "__getitem__"):
+        return tensor[0]
+    return tensor
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):
     if not export and torch.cuda.is_available():
         try:
@@ -1039,31 +1045,19 @@ class TransformerDecoderLayer(nn.Module):
 
 
 
-
-from collections import namedtuple
 EncoderOut = namedtuple('TransformerEncoderOut', [
     'encoder_out',  # T x B x C
     'encoder_padding_mask',  # B x T
     'encoder_embedding',  # B x T x C
     'encoder_states',  # List[T x B x C]
 ])
-def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a tensor with -inf."""
-    return t.float().fill_(float("-inf")).type_as(t)
 
-def _item(tensor):
-    if hasattr(tensor, "item"):
-        return tensor.item()
-    if hasattr(tensor, "__getitem__"):
-        return tensor[0]
-    return tensor
 
 class FairseqDecoder(nn.Module):
     """Base class for decoders."""
 
-    def __init__(self, dictionary):
+    def __init__(self):
         super().__init__()
-        self.dictionary = dictionary
         self.onnx_trace = False
 
     def forward(self, prev_output_tokens, encoder_out=None, **kwargs):
@@ -1133,212 +1127,8 @@ class FairseqDecoder(nn.Module):
         self.onnx_trace = True
 
 
-@with_incremental_state
-class FairseqIncrementalDecoder(FairseqDecoder):
-    """Base class for incremental decoders.
 
-    Incremental decoding is a special mode at inference time where the Model
-    only receives a single timestep of input corresponding to the previous
-    output token (for teacher forcing) and must produce the next output
-    *incrementally*. Thus the model must cache any long-term state that is
-    needed about the sequence, e.g., hidden states, convolutional states, etc.
-
-    Compared to the standard :class:`FairseqDecoder` interface, the incremental
-    decoder interface allows :func:`forward` functions to take an extra keyword
-    argument (*incremental_state*) that can be used to cache state across
-    time-steps.
-
-    The :class:`FairseqIncrementalDecoder` interface also defines the
-    :func:`reorder_incremental_state` method, which is used during beam search
-    to select and reorder the incremental state based on the selection of beams.
-
-    To learn more about how incremental decoding works, refer to `this blog
-    <http://www.telesens.co/2019/04/21/understanding-incremental-decoding-in-fairseq/>`_.
-    """
-
-    def __init__(self, dictionary):
-        super().__init__(dictionary)
-
-    def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None, **kwargs):
-        """
-        Args:
-            prev_output_tokens (LongTensor): shifted output tokens of shape
-                `(batch, tgt_len)`, for teacher forcing
-            encoder_out (dict, optional): output from the encoder, used for
-                encoder-side attention
-            incremental_state (dict, optional): dictionary used for storing
-                state during :ref:`Incremental decoding`
-
-        Returns:
-            tuple:
-                - the decoder's output of shape `(batch, tgt_len, vocab)`
-                - a dictionary with any model-specific outputs
-        """
-        raise NotImplementedError
-
-    def extract_features(self, prev_output_tokens, encoder_out=None, incremental_state=None, **kwargs):
-        """
-        Returns:
-            tuple:
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - a dictionary with any model-specific outputs
-        """
-        raise NotImplementedError
-
-    def reorder_incremental_state(self, incremental_state, new_order):
-        """Reorder incremental state.
-
-        This should be called when the order of the input has changed from the
-        previous time step. A typical use case is beam search, where the input
-        order changes between time steps based on the selection of beams.
-        """
-        seen = set()
-
-        def apply_reorder_incremental_state(module):
-            if module != self and hasattr(module, 'reorder_incremental_state') \
-                    and module not in seen:
-                seen.add(module)
-                module.reorder_incremental_state(incremental_state, new_order)
-
-        self.apply(apply_reorder_incremental_state)
-
-    def set_beam_size(self, beam_size):
-        """Sets the beam size in the decoder and all children."""
-        if getattr(self, '_beam_size', -1) != beam_size:
-            seen = set()
-
-            def apply_set_beam_size(module):
-                if module != self and hasattr(module, 'set_beam_size') \
-                        and module not in seen:
-                    seen.add(module)
-                    module.set_beam_size(beam_size)
-
-            self.apply(apply_set_beam_size)
-            self._beam_size = beam_size
-
-class FairseqEncoder(nn.Module):
-    """Base class for encoders."""
-
-    def __init__(self, dictionary):
-        super().__init__()
-        self.dictionary = dictionary
-
-    def forward(self, src_tokens, src_lengths=None, **kwargs):
-        """
-        Args:
-            src_tokens (LongTensor): tokens in the source language of shape
-                `(batch, src_len)`
-            src_lengths (LongTensor): lengths of each source sentence of shape
-                `(batch)`
-        """
-        raise NotImplementedError
-
-    def reorder_encoder_out(self, encoder_out, new_order):
-        """
-        Reorder encoder output according to `new_order`.
-
-        Args:
-            encoder_out: output from the ``forward()`` method
-            new_order (LongTensor): desired order
-
-        Returns:
-            `encoder_out` rearranged according to `new_order`
-        """
-        raise NotImplementedError
-
-    def max_positions(self):
-        """Maximum input length supported by the encoder."""
-        return 1e6  # an arbitrary large number
-
-    def upgrade_state_dict(self, state_dict):
-        """Upgrade a (possibly old) state dict for new versions of fairseq."""
-        return state_dict
-
-    @with_incremental_state
-    class FairseqIncrementalDecoder(FairseqDecoder):
-        """Base class for incremental decoders.
-
-        Incremental decoding is a special mode at inference time where the Model
-        only receives a single timestep of input corresponding to the previous
-        output token (for teacher forcing) and must produce the next output
-        *incrementally*. Thus the model must cache any long-term state that is
-        needed about the sequence, e.g., hidden states, convolutional states, etc.
-
-        Compared to the standard :class:`FairseqDecoder` interface, the incremental
-        decoder interface allows :func:`forward` functions to take an extra keyword
-        argument (*incremental_state*) that can be used to cache state across
-        time-steps.
-
-        The :class:`FairseqIncrementalDecoder` interface also defines the
-        :func:`reorder_incremental_state` method, which is used during beam search
-        to select and reorder the incremental state based on the selection of beams.
-
-        To learn more about how incremental decoding works, refer to `this blog
-        <http://www.telesens.co/2019/04/21/understanding-incremental-decoding-in-fairseq/>`_.
-        """
-
-        def __init__(self, dictionary):
-            super().__init__(dictionary)
-
-        def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None, **kwargs):
-            """
-            Args:
-                prev_output_tokens (LongTensor): shifted output tokens of shape
-                    `(batch, tgt_len)`, for teacher forcing
-                encoder_out (dict, optional): output from the encoder, used for
-                    encoder-side attention
-                incremental_state (dict, optional): dictionary used for storing
-                    state during :ref:`Incremental decoding`
-
-            Returns:
-                tuple:
-                    - the decoder's output of shape `(batch, tgt_len, vocab)`
-                    - a dictionary with any model-specific outputs
-            """
-            raise NotImplementedError
-
-        def extract_features(self, prev_output_tokens, encoder_out=None, incremental_state=None,
-                             **kwargs):
-            """
-            Returns:
-                tuple:
-                    - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                    - a dictionary with any model-specific outputs
-            """
-            raise NotImplementedError
-
-        def reorder_incremental_state(self, incremental_state, new_order):
-            """Reorder incremental state.
-
-            This should be called when the order of the input has changed from the
-            previous time step. A typical use case is beam search, where the input
-            order changes between time steps based on the selection of beams.
-            """
-            seen = set()
-
-            def apply_reorder_incremental_state(module):
-                if module != self and hasattr(module, 'reorder_incremental_state') \
-                        and module not in seen:
-                    seen.add(module)
-                    module.reorder_incremental_state(incremental_state, new_order)
-
-            self.apply(apply_reorder_incremental_state)
-
-        def set_beam_size(self, beam_size):
-            """Sets the beam size in the decoder and all children."""
-            if getattr(self, '_beam_size', -1) != beam_size:
-                seen = set()
-
-                def apply_set_beam_size(module):
-                    if module != self and hasattr(module, 'set_beam_size') \
-                            and module not in seen:
-                        seen.add(module)
-                        module.set_beam_size(beam_size)
-
-                self.apply(apply_set_beam_size)
-                self._beam_size = beam_size
-
-class TransformerEncoder(FairseqEncoder):
+class TransformerEncoder(nn.Module):
     """
     Transformer encoder consisting of *args.encoder_layers* layers. Each layer
     is a :class:`TransformerEncoderLayer`.
@@ -1349,39 +1139,39 @@ class TransformerEncoder(FairseqEncoder):
         embed_tokens (torch.nn.Embedding): input embedding
     """
 
-    def __init__(self, args, dictionary, embed_tokens):
-        super().__init__(dictionary)
+    def __init__(self, config, embed_tokens):
+        super().__init__()
         self.register_buffer('version', torch.Tensor([3]))
 
-        self.dropout = args.dropout
-        self.encoder_layerdrop = args.encoder_layerdrop
+        self.dropout = config.dropout
+        self.encoder_layerdrop = config.encoder_layerdrop
 
         embed_dim = embed_tokens.embedding_dim
         self.padding_idx = embed_tokens.padding_idx
-        self.max_source_positions = args.max_source_positions
+        self.max_source_positions = config.max_source_positions
 
         self.embed_tokens = embed_tokens
 
-        self.embed_scale = 1.0 if args.no_scale_embedding else math.sqrt(embed_dim)
+        self.embed_scale = 1.0 if config.no_scale_embedding else math.sqrt(embed_dim)
 
         self.embed_positions = PositionalEmbedding(
-            args.max_source_positions, embed_dim, self.padding_idx,
-            learned=args.encoder_learned_pos,
-        ) if not args.no_token_positional_embeddings else None
+            config.max_source_positions, embed_dim, self.padding_idx,
+            learned=True,
+        )
 
-        self.layer_wise_attention = getattr(args, 'layer_wise_attention', False)
+        self.layer_wise_attention = getattr(config, 'layer_wise_attention', False)
 
         self.layers = nn.ModuleList([])
         self.layers.extend([
-            TransformerEncoderLayer(args)
-            for i in range(args.encoder_layers)
+            TransformerEncoderLayer(config)
+            for i in range(config.encoder_layers)
         ])
 
-        if args.encoder_normalize_before:
+        if config.encoder_normalize_before:
             self.layer_norm = LayerNorm(embed_dim)
         else:
             self.layer_norm = None
-        if getattr(args, 'layernorm_embedding', False):
+        if getattr(config, 'layernorm_embedding', False):
             self.layernorm_embedding = LayerNorm(embed_dim)
         else:
             self.layernorm_embedding = None
@@ -1516,7 +1306,86 @@ class TransformerEncoder(FairseqEncoder):
             state_dict[version_key] = torch.Tensor([1])
         return state_dict
 
+@with_incremental_state
+class FairseqIncrementalDecoder(FairseqDecoder):
+    """Base class for incremental decoders.
 
+    Incremental decoding is a special mode at inference time where the Model
+    only receives a single timestep of input corresponding to the previous
+    output token (for teacher forcing) and must produce the next output
+    *incrementally*. Thus the model must cache any long-term state that is
+    needed about the sequence, e.g., hidden states, convolutional states, etc.
+
+    Compared to the standard :class:`FairseqDecoder` interface, the incremental
+    decoder interface allows :func:`forward` functions to take an extra keyword
+    argument (*incremental_state*) that can be used to cache state across
+    time-steps.
+
+    The :class:`FairseqIncrementalDecoder` interface also defines the
+    :func:`reorder_incremental_state` method, which is used during beam search
+    to select and reorder the incremental state based on the selection of beams.
+
+    To learn more about how incremental decoding works, refer to `this blog
+    <http://www.telesens.co/2019/04/21/understanding-incremental-decoding-in-fairseq/>`_.
+    """
+
+    def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None, **kwargs):
+        """
+        Args:
+            prev_output_tokens (LongTensor): shifted output tokens of shape
+                `(batch, tgt_len)`, for teacher forcing
+            encoder_out (dict, optional): output from the encoder, used for
+                encoder-side attention
+            incremental_state (dict, optional): dictionary used for storing
+                state during :ref:`Incremental decoding`
+
+        Returns:
+            tuple:
+                - the decoder's output of shape `(batch, tgt_len, vocab)`
+                - a dictionary with any model-specific outputs
+        """
+        raise NotImplementedError
+
+    def extract_features(self, prev_output_tokens, encoder_out=None, incremental_state=None,
+                         **kwargs):
+        """
+        Returns:
+            tuple:
+                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
+                - a dictionary with any model-specific outputs
+        """
+        raise NotImplementedError
+
+    def reorder_incremental_state(self, incremental_state, new_order):
+        """Reorder incremental state.
+
+        This should be called when the order of the input has changed from the
+        previous time step. A typical use case is beam search, where the input
+        order changes between time steps based on the selection of beams.
+        """
+        seen = set()
+
+        def apply_reorder_incremental_state(module):
+            if module != self and hasattr(module, 'reorder_incremental_state') \
+                    and module not in seen:
+                seen.add(module)
+                module.reorder_incremental_state(incremental_state, new_order)
+
+        self.apply(apply_reorder_incremental_state)
+
+    def set_beam_size(self, beam_size):
+        """Sets the beam size in the decoder and all children."""
+        if getattr(self, '_beam_size', -1) != beam_size:
+            seen = set()
+
+            def apply_set_beam_size(module):
+                if module != self and hasattr(module, 'set_beam_size') \
+                        and module not in seen:
+                    seen.add(module)
+                    module.set_beam_size(beam_size)
+
+            self.apply(apply_set_beam_size)
+            self._beam_size = beam_size
 
 class TransformerDecoder(FairseqIncrementalDecoder):
     """
@@ -1531,8 +1400,8 @@ class TransformerDecoder(FairseqIncrementalDecoder):
             (default: False).
     """
 
-    def __init__(self, args, dictionary, embed_tokens, no_encoder_attn=False):
-        super().__init__(dictionary)
+    def __init__(self, args, embed_tokens, no_encoder_attn=False):
+        super().__init__()
         self.register_buffer('version', torch.Tensor([3]))
 
         self.dropout = args.dropout
@@ -1554,8 +1423,8 @@ class TransformerDecoder(FairseqIncrementalDecoder):
 
         self.embed_positions = PositionalEmbedding(
             args.max_target_positions, embed_dim, self.padding_idx,
-            learned=args.decoder_learned_pos,
-        ) if not args.no_token_positional_embeddings else None
+            learned=True,
+        )
 
         self.cross_self_attention = getattr(args, 'cross_self_attention', False)
         self.layer_wise_attention = getattr(args, 'layer_wise_attention', False)
@@ -1762,33 +1631,6 @@ class TransformerDecoder(FairseqIncrementalDecoder):
             self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
         return self._future_mask[:dim, :dim]
 
-    def upgrade_state_dict_named(self, state_dict, name):
-        """Upgrade a (possibly old) state dict for new versions of fairseq."""
-        if not isinstance(self.embed_positions, LearnedPositionalEmbedding):
-            raise NotImplementedError()
-        for i in range(len(self.layers)):
-            # update layer norms
-            layer_norm_map = {
-                '0': 'self_attn_layer_norm',
-                '1': 'encoder_attn_layer_norm',
-                '2': 'final_layer_norm'
-            }
-            for old, new in layer_norm_map.items():
-                for m in ('weight', 'bias'):
-                    k = '{}.layers.{}.layer_norms.{}.{}'.format(name, i, old, m)
-                    if k in state_dict:
-                        state_dict['{}.layers.{}.{}.{}'.format(name, i, new, m)] = state_dict[k]
-                        del state_dict[k]
-
-        version_key = '{}.version'.format(name)
-        if _item(state_dict.get(version_key, torch.Tensor([1]))[0]) <= 2:
-            # earlier checkpoints did not normalize after the stack of layers
-            self.layer_norm = None
-            self.normalize = False
-            state_dict[version_key] = torch.Tensor([1])
-        return state_dict
-
-
 class FairseqEncoderDecoderModel(nn.Module):
     """Base class for encoder-decoder models.
 
@@ -1803,8 +1645,6 @@ class FairseqEncoderDecoderModel(nn.Module):
 
         self.encoder = encoder
         self.decoder = decoder
-        assert isinstance(self.encoder, FairseqEncoder)
-        assert isinstance(self.decoder, FairseqDecoder)
 
     def get_targets(self, sample, net_output):
         """Get targets from either the sample or the net's output."""
@@ -1821,45 +1661,6 @@ class FairseqEncoderDecoderModel(nn.Module):
             else:
                 return F.softmax(logits, dim=-1)
         raise NotImplementedError
-
-
-    def load_state_dict(self, state_dict, strict=True, args=None):
-        """Copies parameters and buffers from *state_dict* into this module and
-        its descendants.
-
-        Overrides the method in :class:`nn.Module`. Compared with that method
-        this additionally "upgrades" *state_dicts* from old checkpoints.
-        """
-        self.upgrade_state_dict(state_dict)
-        new_state_dict = prune_state_dict(state_dict, args)
-        return super().load_state_dict(new_state_dict, strict)
-
-    def upgrade_state_dict(self, state_dict):
-        """Upgrade old state dicts to work with newer code."""
-        self.upgrade_state_dict_named(state_dict, '')
-
-    def upgrade_state_dict_named(self, state_dict, name):
-        """Upgrade old state dicts to work with newer code.
-
-        Args:
-            state_dict (dict): state dictionary to upgrade, in place
-            name (str): the state dict key corresponding to the current module
-        """
-        assert state_dict is not None
-
-        def do_upgrade(m, prefix):
-            if len(prefix) > 0:
-                prefix += '.'
-
-            for n, c in m.named_children():
-                name = prefix + n
-                if hasattr(c, 'upgrade_state_dict_named'):
-                    c.upgrade_state_dict_named(state_dict, name)
-                elif hasattr(c, 'upgrade_state_dict'):
-                    c.upgrade_state_dict(state_dict)
-                do_upgrade(c, name)
-
-        do_upgrade(self, name)
 
     def make_generation_fast_(self, **kwargs):
         """Optimize model for faster generation."""
@@ -1940,10 +1741,6 @@ class FairseqEncoderDecoderModel(nn.Module):
         logger.info(x['args'])
         return hub_utils.GeneratorHubInterface(x['args'], x['task'], x['models'])
 
-    @classmethod
-    def hub_models(cls):
-        return {}
-
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
         """
@@ -2000,200 +1797,8 @@ class FairseqEncoderDecoderModel(nn.Module):
         """Maximum length supported by the decoder."""
         return self.decoder.max_positions()
 
-def get_available_activation_fns() -> List:
-    return [
-        "relu",
-        "gelu",
-        "gelu_fast",  # deprecated
-        "gelu_accurate",
-        "tanh",
-        "linear",
-    ]
-DEFAULT_MAX_SOURCE_POSITIONS = DEFAULT_MAX_TARGET_POSITIONS = 1024
 
-class TransformerModel(FairseqEncoderDecoderModel):
-    """
-    Transformer model from `"Attention Is All You Need" (Vaswani, et al, 2017)
-    <https://arxiv.org/abs/1706.03762>`_.
 
-    Args:
-        encoder (TransformerEncoder): the encoder
-        decoder (TransformerDecoder): the decoder
 
-    The Transformer model provides the following named architectures and
-    command-line arguments:
-
-    .. argparse::
-        :ref: fairseq.models.transformer_parser
-        :prog:
-    """
-
-    @classmethod
-    def hub_models(cls):
-        # fmt: off
-
-        def moses_subword(path):
-            return {
-                'path': path,
-                'tokenizer': 'moses',
-                'bpe': 'subword_nmt',
-            }
-
-        def moses_fastbpe(path):
-            return {
-                'path': path,
-                'tokenizer': 'moses',
-                'bpe': 'fastbpe',
-            }
-
-        return {
-            'transformer.wmt14.en-fr': moses_subword('https://dl.fbaipublicfiles.com/fairseq/models/wmt14.en-fr.joined-dict.transformer.tar.bz2'),
-            'transformer.wmt16.en-de': 'https://dl.fbaipublicfiles.com/fairseq/models/wmt16.en-de.joined-dict.transformer.tar.bz2',
-            'transformer.wmt18.en-de': moses_subword('https://dl.fbaipublicfiles.com/fairseq/models/wmt18.en-de.ensemble.tar.gz'),
-            'transformer.wmt19.en-de': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-de.joined-dict.ensemble.tar.gz'),
-            'transformer.wmt19.en-ru': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-ru.ensemble.tar.gz'),
-            'transformer.wmt19.de-en': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.de-en.joined-dict.ensemble.tar.gz'),
-            'transformer.wmt19.ru-en': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.ru-en.ensemble.tar.gz'),
-            'transformer.wmt19.en-de.single_model': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-de.joined-dict.single_model.tar.gz'),
-            'transformer.wmt19.en-ru.single_model': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-ru.single_model.tar.gz'),
-            'transformer.wmt19.de-en.single_model': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.de-en.joined-dict.single_model.tar.gz'),
-            'transformer.wmt19.ru-en.single_model': moses_fastbpe('https://dl.fbaipublicfiles.com/fairseq/models/wmt19.ru-en.single_model.tar.gz'),
-        }
         # fmt: on
-
-    def __init__(self, args, encoder, decoder):
-        super().__init__(encoder, decoder)
-        self.args = args
-        self.supports_align_args = True
-
-    @staticmethod
-    def add_args(parser):
-        """Add model-specific arguments to the parser."""
-        # fmt: off
-        parser.add_argument('--activation-fn',
-                            choices=get_available_activation_fns(),
-                            help='activation function to use')
-        parser.add_argument('--dropout', type=float, metavar='D',
-                            help='dropout probability')
-        parser.add_argument('--attention-dropout', type=float, metavar='D',
-                            help='dropout probability for attention weights')
-        parser.add_argument('--activation-dropout', '--relu-dropout', type=float, metavar='D',
-                            help='dropout probability after activation in FFN.')
-        parser.add_argument('--encoder-embed-path', type=str, metavar='STR',
-                            help='path to pre-trained encoder embedding')
-        parser.add_argument('--encoder-embed-dim', type=int, metavar='N',
-                            help='encoder embedding dimension')
-        parser.add_argument('--encoder-ffn-embed-dim', type=int, metavar='N',
-                            help='encoder embedding dimension for FFN')
-        parser.add_argument('--encoder-layers', type=int, metavar='N',
-                            help='num encoder layers')
-        parser.add_argument('--encoder-attention-heads', type=int, metavar='N',
-                            help='num encoder attention heads')
-        parser.add_argument('--encoder-normalize-before', action='store_true',
-                            help='apply layernorm before each encoder block')
-        parser.add_argument('--encoder-learned-pos', action='store_true',
-                            help='use learned positional embeddings in the encoder')
-        parser.add_argument('--decoder-embed-path', type=str, metavar='STR',
-                            help='path to pre-trained decoder embedding')
-        parser.add_argument('--decoder-embed-dim', type=int, metavar='N',
-                            help='decoder embedding dimension')
-        parser.add_argument('--decoder-ffn-embed-dim', type=int, metavar='N',
-                            help='decoder embedding dimension for FFN')
-        parser.add_argument('--decoder-layers', type=int, metavar='N',
-                            help='num decoder layers')
-        parser.add_argument('--decoder-attention-heads', type=int, metavar='N',
-                            help='num decoder attention heads')
-        parser.add_argument('--decoder-learned-pos', action='store_true',
-                            help='use learned positional embeddings in the decoder')
-        parser.add_argument('--decoder-normalize-before', action='store_true',
-                            help='apply layernorm before each decoder block')
-        parser.add_argument('--share-decoder-input-output-embed', action='store_true',
-                            help='share decoder input and output embeddings')
-        parser.add_argument('--share-all-embeddings', action='store_true',
-                            help='share encoder, decoder and output embeddings'
-                                 ' (requires shared dictionary and embed dim)')
-        parser.add_argument('--no-token-positional-embeddings', default=False, action='store_true',
-                            help='if set, disables positional embeddings (outside self attention)')
-        parser.add_argument('--adaptive-softmax-cutoff', metavar='EXPR',
-                            help='comma separated list of adaptive softmax cutoff points. '
-                                 'Must be used with adaptive_loss criterion'),
-        parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
-                            help='sets adaptive softmax dropout for the tail projections')
-        # args for "Cross+Self-Attention for Transformer Models" (Peitz et al., 2019)
-        parser.add_argument('--no-cross-attention', default=False, action='store_true',
-                            help='do not perform cross-attention')
-        parser.add_argument('--cross-self-attention', default=False, action='store_true',
-                            help='perform cross+self-attention')
-        parser.add_argument('--layer-wise-attention', default=False, action='store_true',
-                            help='perform layer-wise attention (cross-attention or cross+self-attention)')
-        # args for "Reducing Transformer Depth on Demand with Structured Dropout" (Fan et al., 2019)
-        parser.add_argument('--encoder-layerdrop', type=float, metavar='D', default=0,
-                            help='LayerDrop probability for encoder')
-        parser.add_argument('--decoder-layerdrop', type=float, metavar='D', default=0,
-                            help='LayerDrop probability for decoder')
-        parser.add_argument('--encoder-layers-to-keep', default=None,
-                            help='which layers to *keep* when pruning as a comma-separated list')
-        parser.add_argument('--decoder-layers-to-keep', default=None,
-                            help='which layers to *keep* when pruning as a comma-separated list')
-        parser.add_argument('--layernorm-embedding', action='store_true',
-                            help='add layernorm to embedding')
-        parser.add_argument('--no-scale-embedding', action='store_true',
-                            help='if True, dont scale embeddings')
-        # fmt: on
-
-    @classmethod
-    def build_model(cls, args, task):
-        """Build a new model instance."""
-
-        # make sure all arguments are present in older models
-        #base_architecture(args) # mutates
-
-        if getattr(args, 'max_source_positions', None) is None:
-            args.max_source_positions = DEFAULT_MAX_SOURCE_POSITIONS
-        if getattr(args, 'max_target_positions', None) is None:
-            args.max_target_positions = DEFAULT_MAX_TARGET_POSITIONS
-
-        src_dict = task.source_dictionary
-        def build_embedding(dictionary, embed_dim, path=None):
-            num_embeddings = len(dictionary)
-            padding_idx = dictionary.pad()
-            emb = Embedding(num_embeddings, embed_dim, padding_idx)
-            # if provided, load from preloaded dictionaries
-            if path:
-                raise NotImplementedError()
-                #embed_dict = utils.parse_embedding(path)
-                #utils.load_embedding(embed_dict, dictionary, emb)
-            return emb
-
-        #assert args.share_all_embeddings
-        # if src_dict != tgt_dict:
-        #     raise ValueError('--share-all-embeddings requires a joined dictionary')
-        if args.encoder_embed_dim != args.decoder_embed_dim:
-            raise ValueError(
-                '--share-all-embeddings requires --encoder-embed-dim to match --decoder-embed-dim')
-        #if args.decoder_embed_path and (
-        #        args.decoder_embed_path != args.encoder_embed_path):
-        #    raise ValueError('--share-all-embeddings not compatible with --decoder-embed-path')
-        encoder_embed_tokens = build_embedding(
-            src_dict, args.encoder_embed_dim, args.encoder_embed_path
-        )
-        decoder_embed_tokens = encoder_embed_tokens
-        args.share_decoder_input_output_embed = True
-
-        encoder = cls.build_encoder(args, src_dict, encoder_embed_tokens)
-        decoder = cls.build_decoder(args, src_dict, decoder_embed_tokens)
-        return cls(args, encoder, decoder)
-
-    @classmethod
-    def build_encoder(cls, args, src_dict, embed_tokens):
-        return TransformerEncoder(args, src_dict, embed_tokens)
-
-    @classmethod
-    def build_decoder(cls, args, tgt_dict, embed_tokens):
-        return TransformerDecoder(
-            args,
-            tgt_dict,
-            embed_tokens,
-            no_encoder_attn=getattr(args, 'no_cross_attention', False),
-        )
 

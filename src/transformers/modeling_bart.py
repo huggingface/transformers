@@ -21,12 +21,20 @@ import logging
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
-from .configuration_bart import BartConfig
+from .configuration_bart import BARTConfig
 from .file_utils import add_start_docstrings
 from .modeling_bert import BertEmbeddings, BertLayerNorm, BertPreTrainedModel, gelu
 #import .f
 from .fairseq_utils import *
-
+def get_available_activation_fns() -> List:
+    return [
+        "relu",
+        "gelu",
+        "gelu_fast",  # deprecated
+        "gelu_accurate",
+        "tanh",
+        "linear",
+    ]
 
 logger = logging.getLogger(__name__)
 
@@ -145,33 +153,46 @@ class BARTClassificationHead(nn.Module):
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
-class BARTModel(TransformerModel):
+class BARTModel(FairseqEncoderDecoderModel):
 
-    def __init__(self, args, encoder, decoder):
-        super().__init__(args, encoder, decoder)
+
+    """FIXME(SS)"""
+
+    def __init__(self, config):  # should take config
+
+
+        # make sure all arguments are present in older models
+        #base_architecture(config) # mutates
+
+
+        #assert config.share_all_embeddings
+        # if src_dict != tgt_dict:
+        #     raise ValueError('--share-all-embeddings requires a joined dictionary')
+        #if config.encoder_embed_dim != config.decoder_embed_dim:
+            # raise ValueError('--share-all-embeddings requires --encoder-embed-dim to match --decoder-embed-dim')
+        #if config.decoder_embed_path and (
+        #        config.decoder_embed_path != config.encoder_embed_path):
+        #    raise ValueError('--share-all-embeddings not compatible with --decoder-embed-path')
+        self.config = config
+        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        encoder_embed_tokens = Embedding(vocab_size, config.encoder_embed_dim, padding_idx)
+        decoder_embed_tokens = encoder_embed_tokens
+        config.share_decoder_input_output_embed = True
+
+        encoder = TransformerEncoder(config, encoder_embed_tokens)
+        decoder = TransformerDecoder(
+            config,
+            decoder_embed_tokens,
+            no_encoder_attn=getattr(config, 'no_cross_attention', False),
+        )
+        super().__init__(encoder, decoder)
 
         # We follow BERT's random weight initialization
         self.apply(init_bert_params)
 
         self.classification_heads = nn.ModuleDict()
 
-    # @staticmethod
-    # def add_args(parser):
-    #     super(BARTModel, BARTModel).add_args(parser)
-    #     parser.add_argument(
-    #         '--pooler-dropout', type=float, metavar='D',
-    #         help='dropout probability in the masked_lm pooler layers'
-    #     )
-    #     parser.add_argument(
-    #         '--pooler-activation-fn',
-    #         choices=utils.get_available_activation_fns(),
-    #         help='activation function to use for pooler layer'
-    #     )
-
-    def _forward(
-        self, src_tokens, src_lengths, prev_output_tokens,
-        features_only=False, classification_head_name=None, **kwargs
-    ):
+    def forward(self, src_tokens, src_lengths, prev_output_tokens, features_only=False, classification_head_name=None, **kwargs):
         if classification_head_name is not None:
             features_only = True
 
@@ -187,7 +208,7 @@ class BARTModel(TransformerModel):
             **kwargs,
         )
 
-        if classification_head_name is not None:
+        if classification_head_name is not None: # move this to BARTForSequenceClassification
             sentence_representation = x[
                 src_tokens.eq(self.encoder.dictionary.eos()), :
             ].view(x.size(0), -1, x.size(-1))[:, -1, :]
@@ -195,7 +216,6 @@ class BARTModel(TransformerModel):
                 sentence_representation
             )
         return x, extra
-
 
     def upgrade_state_dict_named(self, state_dict, name):
         super().upgrade_state_dict_named(state_dict, name)
@@ -252,6 +272,94 @@ class BARTModel(TransformerModel):
                     logger.info('Overwriting', prefix + 'classification_heads.' + k)
                     state_dict[prefix + 'classification_heads.' + k] = v
 
+    #@classmethod
+    def build_model(self, config):
+        """Build a new model instance."""
 
 
-#if __name__ == '__main__':
+    @staticmethod
+    def add_args(parser):
+        """Add model-specific arguments to the parser."""
+        # fmt: off
+        parser.add_argument('--activation-fn',
+                            choices=get_available_activation_fns(),
+                            help='activation function to use')
+        parser.add_argument('--dropout', type=float, metavar='D',
+                            help='dropout probability')
+        parser.add_argument('--attention-dropout', type=float, metavar='D',
+                            help='dropout probability for attention weights')
+        parser.add_argument('--activation-dropout', '--relu-dropout', type=float, metavar='D',
+                            help='dropout probability after activation in FFN.')
+        parser.add_argument('--encoder-embed-path', type=str, metavar='STR',
+                            help='path to pre-trained encoder embedding')
+        parser.add_argument('--encoder-embed-dim', type=int, metavar='N',
+                            help='encoder embedding dimension')
+        parser.add_argument('--encoder-ffn-embed-dim', type=int, metavar='N',
+                            help='encoder embedding dimension for FFN')
+        parser.add_argument('--encoder-layers', type=int, metavar='N',
+                            help='num encoder layers')
+        parser.add_argument('--encoder-attention-heads', type=int, metavar='N',
+                            help='num encoder attention heads')
+        parser.add_argument('--encoder-normalize-before', action='store_true',
+                            help='apply layernorm before each encoder block')
+        parser.add_argument('--encoder-learned-pos', action='store_true',
+                            help='use learned positional embeddings in the encoder')
+        parser.add_argument('--decoder-embed-path', type=str, metavar='STR',
+                            help='path to pre-trained decoder embedding')
+        parser.add_argument('--decoder-embed-dim', type=int, metavar='N',
+                            help='decoder embedding dimension')
+        parser.add_argument('--decoder-ffn-embed-dim', type=int, metavar='N',
+                            help='decoder embedding dimension for FFN')
+        parser.add_argument('--decoder-layers', type=int, metavar='N',
+                            help='num decoder layers')
+        parser.add_argument('--decoder-attention-heads', type=int, metavar='N',
+                            help='num decoder attention heads')
+        parser.add_argument('--decoder-learned-pos', action='store_true',
+                            help='use learned positional embeddings in the decoder')
+        parser.add_argument('--decoder-normalize-before', action='store_true',
+                            help='apply layernorm before each decoder block')
+        parser.add_argument('--share-decoder-input-output-embed', action='store_true',
+                            help='share decoder input and output embeddings')
+        parser.add_argument('--share-all-embeddings', action='store_true',
+                            help='share encoder, decoder and output embeddings'
+                                 ' (requires shared dictionary and embed dim)')
+        parser.add_argument('--no-token-positional-embeddings', default=False, action='store_true',
+                            help='if set, disables positional embeddings (outside self attention)')
+        parser.add_argument('--adaptive-softmax-cutoff', metavar='EXPR',
+                            help='comma separated list of adaptive softmax cutoff points. '
+                                 'Must be used with adaptive_loss criterion'),
+        parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
+                            help='sets adaptive softmax dropout for the tail projections')
+        # args for "Cross+Self-Attention for Transformer Models" (Peitz et al., 2019)
+        parser.add_argument('--no-cross-attention', default=False, action='store_true',
+                            help='do not perform cross-attention')
+        parser.add_argument('--cross-self-attention', default=False, action='store_true',
+                            help='perform cross+self-attention')
+        parser.add_argument('--layer-wise-attention', default=False, action='store_true',
+                            help='perform layer-wise attention (cross-attention or cross+self-attention)')
+        # args for "Reducing Transformer Depth on Demand with Structured Dropout" (Fan et al., 2019)
+        parser.add_argument('--encoder-layerdrop', type=float, metavar='D', default=0,
+                            help='LayerDrop probability for encoder')
+        parser.add_argument('--decoder-layerdrop', type=float, metavar='D', default=0,
+                            help='LayerDrop probability for decoder')
+        parser.add_argument('--encoder-layers-to-keep', default=None,
+                            help='which layers to *keep* when pruning as a comma-separated list')
+        parser.add_argument('--decoder-layers-to-keep', default=None,
+                            help='which layers to *keep* when pruning as a comma-separated list')
+        parser.add_argument('--layernorm-embedding', action='store_true',
+                            help='add layernorm to embedding')
+        parser.add_argument('--no-scale-embedding', action='store_true',
+                            help='if True, dont scale embeddings')
+
+
+class BARTForSequenceClassification(nn.Module):
+
+    def __init__(self, config, num_classes): pass
+
+
+        # head =
+        # input_dim,
+        # inner_dim,
+        # num_classes,
+        # activation_fn,
+        # pooler_dropout,
