@@ -22,6 +22,7 @@ from functools import lru_cache
 
 import regex as re
 import tokenizers as tk
+from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -268,19 +269,25 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         truncation_strategy="longest_first",
         **kwargs
     ):
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-
-        self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
-        self._update_special_tokens()
-        self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
-        self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())
-        if max_length:
-            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
-        self._tokenizer.with_padding(
-            max_length=max_length if pad_to_max_length else None,
-            direction=self.padding_side,
-            pad_id=self.pad_token_id if self.pad_token_id is not None else 0,
-            pad_type_id=self.pad_token_type_id,
-            pad_token=self.pad_token if self.pad_token is not None else "",
+        super().__init__(
+            ByteLevelBPETokenizer(vocab_file, merges_file, add_prefix_space),
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            **kwargs
         )
-        self._decoder = tk.decoders.ByteLevel.new()
+
+        # self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
+        # self._update_special_tokens()
+        # self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
+        # self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())
+        # if max_length:
+        #     self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
+        # self._tokenizer.with_padding(
+        #     max_length=max_length if pad_to_max_length else None,
+        #     direction=self.padding_side,
+        #     pad_id=self.pad_token_id if self.pad_token_id is not None else 0,
+        #     pad_type_id=self.pad_token_type_id,
+        #     pad_token=self.pad_token if self.pad_token is not None else "",
+        # )
+        # self._decoder = tk.decoders.ByteLevel.new()
