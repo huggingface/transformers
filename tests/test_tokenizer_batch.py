@@ -16,12 +16,12 @@
 
 import unittest
 
-import torch
-
 from transformers import AutoTokenizer
-
+from transformers import is_torch_available
 from .utils import require_torch
 
+if is_torch_available():
+    import torch
 
 @require_torch
 class TokenizerUtilsBatchTest(unittest.TestCase):
