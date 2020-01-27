@@ -756,7 +756,7 @@ class XLNetModel(XLNetPreTrainedModel):
             input_ids = input_ids.transpose(0, 1).contiguous()
             qlen, bsz = input_ids.shape[0], input_ids.shape[1]
         elif inputs_embeds is not None:
-            inputs_embeds.transpose(0, 1).contiguous()
+            inputs_embeds = inputs_embeds.transpose(0, 1).contiguous()
             qlen, bsz = inputs_embeds.shape[0], inputs_embeds.shape[1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
