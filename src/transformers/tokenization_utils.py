@@ -1001,7 +1001,7 @@ class PreTrainedTokenizer(object):
                 if key != "input_len":
                     # Padding handle
                     padded_value = [
-                        v + [self.pad_token_id if key == "input_ids" else 1] * (max_seq_len - len(v))
+                        v + [self.pad_token_id if key == "input_ids" else 0] * (max_seq_len - len(v))
                         for v in padded_value
                     ]
 
