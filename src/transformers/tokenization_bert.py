@@ -558,6 +558,12 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         **kwargs
     ):
         super().__init__(
+            tk.implementations.BertWordPieceTokenizer(
+                vocab_file, add_special_tokens,
+                unk_token, sep_token, cls_token,
+                handle_chinese_chars=tokenize_chinese_chars,
+                lowercase=do_lower_case
+            ),
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -565,33 +571,3 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             mask_token=mask_token,
             **kwargs,
         )
-
-        self._tokenizer = tk.Tokenizer(tk.models.WordPiece.from_files(vocab_file, unk_token=unk_token))
-        self._update_special_tokens()
-        self._tokenizer.with_pre_tokenizer(
-            tk.pre_tokenizers.BertPreTokenizer.new(
-                do_basic_tokenize=do_basic_tokenize,
-                do_lower_case=do_lower_case,
-                tokenize_chinese_chars=tokenize_chinese_chars,
-                never_split=never_split if never_split is not None else [],
-            )
-        )
-        self._tokenizer.with_decoder(tk.decoders.WordPiece.new())
-
-        if add_special_tokens:
-            self._tokenizer.with_post_processor(
-                tk.processors.BertProcessing.new(
-                    (sep_token, self._tokenizer.token_to_id(sep_token)),
-                    (cls_token, self._tokenizer.token_to_id(cls_token)),
-                )
-            )
-        if max_length is not None:
-            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
-        self._tokenizer.with_padding(
-            max_length=max_length if pad_to_max_length else None,
-            direction=self.padding_side,
-            pad_id=self.pad_token_id,
-            pad_type_id=self.pad_token_type_id,
-            pad_token=self.pad_token,
-        )
-        self._decoder = tk.decoders.WordPiece.new()

@@ -20,9 +20,9 @@ import logging
 import os
 
 import regex as re
+from tokenizers import BPETokenizer
 
-from .tokenization_utils import PreTrainedTokenizer
-
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 logger = logging.getLogger(__name__)
 
@@ -246,3 +246,16 @@ class CTRLTokenizer(PreTrainedTokenizer):
     #     tokens_generated_so_far = re.sub('(@@ )', '', string=filtered_tokens)
     #     tokens_generated_so_far = re.sub('(@@ ?$)', '', string=tokens_generated_so_far)
     #     return ''.join(tokens_generated_so_far)
+
+
+class CTRLTokenizerFast(PreTrainedTokenizerFast):
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    control_codes = CONTROL_CODES
+
+    def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
+        super().__init__(
+            BPETokenizer(vocab_file, merges_file, unk_token),
+            **kwargs
+        )

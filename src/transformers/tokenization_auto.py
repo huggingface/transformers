@@ -37,15 +37,15 @@ from .configuration_auto import (
 )
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_bert import BertTokenizer
+from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
-from .tokenization_ctrl import CTRLTokenizer
-from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_ctrl import CTRLTokenizer, CTRLTokenizerFast
+from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
-from .tokenization_gpt2 import GPT2Tokenizer
-from .tokenization_openai import OpenAIGPTTokenizer
-from .tokenization_roberta import RobertaTokenizer
+from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer
 from .tokenization_xlm import XLMTokenizer
@@ -58,20 +58,20 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
-        (T5Config, T5Tokenizer),
-        (DistilBertConfig, DistilBertTokenizer),
-        (AlbertConfig, AlbertTokenizer),
-        (CamembertConfig, CamembertTokenizer),
-        (XLMRobertaConfig, XLMRobertaTokenizer),
-        (RobertaConfig, RobertaTokenizer),
-        (BertConfig, BertTokenizer),
-        (OpenAIGPTConfig, OpenAIGPTTokenizer),
-        (GPT2Config, GPT2Tokenizer),
-        (TransfoXLConfig, TransfoXLTokenizer),
-        (XLNetConfig, XLNetTokenizer),
-        (FlaubertConfig, FlaubertTokenizer),
-        (XLMConfig, XLMTokenizer),
-        (CTRLConfig, CTRLTokenizer),
+        (T5Config, (T5Tokenizer, None)),
+        (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
+        (AlbertConfig, (AlbertTokenizer, None)),
+        (CamembertConfig, (CamembertTokenizer, None)),
+        (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
+        (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (BertConfig, (BertTokenizer, BertTokenizerFast)),
+        (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
+        (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
+        (TransfoXLConfig, (TransfoXLTokenizer, None)),
+        (XLNetConfig, (XLNetTokenizer, None)),
+        (FlaubertConfig, (FlaubertTokenizer, None)),
+        (XLMConfig, (XLMTokenizer, None)),
+        (CTRLConfig, (CTRLTokenizer, CTRLTokenizerFast)),
     ]
 )
 
@@ -177,9 +177,12 @@ class AutoTokenizer:
         if "bert-base-japanese" in pretrained_model_name_or_path:
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        for config_class, tokenizer_class in TOKENIZER_MAPPING.items():
+        for config_class, (tokenizer_class_py, tokenizer_class_ru) in TOKENIZER_MAPPING.items():
             if isinstance(config, config_class):
-                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                if tokenizer_class_ru:
+                    return tokenizer_class_ru.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                else:
+                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
             "Unrecognized configuration class {} to build an AutoTokenizer.\n"
