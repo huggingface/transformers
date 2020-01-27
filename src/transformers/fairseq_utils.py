@@ -185,6 +185,8 @@ class LearnedPositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int,):
         #num_embeddings = num_embeddings
         #self.padding_idx = padding_idx
+        # if padding_idx is specified then offset the embedding ids by
+        # this index and adjust num_embeddings appropriately
         if padding_idx is not None:
             num_embeddings += (padding_idx + 1)  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
