@@ -183,12 +183,20 @@ class LearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int,):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.onnx_trace = False
-        if self.padding_idx is not None:
-            self.max_positions = self.num_embeddings - self.padding_idx - 1
+        #num_embeddings = num_embeddings
+        #self.padding_idx = padding_idx
+        if padding_idx is not None:
+            num_embeddings += (padding_idx + 1)  # WHY?
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        if padding_idx is not None:
+            self.max_positions = num_embeddings - self.padding_idx - 1
         else:
-            self.max_positions = self.num_embeddings
+            self.max_positions = num_embeddings
+
+
+        self.onnx_trace = False
+        nn.init.normal_(self.weight, mean=0, std=embedding_dim ** -0.5)
+        if padding_idx is not None: nn.init.constant_(self.weight[padding_idx], 0)
 
     def forward(self, input, incremental_state=None, positions=None):
         """Input is expected to be of size [bsz x seqlen]."""
@@ -203,25 +211,10 @@ class LearnedPositionalEmbedding(nn.Embedding):
                 positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
             else:
                 positions = make_positions(
-                    input, self.padding_idx, onnx_trace=self.onnx_trace,
+                    input, self.padding_idx,
                 )
         return super().forward(positions)
-def PositionalEmbedding(num_embeddings: int, embedding_dim: int, padding_idx: int, learned: bool = False,):
-    # TODO(SS): can consolidate with LearnedPositionalEmbedding
-    if learned:
-        # if padding_idx is specified then offset the embedding ids by
-        # this index and adjust num_embeddings appropriately
-        # TODO: The right place for this offset would be inside
-        # LearnedPositionalEmbedding. Move this there for a cleaner implementation.
-        if padding_idx is not None:
-            num_embeddings = num_embeddings + padding_idx + 1
-        m = LearnedPositionalEmbedding(num_embeddings, embedding_dim, padding_idx)
-        nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
-        if padding_idx is not None:
-            nn.init.constant_(m.weight[padding_idx], 0)
-    else:
-        raise NotImplementedError('unused by BART')
-    return m
+
 
 
 # Copyright (c) Facebook, Inc. and its affiliates.
@@ -734,7 +727,6 @@ class MultiheadAttention(nn.Module):
         for key, value in items_to_add.items():
             state_dict[key] = value
 
-
 class TransformerEncoderLayer(nn.Module):
     """Encoder layer block.
 
@@ -837,7 +829,6 @@ class TransformerEncoderLayer(nn.Module):
             return layer_norm(x)
         else:
             return x
-
 
 class TransformerDecoderLayer(nn.Module):
     """Decoder layer block.
@@ -1044,89 +1035,12 @@ class TransformerDecoderLayer(nn.Module):
         self.need_attn = need_attn
 
 
-
 EncoderOut = namedtuple('TransformerEncoderOut', [
     'encoder_out',  # T x B x C
     'encoder_padding_mask',  # B x T
     'encoder_embedding',  # B x T x C
     'encoder_states',  # List[T x B x C]
 ])
-
-
-class FairseqDecoder(nn.Module):
-    """Base class for decoders."""
-
-    def __init__(self):
-        super().__init__()
-        self.onnx_trace = False
-
-    def forward(self, prev_output_tokens, encoder_out=None, **kwargs):
-        """
-        Args:
-            prev_output_tokens (LongTensor): shifted output tokens of shape
-                `(batch, tgt_len)`, for teacher forcing
-            encoder_out (dict, optional): output from the encoder, used for
-                encoder-side attention
-
-        Returns:
-            tuple:
-                - the decoder's output of shape `(batch, tgt_len, vocab)`
-                - a dictionary with any model-specific outputs
-        """
-        x, extra = self.extract_features(
-            prev_output_tokens, encoder_out=encoder_out, **kwargs
-        )
-        x = self.output_layer(x)
-        return x, extra
-
-    def extract_features(self, prev_output_tokens, encoder_out=None, **kwargs):
-        """
-        Returns:
-            tuple:
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - a dictionary with any model-specific outputs
-        """
-        raise NotImplementedError
-
-    def output_layer(self, features, **kwargs):
-        """
-        Project features to the default output size, e.g., vocabulary size.
-
-        Args:
-            features (Tensor): features returned by *extract_features*.
-        """
-        raise NotImplementedError
-
-    def get_normalized_probs(self, net_output, log_probs, sample):
-        """Get normalized probabilities (or log probs) from a net's output."""
-
-        if hasattr(self, "adaptive_softmax") and self.adaptive_softmax is not None:
-            if sample is not None:
-                assert "target" in sample
-                target = sample["target"]
-            else:
-                target = None
-            out = self.adaptive_softmax.get_log_prob(net_output[0], target=target)
-            return out.exp_() if not log_probs else out
-
-        logits = net_output[0]
-        if log_probs:
-            return log_softmax(logits, dim=-1, onnx_trace=self.onnx_trace)
-        else:
-            return softmax(logits, dim=-1, onnx_trace=self.onnx_trace)
-
-    def max_positions(self):
-        """Maximum input length supported by the decoder."""
-        return 1e6  # an arbitrary large number
-
-    def upgrade_state_dict(self, state_dict):
-        """Upgrade a (possibly old) state dict for new versions of fairseq."""
-        return state_dict
-
-    def prepare_for_onnx_export_(self):
-        self.onnx_trace = True
-
-
 
 class TransformerEncoder(nn.Module):
     """
@@ -1154,9 +1068,8 @@ class TransformerEncoder(nn.Module):
 
         self.embed_scale = 1.0 if config.no_scale_embedding else math.sqrt(embed_dim)
 
-        self.embed_positions = PositionalEmbedding(
+        self.embed_positions = LearnedPositionalEmbedding(
             config.max_source_positions, embed_dim, self.padding_idx,
-            learned=True,
         )
 
         self.layer_wise_attention = getattr(config, 'layer_wise_attention', False)
@@ -1307,91 +1220,11 @@ class TransformerEncoder(nn.Module):
         return state_dict
 
 @with_incremental_state
-class FairseqIncrementalDecoder(FairseqDecoder):
-    """Base class for incremental decoders.
-
-    Incremental decoding is a special mode at inference time where the Model
-    only receives a single timestep of input corresponding to the previous
-    output token (for teacher forcing) and must produce the next output
-    *incrementally*. Thus the model must cache any long-term state that is
-    needed about the sequence, e.g., hidden states, convolutional states, etc.
-
-    Compared to the standard :class:`FairseqDecoder` interface, the incremental
-    decoder interface allows :func:`forward` functions to take an extra keyword
-    argument (*incremental_state*) that can be used to cache state across
-    time-steps.
-
-    The :class:`FairseqIncrementalDecoder` interface also defines the
-    :func:`reorder_incremental_state` method, which is used during beam search
-    to select and reorder the incremental state based on the selection of beams.
-
-    To learn more about how incremental decoding works, refer to `this blog
-    <http://www.telesens.co/2019/04/21/understanding-incremental-decoding-in-fairseq/>`_.
-    """
-
-    def forward(self, prev_output_tokens, encoder_out=None, incremental_state=None, **kwargs):
-        """
-        Args:
-            prev_output_tokens (LongTensor): shifted output tokens of shape
-                `(batch, tgt_len)`, for teacher forcing
-            encoder_out (dict, optional): output from the encoder, used for
-                encoder-side attention
-            incremental_state (dict, optional): dictionary used for storing
-                state during :ref:`Incremental decoding`
-
-        Returns:
-            tuple:
-                - the decoder's output of shape `(batch, tgt_len, vocab)`
-                - a dictionary with any model-specific outputs
-        """
-        raise NotImplementedError
-
-    def extract_features(self, prev_output_tokens, encoder_out=None, incremental_state=None,
-                         **kwargs):
-        """
-        Returns:
-            tuple:
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - a dictionary with any model-specific outputs
-        """
-        raise NotImplementedError
-
-    def reorder_incremental_state(self, incremental_state, new_order):
-        """Reorder incremental state.
-
-        This should be called when the order of the input has changed from the
-        previous time step. A typical use case is beam search, where the input
-        order changes between time steps based on the selection of beams.
-        """
-        seen = set()
-
-        def apply_reorder_incremental_state(module):
-            if module != self and hasattr(module, 'reorder_incremental_state') \
-                    and module not in seen:
-                seen.add(module)
-                module.reorder_incremental_state(incremental_state, new_order)
-
-        self.apply(apply_reorder_incremental_state)
-
-    def set_beam_size(self, beam_size):
-        """Sets the beam size in the decoder and all children."""
-        if getattr(self, '_beam_size', -1) != beam_size:
-            seen = set()
-
-            def apply_set_beam_size(module):
-                if module != self and hasattr(module, 'set_beam_size') \
-                        and module not in seen:
-                    seen.add(module)
-                    module.set_beam_size(beam_size)
-
-            self.apply(apply_set_beam_size)
-            self._beam_size = beam_size
-
-class TransformerDecoder(FairseqIncrementalDecoder):
+class TransformerIncrementalDecoder(nn.Module):
+    # Fairseq docs about incremental decoding or delete it?
     """
     Transformer decoder consisting of *args.decoder_layers* layers. Each layer
     is a :class:`TransformerDecoderLayer`.
-
     Args:
         args (argparse.Namespace): parsed command-line arguments
         dictionary (~fairseq.data.Dictionary): decoding dictionary
@@ -1402,13 +1235,13 @@ class TransformerDecoder(FairseqIncrementalDecoder):
 
     def __init__(self, args, embed_tokens, no_encoder_attn=False):
         super().__init__()
+        self.onnx_trace = False
         self.register_buffer('version', torch.Tensor([3]))
 
         self.dropout = args.dropout
         self.decoder_layerdrop = args.decoder_layerdrop
         self.share_input_output_embed = args.share_decoder_input_output_embed
 
-        input_embed_dim = embed_tokens.embedding_dim
         embed_dim = args.decoder_embed_dim
         self.output_embed_dim = args.decoder_output_dim
 
@@ -1419,32 +1252,20 @@ class TransformerDecoder(FairseqIncrementalDecoder):
 
         self.embed_scale = 1.0 if args.no_scale_embedding else math.sqrt(embed_dim)
 
-        self.project_in_dim = Linear(input_embed_dim, embed_dim, bias=False) if embed_dim != input_embed_dim else None
-
-        self.embed_positions = PositionalEmbedding(
+        self.embed_positions = LearnedPositionalEmbedding(
             args.max_target_positions, embed_dim, self.padding_idx,
-            learned=True,
         )
 
         self.cross_self_attention = getattr(args, 'cross_self_attention', False)
         self.layer_wise_attention = getattr(args, 'layer_wise_attention', False)
 
-        self.layers = nn.ModuleList([])
-        self.layers.extend([
-            TransformerDecoderLayer(args, no_encoder_attn)
-            for _ in range(args.decoder_layers)
+        self.layers = nn.ModuleList([
+            TransformerDecoderLayer(args, no_encoder_attn) for _ in range(args.decoder_layers)
         ])
 
         self.adaptive_softmax = None
 
-        self.project_out_dim = Linear(embed_dim, self.output_embed_dim, bias=False) \
-            if embed_dim != self.output_embed_dim and not args.tie_adaptive_weights else None
-
         # killed adaptive softmax ref
-        if not self.share_input_output_embed:
-            self.embed_out = nn.Parameter(torch.Tensor(len(dictionary), self.output_embed_dim))
-            nn.init.normal_(self.embed_out, mean=0, std=self.output_embed_dim ** -0.5)
-
         if args.decoder_normalize_before and not getattr(args, 'no_decoder_final_norm', False):
             self.layer_norm = LayerNorm(embed_dim)
         else:
@@ -1534,9 +1355,6 @@ class TransformerDecoder(FairseqIncrementalDecoder):
         # embed tokens and positions
         x = self.embed_scale * self.embed_tokens(prev_output_tokens)
 
-        if self.project_in_dim is not None:
-            x = self.project_in_dim(x)
-
         if positions is not None:
             x += positions
 
@@ -1598,27 +1416,20 @@ class TransformerDecoder(FairseqIncrementalDecoder):
         # T x B x C -> B x T x C
         x = x.transpose(0, 1)
 
-        if self.project_out_dim is not None:
-            x = self.project_out_dim(x)
 
         return x, {'attn': attn, 'inner_states': inner_states}
 
-    def output_layer(self, features, **kwargs):
+    def output_layer(self, features, **unused):
         """Project features to the vocabulary size."""
-        if self.adaptive_softmax is None:
-            # project back to size of vocabulary
-            if self.share_input_output_embed:
-                return F.linear(features, self.embed_tokens.weight)
-            else:
-                return F.linear(features, self.embed_out)
-        else:
-            return features
+        return F.linear(features, self.embed_tokens.weight)
 
     def max_positions(self):
         """Maximum output length supported by the decoder."""
         if self.embed_positions is None:
             return self.max_target_positions
         return min(self.max_target_positions, self.embed_positions.max_positions)
+
+    # Extra methods
 
     def buffered_future_mask(self, tensor):
         dim = tensor.size(0)
@@ -1631,174 +1442,49 @@ class TransformerDecoder(FairseqIncrementalDecoder):
             self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
         return self._future_mask[:dim, :dim]
 
-class FairseqEncoderDecoderModel(nn.Module):
-    """Base class for encoder-decoder models.
-
-    Args:
-        encoder (FairseqEncoder): the encoder
-        decoder (FairseqDecoder): the decoder
-    """
-
-    def __init__(self, encoder, decoder):
-        super().__init__()
-        self._is_generation_fast = False
-
-        self.encoder = encoder
-        self.decoder = decoder
-
-    def get_targets(self, sample, net_output):
-        """Get targets from either the sample or the net's output."""
-        return sample['target']
-
-    def get_normalized_probs(self, net_output, log_probs, sample=None):
+    def get_normalized_probs(self, net_output, log_probs, sample):
         """Get normalized probabilities (or log probs) from a net's output."""
-        if hasattr(self, 'decoder'):
-            return self.decoder.get_normalized_probs(net_output, log_probs, sample)
-        elif torch.is_tensor(net_output):
-            logits = net_output.float()
-            if log_probs:
-                return F.log_softmax(logits, dim=-1)
-            else:
-                return F.softmax(logits, dim=-1)
-        raise NotImplementedError
 
-    def make_generation_fast_(self, **kwargs):
-        """Optimize model for faster generation."""
-        if self._is_generation_fast:
-            return  # only apply once
-        self._is_generation_fast = True
+        logits = net_output[0]
+        if log_probs:
+            return log_softmax(logits, dim=-1, onnx_trace=self.onnx_trace)
+        else:
+            return softmax(logits, dim=-1, onnx_trace=self.onnx_trace)
 
-        # remove weight norm from all modules in the network
-        def apply_remove_weight_norm(module):
-            try:
-                nn.utils.remove_weight_norm(module)
-            except ValueError:  # this module didn't have weight norm
-                return
+    def upgrade_state_dict(self, state_dict):
+        """Upgrade a (possibly old) state dict for new versions of fairseq."""
+        return state_dict
 
-        self.apply(apply_remove_weight_norm)
+    def prepare_for_onnx_export_(self):
+        self.onnx_trace = True
 
+    def reorder_incremental_state(self, incremental_state, new_order):
+        """Reorder incremental state.
+
+        This should be called when the order of the input has changed from the
+        previous time step. A typical use case is beam search, where the input
+        order changes between time steps based on the selection of beams.
+        """
         seen = set()
 
-        def apply_make_generation_fast_(module):
-            if module != self and hasattr(module, 'make_generation_fast_') \
+        def apply_reorder_incremental_state(module):
+            if module != self and hasattr(module, 'reorder_incremental_state') \
                     and module not in seen:
                 seen.add(module)
-                module.make_generation_fast_(**kwargs)
+                module.reorder_incremental_state(incremental_state, new_order)
 
-        self.apply(apply_make_generation_fast_)
+        self.apply(apply_reorder_incremental_state)
 
-        def train(mode=True):
-            if mode:
-                raise RuntimeError('cannot train after make_generation_fast')
+    def set_beam_size(self, beam_size):
+        """Sets the beam size in the decoder and all children."""
+        if getattr(self, '_beam_size', -1) != beam_size:
+            seen = set()
 
-        # this model should no longer be used for training
-        self.eval()
-        self.train = train
+            def apply_set_beam_size(module):
+                if module != self and hasattr(module, 'set_beam_size') \
+                        and module not in seen:
+                    seen.add(module)
+                    module.set_beam_size(beam_size)
 
-    def prepare_for_onnx_export_(self, **kwargs):
-        """Make model exportable via ONNX trace."""
-        seen = set()
-
-        def apply_prepare_for_onnx_export_(module):
-            if module != self and hasattr(module, 'prepare_for_onnx_export_') \
-                    and module not in seen:
-                seen.add(module)
-                module.prepare_for_onnx_export_(**kwargs)
-
-        self.apply(apply_prepare_for_onnx_export_)
-
-    @classmethod
-    def from_pretrained(cls, model_name_or_path, checkpoint_file='model.pt', data_name_or_path='.', **kwargs):
-        """
-        Load a :class:`~fairseq.models.FairseqModel` from a pre-trained model
-        file. Downloads and caches the pre-trained model file if needed.
-
-        The base implementation returns a
-        :class:`~fairseq.hub_utils.GeneratorHubInterface`, which can be used to
-        generate translations or sample from language models. The underlying
-        :class:`~fairseq.models.FairseqModel` can be accessed via the
-        *generator.models* attribute.
-
-        Other models may override this to implement custom hub interfaces.
-
-        Args:
-            model_name_or_path (str): either the name of a pre-trained model to
-                load or a path/URL to a pre-trained model state dict
-            checkpoint_file (str, optional): colon-separated list of checkpoint
-                files in the model archive to ensemble (default: 'model.pt')
-            data_name_or_path (str, optional): point args.data to the archive
-                at the given path/URL. Can start with '.' or './' to reuse the
-                model archive path.
-        """
-        from fairseq import hub_utils
-        x = hub_utils.from_pretrained(
-            model_name_or_path,
-            checkpoint_file,
-            data_name_or_path,
-            archive_map=cls.hub_models(),
-            **kwargs,
-        )
-        logger.info(x['args'])
-        return hub_utils.GeneratorHubInterface(x['args'], x['task'], x['models'])
-
-
-    def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
-        """
-        Run the forward pass for an encoder-decoder model.
-
-        First feed a batch of source tokens through the encoder. Then, feed the
-        encoder output and previous decoder outputs (i.e., teacher forcing) to
-        the decoder to produce the next outputs::
-
-            encoder_out = self.encoder(src_tokens, src_lengths)
-            return self.decoder(prev_output_tokens, encoder_out)
-
-        Args:
-            src_tokens (LongTensor): tokens in the source language of shape
-                `(batch, src_len)`
-            src_lengths (LongTensor): source sentence lengths of shape `(batch)`
-            prev_output_tokens (LongTensor): previous decoder outputs of shape
-                `(batch, tgt_len)`, for teacher forcing
-
-        Returns:
-            tuple:
-                - the decoder's output of shape `(batch, tgt_len, vocab)`
-                - a dictionary with any model-specific outputs
-        """
-        encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
-        decoder_out = self.decoder(prev_output_tokens, encoder_out=encoder_out, **kwargs)
-        return decoder_out
-
-    def forward_decoder(self, prev_output_tokens, **kwargs):
-        return self.decoder(prev_output_tokens, **kwargs)
-
-    def extract_features(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
-        """
-        Similar to *forward* but only return features.
-
-        Returns:
-            tuple:
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - a dictionary with any model-specific outputs
-        """
-        encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
-        features = self.decoder.extract_features(prev_output_tokens, encoder_out=encoder_out, **kwargs)
-        return features
-
-    def output_layer(self, features, **kwargs):
-        """Project features to the default output size (typically vocabulary size)."""
-        return self.decoder.output_layer(features, **kwargs)
-
-    def max_positions(self):
-        """Maximum length supported by the model."""
-        return (self.encoder.max_positions(), self.decoder.max_positions())
-
-    def max_decoder_positions(self):
-        """Maximum length supported by the decoder."""
-        return self.decoder.max_positions()
-
-
-
-
-        # fmt: on
-
+            self.apply(apply_set_beam_size)
+            self._beam_size = beam_size

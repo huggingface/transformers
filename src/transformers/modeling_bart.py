@@ -46,31 +46,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
 }
 
 
-BART_START_DOCSTRING = r"""  TODOSS: FIXME)  The RoBERTa model was proposed in
-    `RoBERTa: A Robustly Optimized BERT Pretraining Approach`_
-    by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer,
-    Veselin Stoyanov. It is based on Google's BERT model released in 2018.
-
-    It builds on BERT and modifies key hyperparameters, removing the next-sentence pretraining
-    objective and training with much larger mini-batches and learning rates.
-
-    This implementation is the same as BertModel with a tiny embeddings tweak as well as a setup for Roberta pretrained
-    models.
-
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
-
-    .. _`RoBERTa: A Robustly Optimized BERT Pretraining Approach`:
-        https://arxiv.org/abs/1907.11692
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
-
-    Parameters:
-        config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
-            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-"""
+BART_START_DOCSTRING = r"""  TODOSS: FIXME)"""
 
 ROBERTA_INPUTS_DOCSTRING = r"""
     Inputs:
@@ -153,14 +129,14 @@ class BARTClassificationHead(nn.Module):
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
-class BARTModel(FairseqEncoderDecoderModel):
+class BARTModel(nn.Module):
 
 
     """FIXME(SS)"""
 
     def __init__(self, config):  # should take config
 
-
+        super().__init__()
         # make sure all arguments are present in older models
         #base_architecture(config) # mutates
 
@@ -174,107 +150,140 @@ class BARTModel(FairseqEncoderDecoderModel):
         #        config.decoder_embed_path != config.encoder_embed_path):
         #    raise ValueError('--share-all-embeddings not compatible with --decoder-embed-path')
         self.config = config
+        self._is_generation_fast = False
+
+
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         encoder_embed_tokens = Embedding(vocab_size, config.encoder_embed_dim, padding_idx)
         decoder_embed_tokens = encoder_embed_tokens
         config.share_decoder_input_output_embed = True
 
         encoder = TransformerEncoder(config, encoder_embed_tokens)
-        decoder = TransformerDecoder(
+        decoder = TransformerIncrementalDecoder(
             config,
             decoder_embed_tokens,
             no_encoder_attn=getattr(config, 'no_cross_attention', False),
         )
-        super().__init__(encoder, decoder)
+        self.encoder = encoder
+        self.decoder = decoder
 
         # We follow BERT's random weight initialization
         self.apply(init_bert_params)
 
-        self.classification_heads = nn.ModuleDict()
+    #def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
-    def forward(self, src_tokens, src_lengths, prev_output_tokens, features_only=False, classification_head_name=None, **kwargs):
-        if classification_head_name is not None:
-            features_only = True
+    def forward(self, input_ids: torch.LongTensor, return_all_hiddens=False, **unused):
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0)
+        if input_ids.size(-1) > min(self.max_positions()):
+            raise ValueError('input_ids exceeds maximum length: {} > {}'.format(
+                input_ids.size(-1), self.max_positions()
+            ))
 
+        prev_output_tokens = input_ids.clone()
+
+        prev_output_tokens[:, 0] = input_ids.gather(
+            1,
+            (input_ids.ne(self.config.pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
+        ).squeeze()
+
+        prev_output_tokens[:, 1:] = input_ids[:, :-1]
+        features, extra = self._forward(
+            input_ids=input_ids,
+            src_lengths=None,
+            prev_output_tokens=prev_output_tokens,
+            return_all_hiddens=return_all_hiddens,
+        )
+        if return_all_hiddens:
+            # convert from T x B x C -> B x T x C
+            inner_states = extra['inner_states']
+            return [inner_state.transpose(0, 1) for inner_state in inner_states]
+        else:
+            return features  # just the last layer's features
+
+    def _forward(self, input_ids, src_lengths, prev_output_tokens,  **kwargs):
         encoder_out = self.encoder(
-            src_tokens,
+            input_ids,
             src_lengths=src_lengths,
             **kwargs,
         )
         x, extra = self.decoder(
             prev_output_tokens,
             encoder_out=encoder_out,
-            features_only=features_only,
+            features_only=True,
             **kwargs,
         )
-
-        if classification_head_name is not None: # move this to BARTForSequenceClassification
-            sentence_representation = x[
-                src_tokens.eq(self.encoder.dictionary.eos()), :
-            ].view(x.size(0), -1, x.size(-1))[:, -1, :]
-            x = self.classification_heads[classification_head_name](
-                sentence_representation
-            )
         return x, extra
 
-    def upgrade_state_dict_named(self, state_dict, name):
-        super().upgrade_state_dict_named(state_dict, name)
 
-        prefix = name + '.' if name != '' else ''
-        current_head_names = [] if not hasattr(self, 'classification_heads') else \
-            self.classification_heads.keys()
+    # Extra Methods
 
-        # Handle new classification heads present in the state dict.
-        keys_to_delete = []
-        for k in state_dict.keys():
-            if not k.startswith(prefix + 'classification_heads.'):
-                continue
+    def get_targets(self, sample, net_output):
+        """Get targets from either the sample or the net's output."""
+        return sample['target']
 
-            head_name = k[len(prefix + 'classification_heads.'):].split('.')[0]
-            num_classes = state_dict[prefix + 'classification_heads.' + head_name + '.out_proj.weight'].size(0)
-            inner_dim = state_dict[prefix + 'classification_heads.' + head_name + '.dense.weight'].size(0)
+    def get_normalized_probs(self, net_output, log_probs, sample=None):
+        """Get normalized probabilities (or log probs) from a net's output."""
+        return self.decoder.get_normalized_probs(net_output, log_probs, sample)
 
-            if getattr(self.args, 'load_checkpoint_heads', False):
-                if head_name not in current_head_names:
-                    self.register_classification_head(head_name, num_classes, inner_dim)
-            else:
-                if head_name not in current_head_names:
-                    logger.warning(
-                        'deleting classification head ({}) from checkpoint '
-                        'not present in current model: {}'.format(head_name, k)
-                    )
-                    keys_to_delete.append(k)
-                elif (
-                    num_classes != self.classification_heads[head_name].out_proj.out_features
-                    or inner_dim != self.classification_heads[head_name].dense.out_features
-                ):
-                    logger.warning(
-                        'deleting classification head ({}) from checkpoint '
-                        'with different dimensions than current model: {}'.format(head_name, k)
-                    )
-                    keys_to_delete.append(k)
-        for k in keys_to_delete:
-            del state_dict[k]
+    def make_generation_fast_(self, **kwargs):
+        """Optimize model for faster generation."""
+        if self._is_generation_fast:
+            return  # only apply once
+        self._is_generation_fast = True
 
-        # When finetuning on translation task, remove last row of
-        # embedding matrix that corresponds to mask_idx token.
-        loaded_dict_size = state_dict['encoder.embed_tokens.weight'].size(0)
-        if loaded_dict_size == len(self.encoder.dictionary) + 1 and '<mask>' not in self.encoder.dictionary:
-            state_dict['encoder.embed_tokens.weight'] = state_dict['encoder.embed_tokens.weight'][:loaded_dict_size-1, :]
-            state_dict['decoder.embed_tokens.weight'] = state_dict['decoder.embed_tokens.weight'][:loaded_dict_size-1, :]
+        # remove weight norm from all modules in the network
+        def apply_remove_weight_norm(module):
+            try:
+                nn.utils.remove_weight_norm(module)
+            except ValueError:  # this module didn't have weight norm
+                return
 
-        # Copy any newly-added classification heads into the state dict
-        # with their current weights.
-        if hasattr(self, 'classification_heads'):
-            cur_state = self.classification_heads.state_dict()
-            for k, v in cur_state.items():
-                if prefix + 'classification_heads.' + k not in state_dict:
-                    logger.info('Overwriting', prefix + 'classification_heads.' + k)
-                    state_dict[prefix + 'classification_heads.' + k] = v
+        self.apply(apply_remove_weight_norm)
 
-    #@classmethod
-    def build_model(self, config):
-        """Build a new model instance."""
+        seen = set()
+
+        def apply_make_generation_fast_(module):
+            if module != self and hasattr(module, 'make_generation_fast_') \
+                    and module not in seen:
+                seen.add(module)
+                module.make_generation_fast_(**kwargs)
+
+        self.apply(apply_make_generation_fast_)
+
+        def train(mode=True):
+            if mode:
+                raise RuntimeError('cannot train after make_generation_fast')
+
+        # this model should no longer be used for training
+        self.eval()
+        self.train = train
+
+    def prepare_for_onnx_export_(self, **kwargs):
+        """Make model exportable via ONNX trace."""
+        seen = set()
+
+        def apply_prepare_for_onnx_export_(module):
+            if module != self and hasattr(module, 'prepare_for_onnx_export_') \
+                    and module not in seen:
+                seen.add(module)
+                module.prepare_for_onnx_export_(**kwargs)
+
+        self.apply(apply_prepare_for_onnx_export_)
+
+
+
+    def output_layer(self, features, **kwargs):
+        """Project features to the default output size (typically vocabulary size)."""
+        return self.decoder.output_layer(features, **kwargs)
+
+    def max_positions(self):
+        """Maximum length supported by the model."""
+        return (self.encoder.max_positions(), self.decoder.max_positions())
+
+    def max_decoder_positions(self):
+        """Maximum length supported by the decoder."""
+        return self.decoder.max_positions()
 
 
     @staticmethod
@@ -350,6 +359,10 @@ class BARTModel(FairseqEncoderDecoderModel):
                             help='add layernorm to embedding')
         parser.add_argument('--no-scale-embedding', action='store_true',
                             help='if True, dont scale embeddings')
+
+
+
+
 
 
 class BARTForSequenceClassification(nn.Module):
