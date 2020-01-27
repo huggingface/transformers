@@ -112,8 +112,12 @@ class TFModelTesterMixin:
             tfo = tf_model(inputs_dict, training=False)
             tf_hidden_states = tfo[0].numpy()
             pt_hidden_states = pto[0].numpy()
+
+            pt_hidden_states[np.isnan(tf_hidden_states)] = 0
             tf_hidden_states[np.isnan(tf_hidden_states)] = 0
             pt_hidden_states[np.isnan(pt_hidden_states)] = 0
+            tf_hidden_states[np.isnan(pt_hidden_states)] = 0
+
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             # Debug info (remove when fixed)
             if max_diff >= 2e-2:
