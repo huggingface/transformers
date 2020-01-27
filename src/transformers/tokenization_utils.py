@@ -933,6 +933,7 @@ class PreTrainedTokenizer(object):
         return_tensors=None,
         return_input_lengths=False,
         return_attention_masks=False,
+        return_special_tokens_mask=False,
         **kwargs
     ):
         """
@@ -957,6 +958,8 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
+            return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
+                Mask returned in the output dict as List[List[int]] where int = {0, 1} (1: special token, 0: regular token).
             **kwargs: passed to the `self.tokenize()` method
         """
         batch_outputs = {}
@@ -974,6 +977,7 @@ class PreTrainedTokenizer(object):
                 stride=stride,
                 truncation_strategy=truncation_strategy,
                 return_tensors=None,
+                return_special_tokens_mask=return_special_tokens_mask,
             )
 
             # Append the non-padded length to the output
