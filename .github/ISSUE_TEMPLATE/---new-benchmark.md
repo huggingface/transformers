@@ -1,5 +1,5 @@
 ---
-name: "\U0001F5A5 New Benchmark"
+name: "\U0001F5A5 New benchmark"
 about: Benchmark a part of this library and share your results
 title: "[Benchmark]"
 labels: ''
@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-# Benchmarking `transformers`
+# 🖥 Benchmarking `transformers`
 
 ## Benchmark
 

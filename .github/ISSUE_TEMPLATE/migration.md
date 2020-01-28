@@ -7,7 +7,9 @@ assignees: ''
 
 ---
 
-## 📚 Migration
+# 📚 Migration
+
+## Information
 
 <!-- Important information -->
 
@@ -23,7 +25,7 @@ The tasks I am working on is:
 * [ ] an official GLUE/SQUaD task: (give the name)
 * [ ] my own task or dataset: (give details below)
 
-Details of the issue:
+## Details
 
 <!-- A clear and concise description of the migration issue.
     If you have code snippets, please provide it here as well.
@@ -48,7 +50,3 @@ Details of the issue:
  ([pytorch-transformers](https://github.com/huggingface/transformers#migrating-from-pytorch-transformers-to-transformers);
   [pytorch-pretrained-bert](https://github.com/huggingface/transformers#migrating-from-pytorch-pretrained-bert-to-transformers))
 - [ ] I checked if a related official extension example runs on my machine.
-
-## Additional context
-
-<!-- Add any other context about the problem here. -->

@@ -1,5 +1,5 @@
 ---
-name: "❓Questions & Help"
+name: "❓ Questions & Help"
 about: Post your general questions on Stack Overflow tagged huggingface-transformers
 title: ''
 labels: ''
@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-## ❓ Questions & Help
+# ❓ Questions & Help
 
 <!-- The GitHub issue tracker is primarly intended for bugs, feature requests,
      new models and benchmarks, and migration questions. For all other questions,
@@ -21,8 +21,9 @@ assignees: ''
      that you posted.
      -->
 
+## Details
 <!-- Description of your issue -->
 
 <!-- You should first ask your question on SO, and only if
-     you didn't get an answer ask it here on GitHub.
-A link to original question on Stack Overflow: 
+     you didn't get an answer ask it here on GitHub. -->
+**A link to original question on Stack Overflow**: 
