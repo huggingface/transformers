@@ -2,7 +2,6 @@ import logging
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from starlette.responses import JSONResponse
 from transformers import Pipeline
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import SUPPORTED_TASKS, pipeline
@@ -13,6 +12,7 @@ try:
     from fastapi import FastAPI, HTTPException, Body
     from fastapi.routing import APIRoute
     from pydantic import BaseModel
+    from starlette.responses import JSONResponse
 
     _serve_dependancies_installed = True
 except (ImportError, AttributeError):
