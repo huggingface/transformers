@@ -14,14 +14,14 @@ try:
     from pydantic import BaseModel
     from starlette.responses import JSONResponse
 
-    _serve_dependancies_installed = True
+    _serve_dependencies_installed = True
 except (ImportError, AttributeError):
     BaseModel = object
 
     def Body(*x, **y):
         pass
 
-    _serve_dependancies_installed = False
+    _serve_dependencies_installed = False
 
 
 logger = logging.getLogger("transformers-cli/serving")
@@ -111,7 +111,7 @@ class ServeCommand(BaseTransformersCLICommand):
         self.port = port
         self.workers = workers
 
-        if not _serve_dependancies_installed:
+        if not _serve_dependencies_installed:
             raise RuntimeError(
                 "Using serve command requires FastAPI and unicorn. "
                 'Please install transformers with [serving]: pip install "transformers[serving]".'
