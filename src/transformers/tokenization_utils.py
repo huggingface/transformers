@@ -998,7 +998,8 @@ class PreTrainedTokenizer(object):
             for key, value in batch_outputs.items():
 
                 padded_value = value
-                if key != "input_len":
+                # verify that the tokenizer has a pad_token_id
+                if key != "input_len" and self.pad_token_id is not None:
                     # Padding handle
                     padded_value = [
                         v + [self.pad_token_id if key == "input_ids" else 1] * (max_seq_len - len(v))
