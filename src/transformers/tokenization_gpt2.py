@@ -274,7 +274,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
-            **kwargs
+            **kwargs,
         )
 
         # self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))

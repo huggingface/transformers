@@ -25,6 +25,7 @@ from tokenizers import BPETokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
+
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -222,7 +223,4 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super().__init__(
-            BPETokenizer(vocab_file, merges_file, unk_token),
-            **kwargs
-        )
+        super().__init__(BPETokenizer(vocab_file, merges_file, unk_token), **kwargs)

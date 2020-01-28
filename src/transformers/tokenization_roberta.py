@@ -19,6 +19,7 @@ import logging
 
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 
+
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
@@ -161,22 +162,22 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-            self,
-            vocab_file,
-            merges_file,
-            errors="replace",
-            bos_token="<s>",
-            eos_token="</s>",
-            sep_token="</s>",
-            cls_token="<s>",
-            unk_token="<unk>",
-            pad_token="<pad>",
-            mask_token="<mask>",
-            **kwargs
+        self,
+        vocab_file,
+        merges_file,
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        **kwargs
     ):
-        kwargs['pad_token'] = pad_token
-        kwargs['sep_token'] = sep_token
-        kwargs['cls_token'] = cls_token
-        kwargs['mask_token'] = mask_token
+        kwargs["pad_token"] = pad_token
+        kwargs["sep_token"] = sep_token
+        kwargs["cls_token"] = cls_token
+        kwargs["mask_token"] = mask_token
 
         super().__init__(vocab_file, merges_file, unk_token, bos_token, eos_token, add_prefix_space=True)
