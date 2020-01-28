@@ -7,9 +7,9 @@ assignees: ''
 
 ---
 
-## 🐛 Bug
+# 🐛 Bug
 
-<!-- Important information -->
+## Information
 
 Model I am using (Bert, XLNet ...):
 
@@ -48,7 +48,3 @@ Steps to reproduce the behavior:
 * Using GPU ?
 * Distributed or parallel setup ?
 * Any other relevant information:
-
-## Additional context
-
-<!-- Add any other context about the problem here. -->
