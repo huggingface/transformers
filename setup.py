@@ -63,7 +63,7 @@ extras["sklearn"] = ["scikit-learn"]
 extras["tf"] = ["tensorflow"]
 extras["torch"] = ["torch"]
 
-extras["serving"] = ["pydantic", "uvicorn", "fastapi"]
+extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
 extras["testing"] = ["pytest", "pytest-xdist"]
