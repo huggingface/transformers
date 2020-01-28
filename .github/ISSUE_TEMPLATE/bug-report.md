@@ -1,6 +1,6 @@
 ---
 name: "\U0001F41B Bug Report"
-about: Submit a bug report to help us improve PyTorch Transformers
+about: Submit a bug report to help us improve transformers
 title: ''
 labels: ''
 assignees: ''
@@ -11,19 +11,19 @@ assignees: ''
 
 <!-- Important information -->
 
-Model I am using (Bert, XLNet....):
+Model I am using (Bert, XLNet ...):
 
-Language I am using the model on (English, Chinese....):
+Language I am using the model on (English, Chinese ...):
 
-The problem arise when using:
-* [ ] the official example scripts: (give details)
-* [ ] my own modified scripts: (give details)
+The problem arises when using:
+* [ ] the official example scripts: (give details below)
+* [ ] my own modified scripts: (give details below)
 
 The tasks I am working on is:
 * [ ] an official GLUE/SQUaD task: (give the name)
-* [ ] my own task or dataset: (give details)
+* [ ] my own task or dataset: (give details below)
 
-## To Reproduce
+## To reproduce
 
 Steps to reproduce the behavior:
 
@@ -31,18 +31,20 @@ Steps to reproduce the behavior:
 2.
 3.
 
-<!-- If you have a code sample, error messages, stack traces, please provide it here as well. -->
+<!-- If you have code snippets, error messages, stack traces please provide them here as well.
+     Important! Use code tags to correctly format your code. See https://help.github.com/en/github/writing-on-github/creating-and-highlighting-code-blocks#syntax-highlighting
+     Do not use screenshots, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.-->
 
 ## Expected behavior
 
-<!-- A clear and concise description of what you expected to happen. -->
+<!-- A clear and concise description of what you would expect to happen. -->
 
 ## Environment
 
 * OS:
 * Python version:
 * PyTorch version:
-* PyTorch Transformers version (or branch):
+* `transformers` version (or branch):
 * Using GPU ?
 * Distributed or parallel setup ?
 * Any other relevant information:
