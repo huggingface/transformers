@@ -42,15 +42,15 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 @contextmanager
 def truncate_and_pad(
-        tokenizer: BaseTokenizer,
-        max_length: int,
-        stride: int,
-        strategy: str,
-        pad_to_max_length: bool,
-        padding_side: str,
-        pad_token_id: int,
-        pad_token_type_id: int,
-        pad_token: str,
+    tokenizer: BaseTokenizer,
+    max_length: int,
+    stride: int,
+    strategy: str,
+    pad_to_max_length: bool,
+    padding_side: str,
+    pad_token_id: int,
+    pad_token_type_id: int,
+    pad_token: str,
 ):
     """
     This contextmanager is in charge of defining the truncation and the padding strategies and then
@@ -72,7 +72,7 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
 
-        if pad_to_max_length:
+        if pad_to_max_length and pad_token:
             tokenizer.enable_padding(
                 max_length=max_length,
                 direction=padding_side,
@@ -80,6 +80,8 @@ def truncate_and_pad(
                 pad_type_id=pad_token_type_id,
                 pad_token=pad_token,
             )
+        else:
+            logger.warning("Disabled padding. No padding token set")
 
     yield
 
@@ -1555,15 +1557,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     @staticmethod
     def _convert_encoding(
-            encoding,
-            return_tensors=None,
-            return_token_type_ids=True,
-            return_attention_mask=True,
-            return_overflowing_tokens=False,
-            return_special_tokens_mask=False,
-            return_offsets_mapping=False,
-            pad_token_id: int = 0,
-            pad_to_length: int = -1
+        encoding,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+        return_offsets_mapping=False,
+        pad_token_id: int = 0,
+        pad_to_length: int = -1,
     ):
         if return_overflowing_tokens and encoding.overflowing is not None:
             encodings = [encoding] + encoding.overflowing
@@ -1584,19 +1586,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             encoding_dict["offset_mapping"] = [e.offsets for e in encodings]
 
         if pad_to_length > 0:
-            for i in range(len(encoding_dict['input_ids'])):
-                if len(encoding_dict['input_ids'][i]) < pad_to_length:
-                    padding = (pad_to_length - len(encoding_dict['input_ids'][i]))
-                    encoding_dict['input_ids'][i] += [pad_token_id] * padding
+            for i in range(len(encoding_dict["input_ids"])):
+                if len(encoding_dict["input_ids"][i]) < pad_to_length:
+                    padding = pad_to_length - len(encoding_dict["input_ids"][i])
+                    encoding_dict["input_ids"][i] += [pad_token_id] * padding
 
                     if return_attention_mask:
-                        encoding_dict['attention_mask'][i] += [0] * padding
+                        encoding_dict["attention_mask"][i] += [0] * padding
 
                     if return_special_tokens_mask:
-                        encoding_dict['special_tokens_mask'][i] += [1] * padding
+                        encoding_dict["special_tokens_mask"][i] += [1] * padding
 
                     if return_token_type_ids:
-                        encoding_dict['token_type_ids'][i] += [1] * padding
+                        encoding_dict["token_type_ids"][i] += [1] * padding
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
@@ -1644,21 +1646,21 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return added
 
     def encode_plus(
-            self,
-            text,
-            text_pair=None,
-            add_special_tokens=True,
-            max_length=None,
-            stride=0,
-            truncation_strategy="longest_first",
-            pad_to_max_length=False,
-            return_tensors=None,
-            return_token_type_ids=True,
-            return_attention_mask=True,
-            return_overflowing_tokens=False,
-            return_special_tokens_mask=False,
-            return_offsets_mapping=False,
-            **kwargs
+        self,
+        text,
+        text_pair=None,
+        add_special_tokens=True,
+        max_length=None,
+        stride=0,
+        truncation_strategy="longest_first",
+        pad_to_max_length=False,
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+        return_offsets_mapping=False,
+        **kwargs
     ):
         # Ensure we have text defined as [str]
         if text is not None and not isinstance(text, list):
@@ -1675,15 +1677,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Set the truncation and padding strategy and restore the initial configuration
         with truncate_and_pad(
-                self._tokenizer,
-                max_length,
-                stride,
-                truncation_strategy,
-                pad_to_max_length,
-                self.padding_side,
-                self.pad_token_id,
-                self.pad_token_type_id,
-                self._pad_token,
+            self._tokenizer,
+            max_length,
+            stride,
+            truncation_strategy,
+            pad_to_max_length,
+            self.padding_side,
+            self.pad_token_id,
+            self.pad_token_type_id,
+            self._pad_token,
         ):
 
             if text_pair is None:
@@ -1703,8 +1705,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 return_special_tokens_mask,
                 return_offsets_mapping,
                 self.pad_token_id,
-                max_length
-            ) for encoding in tokens
+                max_length,
+            )
+            for encoding in tokens
         ]
 
         # Unwrap from the list if only on sample
@@ -1716,9 +1719,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         for key in tokens[0].keys():
             stack = [item[key] for item in tokens]
 
-            if return_tensors == 'tf':
+            if return_tensors == "tf":
                 stack = tf.concat(stack, axis=0)
-            elif return_tensors == 'pt':
+            elif return_tensors == "pt":
                 stack = torch.cat(stack, dim=0)
 
             sanitized[key] = stack
