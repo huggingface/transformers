@@ -306,13 +306,15 @@ def squad_convert_examples_to_features(
             tqdm(
                 p.imap(annotate_, examples, chunksize=32),
                 total=len(examples),
-                desc="convert squad examples to features",
+                desc="Converting squad examples to features",
             )
         )
+
+    print("Converted {} examples into {} features".format(len(examples), len(features)))
     new_features = []
     unique_id = 1000000000
     example_index = 0
-    for example_features in tqdm(features, total=len(features), desc="add example index and unique id"):
+    for example_features in features:
         if not example_features:
             continue
         for example_feature in example_features:
@@ -376,31 +378,34 @@ def squad_convert_examples_to_features(
                     },
                 )
 
-        return tf.data.Dataset.from_generator(
-            gen,
-            (
-                {"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32},
-                {
-                    "start_position": tf.int64,
-                    "end_position": tf.int64,
-                    "cls_index": tf.int64,
-                    "p_mask": tf.int32,
-                    "is_impossible": tf.int32,
-                },
-            ),
-            (
-                {
-                    "input_ids": tf.TensorShape([None]),
-                    "attention_mask": tf.TensorShape([None]),
-                    "token_type_ids": tf.TensorShape([None]),
-                },
-                {
-                    "start_position": tf.TensorShape([]),
-                    "end_position": tf.TensorShape([]),
-                    "cls_index": tf.TensorShape([]),
-                    "p_mask": tf.TensorShape([None]),
-                    "is_impossible": tf.TensorShape([]),
-                },
+        return (
+            features,
+            tf.data.Dataset.from_generator(
+                gen,
+                (
+                    {"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32},
+                    {
+                        "start_position": tf.int64,
+                        "end_position": tf.int64,
+                        "cls_index": tf.int64,
+                        "p_mask": tf.int32,
+                        "is_impossible": tf.int32,
+                    },
+                ),
+                (
+                    {
+                        "input_ids": tf.TensorShape([None]),
+                        "attention_mask": tf.TensorShape([None]),
+                        "token_type_ids": tf.TensorShape([None]),
+                    },
+                    {
+                        "start_position": tf.TensorShape([]),
+                        "end_position": tf.TensorShape([]),
+                        "cls_index": tf.TensorShape([]),
+                        "p_mask": tf.TensorShape([None]),
+                        "is_impossible": tf.TensorShape([]),
+                    },
+                ),
             ),
         )
 

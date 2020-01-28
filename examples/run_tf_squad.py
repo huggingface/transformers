@@ -12,37 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
+from __future__ import absolute_import, division, print_function
 
-
-import os
-from typing import Dict
-
-import tensorflow as tf
-import tensorflow_datasets
+import argparse
+import datetime
+import glob
 import logging
+import math
+import os
+import pickle
+
+import regex as re
+import tensorflow as tf
+from fastprogress import master_bar, progress_bar
+from seqeval import metrics
+from tqdm import tqdm, trange
 
 from transformers import (
-    BertTokenizer,
-    TFBertForQuestionAnswering,
+    TF2_WEIGHTS_NAME,
     BertConfig,
-    XLNetTokenizer,
-    TFXLNetForQuestionAnsweringSimple,
-    XLNetConfig,
-    XLMTokenizer,
-    TFXLMForQuestionAnsweringSimple,
-    XLMConfig,
-    DistilBertTokenizer,
-    TFDistilBertForQuestionAnswering,
+    BertTokenizer,
     DistilBertConfig,
+    DistilBertTokenizer,
+    GradientAccumulator,
+    SquadV1Processor,
+    SquadV2Processor,
+    TFBertForQuestionAnswering,
+    TFDistilBertForQuestionAnswering,
+    TFXLMForQuestionAnsweringSimple,
+    TFXLNetForQuestionAnsweringSimple,
+    XLMConfig,
+    XLMTokenizer,
+    XLNetConfig,
+    XLNetTokenizer,
+    create_optimizer,
+    squad_convert_examples_to_features,
 )
-import argparse
+from transformers.data.metrics.squad_metrics import compute_predictions_logits, squad_evaluate
+from transformers.data.processors.squad import SquadResult
 
-from seqeval import metrics
-from fastprogress import master_bar, progress_bar
-from transformers import create_optimizer, GradientAccumulator
-from transformers import squad_convert_examples_to_features, SquadV1Processor, SquadV2Processor
-import datetime
-import math
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +84,9 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
     writer = tf.summary.create_file_writer("/tmp/mylogs")
 
     with strategy.scope():
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+            reduction=tf.keras.losses.Reduction.NONE, from_logits=True
+        )
         optimizer = create_optimizer(args.learning_rate, num_train_steps, args.warmup_steps)
 
         if args.amp:
@@ -112,19 +122,17 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
         optimizer.apply_gradients(grads_and_vars, args.max_grad_norm)
         gradient_accumulator.reset()
 
-    # @tf.function
+    @tf.function
     def train_step(train_features, train_labels):
         def step_fn(train_features, train_labels):
-            if args.model_type in ["distilbert", "roberta"]:
-                del train_features['token_type_ids']
-
-
             with tf.GradientTape() as tape:
                 start_logits, end_logits = model(train_features)
-                start_logits = tf.multiply(start_logits, tf.dtypes.cast((train_features['attention_mask']), tf.float32))
-                end_logits = tf.multiply(end_logits, tf.dtypes.cast((train_features['attention_mask']), tf.float32))
-                start_loss = loss_fct(train_labels['start_position'], start_logits)
-                end_loss = loss_fct(train_labels['end_position'], end_logits)
+                start_logits = tf.multiply(
+                    start_logits, tf.dtypes.cast((train_features["attention_mask"]), tf.float32)
+                )
+                end_logits = tf.multiply(end_logits, tf.dtypes.cast((train_features["attention_mask"]), tf.float32))
+                start_loss = loss_fct(train_labels["start_position"], start_logits)
+                end_loss = loss_fct(train_labels["end_position"], end_logits)
                 total_loss = (start_loss + end_loss) / 2
 
                 loss = tf.reduce_sum(total_loss) * (1.0 / train_batch_size)
@@ -146,12 +154,19 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
 
     for epoch in train_iterator:
         epoch_iterator = progress_bar(
-            train_dataset, total=num_train_steps, parent=train_iterator, display=args.n_device > 1
+            train_dataset,
+            total=num_train_steps / args.num_train_epochs,
+            parent=train_iterator,
+            display=args.n_device > 1,
         )
         step = 1
 
         with strategy.scope():
-            for train_features, train_labels in epoch_iterator:
+            for train_features, train_labels in tqdm(
+                epoch_iterator,
+                desc="Training, epoch {}".format(epoch),
+                total=int(num_train_steps / args.num_train_epochs),
+            ):
                 loss = train_step(train_features, train_labels)
 
                 if step % args.gradient_accumulation_steps == 0:
@@ -166,9 +181,7 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
                         if (
                             args.n_device == 1 and args.evaluate_during_training
                         ):  # Only evaluate when single GPU otherwise metrics may not average well
-                            y_true, y_pred, eval_loss = evaluate(
-                                args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev"
-                            )
+                            y_true, y_pred, eval_loss = evaluate(args, strategy, model, tokenizer, global_step)
                             report = metrics.classification_report(y_true, y_pred, digits=4)
 
                             logging.info("Eval at step " + str(global_step) + "\n" + report)
@@ -218,11 +231,67 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
     logging.info("  Training took time = {}".format(datetime.datetime.now() - current_time))
 
 
-def evaluate():
-    ""
+def evaluate(args, strategy, model, tokenizer, prefix):
+    eval_batch_size = args.per_device_eval_batch_size * args.n_device
+    eval_dataset, size, examples, features = load_and_cache_examples(
+        args, tokenizer, evaluate=True, output_examples=True
+    )
+    eval_dataset = eval_dataset.batch(args.per_device_eval_batch_size)
+    eval_dataset = strategy.experimental_distribute_dataset(eval_dataset)
+    num_eval_steps = math.ceil(size / eval_batch_size)
+    master = master_bar(range(1))
+    eval_iterator = progress_bar(eval_dataset, total=num_eval_steps, parent=master, display=args.n_device > 1)
+
+    logging.info("***** Running evaluation *****")
+    logging.info("  Num examples = %d", size)
+    logging.info("  Batch size = %d", eval_batch_size)
+
+    all_results = []
+    for index, (eval_features, eval_labels) in tqdm(
+        enumerate(eval_iterator), total=size / args.per_device_eval_batch_size
+    ):
+        with strategy.scope():
+            start_logits, end_logits = model(eval_features)
+
+            for sample_index in range(args.per_device_eval_batch_size):
+                if index * args.per_device_eval_batch_size + sample_index < len(features):
+                    result = SquadResult(
+                        features[index * args.per_device_eval_batch_size + sample_index].unique_id,
+                        start_logits[sample_index],
+                        end_logits[sample_index],
+                    )
+                    all_results.append(result)
+
+    output_prediction_file = os.path.join(args.output_dir, "predictions_{}.json".format(prefix))
+    output_nbest_file = os.path.join(args.output_dir, "nbest_predictions_{}.json".format(prefix))
+
+    if args.version_2_with_negative:
+        output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
+    else:
+        output_null_log_odds_file = None
+
+    predictions = compute_predictions_logits(
+        examples,
+        features,
+        all_results,
+        args.n_best_size,
+        args.max_answer_length,
+        args.do_lower_case,
+        output_prediction_file,
+        output_nbest_file,
+        output_null_log_odds_file,
+        args.verbose_logging,
+        args.version_2_with_negative,
+        args.null_score_diff_threshold,
+        tokenizer,
+    )
+
+    # Compute the F1 and exact scores.
+    results = squad_evaluate(examples, predictions)
+    return results
 
 
-def load_and_cache_examples(args, tokenizer, evaluate=False):
+def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False):
     features_output_dir = os.path.join(args.output_dir, "features")
     cached_features_file = os.path.join(
         features_output_dir,
@@ -255,7 +324,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False):
             examples = examples
 
         logger.info("Converting examples to features")
-        dataset = squad_convert_examples_to_features(
+        features, dataset = squad_convert_examples_to_features(
             examples,
             tokenizer,
             args.max_seq_length,
@@ -269,7 +338,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False):
             os.makedirs(features_output_dir)
 
         with tf.compat.v1.python_io.TFRecordWriter(cached_features_file) as tfwriter:
-            for feature in dataset:
+            for feature in tqdm(dataset, desc="Building tfrecord dataset", total=len(features)):
                 example, result = feature
                 feature_key_value_pair = {
                     "input_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=example["input_ids"])),
@@ -282,14 +351,20 @@ def load_and_cache_examples(args, tokenizer, evaluate=False):
                     "cls_index": tf.train.Feature(int64_list=tf.train.Int64List(value=[result["cls_index"]])),
                     "p_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=result["p_mask"])),
                 }
-                features = tf.train.Features(feature=feature_key_value_pair)
-                example = tf.train.Example(features=features)
+                feature_skeleton = tf.train.Features(feature=feature_key_value_pair)
+                example = tf.train.Example(features=feature_skeleton)
 
                 tfwriter.write(example.SerializeToString())
 
+            with open("{}.pickle".format(cached_features_file.replace(".tfrecord", "_examples")), "wb") as handle:
+                pickle.dump(examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+            with open("{}.pickle".format(cached_features_file.replace(".tfrecord", "_features")), "wb") as handle:
+                pickle.dump(features, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
         logger.info("Features saved to cache")
 
-    features = {
+    feature_skeleton = {
         "input_ids": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
         "attention_mask": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
         "token_type_ids": tf.io.FixedLenFeature([args.max_seq_length], tf.int64),
@@ -300,7 +375,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False):
     }
 
     def select_data_from_record(record):
-        record = tf.io.parse_single_example(record, features)
+        record = tf.io.parse_single_example(record, feature_skeleton)
         x = {
             "input_ids": record["input_ids"],
             "attention_mask": record["attention_mask"],
@@ -317,7 +392,16 @@ def load_and_cache_examples(args, tokenizer, evaluate=False):
     dataset = tf.data.TFRecordDataset(cached_features_file)
     dataset = dataset.map(select_data_from_record)
 
+    with open("{}.pickle".format(cached_features_file.replace(".tfrecord", "_examples")), "rb") as handle:
+        examples = pickle.load(handle)
+
+    with open("{}.pickle".format(cached_features_file.replace(".tfrecord", "_features")), "rb") as handle:
+        features = pickle.load(handle)
+
     logger.info("Created dataset %s from TFRecord" % "dev" if evaluate else "train")
+
+    if output_examples:
+        return dataset, len(list(dataset.__iter__())), examples, features
     return dataset, len(list(dataset.__iter__()))
 
 
@@ -462,15 +546,41 @@ def main():
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument(
-        "--warmup_steps",
-        default=0,
-        help="Linear warmup over warmup_steps.",
+        "--warmup_steps", default=0, help="Linear warmup over warmup_steps.",
+    )
+    parser.add_argument("--max_grad_norm", default=1.0, help="Max gradient norm.")
+    parser.add_argument("--logging_steps", default=500, type=int, help="Log every X updates.")
+    parser.add_argument("--save_steps", default=500, type=int, help="Save checkpoint every X updates.")
+    parser.add_argument(
+        "--eval_all_checkpoints",
+        action="store_true",
+        help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
     parser.add_argument(
-        "--max_grad_norm", default=1.0, help="Max gradient norm."
+        "--n_best_size",
+        default=20,
+        type=int,
+        help="The total number of n-best predictions to generate in the nbest_predictions.json output file.",
     )
-    parser.add_argument("--logging_steps", default=50, help="Log every X updates.")
-    parser.add_argument("--save_steps", default=50, help="Save checkpoint every X updates.")
+    parser.add_argument(
+        "--max_answer_length",
+        default=30,
+        type=int,
+        help="The maximum length of an answer that can be generated. This is needed because the start "
+        "and end predictions are not conditioned on one another.",
+    )
+    parser.add_argument(
+        "--verbose_logging",
+        action="store_true",
+        help="If true, all of the warnings related to data processing will be printed. "
+        "A number of warnings are expected for a normal SQuAD evaluation.",
+    )
+    parser.add_argument(
+        "--null_score_diff_threshold",
+        type=float,
+        default=0.0,
+        help="If null_score - best_non_null is greater than the threshold predict null.",
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -560,6 +670,37 @@ def main():
 
         model.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
+
+    if args.do_eval:
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        checkpoints = []
+        results = []
+
+        if args.eval_all_checkpoints:
+            checkpoints = list(
+                os.path.dirname(c)
+                for c in sorted(
+                    glob.glob(args.output_dir + "/**/" + TF2_WEIGHTS_NAME, recursive=True),
+                    key=lambda f: int("".join(filter(str.isdigit, f)) or -1),
+                )
+            )
+
+        logging.info("Evaluate the following checkpoints: %s", checkpoints)
+
+        if len(checkpoints) == 0:
+            checkpoints.append(args.output_dir)
+
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split("-")[-1] if re.match(".*checkpoint-[0-9]", checkpoint) else "final"
+
+            with strategy.scope():
+                model = model_class.from_pretrained(checkpoint)
+                results = evaluate(args, strategy, model, tokenizer, prefix=global_step)
+
+            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in results.items())
+            results.update(result)
+
+        logger.info("Results: {}".format(results))
 
 
 if __name__ == "__main__":
