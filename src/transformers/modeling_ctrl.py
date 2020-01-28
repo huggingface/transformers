@@ -30,7 +30,7 @@ from .modeling_utils import Conv1D, PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-ctrl/pytorch/seqlen256_v1.bin"}
+CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-pytorch_model.bin"}
 
 
 def angle_defn(pos, i, d_model_size):

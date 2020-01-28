@@ -32,8 +32,8 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json"},
-    "merges_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt"},
+    "vocab_file": {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-vocab.json"},
+    "merges_file": {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-merges.txt"},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -148,14 +148,14 @@ class CTRLTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def bpe(self, token):
-        if token in self.cache:
-            return self.cache[token]
         word = tuple(token)
         word = tuple(list(word[:-1]) + [word[-1] + "</w>"])
+        if token in self.cache:
+            return self.cache[token]
         pairs = get_pairs(word)
 
         if not pairs:
-            return token
+            return token + "</w>"
 
         while True:
             bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
@@ -186,8 +186,9 @@ class CTRLTokenizer(PreTrainedTokenizer):
                 break
             else:
                 pairs = get_pairs(word)
-        word = "@@ ".join(word)
-        word = word[:-4]
+        word = " ".join(word)
+        if word == "\n  </w>":
+            word = "\n</w>"
         self.cache[token] = word
         return word
 
@@ -212,7 +213,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
-        out_string = " ".join(tokens).replace("@@ ", "").strip()
+        out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
     def save_vocabulary(self, save_directory):
