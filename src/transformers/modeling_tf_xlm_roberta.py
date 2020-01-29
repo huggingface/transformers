@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {}
 
 
-XLM_ROBERTA_START_DOCSTRING = r"""    
+XLM_ROBERTA_START_DOCSTRING = r"""
 
     .. note::
 
@@ -60,6 +60,7 @@ XLM_ROBERTA_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
+
 @add_start_docstrings(
     "The bare XLM-RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
@@ -69,19 +70,20 @@ class TFXLMRobertaModel(TFRobertaModel):
     This class overrides :class:`~transformers.TFRobertaModel`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """,
-    XLM_ROBERTA_START_DOCSTRING,
+    """XLM-RoBERTa Model with a `language modeling` head on top. """, XLM_ROBERTA_START_DOCSTRING,
 )
 class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
     """
     This class overrides :class:`~transformers.TFRobertaForMaskedLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -96,6 +98,7 @@ class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
     This class overrides :class:`~transformers.TFRobertaForSequenceClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -110,5 +113,6 @@ class TFXLMRobertaForTokenClassification(TFRobertaForTokenClassification):
     This class overrides :class:`~transformers.TFRobertaForTokenClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = XLMRobertaConfig
     pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
