@@ -56,7 +56,16 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
         }
 
 
-def create_optimizer(init_lr, num_train_steps, num_warmup_steps):
+def create_optimizer(
+    init_lr,
+    num_train_steps,
+    num_warmup_steps,
+    weight_decay=0.0,
+    adam_epsilon=1e-6,
+    beta_1=0.9,
+    beta_2=0.999,
+    exclude_from_weight_decay=("layer_norm", "bias"),
+):
     """Creates an optimizer with learning rate schedule."""
     # Implements linear decay of the learning rate.
     learning_rate_fn = tf.keras.optimizers.schedules.PolynomialDecay(
@@ -68,11 +77,11 @@ def create_optimizer(init_lr, num_train_steps, num_warmup_steps):
         )
     optimizer = AdamWeightDecay(
         learning_rate=learning_rate_fn,
-        weight_decay_rate=0.01,
-        beta_1=0.9,
-        beta_2=0.999,
-        epsilon=1e-6,
-        exclude_from_weight_decay=["layer_norm", "bias"],
+        weight_decay_rate=weight_decay,
+        beta_1=beta_1,
+        beta_2=beta_2,
+        epsilon=adam_epsilon,
+        exclude_from_weight_decay=exclude_from_weight_decay,
     )
     return optimizer
 

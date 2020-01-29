@@ -89,6 +89,9 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
         )
         optimizer = create_optimizer(args.learning_rate, num_train_steps, args.warmup_steps)
 
+        if args.xla:
+            tf.config.optimizer.set_jit(True)
+
         if args.amp:
             optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, "dynamic")
 
@@ -178,24 +181,13 @@ def train(args, strategy, train_dataset, tokenizer, model, num_train_examples, t
 
                     if args.logging_steps > 0 and global_step % args.logging_steps == 0:
                         # Log metrics
-                        if (
-                            args.n_device == 1 and args.evaluate_during_training
-                        ):  # Only evaluate when single GPU otherwise metrics may not average well
-                            y_true, y_pred, eval_loss = evaluate(args, strategy, model, tokenizer, global_step)
-                            report = metrics.classification_report(y_true, y_pred, digits=4)
-
-                            logging.info("Eval at step " + str(global_step) + "\n" + report)
-                            logging.info("eval_loss: " + str(eval_loss))
-
-                            precision = metrics.precision_score(y_true, y_pred)
-                            recall = metrics.recall_score(y_true, y_pred)
-                            f1 = metrics.f1_score(y_true, y_pred)
+                        if args.n_device == 1 and args.evaluate_during_training:
+                            # Only evaluate when single GPU otherwise metrics may not average well
+                            results = evaluate(args, strategy, model, tokenizer, global_step)
 
                             with writer.as_default():
-                                tf.summary.scalar("eval_loss", eval_loss, global_step)
-                                tf.summary.scalar("precision", precision, global_step)
-                                tf.summary.scalar("recall", recall, global_step)
-                                tf.summary.scalar("f1", f1, global_step)
+                                tf.summary.scalar("exact", results[0], global_step)
+                                tf.summary.scalar("f1", results[1], global_step)
 
                         lr = optimizer.learning_rate
                         learning_rate = lr(step)

@@ -15,34 +15,34 @@
 """ Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
 
 
+import argparse
+import logging
 import os
 
 import tensorflow as tf
 import tensorflow_datasets
-import logging
 
 from transformers import (
-    BertTokenizer,
-    TFBertForSequenceClassification,
     BertConfig,
-    XLNetTokenizer,
-    TFXLNetForSequenceClassification,
-    XLNetConfig,
-    XLMTokenizer,
-    TFXLMForSequenceClassification,
-    XLMConfig,
-    RobertaTokenizer,
-    TFRobertaForSequenceClassification,
-    RobertaConfig,
-    DistilBertTokenizer,
-    TFDistilBertForSequenceClassification,
+    BertTokenizer,
     DistilBertConfig,
+    DistilBertTokenizer,
+    RobertaConfig,
+    RobertaTokenizer,
+    TFBertForSequenceClassification,
+    TFDistilBertForSequenceClassification,
+    TFRobertaForSequenceClassification,
+    TFXLMForSequenceClassification,
+    TFXLNetForSequenceClassification,
+    XLMConfig,
+    XLMTokenizer,
+    XLNetConfig,
+    XLNetTokenizer,
 )
-import argparse
-
+from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
+
 
 logger = logging.getLogger(__name__)
 
