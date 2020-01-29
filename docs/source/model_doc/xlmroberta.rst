@@ -73,3 +73,30 @@ XLMRobertaForTokenClassification
 .. autoclass:: transformers.XLMRobertaForTokenClassification
     :members:
 
+
+TFXLMRobertaModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMRobertaModel
+    :members:
+
+
+TFXLMRobertaForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMRobertaForMaskedLM
+    :members:
+
+
+TFXLMRobertaForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMRobertaForSequenceClassification
+    :members:
+
+
+TFXLMRobertaForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMRobertaForTokenClassification
+    :members:
