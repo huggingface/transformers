@@ -999,7 +999,7 @@ class PreTrainedTokenizer(object):
 
                 padded_value = value
                 # verify that the tokenizer has a pad_token_id
-                if key != "input_len" and self.pad_token_id is not None:
+                if key != "input_len" and self._pad_token is not None:
                     # Padding handle
                     padded_value = [
                         v + [self.pad_token_id if key == "input_ids" else 1] * (max_seq_len - len(v))
