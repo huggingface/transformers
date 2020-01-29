@@ -326,7 +326,7 @@ class PreTrainedTokenizer(object):
                 cls.pretrained_init_configuration
                 and pretrained_model_name_or_path in cls.pretrained_init_configuration
             ):
-                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path]
+                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path].copy()
         else:
             # Get the vocabulary from local files
             logger.info(
