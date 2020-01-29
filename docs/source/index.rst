@@ -98,3 +98,4 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/camembert
     model_doc/albert
     model_doc/xlmroberta
+    model_doc/flaubert
