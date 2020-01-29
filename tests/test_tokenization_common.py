@@ -495,3 +495,16 @@ class TokenizerTesterMixin:
         assert [token_type_padding_idx] * padding_size + token_type_ids == padded_token_type_ids
         assert [0] * padding_size + attention_mask == padded_attention_mask
         assert [1] * padding_size + special_tokens_mask == padded_special_tokens_mask
+
+    def test_separate_tokenizers(self):
+        # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
+        # we're loading an S3 configuration from a pre-trained identifier, and we have no way of testing those today.
+
+        tokenizer = self.get_tokenizer(random_argument=True)
+        print(tokenizer.init_kwargs)
+        assert tokenizer.init_kwargs['random_argument'] is True
+        new_tokenizer = self.get_tokenizer(random_argument=False)
+        print(tokenizer.init_kwargs)
+        print(new_tokenizer.init_kwargs)
+        assert tokenizer.init_kwargs['random_argument'] is True
+        assert new_tokenizer.init_kwargs['random_argument'] is False
