@@ -491,6 +491,34 @@ class TextClassificationPipeline(Pipeline):
         return [{"label": self.model.config.id2label[item.argmax()], "score": item.max()} for item in scores]
 
 
+class FillMaskPipeline(Pipeline):
+    """
+    """
+
+    def __call__(self, *texts, **kwargs):
+        # Parse arguments
+        inputs = self._args_parser(*texts, **kwargs)
+        inputs = self.tokenizer.batch_encode_plus(
+            inputs, add_special_tokens=True, return_tensors=self.framework, max_length=self.tokenizer.max_len
+        )
+        masked_index = (inputs["input_ids"] == self.tokenizer.mask_token_id).squeeze().nonzero().item()
+
+        # Filter out features not available on specific models
+        inputs = self.inputs_for_model(inputs)
+        outputs = self._forward(inputs)
+
+        logits = outputs[0, masked_index, :]
+        probs = np.exp(logits) / np.exp(logits).sum(-1)
+        predictions = np.argpartition(probs, -5)[-5:]
+        values = probs[predictions]
+        results = []
+        for v, p in zip(values, predictions):
+            tokens = inputs["input_ids"].squeeze().tolist()
+            tokens[masked_index] = p
+            results += (self.tokenizer.decode(tokens), v)
+        return results
+
+
 class NerPipeline(Pipeline):
     """
     Named Entity Recognition pipeline using ModelForTokenClassification head.
