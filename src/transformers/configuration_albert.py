@@ -76,6 +76,8 @@ class AlbertConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
+            classifier_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+                The dropout ratio for attached classifiers.
 
         Example::
 
@@ -121,6 +123,7 @@ class AlbertConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        classifier_dropout_prob=0.1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -140,3 +143,4 @@ class AlbertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.classifier_dropout_prob = classifier_dropout_prob
