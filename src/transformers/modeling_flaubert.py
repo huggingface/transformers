@@ -310,6 +310,7 @@ class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
     This class overrides :class:`~transformers.XLMWithLMHeadModel`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = FlaubertConfig
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -329,6 +330,7 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
     This class overrides :class:`~transformers.XLMForSequenceClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = FlaubertConfig
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -348,6 +350,7 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
     This class overrides :class:`~transformers.XLMForQuestionAnsweringSimple`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = FlaubertConfig
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -367,6 +370,7 @@ class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     This class overrides :class:`~transformers.XLMForQuestionAnswering`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = FlaubertConfig
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
