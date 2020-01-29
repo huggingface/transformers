@@ -502,9 +502,9 @@ class TokenizerTesterMixin:
 
         tokenizer = self.get_tokenizer(random_argument=True)
         print(tokenizer.init_kwargs)
-        assert tokenizer.init_kwargs['random_argument'] is True
+        assert tokenizer.init_kwargs["random_argument"] is True
         new_tokenizer = self.get_tokenizer(random_argument=False)
         print(tokenizer.init_kwargs)
         print(new_tokenizer.init_kwargs)
-        assert tokenizer.init_kwargs['random_argument'] is True
-        assert new_tokenizer.init_kwargs['random_argument'] is False
+        assert tokenizer.init_kwargs["random_argument"] is True
+        assert new_tokenizer.init_kwargs["random_argument"] is False
