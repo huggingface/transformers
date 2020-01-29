@@ -68,6 +68,7 @@ CONFIG_MAPPING = OrderedDict(
         ("camembert", CamembertConfig,),
         ("xlm-roberta", XLMRobertaConfig,),
         ("roberta", RobertaConfig,),
+        ("flaubert", FlaubertConfig,),
         ("bert", BertConfig,),
         ("openai-gpt", OpenAIGPTConfig,),
         ("gpt2", GPT2Config,),
@@ -75,7 +76,6 @@ CONFIG_MAPPING = OrderedDict(
         ("xlnet", XLNetConfig,),
         ("xlm", XLMConfig,),
         ("ctrl", CTRLConfig,),
-        ("flaubert", FlaubertConfig,),
     ]
 )
 
