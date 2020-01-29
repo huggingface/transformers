@@ -17,6 +17,8 @@
 
 import logging
 
+from tokenizers.processors import RobertaProcessing
+
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 
 logger = logging.getLogger(__name__)
@@ -181,6 +183,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             unk_token="<unk>",
             pad_token="<pad>",
             mask_token="<mask>",
+            add_prefix_space=False,
             **kwargs
     ):
         kwargs['pad_token'] = pad_token
@@ -188,4 +191,12 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         kwargs['cls_token'] = cls_token
         kwargs['mask_token'] = mask_token
 
-        super().__init__(vocab_file, merges_file, unk_token, bos_token, eos_token, add_prefix_space=True)
+        super().__init__(vocab_file, merges_file,
+                         unk_token, bos_token, eos_token,
+                         add_prefix_space=add_prefix_space,
+                         **kwargs)
+
+        self.tokenizer._tokenizer.post_processor = RobertaProcessing.new(
+            (sep_token, self.sep_token_id),
+            (cls_token, self.cls_token_id)
+        )
