@@ -520,8 +520,8 @@ You can create `Pipeline` objects for the following down-stream tasks:
  - `feature-extraction`: Generates a tensor representation for the input sequence
  - `ner`: Generates named entity mapping for each word in the input sequence.
  - `sentiment-analysis`: Gives the polarity (positive / negative) of the whole input sequence.
- - `question-answering`: Provided some context and a question refering to the context, it will extract the answer to the question
- in the context.
+ - `text-classification`: Initialize a `TextClassificationPipeline` directly, or see `sentiment-analysis` for an example.
+ - `question-answering`: Provided some context and a question refering to the context, it will extract the answer to the question in the context.
 
 ```python
 from transformers import pipeline
