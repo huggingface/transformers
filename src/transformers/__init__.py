@@ -93,6 +93,7 @@ from .modeling_tf_pytorch_utils import (
 from .pipelines import (
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
+    FillMaskPipeline,
     JsonPipelineDataFormat,
     NerPipeline,
     PipedPipelineDataFormat,
