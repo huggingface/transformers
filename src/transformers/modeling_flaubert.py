@@ -110,7 +110,6 @@ class FlaubertModel(XLMModel):
 
     config_class = FlaubertConfig
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
-    model_type = "flaubert"
 
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super(FlaubertModel, self).__init__(config)
