@@ -82,6 +82,7 @@ class PretrainedConfig(object):
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
         # Fine-tuning task arguments
+        self.architectures = kwargs.pop("architectures", None)
         self.finetuning_task = kwargs.pop("finetuning_task", None)
         self.num_labels = kwargs.pop("num_labels", 2)
         self.id2label = kwargs.pop("id2label", {i: "LABEL_{}".format(i) for i in range(self.num_labels)})
