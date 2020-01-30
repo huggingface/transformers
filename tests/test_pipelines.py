@@ -127,19 +127,19 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
-    def test_features_extraction(self):
+    def test_feature_extraction(self):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in FEATURE_EXTRACT_FINETUNED_MODELS:
-            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer)
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_tf
-    def test_tf_features_extraction(self):
+    def test_tf_feature_extraction(self):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_FEATURE_EXTRACT_FINETUNED_MODELS:
-            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer)
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
 
