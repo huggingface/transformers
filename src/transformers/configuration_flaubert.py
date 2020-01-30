@@ -45,7 +45,10 @@ class FlaubertConfig(XLMConfig):
         Args:
             pre_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to apply the layer normalization before or after the feed forward layer following the
-                attention in each layer.
+                attention in each layer (Vaswani et al., Tensor2Tensor for Neural Machine Translation. 2018)
+            layerdrop (:obj:`float`, `optional`, defaults to 0.0):
+                Probability to drop layers during training (Fan et al., Reducing Transformer Depth on Demand
+                with Structured Dropout. ICLR 2020)
             vocab_size (:obj:`int`, optional, defaults to 30145):
                 Vocabulary size of the XLM model. Defines the different tokens that
                 can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLMModel`.
