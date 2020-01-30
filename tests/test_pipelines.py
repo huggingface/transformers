@@ -1,7 +1,8 @@
 import unittest
-from typing import Iterable
+from typing import Iterable, List
 
 from transformers import pipeline
+from transformers.pipelines import Pipeline
 
 from .utils import require_tf, require_torch
 
@@ -64,7 +65,9 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
 
 
 class MonoColumnInputTestCase(unittest.TestCase):
-    def _test_mono_column_pipeline(self, nlp, valid_inputs: list, invalid_inputs: list, output_keys: Iterable[str]):
+    def _test_mono_column_pipeline(
+        self, nlp: Pipeline, valid_inputs: List, invalid_inputs: List, output_keys: Iterable[str]
+    ):
         self.assertIsNotNone(nlp)
 
         mono_result = nlp(valid_inputs[0])
@@ -110,7 +113,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     def test_sentiment_analysis(self):
-        mandatory_keys = {"label"}
+        mandatory_keys = {"label", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TEXT_CLASSIF_FINETUNED_MODELS:
@@ -119,7 +122,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_tf
     def test_tf_sentiment_analysis(self):
-        mandatory_keys = {"label"}
+        mandatory_keys = {"label", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_TEXT_CLASSIF_FINETUNED_MODELS:
