@@ -47,6 +47,7 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForTokenClassification,
+        TFAutoModelWithLMHead,
     )
 
 if is_torch_available():
@@ -56,6 +57,7 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelWithLMHead,
     )
 
 
@@ -504,6 +506,71 @@ class TextClassificationPipeline(Pipeline):
         return [{"label": self.model.config.id2label[item.argmax()], "score": item.max()} for item in scores]
 
 
+class FillMaskPipeline(Pipeline):
+    """
+    Masked language modeling prediction pipeline using ModelWithLMHead head.
+    """
+
+    def __init__(
+        self,
+        model,
+        tokenizer: PreTrainedTokenizer = None,
+        modelcard: ModelCard = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        topk=5,
+    ):
+        super().__init__(
+            model=model,
+            tokenizer=tokenizer,
+            modelcard=modelcard,
+            framework=framework,
+            args_parser=args_parser,
+            device=device,
+            binary_output=True,
+        )
+
+        self.topk = topk
+
+    def __call__(self, *args, **kwargs):
+        inputs = self._parse_and_tokenize(*args, **kwargs)
+        outputs = self._forward(inputs, return_tensors=True)
+
+        results = []
+        batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
+
+        for i in range(batch_size):
+            input_ids = inputs["input_ids"][i]
+            result = []
+
+            if self.framework == "tf":
+                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy().item()
+                logits = outputs[i, masked_index, :]
+                probs = tf.nn.softmax(logits)
+                topk = tf.math.top_k(probs, k=self.topk)
+                values, predictions = topk.values.numpy(), topk.indices.numpy()
+            else:
+                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
+                logits = outputs[i, masked_index, :]
+                probs = logits.softmax(dim=0)
+                values, predictions = probs.topk(self.topk)
+
+            for v, p in zip(values.tolist(), predictions.tolist()):
+                tokens = input_ids.numpy()
+                tokens[masked_index] = p
+                # Filter padding out:
+                tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
+                result.append({"sequence": self.tokenizer.decode(tokens), "score": v, "token": p})
+
+            # Append
+            results += [result]
+
+        if len(results) == 1:
+            return results[0]
+        return results
+
+
 class NerPipeline(Pipeline):
     """
     Named Entity Recognition pipeline using ModelForTokenClassification head.
@@ -915,6 +982,16 @@ SUPPORTED_TASKS = {
             },
             "config": None,
             "tokenizer": "distilbert-base-uncased",
+        },
+    },
+    "fill-mask": {
+        "impl": FillMaskPipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "distilroberta-base", "tf": "distilroberta-base"},
+            "config": None,
+            "tokenizer": "distilroberta-base",
         },
     },
 }

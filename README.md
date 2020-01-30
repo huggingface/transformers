@@ -522,6 +522,7 @@ You can create `Pipeline` objects for the following down-stream tasks:
  - `sentiment-analysis`: Gives the polarity (positive / negative) of the whole input sequence.
  - `text-classification`: Initialize a `TextClassificationPipeline` directly, or see `sentiment-analysis` for an example.
  - `question-answering`: Provided some context and a question refering to the context, it will extract the answer to the question in the context.
+ - `fill-mask`: Takes an input sequence containing a masked token (e.g. `<mask>`) and return list of most probable filled sequences, with their probabilities.
 
 ```python
 from transformers import pipeline
