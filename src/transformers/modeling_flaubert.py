@@ -16,6 +16,7 @@
 
 
 import logging
+import random
 
 import torch
 from torch.nn import functional as F
@@ -113,8 +114,8 @@ class FlaubertModel(XLMModel):
 
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super(FlaubertModel, self).__init__(config)
-        self.layerdrop = 0.0 if not hasattr(config, "layerdrop") else config.layerdrop
-        self.pre_norm = False if not hasattr(config, "pre_norm") else config.pre_norm
+        self.layerdrop = getattr(config, "layerdrop", 0.0)
+        self.pre_norm = getattr(config, "pre_norm", False)
 
     @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
     def forward(
@@ -243,6 +244,11 @@ class FlaubertModel(XLMModel):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
+            # LayerDrop
+            dropout_probability = random.uniform(0, 1)
+            if self.training and (dropout_probability < self.layerdrop):
+                continue
+
             if self.output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
