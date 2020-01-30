@@ -25,6 +25,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -66,6 +67,13 @@ from .modeling_distilbert import (
     DistilBertForSequenceClassification,
     DistilBertForTokenClassification,
     DistilBertModel,
+)
+from .modeling_flaubert import (
+    FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    FlaubertForQuestionAnswering,
+    FlaubertForSequenceClassification,
+    FlaubertModel,
+    FlaubertWithLMHeadModel,
 )
 from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
 from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
@@ -122,6 +130,7 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -141,6 +150,7 @@ MODEL_MAPPING = OrderedDict(
         (XLNetConfig, XLNetModel),
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
+        (FlaubertConfig, FlaubertModel),
     ]
 )
 
@@ -159,6 +169,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLNetConfig, XLNetLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
+        (FlaubertConfig, FlaubertWithLMHeadModel),
     ]
 )
 
@@ -177,6 +188,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLNetConfig, XLNetLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
+        (FlaubertConfig, FlaubertWithLMHeadModel),
     ]
 )
 
@@ -190,6 +202,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
+        (FlaubertConfig, FlaubertForSequenceClassification),
     ]
 )
 
@@ -201,6 +214,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnswering),
         (XLMConfig, XLMForQuestionAnswering),
+        (FlaubertConfig, FlaubertForQuestionAnswering),
     ]
 )
 
@@ -251,6 +265,7 @@ class AutoModel(object):
                 - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLModel` (Transformer-XL model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModel` (XLM model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (XLM model)
 
         Examples::
 
@@ -291,6 +306,7 @@ class AutoModel(object):
             - contains `xlnet`: :class:`~transformers.XLNetModel` (XLNet model)
             - contains `xlm`: :class:`~transformers.XLMModel` (XLM model)
             - contains `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
+            - contains `flaubert`: :class:`~transformers.Flaubert` (Flaubert  model)
 
             The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
             To train the model, you should first set it back in training mode with `model.train()`
@@ -401,6 +417,7 @@ class AutoModelForPreTraining(object):
                 - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
 
         Examples::
 
@@ -440,6 +457,7 @@ class AutoModelForPreTraining(object):
             - contains `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
             - contains `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
             - contains `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
+            - contains `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -552,6 +570,7 @@ class AutoModelWithLMHead(object):
                 - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
 
         Examples::
 
@@ -592,6 +611,7 @@ class AutoModelWithLMHead(object):
             - contains `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
             - contains `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
             - contains `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
+            - contains `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -703,6 +723,7 @@ class AutoModelForSequenceClassification(object):
                 - isInstance of `bert` configuration class: :class:`~transformers.BertModelForSequenceClassification` (Bert model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForSequenceClassification` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModelForSequenceClassification` (XLM model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
 
 
         Examples::
@@ -740,7 +761,7 @@ class AutoModelForSequenceClassification(object):
             - contains `roberta`: :class:`~transformers.RobertaForSequenceClassification` (RoBERTa model)
             - contains `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
             - contains `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
-            - contains `xlm`: :class:`~transformers.XLMForSequenceClassification` (XLM model)
+            - contains `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -850,6 +871,7 @@ class AutoModelForQuestionAnswering(object):
                 - isInstance of `bert` configuration class: :class:`~transformers.BertModelForQuestionAnswering` (Bert model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForQuestionAnswering` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModelForQuestionAnswering` (XLM model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
 
         Examples::
 
@@ -885,6 +907,7 @@ class AutoModelForQuestionAnswering(object):
             - contains `bert`: :class:`~transformers.BertForQuestionAnswering` (Bert model)
             - contains `xlnet`: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
             - contains `xlm`: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
+            - contains `flaubert`: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
