@@ -64,7 +64,7 @@ def get_framework(model=None):
         If both frameworks are installed and no specific model is provided, defaults to using PyTorch.
     """
     if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
-        # Both framework are available but the use supplied a model class instance.
+        # Both framework are available but the user supplied a model class instance.
         # Try to guess which framework to use from the model classname
         framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     elif not is_tf_available() and not is_torch_available():
@@ -420,7 +420,10 @@ class Pipeline(_ScikitCompat):
         else:
             return {k: [feature[k] for feature in features] for k in args}
 
-    def __call__(self, *texts, **kwargs):
+    def _parse_and_tokenize(self, *texts, **kwargs):
+        """
+        Parse arguments and tokenize
+        """
         # Parse arguments
         inputs = self._args_parser(*texts, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
@@ -429,13 +432,19 @@ class Pipeline(_ScikitCompat):
 
         # Filter out features not available on specific models
         inputs = self.inputs_for_model(inputs)
+
+        return inputs
+
+    def __call__(self, *texts, **kwargs):
+        inputs = self._parse_and_tokenize(*texts, **kwargs)
         return self._forward(inputs)
 
-    def _forward(self, inputs):
+    def _forward(self, inputs, return_tensors=False):
         """
         Internal framework specific forward dispatching.
         Args:
             inputs: dict holding all the keyworded arguments for required by the model forward method.
+            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array.
         Returns:
             Numpy array
         """
@@ -449,7 +458,10 @@ class Pipeline(_ScikitCompat):
                     inputs = self.ensure_tensor_on_device(**inputs)
                     predictions = self.model(**inputs)[0].cpu()
 
-        return predictions.numpy()
+        if return_tensors:
+            return predictions
+        else:
+            return predictions.numpy()
 
 
 class FeatureExtractionPipeline(Pipeline):
