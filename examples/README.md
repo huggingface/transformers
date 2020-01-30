@@ -404,12 +404,12 @@ exact_match = 81.22
 #### Distributed training
 
 
-Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.0:
+Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
     --model_type bert \
-    --model_name_or_path bert-base-cased \
+    --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
     --do_lower_case \
@@ -419,9 +419,9 @@ python -m torch.distributed.launch --nproc_per_node=8 run_squad.py \
     --num_train_epochs 2 \
     --max_seq_length 384 \
     --doc_stride 128 \
-    --output_dir ../models/wwm_uncased_finetuned_squad/ \
-    --per_gpu_train_batch_size 24 \
-    --gradient_accumulation_steps 12
+    --output_dir ./examples/models/wwm_uncased_finetuned_squad/ \
+    --per_gpu_eval_batch_size=3   \
+    --per_gpu_train_batch_size=3   \
 ```
 
 Training with the previously defined hyper-parameters yields the following results:
