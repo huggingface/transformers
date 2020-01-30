@@ -536,7 +536,8 @@ class NerPipeline(Pipeline):
         self.ignore_labels = ignore_labels
 
     def __call__(self, *texts, **kwargs):
-        inputs, answers = self._args_parser(*texts, **kwargs), []
+        inputs = self._args_parser(*texts, **kwargs)
+        answers = []
         for sentence in inputs:
 
             # Manage correct placement of the tensors
