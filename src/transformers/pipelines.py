@@ -28,7 +28,9 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_distilbert import DistilBertConfig
 from .configuration_utils import PretrainedConfig
+from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
@@ -405,9 +407,8 @@ class Pipeline(_ScikitCompat):
             dict holding all the required parameters for model's forward
         """
         args = ["input_ids", "attention_mask"]
-        model_type = type(self.model).__name__.lower()
 
-        if "distilbert" not in model_type and "xlm" not in model_type:
+        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig)):
             args += ["token_type_ids"]
 
         # PR #1548 (CLI) There is an issue with attention_mask
