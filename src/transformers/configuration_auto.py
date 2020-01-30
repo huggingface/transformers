@@ -80,7 +80,7 @@ CONFIG_MAPPING = OrderedDict(
 )
 
 
-class AutoConfig(object):
+class AutoConfig:
     r"""
         :class:`~transformers.AutoConfig` is a generic configuration class
         that will be instantiated as one of the configuration classes of the library
