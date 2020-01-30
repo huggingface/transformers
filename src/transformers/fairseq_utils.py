@@ -183,46 +183,29 @@ class LearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int,):
-        #num_embeddings = num_embeddings
-        #self.padding_idx = padding_idx
         # if padding_idx is specified then offset the embedding ids by
         # this index and adjust num_embeddings appropriately
-        if padding_idx is not None:
-            num_embeddings += (padding_idx + 1)  # WHY?
+        assert padding_idx is not None
+        num_embeddings += (padding_idx + 1)  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
-        if padding_idx is not None:
-            self.max_positions = num_embeddings - self.padding_idx - 1
-        else:
-            self.max_positions = num_embeddings
-
-
+        self.max_positions = num_embeddings - self.padding_idx - 1
         self.onnx_trace = False
         nn.init.normal_(self.weight, mean=0, std=embedding_dim ** -0.5)
-        if padding_idx is not None: nn.init.constant_(self.weight[padding_idx], 0)
+        nn.init.constant_(self.weight[padding_idx], 0)
 
-    def forward(self, input, incremental_state=None, positions=None):
+    def forward(self, input, incremental_state=None):
         """Input is expected to be of size [bsz x seqlen]."""
-        assert (
-            (positions is None) or (self.padding_idx is None)
-        ), "If positions is pre-computed then padding_idx should not be set."
-
-        if positions is None:
-            if incremental_state is not None:
-                # positions is the same for every token when decoding a single step
-                # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
-            else:
-                positions = make_positions(
-                    input, self.padding_idx,
-                )
+        if incremental_state is not None:
+            # positions is the same for every token when decoding a single step
+            # Without the int() cast, it doesn't work in some cases when exporting to ONNX
+            positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
+        else:
+            positions = make_positions(
+                input, self.padding_idx,
+            )
         return super().forward(positions)
 
 
-
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
 
 import math
 from typing import Dict, Optional, Tuple
@@ -339,12 +322,7 @@ class MultiheadAttention(nn.Module):
         self.reset_parameters()
 
         self.onnx_trace = False
-
-        self.enable_torch_version = False
-        if hasattr(F, "multi_head_attention_forward"):
-            self.enable_torch_version = True
-        else:
-            self.enable_torch_version = False
+        self.enable_torch_version = hasattr(F, "multi_head_attention_forward")
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True

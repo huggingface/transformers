@@ -138,20 +138,8 @@ class BARTModel(nn.Module):
 
         super().__init__()
         # make sure all arguments are present in older models
-        #base_architecture(config) # mutates
-
-
-        #assert config.share_all_embeddings
-        # if src_dict != tgt_dict:
-        #     raise ValueError('--share-all-embeddings requires a joined dictionary')
-        #if config.encoder_embed_dim != config.decoder_embed_dim:
-            # raise ValueError('--share-all-embeddings requires --encoder-embed-dim to match --decoder-embed-dim')
-        #if config.decoder_embed_path and (
-        #        config.decoder_embed_path != config.encoder_embed_path):
-        #    raise ValueError('--share-all-embeddings not compatible with --decoder-embed-path')
         self.config = config
         self._is_generation_fast = False
-
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         encoder_embed_tokens = Embedding(vocab_size, config.encoder_embed_dim, padding_idx)

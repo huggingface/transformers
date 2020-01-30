@@ -68,7 +68,7 @@ _FAIRSEQ_DEFAULTS = dict(
 class BARTConfig(PretrainedConfig):
     model_type = 'bart'
     def __init__(self,
-                 vocab_size=30522,
+                 vocab_size=50265,
                  pad_token_id=1, # TODO(SS): feels like wrong place?
                  encoder_embed_dim=1024,
                  encoder_ffn_embed_dim=4096,
