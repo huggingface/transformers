@@ -23,6 +23,8 @@ To create the package for pypi.
 
    twine upload dist/* -r pypitest
    (pypi suggest using twine as other methods upload files via plaintext.)
+   You may have to specify the repository url, use the following command then:
+   twine upload dist/* -r pypitest --repository-url=https://test.pypi.org/legacy/
 
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
