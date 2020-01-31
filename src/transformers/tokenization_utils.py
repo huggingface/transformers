@@ -326,7 +326,7 @@ class PreTrainedTokenizer(object):
                 cls.pretrained_init_configuration
                 and pretrained_model_name_or_path in cls.pretrained_init_configuration
             ):
-                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path]
+                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path].copy()
         else:
             # Get the vocabulary from local files
             logger.info(
@@ -998,7 +998,8 @@ class PreTrainedTokenizer(object):
             for key, value in batch_outputs.items():
 
                 padded_value = value
-                if key != "input_len":
+                # verify that the tokenizer has a pad_token_id
+                if key != "input_len" and self._pad_token is not None:
                     # Padding handle
                     padded_value = [
                         v + [self.pad_token_id if key == "input_ids" else 1] * (max_seq_len - len(v))

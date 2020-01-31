@@ -40,6 +40,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "camembert-base": None,
 }
 
+SHARED_MODEL_IDENTIFIERS = [
+    # Load with
+    # `tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")`
+    "Musixmatch/umberto-commoncrawl-cased-v1",
+    "Musixmatch/umberto-wikipedia-uncased-v1",
+]
+
 
 class CamembertTokenizer(PreTrainedTokenizer):
     """

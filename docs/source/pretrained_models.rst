@@ -251,6 +251,22 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   | ``xlm-roberta-large``                                      | | ~355M parameters with 24-layers, 1027-hidden-state, 4096 feed-forward hidden-state, 16-heads,                                       |
 |                   |                                                            | | Trained on 2.5 TB of newly created clean CommonCrawl data in 100 languages                                                          |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| FlauBERT          | ``flaubert-small-cased``                                   | | 6-layer, 512-hidden, 8-heads, 54M parameters                                                                                        |
+|                   |                                                            | | FlauBERT small architecture                                                                                                         |
+|                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``flaubert-base-uncased``                                  | | 12-layer, 768-hidden, 12-heads, 137M parameters                                                                                     |
+|                   |                                                            | | FlauBERT base architecture with uncased vocabulary                                                                                  |
+|                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``flaubert-base-cased``                                    | | 12-layer, 768-hidden, 12-heads, 138M parameters                                                                                     |
+|                   |                                                            | | FlauBERT base architecture with cased vocabulary                                                                                    |
+|                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``flaubert-large-cased``                                   | | 24-layer, 1024-hidden, 16-heads, 373M parameters                                                                                    |
+|                   |                                                            | | FlauBERT large architecture                                                                                                         |
+|                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
 .. <https://huggingface.co/transformers/examples.html>`__

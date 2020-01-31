@@ -698,7 +698,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.albert = AlbertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 
         self.init_weights()

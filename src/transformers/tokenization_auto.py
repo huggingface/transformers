@@ -73,7 +73,7 @@ TOKENIZER_MAPPING = OrderedDict(
 )
 
 
-class AutoTokenizer(object):
+class AutoTokenizer:
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
         that will be instantiated as one of the tokenizer classes of the library
         when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`

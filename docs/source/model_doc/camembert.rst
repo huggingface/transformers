@@ -69,3 +69,31 @@ CamembertForTokenClassification
 
 .. autoclass:: transformers.CamembertForTokenClassification
     :members:
+
+
+TFCamembertModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCamembertModel
+    :members:
+
+
+TFCamembertForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCamembertForMaskedLM
+    :members:
+
+
+TFCamembertForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCamembertForSequenceClassification
+    :members:
+
+
+TFCamembertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCamembertForTokenClassification
+    :members:
