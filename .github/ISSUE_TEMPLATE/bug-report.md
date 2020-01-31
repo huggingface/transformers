@@ -41,10 +41,5 @@ Steps to reproduce the behavior:
 
 ## Environment
 
-* OS:
-* Python version:
-* PyTorch version:
-* `transformers` version (or branch):
-* Using GPU ?
-* Distributed or parallel setup ?
-* Any other relevant information:
+<!-- You can run the command `python transformers-cli info` and copy-and-paste its output here.
+     Don't forget to fill out the missing fields in that output! -->

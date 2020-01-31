@@ -35,14 +35,11 @@ The tasks I am working on is:
 
 ## Environment
 
-* OS:
-* Python version:
-* PyTorch version:
+<!-- You can run the command `python transformers-cli info` and copy-and-paste its output here.
+     Don't forget to fill out the missing fields in that output! -->
+
 * `pytorch-transformers` or `pytorch-pretrained-bert` version (or branch):
-* `transformers` version (or branch):
-* Using GPU?
-* Distributed or parallel setup?
-* Any other relevant information:
+
 
 ## Checklist
 
