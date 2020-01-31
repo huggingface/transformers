@@ -152,6 +152,8 @@ class ModelCard(object):
             resolved_model_card_file = cached_path(
                 model_card_file, cache_dir=cache_dir, force_download=True, proxies=proxies, resume_download=False
             )
+            if resolved_model_card_file is None:
+                raise EnvironmentError
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:

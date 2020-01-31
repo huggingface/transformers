@@ -2,7 +2,6 @@ import logging
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from starlette.responses import JSONResponse
 from transformers import Pipeline
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import SUPPORTED_TASKS, pipeline
@@ -13,15 +12,16 @@ try:
     from fastapi import FastAPI, HTTPException, Body
     from fastapi.routing import APIRoute
     from pydantic import BaseModel
+    from starlette.responses import JSONResponse
 
-    _serve_dependancies_installed = True
+    _serve_dependencies_installed = True
 except (ImportError, AttributeError):
     BaseModel = object
 
     def Body(*x, **y):
         pass
 
-    _serve_dependancies_installed = False
+    _serve_dependencies_installed = False
 
 
 logger = logging.getLogger("transformers-cli/serving")
@@ -111,7 +111,7 @@ class ServeCommand(BaseTransformersCLICommand):
         self.port = port
         self.workers = workers
 
-        if not _serve_dependancies_installed:
+        if not _serve_dependencies_installed:
             raise RuntimeError(
                 "Using serve command requires FastAPI and unicorn. "
                 'Please install transformers with [serving]: pip install "transformers[serving]".'

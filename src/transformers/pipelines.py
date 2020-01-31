@@ -28,7 +28,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_distilbert import DistilBertConfig
+from .configuration_roberta import RobertaConfig
 from .configuration_utils import PretrainedConfig
+from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
@@ -44,6 +47,7 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForTokenClassification,
+        TFAutoModelWithLMHead,
     )
 
 if is_torch_available():
@@ -53,6 +57,7 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelWithLMHead,
     )
 
 
@@ -64,7 +69,7 @@ def get_framework(model=None):
         If both frameworks are installed and no specific model is provided, defaults to using PyTorch.
     """
     if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
-        # Both framework are available but the use supplied a model class instance.
+        # Both framework are available but the user supplied a model class instance.
         # Try to guess which framework to use from the model classname
         framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     elif not is_tf_available() and not is_torch_available():
@@ -364,7 +369,6 @@ class Pipeline(_ScikitCompat):
     def predict(self, X):
         """
         Scikit / Keras interface to transformers' pipelines. This method will forward to __call__().
-        Se
         """
         return self(X=X)
 
@@ -406,9 +410,8 @@ class Pipeline(_ScikitCompat):
             dict holding all the required parameters for model's forward
         """
         args = ["input_ids", "attention_mask"]
-        model_type = type(self.model).__name__.lower()
 
-        if "distilbert" not in model_type and "xlm" not in model_type:
+        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig)):
             args += ["token_type_ids"]
 
         # PR #1548 (CLI) There is an issue with attention_mask
@@ -420,7 +423,10 @@ class Pipeline(_ScikitCompat):
         else:
             return {k: [feature[k] for feature in features] for k in args}
 
-    def __call__(self, *texts, **kwargs):
+    def _parse_and_tokenize(self, *texts, **kwargs):
+        """
+        Parse arguments and tokenize
+        """
         # Parse arguments
         inputs = self._args_parser(*texts, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
@@ -429,13 +435,19 @@ class Pipeline(_ScikitCompat):
 
         # Filter out features not available on specific models
         inputs = self.inputs_for_model(inputs)
+
+        return inputs
+
+    def __call__(self, *texts, **kwargs):
+        inputs = self._parse_and_tokenize(*texts, **kwargs)
         return self._forward(inputs)
 
-    def _forward(self, inputs):
+    def _forward(self, inputs, return_tensors=False):
         """
         Internal framework specific forward dispatching.
         Args:
             inputs: dict holding all the keyworded arguments for required by the model forward method.
+            return_tensors: Whether to return native framework (pt/tf) tensors rather than numpy array.
         Returns:
             Numpy array
         """
@@ -449,7 +461,10 @@ class Pipeline(_ScikitCompat):
                     inputs = self.ensure_tensor_on_device(**inputs)
                     predictions = self.model(**inputs)[0].cpu()
 
-        return predictions.numpy()
+        if return_tensors:
+            return predictions
+        else:
+            return predictions.numpy()
 
 
 class FeatureExtractionPipeline(Pipeline):
@@ -491,6 +506,71 @@ class TextClassificationPipeline(Pipeline):
         return [{"label": self.model.config.id2label[item.argmax()], "score": item.max()} for item in scores]
 
 
+class FillMaskPipeline(Pipeline):
+    """
+    Masked language modeling prediction pipeline using ModelWithLMHead head.
+    """
+
+    def __init__(
+        self,
+        model,
+        tokenizer: PreTrainedTokenizer = None,
+        modelcard: ModelCard = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        topk=5,
+    ):
+        super().__init__(
+            model=model,
+            tokenizer=tokenizer,
+            modelcard=modelcard,
+            framework=framework,
+            args_parser=args_parser,
+            device=device,
+            binary_output=True,
+        )
+
+        self.topk = topk
+
+    def __call__(self, *args, **kwargs):
+        inputs = self._parse_and_tokenize(*args, **kwargs)
+        outputs = self._forward(inputs, return_tensors=True)
+
+        results = []
+        batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
+
+        for i in range(batch_size):
+            input_ids = inputs["input_ids"][i]
+            result = []
+
+            if self.framework == "tf":
+                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy().item()
+                logits = outputs[i, masked_index, :]
+                probs = tf.nn.softmax(logits)
+                topk = tf.math.top_k(probs, k=self.topk)
+                values, predictions = topk.values.numpy(), topk.indices.numpy()
+            else:
+                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
+                logits = outputs[i, masked_index, :]
+                probs = logits.softmax(dim=0)
+                values, predictions = probs.topk(self.topk)
+
+            for v, p in zip(values.tolist(), predictions.tolist()):
+                tokens = input_ids.numpy()
+                tokens[masked_index] = p
+                # Filter padding out:
+                tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
+                result.append({"sequence": self.tokenizer.decode(tokens), "score": v, "token": p})
+
+            # Append
+            results += [result]
+
+        if len(results) == 1:
+            return results[0]
+        return results
+
+
 class NerPipeline(Pipeline):
     """
     Named Entity Recognition pipeline using ModelForTokenClassification head.
@@ -523,7 +603,8 @@ class NerPipeline(Pipeline):
         self.ignore_labels = ignore_labels
 
     def __call__(self, *texts, **kwargs):
-        inputs, answers = self._args_parser(*texts, **kwargs), []
+        inputs = self._args_parser(*texts, **kwargs)
+        answers = []
         for sentence in inputs:
 
             # Manage correct placement of the tensors
@@ -901,6 +982,16 @@ SUPPORTED_TASKS = {
             },
             "config": None,
             "tokenizer": "distilbert-base-uncased",
+        },
+    },
+    "fill-mask": {
+        "impl": FillMaskPipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "distilroberta-base", "tf": "distilroberta-base"},
+            "config": None,
+            "tokenizer": "distilroberta-base",
         },
     },
 }

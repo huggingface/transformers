@@ -25,6 +25,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -41,6 +42,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -60,20 +62,21 @@ TOKENIZER_MAPPING = OrderedDict(
         (DistilBertConfig, DistilBertTokenizer),
         (AlbertConfig, AlbertTokenizer),
         (CamembertConfig, CamembertTokenizer),
-        (RobertaConfig, RobertaTokenizer),
         (XLMRobertaConfig, XLMRobertaTokenizer),
+        (RobertaConfig, RobertaTokenizer),
         (BertConfig, BertTokenizer),
         (OpenAIGPTConfig, OpenAIGPTTokenizer),
         (GPT2Config, GPT2Tokenizer),
         (TransfoXLConfig, TransfoXLTokenizer),
         (XLNetConfig, XLNetTokenizer),
+        (FlaubertConfig, FlaubertTokenizer),
         (XLMConfig, XLMTokenizer),
         (CTRLConfig, CTRLTokenizer),
     ]
 )
 
 
-class AutoTokenizer(object):
+class AutoTokenizer:
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
         that will be instantiated as one of the tokenizer classes of the library
         when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`

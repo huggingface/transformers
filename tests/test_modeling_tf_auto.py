@@ -28,6 +28,8 @@ if is_tf_available():
         BertConfig,
         TFAutoModel,
         TFBertModel,
+        TFAutoModelForPreTraining,
+        TFBertForPreTraining,
         TFAutoModelWithLMHead,
         TFBertForMaskedLM,
         TFRobertaForMaskedLM,
@@ -56,6 +58,23 @@ class TFAutoModelTest(unittest.TestCase):
             model = TFAutoModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, TFBertModel)
+
+    @slow
+    def test_model_for_pretraining_from_pretrained(self):
+        import h5py
+
+        self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
+
+        logging.basicConfig(level=logging.INFO)
+        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ["bert-base-uncased"]:
+            config = AutoConfig.from_pretrained(model_name)
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, BertConfig)
+
+            model = TFAutoModelForPreTraining.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, TFBertForPreTraining)
 
     @slow
     def test_lmhead_model_from_pretrained(self):

@@ -38,3 +38,8 @@ transformers-cli s3 ls
 # List all your S3 objects.
 ```
 
+You can also delete files:
+
+```shell
+transformers-cli s3 rm …
+```

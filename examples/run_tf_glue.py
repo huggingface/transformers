@@ -99,9 +99,6 @@ if TASK == "mrpc":
     inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors="pt")
     inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors="pt")
 
-    del inputs_1["special_tokens_mask"]
-    del inputs_2["special_tokens_mask"]
-
     pred_1 = pytorch_model(**inputs_1)[0].argmax().item()
     pred_2 = pytorch_model(**inputs_2)[0].argmax().item()
     print("sentence_1 is", "a paraphrase" if pred_1 else "not a paraphrase", "of sentence_0")

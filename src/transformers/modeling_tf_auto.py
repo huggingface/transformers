@@ -42,6 +42,7 @@ from .modeling_tf_albert import (
 from .modeling_tf_bert import (
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertForMaskedLM,
+    TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
     TFBertForTokenClassification,
@@ -122,6 +123,22 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetModel),
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
+    ]
+)
+
+TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
+    [
+        (T5Config, TFT5WithLMHeadModel),
+        (DistilBertConfig, TFDistilBertForMaskedLM),
+        (AlbertConfig, TFAlbertForMaskedLM),
+        (RobertaConfig, TFRobertaForMaskedLM),
+        (BertConfig, TFBertForPreTraining),
+        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
+        (GPT2Config, TFGPT2LMHeadModel),
+        (TransfoXLConfig, TFTransfoXLLMHeadModel),
+        (XLNetConfig, TFXLNetLMHeadModel),
+        (XLMConfig, TFXLMWithLMHeadModel),
+        (CTRLConfig, TFCTRLLMHeadModel),
     ]
 )
 
@@ -329,6 +346,154 @@ class TFAutoModel(object):
         )
 
 
+class TFAutoModelForPreTraining(object):
+    r"""
+        :class:`~transformers.TFAutoModelForPreTraining` is a generic model class
+        that will be instantiated as one of the model classes of the library -with the architecture used for pretraining this model– when created with the `TFAutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "TFAutoModelForPreTraining is designed to be instantiated "
+            "using the `TFAutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModelForPreTraining.from_config(config)` methods."
+        )
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                - isInstance of `distilbert` configuration class: :class:`~transformers.TFDistilBertModelForMaskedLM` (DistilBERT model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.TFRobertaModelForMaskedLM` (RoBERTa model)
+                - isInstance of `bert` configuration class: :class:`~transformers.TFBertForPreTraining` (Bert model)
+                - isInstance of `openai-gpt` configuration class: :class:`~transformers.TFOpenAIGPTLMHeadModel` (OpenAI GPT model)
+                - isInstance of `gpt2` configuration class: :class:`~transformers.TFGPT2ModelLMHeadModel` (OpenAI GPT-2 model)
+                - isInstance of `ctrl` configuration class: :class:`~transformers.TFCTRLModelLMHeadModel` (Salesforce CTRL  model)
+                - isInstance of `transfo-xl` configuration class: :class:`~transformers.TFTransfoXLLMHeadModel` (Transformer-XL model)
+                - isInstance of `xlnet` configuration class: :class:`~transformers.TFXLNetLMHeadModel` (XLNet model)
+                - isInstance of `xlm` configuration class: :class:`~transformers.TFXLMWithLMHeadModel` (XLM model)
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = TFAutoModelForPreTraining.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())
+            )
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the model classes of the library -with the architecture used for pretraining this model– from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+
+        The model class to instantiate is selected as the first pattern matching
+        in the `pretrained_model_name_or_path` string (in the following order):
+            - contains `t5`: :class:`~transformers.TFT5ModelWithLMHead` (T5 model)
+            - contains `distilbert`: :class:`~transformers.TFDistilBertForMaskedLM` (DistilBERT model)
+            - contains `albert`: :class:`~transformers.TFAlbertForMaskedLM` (ALBERT model)
+            - contains `roberta`: :class:`~transformers.TFRobertaForMaskedLM` (RoBERTa model)
+            - contains `bert`: :class:`~transformers.TFBertForPreTraining` (Bert model)
+            - contains `openai-gpt`: :class:`~transformers.TFOpenAIGPTLMHeadModel` (OpenAI GPT model)
+            - contains `gpt2`: :class:`~transformers.TFGPT2LMHeadModel` (OpenAI GPT-2 model)
+            - contains `transfo-xl`: :class:`~transformers.TFTransfoXLLMHeadModel` (Transformer-XL model)
+            - contains `xlnet`: :class:`~transformers.TFXLNetLMHeadModel` (XLNet model)
+            - contains `xlm`: :class:`~transformers.TFXLMWithLMHeadModel` (XLM model)
+            - contains `ctrl`: :class:`~transformers.TFCTRLLMHeadModel` (Salesforce CTRL model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Args:
+            pretrained_model_name_or_path:
+                Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely received file. Attempt to resume the download if such a file exists.
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model.
+                (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or
+                automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
+                  underlying model's ``__init__`` method (we assume all relevant updates to the configuration have
+                  already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class
+                  initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of
+                  ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
+                  with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
+                  attribute will be passed to the underlying model's ``__init__`` function.
+
+        Examples::
+
+            model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelForPreTraining.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            model = TFAutoModelForPreTraining.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        for config_class, model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())
+            )
+        )
+
+
 class TFAutoModelWithLMHead(object):
     r"""
         :class:`~transformers.TFAutoModelWithLMHead` is a generic model class
@@ -383,7 +548,7 @@ class TFAutoModelWithLMHead(object):
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelWithLMHead.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = TFAutoModelWithLMHead.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.items():
             if isinstance(config, config_class):

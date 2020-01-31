@@ -40,6 +40,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "camembert-base": None,
 }
 
+SHARED_MODEL_IDENTIFIERS = [
+    # Load with
+    # `tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")`
+    "Musixmatch/umberto-commoncrawl-cased-v1",
+    "Musixmatch/umberto-wikipedia-uncased-v1",
+]
+
 
 class CamembertTokenizer(PreTrainedTokenizer):
     """
@@ -168,6 +175,24 @@ class CamembertTokenizer(PreTrainedTokenizer):
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning(
+                "You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
+            raise
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""

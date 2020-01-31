@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.3.0"
+__version__ = "2.4.1"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -26,6 +26,7 @@ from .configuration_bart import BARTConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
@@ -93,6 +94,7 @@ from .modeling_tf_pytorch_utils import (
 from .pipelines import (
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
+    FillMaskPipeline,
     JsonPipelineDataFormat,
     NerPipeline,
     PipedPipelineDataFormat,
@@ -109,6 +111,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenize
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer
 from .tokenization_roberta import RobertaTokenizer
@@ -134,6 +137,7 @@ if is_torch_available():
     from .modeling_utils import PreTrainedModel, prune_layer, Conv1D
     from .modeling_auto import (
         AutoModel,
+        AutoModelForPreTraining,
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelWithLMHead,
@@ -210,6 +214,13 @@ if is_torch_available():
         RobertaForQuestionAnswering,
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
+    from .modeling_camembert import (
+        CamembertForMaskedLM,
+        CamembertModel,
+        CamembertForSequenceClassification,
+        CamembertForTokenClassification,
+        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
     from .modeling_distilbert import (
         DistilBertPreTrainedModel,
         DistilBertForMaskedLM,
@@ -250,8 +261,18 @@ if is_torch_available():
         XLMRobertaForMultipleChoice,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
+        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
+
+    from .modeling_flaubert import (
+        FlaubertModel,
+        FlaubertWithLMHeadModel,
+        FlaubertForSequenceClassification,
+        FlaubertForQuestionAnswering,
+        FlaubertForQuestionAnsweringSimple,
+        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
     # Optimization
     from .optimization import (
@@ -269,6 +290,7 @@ if is_tf_available():
     from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
     from .modeling_tf_auto import (
         TFAutoModel,
+        TFAutoModelForPreTraining,
         TFAutoModelForSequenceClassification,
         TFAutoModelForQuestionAnswering,
         TFAutoModelWithLMHead,
@@ -338,6 +360,14 @@ if is_tf_available():
         TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
+    from .modeling_tf_xlm_roberta import (
+        TFXLMRobertaForMaskedLM,
+        TFXLMRobertaModel,
+        TFXLMRobertaForSequenceClassification,
+        TFXLMRobertaForTokenClassification,
+        TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
     from .modeling_tf_roberta import (
         TFRobertaPreTrainedModel,
         TFRobertaMainLayer,
@@ -346,6 +376,14 @@ if is_tf_available():
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_tf_camembert import (
+        TFCamembertModel,
+        TFCamembertForMaskedLM,
+        TFCamembertForSequenceClassification,
+        TFCamembertForTokenClassification,
+        TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     from .modeling_tf_distilbert import (
@@ -374,7 +412,12 @@ if is_tf_available():
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
-    from .modeling_tf_t5 import TFT5PreTrainedModel, TFT5Model, TFT5WithLMHeadModel, TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
+    from .modeling_tf_t5 import (
+        TFT5PreTrainedModel,
+        TFT5Model,
+        TFT5WithLMHeadModel,
+        TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
 
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
