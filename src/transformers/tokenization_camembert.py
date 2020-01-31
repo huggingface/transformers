@@ -33,16 +33,19 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model",
-        "umberto-commoncrawl-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/Musixmatch/umberto-commoncrawl-cased-v1/sentencepiece.bpe.model",
-        "umberto-wikipedia-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/Musixmatch/umberto-wikipedia-uncased-v1/sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "camembert-base": None,
-    "umberto-commoncrawl-cased-v1": None,
-    "umberto-wikipedia-uncased-v1": None,
 }
+
+SHARED_MODEL_IDENTIFIERS = [
+    # Load with
+    # `tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")`
+    "Musixmatch/umberto-commoncrawl-cased-v1",
+    "Musixmatch/umberto-wikipedia-uncased-v1",
+]
 
 
 class CamembertTokenizer(PreTrainedTokenizer):
