@@ -56,8 +56,4 @@ class InfoCommand(BaseTransformersCLICommand):
 
     @staticmethod
     def format_dict(d):
-        s = "## Environment info\n"
-        s += "\n".join(["- {}: {}".format(prop, val) for prop, val in d.items()])
-        s += "\n"
-
-        return s
+        return "\n".join(["- {}: {}".format(prop, val) for prop, val in d.items()]) + "\n"
