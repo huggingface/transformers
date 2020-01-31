@@ -15,23 +15,18 @@
 """ TF 2.0 Flaubert model.
 """
 
-
-import itertools
 import logging
-import math
 import random
 
-import numpy as np
 import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .modeling_tf_xlm import (
     TFXLMForSequenceClassification,
     TFXLMMainLayer,
     TFXLMModel,
     TFXLMWithLMHeadModel,
-    get_initializer,
     get_masks,
     shape_list,
 )
