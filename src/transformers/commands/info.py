@@ -20,6 +20,7 @@ class InfoCommand(BaseTransformersCLICommand):
         pt_cuda_available = "NA"
         try:
             import torch
+
             pt_version = torch.__version__
             pt_cuda_available = torch.cuda.is_available()
         except ImportError:
@@ -29,13 +30,14 @@ class InfoCommand(BaseTransformersCLICommand):
         tf_cuda_available = "NA"
         try:
             import tensorflow as tf
+
             tf_version = tf.__version__
             try:
                 # deprecated in v2.1
                 tf_cuda_available = tf.test.is_gpu_available()
             except AttributeError:
                 # returns list of devices, convert to bool
-                tf_cuda_available = bool(tf.config.list_physical_devices('GPU'))
+                tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
         except ImportError:
             pass
 
@@ -46,7 +48,7 @@ class InfoCommand(BaseTransformersCLICommand):
             "PyTorch version (GPU?)": "{} ({})".format(pt_version, pt_cuda_available),
             "Tensorflow version (GPU?)": "{} ({})".format(tf_version, tf_cuda_available),
             "Using GPU in script?": "<fill in>",
-            "Using distributed or parallel set-up in script?": "<fill in>"
+            "Using distributed or parallel set-up in script?": "<fill in>",
         }
 
         print("\nCopy-and-paste the text below in your GitHub issue and FILL OUT the two last points.\n")
