@@ -25,6 +25,7 @@ from transformers import (
     GPT2Tokenizer,
     RobertaTokenizer,
 )
+from transformers.tokenization_auto import TOKENIZER_MAPPING
 
 from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
 
@@ -70,3 +71,19 @@ class AutoTokenizerTest(unittest.TestCase):
         for tokenizer_class in [BertTokenizer, AutoTokenizer]:
             with self.assertRaises(EnvironmentError):
                 _ = tokenizer_class.from_pretrained("julien-c/herlolip-not-exists")
+
+    def test_parents_and_children_in_mappings(self):
+        # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
+        # by the parents and will return the wrong configuration type when using auto models
+
+        mappings = (TOKENIZER_MAPPING,)
+
+        for mapping in mappings:
+            mapping = tuple(mapping.items())
+            for index, (child_config, child_model) in enumerate(mapping[1:]):
+                for parent_config, parent_model in mapping[: index + 1]:
+                    with self.subTest(
+                        msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
+                    ):
+                        self.assertFalse(issubclass(child_config, parent_config))
+                        self.assertFalse(issubclass(child_model, parent_model))
