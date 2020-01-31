@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
+    "umberto-commoncrawl-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/Musixmatch/umberto-commoncrawl-cased-v1/pytorch_model.bin",
+    "umberto-wikipedia-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/Musixmatch/umberto-wikipedia-uncased-v1/pytorch_model.bin",
 }
 
 
