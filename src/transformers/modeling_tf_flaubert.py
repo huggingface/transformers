@@ -1,0 +1,248 @@
+# coding=utf-8
+# Copyright 2019-present, Facebook, Inc and the HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" TF 2.0 XLM model.
+"""
+
+
+import itertools
+import logging
+import math
+import random
+
+import numpy as np
+import tensorflow as tf
+
+from .configuration_flaubert import FlaubertConfig
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_tf_xlm import TFXLMMainLayer, TFXLMForSequenceClassification, TFXLMWithLMHeadModel, TFXLMModel, get_initializer, shape_list, get_masks
+
+
+logger = logging.getLogger(__name__)
+
+TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+}
+
+class TFFlaubertModel(TFXLMModel):
+    config_class = FlaubertConfig
+    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFFlaubertModel, self).__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+class TFFlaubertMainLayer(TFXLMMainLayer):
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFFlaubertMainLayer, self).__init__(config, *inputs, **kwargs)
+        self.layerdrop = getattr(config, "layerdrop", 0.0)
+        self.pre_norm = getattr(config, "pre_norm", False)
+    
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        lengths=None,
+        cache=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
+    ):  # removed: src_enc=None, src_len=None
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            langs = inputs[2] if len(inputs) > 2 else langs
+            token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
+            position_ids = inputs[4] if len(inputs) > 4 else position_ids
+            lengths = inputs[5] if len(inputs) > 5 else lengths
+            cache = inputs[6] if len(inputs) > 6 else cache
+            head_mask = inputs[7] if len(inputs) > 7 else head_mask
+            inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
+            assert len(inputs) <= 9, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            langs = inputs.get("langs", langs)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            lengths = inputs.get("lengths", lengths)
+            cache = inputs.get("cache", cache)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            assert len(inputs) <= 9, "Too many inputs."
+        else:
+            input_ids = inputs
+        
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            bs, slen = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            bs, slen = shape_list(inputs_embeds)[:2]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        
+        if lengths is None:
+            if input_ids is not None:
+                lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.pad_index), dtype=tf.int32), axis=1)
+            else:
+                lengths = tf.convert_to_tensor([slen] * bs, tf.int32)
+        # mask = input_ids != self.pad_index
+
+        # check inputs
+        # assert shape_list(lengths)[0] == bs
+        tf.debugging.assert_equal(shape_list(lengths)[0], bs)
+        # assert lengths.max().item() <= slen
+        # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
+        # assert (src_enc is None) == (src_len is None)
+        # if src_enc is not None:
+        #     assert self.is_decoder
+        #     assert src_enc.size(0) == bs
+
+        # generate masks
+        mask, attn_mask = get_masks(slen, lengths, self.causal, padding_mask=attention_mask)
+        # if self.is_decoder and src_enc is not None:
+        #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
+
+        # position_ids
+        if position_ids is None:
+            position_ids = tf.expand_dims(tf.range(slen), axis=0)
+        else:
+            # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
+            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen])
+            # position_ids = position_ids.transpose(0, 1)
+
+        # langs
+        if langs is not None:
+            # assert shape_list(langs) == [bs, slen]  # (slen, bs)
+            tf.debugging.assert_equal(shape_list(langs), [bs, slen])
+            # langs = langs.transpose(0, 1)
+        
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x qlen x klen]
+        if head_mask is not None:
+            raise NotImplementedError
+        else:
+            head_mask = [None] * self.n_layers
+        
+        # do not recompute cached elements
+        if cache is not None and input_ids is not None:
+            _slen = slen - cache["slen"]
+            input_ids = input_ids[:, -_slen:]
+            position_ids = position_ids[:, -_slen:]
+            if langs is not None:
+                langs = langs[:, -_slen:]
+            mask = mask[:, -_slen:]
+            attn_mask = attn_mask[:, -_slen:]
+        
+        # embeddings
+        if inputs_embeds is None:
+            inputs_embeds = self.embeddings(input_ids)
+        
+        tensor = inputs_embeds + self.position_embeddings(position_ids)
+        if langs is not None and self.use_lang_emb:
+            tensor = tensor + self.lang_embeddings(langs)
+        if token_type_ids is not None:
+            tensor = tensor + self.embeddings(token_type_ids)
+        tensor = self.layer_norm_emb(tensor)
+        tensor = self.dropout(tensor, training=training)
+        tensor = tensor * mask[..., tf.newaxis]
+
+        # transformer layers
+        hidden_states = ()
+        attentions = ()
+        for i in range(self.n_layers):
+            # LayerDrop
+            dropout_probability = random.uniform(0, 1)
+            if training and (dropout_probability < self.layerdrop):
+                continue
+
+            if self.output_hidden_states:
+                hidden_states = hidden_states + (tensor,)
+            
+            # self attention
+            if not self.pre_norm:
+                attn_outputs = self.attentions[i]([tensor, attn_mask, None, cache, head_mask[i]], training=training)
+                attn = attn_outputs[0]
+                if self.output_attentions:
+                    attentions = attentions + (attn_outputs[1],)
+                attn = self.dropout(attn, training=training)
+                tensor = tensor + attn
+                tensor = self.layer_norm1[i](tensor)
+            else:
+                tensor_normalized = self.layer_norm1[i](tensor)
+                attn_outputs = self.attentions[i]([tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training)
+                attn = attn_outputs[0]
+                if self.output_attentions:
+                    attentions = attentions + (attn_outputs[1],)
+                attn = self.dropout(attn, training=training)
+                tensor = tensor + attn
+            
+            # encoder attention (for decoder only)
+            # if self.is_decoder and src_enc is not None:
+            #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
+            #     attn = F.dropout(attn, p=self.dropout, training=self.training)
+            #     tensor = tensor + attn
+            #     tensor = self.layer_norm15[i](tensor)
+
+            # FFN
+            if not self.pre_norm:
+                tensor = tensor + self.ffns[i](tensor)
+                tensor = self.layer_norm2[i](tensor)
+            else:
+                tensor_normalized = self.layer_norm2[i](tensor)
+                tensor = tensor + self.ffns[i](tensor_normalized)
+
+            tensor = tensor * mask[..., tf.newaxis]
+
+        # Add last hidden state
+        if self.output_hidden_states:
+            hidden_states = hidden_states + (tensor,)
+        
+         # update cache length
+        if cache is not None:
+            cache["slen"] += tensor.size(1)
+        
+        # move back sequence length to dimension 0
+        # tensor = tensor.transpose(0, 1)
+
+        outputs = (tensor,)
+        if self.output_hidden_states:
+            outputs = outputs + (hidden_states,)
+        if self.output_attentions:
+            outputs = outputs + (attentions,)
+        return outputs  # outputs, (hidden_states), (attentions)
+
+
+class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
+    config_class = FlaubertConfig
+    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFFlaubertWithLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
+    config_class = FlaubertConfig
+    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+
+    def __init__(self, config, *inputs, **kwargs):
+        super(TFFlaubertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
