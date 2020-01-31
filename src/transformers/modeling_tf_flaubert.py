@@ -26,13 +26,20 @@ import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_xlm import TFXLMMainLayer, TFXLMForSequenceClassification, TFXLMWithLMHeadModel, TFXLMModel, get_initializer, shape_list, get_masks
+from .modeling_tf_xlm import (
+    TFXLMForSequenceClassification,
+    TFXLMMainLayer,
+    TFXLMModel,
+    TFXLMWithLMHeadModel,
+    get_initializer,
+    get_masks,
+    shape_list,
+)
 
 
 logger = logging.getLogger(__name__)
 
-TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-}
+TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {}
 
 FLAUBERT_START_DOCSTRING = r"""
 
@@ -107,12 +114,13 @@ class TFFlaubertModel(TFXLMModel):
         super(TFFlaubertModel, self).__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
+
 class TFFlaubertMainLayer(TFXLMMainLayer):
     def __init__(self, config, *inputs, **kwargs):
         super(TFFlaubertMainLayer, self).__init__(config, *inputs, **kwargs)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
-    
+
     def call(
         self,
         inputs,
@@ -125,7 +133,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
-    ):  
+    ):
         # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -151,7 +159,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
-        
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -160,7 +168,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             bs, slen = shape_list(inputs_embeds)[:2]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-        
+
         if lengths is None:
             if input_ids is not None:
                 lengths = tf.reduce_sum(tf.cast(tf.not_equal(input_ids, self.pad_index), dtype=tf.int32), axis=1)
@@ -196,7 +204,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
             tf.debugging.assert_equal(shape_list(langs), [bs, slen])
             # langs = langs.transpose(0, 1)
-        
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -206,7 +214,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             raise NotImplementedError
         else:
             head_mask = [None] * self.n_layers
-        
+
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
             _slen = slen - cache["slen"]
@@ -216,11 +224,11 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                 langs = langs[:, -_slen:]
             mask = mask[:, -_slen:]
             attn_mask = attn_mask[:, -_slen:]
-        
+
         # embeddings
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
-        
+
         tensor = inputs_embeds + self.position_embeddings(position_ids)
         if langs is not None and self.use_lang_emb:
             tensor = tensor + self.lang_embeddings(langs)
@@ -241,7 +249,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 
             if self.output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
-            
+
             # self attention
             if not self.pre_norm:
                 attn_outputs = self.attentions[i]([tensor, attn_mask, None, cache, head_mask[i]], training=training)
@@ -253,13 +261,15 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                 tensor = self.layer_norm1[i](tensor)
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
-                attn_outputs = self.attentions[i]([tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training)
+                attn_outputs = self.attentions[i](
+                    [tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training
+                )
                 attn = attn_outputs[0]
                 if self.output_attentions:
                     attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
-            
+
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
             #     attn = self.encoder_attn[i](tensor, src_mask, kv=src_enc, cache=cache)
@@ -280,11 +290,11 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         # Add last hidden state
         if self.output_hidden_states:
             hidden_states = hidden_states + (tensor,)
-        
-         # update cache length
+
+        # update cache length
         if cache is not None:
             cache["slen"] += tensor.size(1)
-        
+
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
 
