@@ -129,8 +129,8 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -148,9 +148,9 @@ MODEL_MAPPING = OrderedDict(
         (GPT2Config, GPT2Model),
         (TransfoXLConfig, TransfoXLModel),
         (XLNetConfig, XLNetModel),
+        (FlaubertConfig, FlaubertModel),
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
-        (FlaubertConfig, FlaubertModel),
     ]
 )
 
@@ -167,9 +167,9 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (GPT2Config, GPT2LMHeadModel),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
+        (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
-        (FlaubertConfig, FlaubertWithLMHeadModel),
     ]
 )
 
@@ -186,9 +186,9 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (GPT2Config, GPT2LMHeadModel),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
+        (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
-        (FlaubertConfig, FlaubertWithLMHeadModel),
     ]
 )
 
@@ -201,8 +201,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
-        (XLMConfig, XLMForSequenceClassification),
         (FlaubertConfig, FlaubertForSequenceClassification),
+        (XLMConfig, XLMForSequenceClassification),
     ]
 )
 
@@ -213,8 +213,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForQuestionAnswering),
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnswering),
-        (XLMConfig, XLMForQuestionAnswering),
         (FlaubertConfig, FlaubertForQuestionAnswering),
+        (XLMConfig, XLMForQuestionAnswering),
     ]
 )
 
