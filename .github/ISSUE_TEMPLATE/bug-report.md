@@ -39,7 +39,14 @@ Steps to reproduce the behavior:
 
 <!-- A clear and concise description of what you would expect to happen. -->
 
-## Environment
-
-<!-- You can run the command `python transformers-cli info` and copy-and-paste its output here.
+## Environment info
+<!-- You can run the command `python transformers-cli info` and copy-and-paste its output below.
      Don't forget to fill out the missing fields in that output! -->
+     
+- `transformers` version:
+- Platform:
+- Python version:
+- PyTorch version (GPU?):
+- Tensorflow version (GPU?):
+- Using GPU in script?:
+- Using distributed or parallel set-up in script?:
