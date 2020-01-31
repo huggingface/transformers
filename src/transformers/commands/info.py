@@ -1,8 +1,8 @@
-from argparse import ArgumentParser
 import platform
+from argparse import ArgumentParser
 
-from transformers.commands import BaseTransformersCLICommand
 from transformers import __version__ as version
+from transformers.commands import BaseTransformersCLICommand
 
 
 def info_command_factory(_):
