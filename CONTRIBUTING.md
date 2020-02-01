@@ -41,14 +41,10 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
   less than 30s;
 * Provide the *full* traceback if an exception is raised.
 
-To get the OS and software versions, execute the following code and copy-paste
-the output:
+To get the OS and software versions automatically, you can run the following command:
 
-```
-import platform; print("Platform", platform.platform())
-import sys; print("Python", sys.version)
-import torch; print("PyTorch", torch.__version__)
-import tensorflow; print("Tensorflow", tensorflow.__version__)
+```bash
+python transformers-cli env
 ```
 
 ### Do you want to implement a new model?
