@@ -22,7 +22,7 @@ class InfoCommand(BaseTransformersCLICommand):
         if is_torch_available():
             import torch
 
-            pt_version = "not installed"
+            pt_version = torch.__version__
             pt_cuda_available = torch.cuda.is_available()
 
         tf_version = "not installed"
