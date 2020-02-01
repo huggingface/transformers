@@ -34,7 +34,7 @@ The tasks I am working on is:
     -->
 
 ## Environment info
-<!-- You can run the command `python transformers-cli info` and copy-and-paste its output below.
+<!-- You can run the command `python transformers-cli env` and copy-and-paste its output below.
      Don't forget to fill out the missing fields in that output! -->
  
 - `transformers` version:

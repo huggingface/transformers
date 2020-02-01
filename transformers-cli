@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 from transformers.commands.convert import ConvertCommand
 from transformers.commands.download import DownloadCommand
-from transformers.commands.info import InfoCommand
+from transformers.commands.env import EnvironmentCommand
 from transformers.commands.run import RunCommand
 from transformers.commands.serving import ServeCommand
 from transformers.commands.user import UserCommands
@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # Register commands
     ConvertCommand.register_subcommand(commands_parser)
     DownloadCommand.register_subcommand(commands_parser)
-    InfoCommand.register_subcommand(commands_parser)
+    EnvironmentCommand.register_subcommand(commands_parser)
     RunCommand.register_subcommand(commands_parser)
     ServeCommand.register_subcommand(commands_parser)
     UserCommands.register_subcommand(commands_parser)
