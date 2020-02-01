@@ -1,7 +1,7 @@
 import platform
 from argparse import ArgumentParser
 
-from transformers import __version__ as version
+from transformers import is_torch_available, is_tf_available, __version__ as version
 from transformers.commands import BaseTransformersCLICommand
 
 
@@ -18,17 +18,15 @@ class InfoCommand(BaseTransformersCLICommand):
     def run(self):
         pt_version = "not installed"
         pt_cuda_available = "NA"
-        try:
+        if is_torch_available():
             import torch
 
-            pt_version = torch.__version__
+            pt_version = "not installed"
             pt_cuda_available = torch.cuda.is_available()
-        except ImportError:
-            pass
 
         tf_version = "not installed"
         tf_cuda_available = "NA"
-        try:
+        if is_tf_available():
             import tensorflow as tf
 
             tf_version = tf.__version__
@@ -38,8 +36,6 @@ class InfoCommand(BaseTransformersCLICommand):
             except AttributeError:
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
-        except ImportError:
-            pass
 
         info = {
             "`transformers` version": version,
