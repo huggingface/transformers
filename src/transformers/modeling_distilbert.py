@@ -30,7 +30,9 @@ from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 
+
 logger = logging.getLogger(__name__)
+
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-pytorch_model.bin",
@@ -660,13 +662,13 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            head_mask=None,
-            inputs_embeds=None,
-            start_positions=None,
-            end_positions=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
