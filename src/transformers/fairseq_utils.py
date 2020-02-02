@@ -818,9 +818,7 @@ class TransformerDecoderLayer(nn.Module):
             (default: False).
     """
 
-    def __init__(
-        self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False
-    ):
+    def __init__(self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
         self.cross_self_attention = getattr(args, "cross_self_attention", False)
@@ -833,14 +831,12 @@ class TransformerDecoderLayer(nn.Module):
             self_attention=not self.cross_self_attention,
         )
         self.dropout = args.dropout
-        self.activation_fn = get_activation_fn(
-            activation=getattr(args, "activation_fn", "relu")
-        )
+        self.activation_fn = get_activation_fn(args.activation_fn)
         self.activation_dropout = getattr(args, "activation_dropout", 0)
         if self.activation_dropout == 0:
             # for backwards compatibility with models that use args.relu_dropout
             self.activation_dropout = getattr(args, "relu_dropout", 0)
-        self.normalize_before = args.decoder_normalize_before
+        self.normalize_before = False
 
         # use layerNorm rather than FusedLayerNorm for exporting.
         # char_inputs can be used to determint this.
@@ -869,9 +865,6 @@ class TransformerDecoderLayer(nn.Module):
         self.need_attn = True
 
         self.onnx_trace = False
-
-    def prepare_for_onnx_export_(self):
-        self.onnx_trace = True
 
     def forward(
         self,
@@ -903,7 +896,6 @@ class TransformerDecoderLayer(nn.Module):
             need_attn = True
 
         residual = x
-        x = self.maybe_layer_norm(self.self_attn_layer_norm, x, before=True)
         if prev_self_attn_state is not None:
             if incremental_state is None:
                 incremental_state = {}
@@ -935,22 +927,21 @@ class TransformerDecoderLayer(nn.Module):
         else:
             y = x
 
-        x, attn = self.self_attn(
+        x, self_attn_weights = self.self_attn(
             query=x,
             key=y,
             value=y,
             key_padding_mask=self_attn_padding_mask,
             incremental_state=incremental_state,
-            need_weights=False,
+            need_weights=True,
             attn_mask=self_attn_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.maybe_layer_norm(self.self_attn_layer_norm, x, after=True)
+        x = self.self_attn_layer_norm(x)
 
         if self.encoder_attn is not None:
             residual = x
-            x = self.maybe_layer_norm(self.encoder_attn_layer_norm, x, before=True)
             if prev_attn_state is not None:
                 if incremental_state is None:
                     incremental_state = {}
@@ -972,16 +963,16 @@ class TransformerDecoderLayer(nn.Module):
             )
             x = F.dropout(x, p=self.dropout, training=self.training)
             x = residual + x
-            x = self.maybe_layer_norm(self.encoder_attn_layer_norm, x, after=True)
+
+            x = self.encoder_attn_layer_norm(x)
 
         residual = x
-        x = self.maybe_layer_norm(self.final_layer_norm, x, before=True)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.maybe_layer_norm(self.final_layer_norm, x, after=True)
+        x = self.final_layer_norm(x)
         if self.onnx_trace and incremental_state is not None:
             saved_state = self.self_attn._get_input_buffer(incremental_state)
             if self_attn_padding_mask is not None:
@@ -995,14 +986,7 @@ class TransformerDecoderLayer(nn.Module):
             return x, attn, self_attn_state
         return x, attn
 
-    def maybe_layer_norm(self, layer_norm, x, before=False, after=False):
-        assert before ^ after
-        if after ^ self.normalize_before:
-            return layer_norm(x)
-        else:
-            return x
-
-    def make_generation_fast_(self, need_attn=False, **kwargs):
+    def make_generation_fast_(self, need_attn=False, **unused):
         self.need_attn = need_attn
 
 
