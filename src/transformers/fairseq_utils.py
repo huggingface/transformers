@@ -776,39 +776,30 @@ class TransformerEncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        x = self.maybe_layer_norm(self.self_attn_layer_norm, x, before=True)
         if attn_mask is not None:
-            attn_mask = attn_mask.masked_fill(attn_mask.bool(), -1e8)
+            attn_mask = attn_mask.masked_fill(attn_mask.bool(), -1e8) # unused, asked why!
         # anything in original attn_mask = 1, becomes -1e8
         # anything in original attn_mask = 0, becomes 0
         # Note that we cannot use -inf here, because at some edge cases,
         # the attention weight (before softmax) for some padded element in query
         # will become -inf, which results in NaN in model parameters
-        # TODO: to formally solve this problem, we need to change fairseq's
-        # MultiheadAttention. We will do this later on.
-        x, _ = self.self_attn(
-            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask
+        # TODO: to formally solve this problem, we need to change fairseq's MultiheadAttention.
+        x, attn_weights = self.self_attn(
+            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask,
+            need_weights=True
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.maybe_layer_norm(self.self_attn_layer_norm, x, after=True)
+        x = self.self_attn_layer_norm(x)
 
         residual = x
-        x = self.maybe_layer_norm(self.final_layer_norm, x, before=True)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.maybe_layer_norm(self.final_layer_norm, x, after=True)
+        x = self.final_layer_norm(x)
         return x
-
-    def maybe_layer_norm(self, layer_norm, x, before=False, after=False):
-        assert before ^ after
-        if after ^ self.normalize_before:
-            return layer_norm(x)
-        else:
-            return x
 
 class TransformerDecoderLayer(nn.Module):
     """Decoder layer block.
@@ -1056,8 +1047,7 @@ class TransformerEncoder(nn.Module):
 
         self.layers = nn.ModuleList([])
         self.layers.extend([
-            TransformerEncoderLayer(config)
-            for i in range(config.encoder_layers)
+            TransformerEncoderLayer(config) for _ in range(config.encoder_layers)
         ])
 
         if config.encoder_normalize_before:
