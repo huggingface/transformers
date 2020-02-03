@@ -28,85 +28,42 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 }
 
-
-_FAIRSEQ_DEFAULTS = dict(
-    activation_dropout=0.,
-    encoder_embed_dim=1024,
-    encoder_ffn_embed_dim=4096,
-    encoder_layers=12,
-    encoder_attention_heads=16,
-    encoder_normalize_before=False,
-    encoder_learned_pos=True,
-    decoder_embed_path=None,
-    decoder_embed_dim=1024,
-    decoder_ffn_embed_dim=4096,
-    decoder_layers=12,
-    decoder_attention_heads=16,
-    decoder_normalize_before=False,
-    decoder_learned_pos=True,
-    attention_dropout=0.0,
-    relu_dropout=0.0,
-    dropout=0.1,
-    max_target_positions=1024,
-    max_source_positions=1024,
-    adaptive_softmax_cutoff=None,
-    adaptive_softmax_dropout=0,
-    share_decoder_input_output_embed=True,
-    share_all_embeddings=True,
-    decoder_output_dim=1024,
-    decoder_input_dim=1024,
-    no_scale_embedding=True,
-    layernorm_embedding=True,
-    activation_fn='gelu',
-    pooler_activation_fn='tanh',
-    pooler_dropout=0.0,
-    encoder_layerdrop=0.,
-    decoder_layerdrop=0.,
-
-#vocab_size = 30522,
-#             pad_token_id = 1
-)
-
 class BARTConfig(PretrainedConfig):
     model_type = 'bart'
     def __init__(self,
                  activation_dropout=0.,
-                 vocab_size=50265,
-                 pad_token_id=1, # TODO(SS): feels like wrong place?
-                 encoder_embed_dim=1024,
-                 encoder_ffn_embed_dim=4096,
-                 encoder_layers=12,
-                 encoder_attention_heads=16,
-                 encoder_normalize_before=False,
+                 vocab_size=50265,  # bert's is 30522, why the difference
+                 pad_token_id=1,  # TODO(SS): feels like wrong place?
+                 d_model=1024,
+                 encoder_ffn_dim=4096, encoder_layers=12, encoder_attention_heads=16,
+                 decoder_ffn_dim=4096, decoder_layers=12, decoder_attention_heads=16,
                  encoder_layerdrop=0., decoder_layerdrop=0.,
-                 encoder_learned_pos=True,
-                 decoder_embed_path=None,
-                 decoder_embed_dim=1024,
-                 decoder_ffn_embed_dim=4096,
-                 decoder_layers=12,
-                 decoder_attention_heads=16,
-                 decoder_normalize_before=False,
-                 decoder_learned_pos=True,
+
+
                  attention_dropout=0.0,
-                 relu_dropout=0.0,
                  dropout=0.1,
-                 max_target_positions=1024,  # dont need two args if weight tying
-                 max_source_positions=1024,
-                 adaptive_softmax_cutoff=None,
-                 adaptive_softmax_dropout=0,
-                 share_decoder_input_output_embed=True,
-                 share_all_embeddings=True,
-                 decoder_output_dim=1024,
-                 decoder_input_dim=1024,
-                 no_scale_embedding=True,
-                 no_cross_attention=False,
-                 layernorm_embedding=True,
+                 max_position_embeddings=1024,
                  activation_fn='gelu',
-                 pooler_activation_fn='tanh',
-                 pooler_dropout=0.0,
-                 **kwargs):
-        super().__init__(**kwargs)
+                 **common_kwargs,
+                 ):
+        super().__init__(**common_kwargs)
+
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id
-        for k in _FAIRSEQ_DEFAULTS:
-            setattr(self, k, locals()[k])   # hack to avoid 1 million LOC
+        self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
+
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_layers = self.num_hidden_layers = encoder_layers
+        self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+        self.decoder_ffn_embed_dim = decoder_ffn_dim
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.max_position_embeddings = max_position_embeddings
+        self.activation_fn = activation_fn
+
+        # 3 Types of Dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.dropout = dropout
