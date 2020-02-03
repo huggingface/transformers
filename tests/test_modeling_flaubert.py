@@ -387,6 +387,6 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(Flaubert_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in list(FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = FlaubertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
