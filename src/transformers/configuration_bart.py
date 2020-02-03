@@ -62,6 +62,7 @@ _FAIRSEQ_DEFAULTS = dict(
     pooler_dropout=0.0,
     encoder_layerdrop=0.,
     decoder_layerdrop=0.,
+
 #vocab_size = 30522,
 #             pad_token_id = 1
 )
@@ -102,7 +103,8 @@ class BARTConfig(PretrainedConfig):
                  layernorm_embedding=True,
                  activation_fn='gelu',
                  pooler_activation_fn='tanh',
-                 pooler_dropout=0.0, **kwargs):
+                 pooler_dropout=0.0,
+                 **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id

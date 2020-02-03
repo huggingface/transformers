@@ -22,15 +22,8 @@ import torch
 from .file_utils import add_start_docstrings
 #import .f
 from .fairseq_utils import *
-def get_available_activation_fns() -> List:
-    return [
-        "relu",
-        "gelu",
-        "gelu_fast",  # deprecated
-        "gelu_accurate",
-        "tanh",
-        "linear",
-    ]
+from typing import List
+available_activation_fns = ["relu", "gelu", "gelu_accurate", "tanh", "linear",]
 
 logger = logging.getLogger(__name__)
 
@@ -126,37 +119,33 @@ class BARTClassificationHead(nn.Module):
     ROBERTA_INPUTS_DOCSTRING,
 )
 class BARTModel(nn.Module):
-
-
     """FIXME(SS)"""
 
     def __init__(self, config):  # should take config
 
         super().__init__()
-        # make sure all arguments are present in older models
         self.config = config
         self._is_generation_fast = False
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         encoder_embed_tokens = Embedding(vocab_size, config.encoder_embed_dim, padding_idx)
         decoder_embed_tokens = encoder_embed_tokens
         config.share_decoder_input_output_embed = True
 
-        encoder = TransformerEncoder(config, encoder_embed_tokens)
-        decoder = TransformerIncrementalDecoder(
+        self.encoder = TransformerEncoder(config, encoder_embed_tokens)
+        self.decoder = BartDecoder(
             config,
             decoder_embed_tokens,
-            no_encoder_attn=getattr(config, 'no_cross_attention', False),
+            no_encoder_attn=False,
         )
-        self.encoder = encoder
-        self.decoder = decoder
-
-        # We follow BERT's random weight initialization
+        # TODO(SS): paper says weight init slightly different than bert, but this is there code!
         self.apply(init_bert_params)
 
     #def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
-    def forward(self, input_ids: torch.LongTensor, return_all_hiddens=False, **unused):
+    def forward(self, input_ids: torch.LongTensor, return_all_hiddens=True, **unused):
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
@@ -172,33 +161,19 @@ class BARTModel(nn.Module):
         ).squeeze()
 
         prev_output_tokens[:, 1:] = input_ids[:, :-1]
-        features, extra = self._forward(
-            input_ids=input_ids,
+        encoder_out = self.encoder.forward(  # TODO(SS): delete forward later
+            input_ids,
             src_lengths=None,
             prev_output_tokens=prev_output_tokens,
             return_all_hiddens=return_all_hiddens,
         )
-        if return_all_hiddens:
-            # convert from T x B x C -> B x T x C
-            inner_states = extra['inner_states']
-            return [inner_state.transpose(0, 1) for inner_state in inner_states]
-        else:
-            return features  # just the last layer's features
-
-    def _forward(self, input_ids, src_lengths, prev_output_tokens,  **kwargs):
-        encoder_out = self.encoder(
-            input_ids,
-            src_lengths=src_lengths,
-            **kwargs,
-        )
-        x, extra = self.decoder(
+        decoder_outputs = self.decoder.forward(
             prev_output_tokens,
             encoder_out=encoder_out,
-            features_only=True,
-            **kwargs,
+            #return_all_hiddens=return_all_hiddens,
         )
-        return x, extra
-
+        # TODO(SS): document return types
+        return decoder_outputs + (encoder_out.encoder_states,)
 
     # Extra Methods
 
@@ -243,20 +218,6 @@ class BARTModel(nn.Module):
         self.eval()
         self.train = train
 
-    def prepare_for_onnx_export_(self, **kwargs):
-        """Make model exportable via ONNX trace."""
-        seen = set()
-
-        def apply_prepare_for_onnx_export_(module):
-            if module != self and hasattr(module, 'prepare_for_onnx_export_') \
-                    and module not in seen:
-                seen.add(module)
-                module.prepare_for_onnx_export_(**kwargs)
-
-        self.apply(apply_prepare_for_onnx_export_)
-
-
-
     def output_layer(self, features, **kwargs):
         """Project features to the default output size (typically vocabulary size)."""
         return self.decoder.output_layer(features, **kwargs)
@@ -269,13 +230,12 @@ class BARTModel(nn.Module):
         """Maximum length supported by the decoder."""
         return self.decoder.max_positions()
 
-
     @staticmethod
     def add_args(parser):
         """Add model-specific arguments to the parser."""
         # fmt: off
         parser.add_argument('--activation-fn',
-                            choices=get_available_activation_fns(),
+                            choices=available_activation_fns,
                             help='activation function to use')
         parser.add_argument('--dropout', type=float, metavar='D',
                             help='dropout probability')
@@ -343,23 +303,6 @@ class BARTModel(nn.Module):
                             help='add layernorm to embedding')
         parser.add_argument('--no-scale-embedding', action='store_true',
                             help='if True, dont scale embeddings')
-
-
-
-
-
-
-class BARTForSequenceClassification(nn.Module):
-
-    def __init__(self, config, num_classes): pass
-
-
-        # head =
-        # input_dim,
-        # inner_dim,
-        # num_classes,
-        # activation_fn,
-        # pooler_dropout,
 
 
 class TransformerEncoderLayer(nn.Module):
@@ -461,7 +404,7 @@ class TransformerDecoderLayer(nn.Module):
             (default: False).
     """
 
-    def __init__(self, args, no_encoder_attn=False, add_bias_kv=False, add_zero_attn=False):
+    def __init__(self, args, add_bias_kv=False, add_zero_attn=False):
         super().__init__()
         self.embed_dim = args.decoder_embed_dim
         self.cross_self_attention = getattr(args, "cross_self_attention", False)
@@ -478,20 +421,15 @@ class TransformerDecoderLayer(nn.Module):
         self.activation_dropout = args.activation_dropout
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim, export=False)
-
-        if no_encoder_attn:
-            self.encoder_attn = None
-            self.encoder_attn_layer_norm = None
-        else:
-            self.encoder_attn = MultiheadAttention(
-                self.embed_dim,
-                args.decoder_attention_heads,
-                kdim=getattr(args, "encoder_embed_dim", None),
-                vdim=getattr(args, "encoder_embed_dim", None),
-                dropout=args.attention_dropout,
-                encoder_decoder_attention=True,
-            )
-            self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=False)
+        self.encoder_attn = MultiheadAttention(
+            self.embed_dim,
+            args.decoder_attention_heads,
+            kdim=getattr(args, "encoder_embed_dim", None),
+            vdim=getattr(args, "encoder_embed_dim", None),
+            dropout=args.attention_dropout,
+            encoder_decoder_attention=True,
+        )
+        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=False)
 
         self.fc1 = Linear(self.embed_dim, args.decoder_ffn_embed_dim)
         self.fc2 = Linear(args.decoder_ffn_embed_dim, self.embed_dim)
@@ -568,7 +506,7 @@ class TransformerDecoderLayer(nn.Module):
             value=y,
             key_padding_mask=self_attn_padding_mask,
             incremental_state=incremental_state,
-            need_weights=True,
+            need_weights=need_attn,
             attn_mask=self_attn_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -586,15 +524,15 @@ class TransformerDecoderLayer(nn.Module):
                     saved_state["prev_key_padding_mask"] = prev_attn_state[2]
                 self.encoder_attn._set_input_buffer(incremental_state, saved_state)
 
-            x, attn = self.encoder_attn(
+            x, encoder_attn_weights = self.encoder_attn(
                 query=x,
                 key=encoder_out,
                 value=encoder_out,
                 key_padding_mask=encoder_padding_mask,
                 incremental_state=incremental_state,
                 static_kv=True,
-                need_weights=need_attn or (not self.training and self.need_attn),
-                need_head_weights=need_head_weights,
+                need_weights=False,  # not returning it so why compute it
+                need_head_weights=False,
             )
             x = F.dropout(x, p=self.dropout, training=self.training)
             x = residual + x
@@ -608,18 +546,18 @@ class TransformerDecoderLayer(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
-        if self.onnx_trace and incremental_state is not None:
-            saved_state = self.self_attn._get_input_buffer(incremental_state)
-            if self_attn_padding_mask is not None:
-                self_attn_state = (
-                    saved_state["prev_key"],
-                    saved_state["prev_value"],
-                    saved_state["prev_key_padding_mask"],
-                )
-            else:
-                self_attn_state = saved_state["prev_key"], saved_state["prev_value"]
-            return x, attn, self_attn_state
-        return x, attn
+        # if self.onnx_trace and incremental_state is not None:
+        #     saved_state = self.self_attn._get_input_buffer(incremental_state)
+        #     if self_attn_padding_mask is not None:
+        #         self_attn_state = (
+        #             saved_state["prev_key"],
+        #             saved_state["prev_value"],
+        #             saved_state["prev_key_padding_mask"],
+        #         )
+        #     else:
+        #         self_attn_state = saved_state["prev_key"], saved_state["prev_value"]
+        #     return x, encoder_attn_weights, self_attn_state
+        return x, self_attn_weights  # just self_attn weights for now, following t5
 
     def make_generation_fast_(self, need_attn=False, **unused):
         self.need_attn = need_attn
@@ -631,6 +569,7 @@ EncoderOut = namedtuple('TransformerEncoderOut', [
     'encoder_embedding',  # B x T x C
     'encoder_states',  # List[T x B x C]
 ])
+from .configuration_bart import BARTConfig
 
 
 class TransformerEncoder(nn.Module):
@@ -644,7 +583,7 @@ class TransformerEncoder(nn.Module):
         embed_tokens (torch.nn.Embedding): input embedding
     """
 
-    def __init__(self, config, embed_tokens):
+    def __init__(self, config:BARTConfig, embed_tokens):
         super().__init__()
         self.register_buffer('version', torch.Tensor([3]))
 
@@ -724,16 +663,17 @@ class TransformerEncoder(nn.Module):
         if not encoder_padding_mask.any():
             encoder_padding_mask = None
 
-        encoder_states = [] if return_all_hiddens else None
+        encoder_states = []
 
         # encoder layers
         for layer in self.layers:
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if not self.training or (dropout_probability > self.encoder_layerdrop):
-                x = layer(x, encoder_padding_mask)
-                if return_all_hiddens:
-                    encoder_states.append(x)
+            if self.training and (dropout_probability < self.encoder_layerdrop):
+                continue
+            x = layer(x, encoder_padding_mask)
+            if return_all_hiddens:
+                encoder_states.append(x)
 
         if self.layer_norm:
             x = self.layer_norm(x)
@@ -791,7 +731,7 @@ class TransformerEncoder(nn.Module):
 
 
 @with_incremental_state
-class TransformerIncrementalDecoder(nn.Module):
+class BartDecoder(nn.Module):
     # Fairseq docs about incremental decoding or delete it?
     """
     Transformer decoder consisting of *args.decoder_layers* layers. Each layer
@@ -804,99 +744,50 @@ class TransformerIncrementalDecoder(nn.Module):
             (default: False).
     """
 
-    def __init__(self, args, embed_tokens, no_encoder_attn=False):
+    def __init__(self, config, embed_tokens, no_encoder_attn=False):
         super().__init__()
         self.onnx_trace = False
         self.register_buffer('version', torch.Tensor([3]))
 
-        self.dropout = args.dropout
-        self.decoder_layerdrop = args.decoder_layerdrop
-        self.share_input_output_embed = args.share_decoder_input_output_embed
+        self.dropout = config.dropout
+        self.decoder_layerdrop = config.decoder_layerdrop
 
-        embed_dim = args.decoder_embed_dim
-        self.output_embed_dim = args.decoder_output_dim
-
+        embed_dim = config.decoder_embed_dim
         self.padding_idx = embed_tokens.padding_idx
-        self.max_target_positions = args.max_target_positions
-
-        self.embed_tokens = embed_tokens
-
-        self.embed_scale = 1.0 if args.no_scale_embedding else math.sqrt(embed_dim)
-
+        self.max_target_positions = config.max_target_positions
+        self.embed_tokens = embed_tokens # killed embed_scale = 1.0
         self.embed_positions = LearnedPositionalEmbedding(
-            args.max_target_positions, embed_dim, self.padding_idx,
+            config.max_target_positions, embed_dim, self.padding_idx,
         )
 
-        self.cross_self_attention = getattr(args, 'cross_self_attention', False)
-        self.layer_wise_attention = getattr(args, 'layer_wise_attention', False)
+        self.cross_self_attention = getattr(config, 'cross_self_attention', False)
+        self.layer_wise_attention = getattr(config, 'layer_wise_attention', False)
 
-        self.layers = nn.ModuleList([
-            TransformerDecoderLayer(args, no_encoder_attn) for _ in range(args.decoder_layers)
+        self.layers: List[TransformerDecoderLayer] = nn.ModuleList([
+            TransformerDecoderLayer(config) for _ in range(config.decoder_layers)
         ])
-
-        self.adaptive_softmax = None
-
-        # killed adaptive softmax ref
-        if args.decoder_normalize_before and not getattr(args, 'no_decoder_final_norm', False):
-            self.layer_norm = LayerNorm(embed_dim)
-        else:
-            self.layer_norm = None
-        if getattr(args, 'layernorm_embedding', False):
-            self.layernorm_embedding = LayerNorm(embed_dim)
-        else:
-            self.layernorm_embedding = None
+        # deleted some unused:  adaptive softmax, self.layer_norm
+        self.layernorm_embedding = LayerNorm(embed_dim)
 
     def forward(
         self,
         prev_output_tokens,
         encoder_out=None,
         incremental_state=None,
-        features_only=False,
-        **extra_args
-    ):
-        """
-        Args:
-            prev_output_tokens (LongTensor): previous decoder outputs of shape
-                `(batch, tgt_len)`, for teacher forcing
-            encoder_out (optional): output from the encoder, used for
-                encoder-side attention
-            incremental_state (dict): dictionary used for storing state during
-                :ref:`Incremental decoding`
-            features_only (bool, optional): only return features without
-                applying output layer (default: False).
-
-        Returns:
-            tuple:
-                - the decoder's output of shape `(batch, tgt_len, vocab)`
-                - a dictionary with any model-specific outputs
-        """
-        x, extra = self.extract_features(
-            prev_output_tokens,
-            encoder_out=encoder_out,
-            incremental_state=incremental_state,
-            **extra_args
-        )
-        if not features_only:
-            x = self.output_layer(x)
-        return x, extra
-
-    def extract_features(
-        self,
-        prev_output_tokens,
-        encoder_out=None,
-        incremental_state=None,
         full_context_alignment=False,
-        alignment_layer=None,
-        alignment_heads=None,
-        **unused,
     ):
         """
-        Similar to *forward* but only return features.
-
         Includes several features from "Jointly Learning to Align and
         Translate with Transformer Models" (Garg et al., EMNLP 2019).
 
         Args:
+            prev_output_tokens (LongTensor): previous decoder outputs of shape
+                `(batch, tgt_len)`, for teacher forcing
+
+            encoder_out (optional): output from the encoder, used for
+                encoder-side attention
+            incremental_state (dict): dictionary used for storing state during
+                :ref:`Incremental decoding`
             full_context_alignment (bool, optional): don't apply
                 auto-regressive mask to self-attention (default: False).
             alignment_layer (int, optional): return mean alignment over
@@ -907,10 +798,10 @@ class TransformerIncrementalDecoder(nn.Module):
         Returns:
             tuple:
                 - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - a dictionary with any model-specific outputs
+                - hidden states
+                - attentions
         """
-        if alignment_layer is None:
-            alignment_layer = len(self.layers) - 1
+        #if alignment_layer is None: alignment_layer = len(self.layers) - 1
 
         # embed positions
         positions = self.embed_positions(
@@ -924,14 +815,13 @@ class TransformerIncrementalDecoder(nn.Module):
                 positions = positions[:, -1:]
 
         # embed tokens and positions
-        x = self.embed_scale * self.embed_tokens(prev_output_tokens)
+        x = self.embed_tokens(prev_output_tokens)
 
         if positions is not None:
             x += positions
 
-        if self.layernorm_embedding:
-            x = self.layernorm_embedding(x)
 
+        x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
@@ -942,13 +832,14 @@ class TransformerIncrementalDecoder(nn.Module):
             self_attn_padding_mask = prev_output_tokens.eq(self.padding_idx)
 
         # decoder layers
-        attn = None
-        inner_states = [x]
-        for idx, layer in enumerate(self.layers):
+        all_hidden_states = ()
+        all_self_attns = ()
+        for i, layer in enumerate(self.layers):
+            # layer: TransformerDecoderLayer
             encoder_state = None
             if encoder_out is not None:
-                if self.layer_wise_attention:
-                    encoder_state = encoder_out.encoder_states[idx]
+                if self.layer_wise_attention: # default False
+                    encoder_state = encoder_out.encoder_states[i]
                 else:
                     encoder_state = encoder_out.encoder_out
 
@@ -960,35 +851,27 @@ class TransformerIncrementalDecoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if not self.training or (dropout_probability > self.decoder_layerdrop):
-                x, layer_attn = layer(
+                x, layer_self_attn = layer.forward( # TODO(SS): remove forward
                     x,
                     encoder_state,
                     encoder_out.encoder_padding_mask if encoder_out is not None else None,
                     incremental_state,
                     self_attn_mask=self_attn_mask,
                     self_attn_padding_mask=self_attn_padding_mask,
-                    need_attn=(idx == alignment_layer),
-                    need_head_weights=(idx == alignment_layer),
+                    need_attn=True,#(i == alignment_layer),
                 )
-                inner_states.append(x)
-                if layer_attn is not None and idx == alignment_layer:
-                    attn = layer_attn.float()
+                all_hidden_states += (x,)
+                all_self_attns += (layer_self_attn, ) # .float?
+                #if layer_self_attn is not None and i == alignment_layer:
+                #    attn = layer_self_attn.float()
 
-        if attn is not None:
-            if alignment_heads is not None:
-                attn = attn[:alignment_heads]
 
-            # average probabilities over heads
-            attn = attn.mean(dim=0)
-
-        if self.layer_norm:
-            x = self.layer_norm(x)
+        #attn = all_self_attns[-1].mean(dim=0)
 
         # T x B x C -> B x T x C
+        all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
-
-
-        return x, {'attn': attn, 'inner_states': inner_states}
+        return x, all_hidden_states, all_self_attns
 
     def output_layer(self, features, **unused):
         """Project features to the vocabulary size."""

@@ -275,7 +275,7 @@ class MultiheadAttention(nn.Module):
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
-        self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim
+        self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim  # True for all BART
 
         self.num_heads = num_heads
         self.dropout = dropout
@@ -315,16 +315,9 @@ class MultiheadAttention(nn.Module):
         self.onnx_trace = True
 
     def reset_parameters(self):
-        if self.qkv_same_dim:
-            # Empirically observed the convergence to be much better with
-            # the scaled initialization
-            nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
-            nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
-        else:
-            nn.init.xavier_uniform_(self.k_proj.weight)
-            nn.init.xavier_uniform_(self.v_proj.weight)
-            nn.init.xavier_uniform_(self.q_proj.weight)
+        nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
+        nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
+        nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
 
         nn.init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
@@ -344,7 +337,6 @@ class MultiheadAttention(nn.Module):
         need_weights: bool = True,
         static_kv: bool = False,
         attn_mask: Optional[Tensor] = None,
-        before_softmax: bool = False,
         need_head_weights: bool = False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
@@ -376,7 +368,7 @@ class MultiheadAttention(nn.Module):
             and not self.onnx_trace
             and incremental_state is None
             and not static_kv
-        ):
+        ):  # if we kill incremental decoding, we always hit this block
             assert key is not None and value is not None
             return F.multi_head_attention_forward(
                 query,
@@ -428,6 +420,7 @@ class MultiheadAttention(nn.Module):
                 v = self.v_proj(key)
 
         else:
+            raise NotImplementedError('IDT this is used')
             assert key is not None and value is not None
             q = self.q_proj(query)
             k = self.k_proj(key)
@@ -435,6 +428,7 @@ class MultiheadAttention(nn.Module):
         q *= self.scaling
 
         if self.bias_k is not None:
+            raise NotImplementedError("IDT this is used")
             assert self.bias_v is not None
             k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
             v = torch.cat([v, self.bias_v.repeat(1, bsz, 1)])
@@ -450,7 +444,6 @@ class MultiheadAttention(nn.Module):
                     ],
                     dim=1,
                 )
-
         q = (
             q.contiguous()
             .view(tgt_len, bsz * self.num_heads, self.head_dim)
@@ -520,6 +513,7 @@ class MultiheadAttention(nn.Module):
             assert key_padding_mask.size(1) == src_len
 
         if self.add_zero_attn:
+            raise NotImplementedError('IDT this is used')
             assert v is not None
             src_len += 1
             k = torch.cat([k, k.new_zeros((k.size(0), 1) + k.size()[2:])], dim=1)
@@ -540,7 +534,6 @@ class MultiheadAttention(nn.Module):
                 )
 
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        attn_weights = MultiheadAttention.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
@@ -557,9 +550,6 @@ class MultiheadAttention(nn.Module):
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if before_softmax:
-            return attn_weights, v
 
         attn_weights_float = softmax(
             attn_weights, dim=-1, onnx_trace=self.onnx_trace
@@ -659,8 +649,3 @@ class MultiheadAttention(nn.Module):
             self, "attn_state"
         )
         incremental_state[full_key] = buffer
-
-    def apply_sparse_mask(attn_weights, tgt_len: int, src_len: int, bsz: int):
-        return attn_weights
-
-

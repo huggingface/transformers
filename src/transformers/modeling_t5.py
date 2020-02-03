@@ -792,7 +792,7 @@ class T5Model(T5PreTrainedModel):
 
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
         kwargs_decoder["encoder_attention_mask"] = encoder_attention_mask
-        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder.forward(hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
 
