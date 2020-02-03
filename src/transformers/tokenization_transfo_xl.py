@@ -23,19 +23,20 @@ import logging
 import os
 import pickle
 from collections import Counter, OrderedDict
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from tokenizers import Tokenizer, Encoding
+from tokenizers import Encoding, Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import LookupTable
-from tokenizers.normalizers import unicode_normalizer_from_str, Lowercase, Sequence
+from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
-from typing import Optional, List, Union, Tuple
 
 from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+
 
 if is_torch_available():
     import torch
@@ -294,14 +295,17 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
-    def __init__(self, vocab_file,
-                 delimiter,
-                 lowercase,
-                 unk_token,
-                 eos_token,
-                 add_eos=False,
-                 add_double_eos=False,
-                 normalization: Optional[str] = None):
+    def __init__(
+        self,
+        vocab_file,
+        delimiter,
+        lowercase,
+        unk_token,
+        eos_token,
+        add_eos=False,
+        add_double_eos=False,
+        normalization: Optional[str] = None,
+    ):
 
         tokenizer = LookupTable.from_files(vocab_file, unk_token=unk_token)
         tokenizer = Tokenizer(tokenizer)
@@ -325,8 +329,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
         if add_double_eos:
             tokenizer.post_processor = BertProcessing.new(
-                (eos_token, tokenizer.token_to_id(eos_token)),
-                (eos_token, tokenizer.token_to_id(eos_token))
+                (eos_token, tokenizer.token_to_id(eos_token)), (eos_token, tokenizer.token_to_id(eos_token))
             )
 
         parameters = {
@@ -347,10 +350,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         )
 
     def encode(self, sequence: str, pair: Optional[str] = None) -> Encoding:
-        return super().encode(
-            sequence.strip(),
-            pair.strip() if pair else pair
-        )
+        return super().encode(sequence.strip(), pair.strip() if pair else pair)
 
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
@@ -360,22 +360,22 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-            self,
-            special=None,
-            min_freq=0,
-            max_size=None,
-            lower_case=False,
-            delimiter=None,
-            vocab_file=None,
-            pretrained_vocab_file=None,
-            never_split=None,
-            unk_token="<unk>",
-            eos_token="<eos>",
-            additional_special_tokens=["<formula>"],
-            add_eos=False,
-            add_double_eos=False,
-            normalization=None,
-            **kwargs
+        self,
+        special=None,
+        min_freq=0,
+        max_size=None,
+        lower_case=False,
+        delimiter=None,
+        vocab_file=None,
+        pretrained_vocab_file=None,
+        never_split=None,
+        unk_token="<unk>",
+        eos_token="<eos>",
+        additional_special_tokens=["<formula>"],
+        add_eos=False,
+        add_double_eos=False,
+        normalization=None,
+        **kwargs
     ):
 
         super().__init__(
@@ -387,12 +387,12 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
                 eos_token,
                 add_eos,
                 add_double_eos,
-                normalization
+                normalization,
             ),
             unk_token=unk_token,
             eos_token=eos_token,
             additional_special_tokens=additional_special_tokens,
-            **kwargs
+            **kwargs,
         )
 
 

@@ -559,10 +559,13 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             tk.implementations.BertWordPieceTokenizer(
-                vocab_file, add_special_tokens,
-                unk_token, sep_token, cls_token,
+                vocab_file,
+                add_special_tokens,
+                unk_token,
+                sep_token,
+                cls_token,
                 handle_chinese_chars=tokenize_chinese_chars,
-                lowercase=do_lower_case
+                lowercase=do_lower_case,
             ),
             unk_token=unk_token,
             sep_token=sep_token,

@@ -19,19 +19,19 @@ import json
 import logging
 import os
 import re
+from typing import List, Optional, Union
 
 from tokenizers import Tokenizer
 from tokenizers.decoders import BPEDecoder
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import BPE
-from tokenizers.normalizers import BertNormalizer, unicode_normalizer_from_str, Sequence
+from tokenizers.normalizers import BertNormalizer, Sequence, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import BertPreTokenizer
-from typing import Optional, Union, List
-
 from tokenizers.trainers import BpeTrainer
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+
 
 logger = logging.getLogger(__name__)
 

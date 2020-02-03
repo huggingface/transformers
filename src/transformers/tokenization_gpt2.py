@@ -21,6 +21,7 @@ import os
 from functools import lru_cache
 
 import regex as re
+
 from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
@@ -271,5 +272,5 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
-            **kwargs
+            **kwargs,
         )
