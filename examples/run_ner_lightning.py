@@ -10,27 +10,7 @@ from seqeval.metrics import f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
-
-from transformers import (
-    WEIGHTS_NAME,
-    AdamW,
-    BertConfig,
-    BertForTokenClassification,
-    BertTokenizer,
-    CamembertConfig,
-    CamembertForTokenClassification,
-    CamembertTokenizer,
-    DistilBertConfig,
-    DistilBertForTokenClassification,
-    DistilBertTokenizer,
-    RobertaConfig,
-    RobertaForTokenClassification,
-    RobertaTokenizer,
-    XLMRobertaConfig,
-    XLMRobertaForTokenClassification,
-    XLMRobertaTokenizer,
-    get_linear_schedule_with_warmup,
-)
+from transformers import *
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 import pytorch_lightning as pl
 
@@ -83,14 +63,11 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
             args.max_seq_length,
             tokenizer,
             cls_token_at_end=bool(args.model_type in ["xlnet"]),
-            # xlnet has a cls token at the end
             cls_token=tokenizer.cls_token,
             cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
             sep_token=tokenizer.sep_token,
             sep_token_extra=bool(args.model_type in ["roberta"]),
-            # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
             pad_on_left=bool(args.model_type in ["xlnet"]),
-            # pad on the left for xlnet
             pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
             pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
             pad_token_label_id=pad_token_label_id,
@@ -187,8 +164,6 @@ class NERTransformer(pl.LightningModule):
         }
         return {'loss': loss, "log": tensorboard_logs}
 
-
-
     def load_dataset(self, mode, batch_size):
         args = self.hparams
         labels = get_labels(args.labels)
@@ -222,30 +197,11 @@ class NERTransformer(pl.LightningModule):
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
         tmp_eval_loss, logits = outputs[:2]
-        return {'val_loss': tmp_eval_loss.item()}
+        return tmp_eval_loss.item()
 
-    # def validation_end(self, outputs):
-    #     # OPTIONAL
-    #     eval_loss = eval_loss / nb_eval_steps
-    #     preds = np.argmax(preds, axis=2)
+    def validation_end(self, outputs):
+         return torch.stack(outputs).mean()
 
-    #     label_map = {i: label for i, label in enumerate(labels)}
-
-    #     out_label_list = [[] for _ in range(out_label_ids.shape[0])]
-    #     preds_list = [[] for _ in range(out_label_ids.shape[0])]
-
-    #     for i in range(out_label_ids.shape[0]):
-    #         for j in range(out_label_ids.shape[1]):
-    #             if out_label_ids[i, j] != pad_token_label_id:
-    #                 out_label_list[i].append(label_map[out_label_ids[i][j]])
-    #                 preds_list[i].append(label_map[preds[i][j]])
-
-    #     results = {
-    #         "loss": eval_loss,
-    #         "precision": precision_score(out_label_list, preds_list),
-    #         "recall": recall_score(out_label_list, preds_list),
-    #         "f1": f1_score(out_label_list, preds_list),
-    #     }
 
 
     @staticmethod
@@ -303,7 +259,6 @@ class NERTransformer(pl.LightningModule):
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-        parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
         parser.add_argument(
             "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform."
     )
@@ -347,10 +302,23 @@ class NERTransformer(pl.LightningModule):
 def main(hparams):
     args = hparams
     # init model
+    set_seed(args)
+
+    # Setup distant debugging if needed
+    if args.server_ip and args.server_port:
+        # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
+        import ptvsd
+
+        print("Waiting for debugger attach")
+        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
+        ptvsd.wait_for_attach()
+
     model = NERTransformer(hparams)
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=hparams.gpus,
-                         use_amp=hparams.fp16)
+                         use_amp=hparams.fp16,
+                         gradient_clip_val=args.max_grad_norm
+    )
     if args.do_train:
         trainer.fit(model)
 
@@ -368,7 +336,7 @@ if __name__ == '__main__':
         "--gpus",
         type=int, default=1
     )
-
+    parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     # add model specific args
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
@@ -398,6 +366,7 @@ if __name__ == '__main__':
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
 
+    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
     parser = NERTransformer.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
