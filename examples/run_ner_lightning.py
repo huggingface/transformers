@@ -189,8 +189,7 @@ class NERTransformer(pl.LightningModule):
 
 
 
-    @pl.data_loader
-    def train_dataloader(self):
+    def load_dataset(self, mode, batch_size):
         args = self.hparams
         labels = get_labels(args.labels)
         train_dataset = load_and_cache_examples(args, self.tokenizer, labels,
@@ -200,37 +199,28 @@ class NERTransformer(pl.LightningModule):
                                       batch_size=args.train_batch_size)
         return train_dataloader
 
+    @pl.data_loader
+    def train_dataloader(self):
+        args = self.hparams
+        return self.load_dataset("train", args.train_batch_size)
 
     @pl.data_loader
     def val_dataloader(self):
         args = self.hparams
-        labels = get_labels(args.labels)
-        eval_dataset = load_and_cache_examples(args, self.tokenizer, labels,
-                                               self.pad_token_label_id, mode="dev")
-        eval_sampler = SequentialSampler(eval_dataset)
-        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler,
-                                     batch_size=args.eval_batch_size)
-        return eval_dataloader
+        return self.load_dataset("dev", args.eval_batch_size)
 
     @pl.data_loader
     def test_dataloader(self):
         args = self.hparams
-        labels = get_labels(args.labels)
-        eval_dataset = load_and_cache_examples(args, self.tokenizer, labels,
-                                               self.pad_token_label_id, mode="test")
-        eval_sampler = SequentialSampler(eval_dataset)
-        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler,
-                                     batch_size=args.eval_batch_size)
-        return eval_dataloader
+        return self.load_dataset("test", args.eval_batch_size)
 
     def validation_step(self, batch, batch_nb):
-        # OPTIONAL
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if args.model_type != "distilbert":
             inputs["token_type_ids"] = (
                 batch[2] if args.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use segment_ids
-        outputs = model(**inputs)
+        outputs = self.forward(**inputs)
         tmp_eval_loss, logits = outputs[:2]
         return {'val_loss': tmp_eval_loss.item()}
 
@@ -361,7 +351,8 @@ def main(hparams):
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=hparams.gpus,
                          use_amp=hparams.fp16)
-    trainer.fit(model)
+    if args.do_train:
+        trainer.fit(model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="parser for fast-neural-style")
