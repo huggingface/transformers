@@ -288,11 +288,25 @@ def main(hparams):
     args = hparams
     # init model
     model = NERTransformer(hparams)
-    trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps)
+    trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
+                         gpus=hparams.gpus,
+                         use_amp=hparams.fp16)
     trainer.fit(model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="parser for fast-neural-style")
+    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
+    )
+
+    parser.add_argument(
+        "--gpus",
+        type=int, default=1
+    )
 
     # add model specific args
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
