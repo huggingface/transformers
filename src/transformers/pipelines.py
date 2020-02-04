@@ -326,7 +326,7 @@ class Pipeline(_ScikitCompat):
         self,
         model,
         tokenizer: PreTrainedTokenizer = None,
-        modelcard: ModelCard = None,
+        modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
@@ -358,7 +358,8 @@ class Pipeline(_ScikitCompat):
 
         self.model.save_pretrained(save_directory)
         self.tokenizer.save_pretrained(save_directory)
-        self.modelcard.save_pretrained(save_directory)
+        if self.modelcard is not None:
+            self.modelcard.save_pretrained(save_directory)
 
     def transform(self, X):
         """
@@ -476,7 +477,7 @@ class FeatureExtractionPipeline(Pipeline):
         self,
         model,
         tokenizer: PreTrainedTokenizer = None,
-        modelcard: ModelCard = None,
+        modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
@@ -515,7 +516,7 @@ class FillMaskPipeline(Pipeline):
         self,
         model,
         tokenizer: PreTrainedTokenizer = None,
-        modelcard: ModelCard = None,
+        modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
@@ -582,7 +583,7 @@ class NerPipeline(Pipeline):
         self,
         model,
         tokenizer: PreTrainedTokenizer = None,
-        modelcard: ModelCard = None,
+        modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
@@ -721,7 +722,7 @@ class QuestionAnsweringPipeline(Pipeline):
         self,
         model,
         tokenizer: Optional[PreTrainedTokenizer],
-        modelcard: Optional[ModelCard],
+        modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         device: int = -1,
         **kwargs
