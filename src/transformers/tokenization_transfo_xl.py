@@ -29,7 +29,7 @@ import numpy as np
 
 from tokenizers import Encoding, Tokenizer
 from tokenizers.implementations import BaseTokenizer
-from tokenizers.models import LookupTable
+from tokenizers.models import WordLevel
 from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
@@ -307,7 +307,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         normalization: Optional[str] = None,
     ):
 
-        tokenizer = LookupTable.from_files(vocab_file, unk_token=unk_token)
+        tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
         tokenizer = Tokenizer(tokenizer)
 
         # Create the correct normalization path
