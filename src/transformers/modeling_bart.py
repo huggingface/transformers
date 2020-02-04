@@ -146,7 +146,7 @@ class BARTModel(nn.Module):
 
     #def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
-    def forward(self, input_ids: torch.LongTensor, return_all_hiddens=True, **unused):
+    def forward(self, input_ids: torch.LongTensor, **unused):
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
@@ -161,20 +161,21 @@ class BARTModel(nn.Module):
 
         encoder_out = self.encoder.forward(  # TODO(SS): delete forward later
             input_ids,
-            src_lengths=None,
-            prev_output_tokens=prev_output_tokens,
-            return_all_hiddens=return_all_hiddens,
+            # prev_output_tokens=prev_output_tokens,
         )
         dec_features, dec_hidden, dec_attn = self.decoder.forward(
             prev_output_tokens,
             encoder_out=encoder_out,
         )
         if self.output_hidden_states and self.output_attentions:
-            return (dec_features, dec_hidden, dec_attn, encoder_out.encoder_states, encoder_out.encoder_attn)
+            return (dec_features, dec_hidden, dec_attn,
+                    encoder_out.encoder_out, encoder_out.encoder_states, encoder_out.encoder_attn)
         elif self.output_hidden_states:
-            return (dec_features, dec_hidden, encoder_out.encoder_states,)
+            return (dec_features, dec_hidden, encoder_out.encoder_out, encoder_out.encoder_states,)
         elif self.output_attentions:
-            return (dec_features, dec_attn, encoder_out.encoder_attn)
+            return (dec_features, dec_attn, encoder_out.encoder_out, encoder_out.encoder_attn)
+        else:
+            return (dec_features, encoder_out.encoder_out)
 
     def get_targets(self, sample, net_output):
         """Get targets from either the sample or the net's output."""
@@ -498,16 +499,13 @@ class BartEncoder(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         return x, embedded_tokens
 
-    def forward(self, input_ids, src_lengths, cls_input=None, **unused):
+    def forward(self, input_ids, **unused):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
             src_lengths (torch.LongTensor): lengths of each source sentence of
                 shape `(batch)`
-            return_all_hiddens (bool, optional): also return all of the
-                intermediate hidden states (default: False).
-
         Returns:
             namedtuple:
                 - **encoder_out** (Tensor): the last encoder layer's output of
@@ -534,15 +532,21 @@ class BartEncoder(nn.Module):
 
         # encoder layers
         for layer in self.layers:
+
+            if self.output_hidden_states:
+                encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.encoder_layerdrop):
-                continue
+                continue  # NOTE(SS): this could break shape of attentions!
             x, attn = layer(x, encoder_padding_mask)
-            if self.output_hidden_states:
-                encoder_states.append(x)
+
             if self.output_attentions:
                 all_attentions.append(attn)
+        if self.output_hidden_states:
+            encoder_states.append(x)
+
+        encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
 
         return EncoderOut(
             encoder_out=x,  # T x B x C
@@ -721,8 +725,6 @@ class BartDecoder(nn.Module):
                 #if layer_self_attn is not None and i == alignment_layer:
                 #    attn = layer_self_attn.float()
 
-
-        #attn = all_self_attns[-1].mean(dim=0)
 
         # T x B x C -> B x T x C
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]

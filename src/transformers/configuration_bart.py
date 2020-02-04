@@ -67,3 +67,6 @@ class BARTConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.dropout = dropout
+    @property
+    def num_attention_heads(self):
+        return self.encoder_attention_heads

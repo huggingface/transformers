@@ -40,7 +40,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
+    test_head_masking = False  # TODO(SS): may want to fix this
     is_encoder_decoder = True
+
 
     class ModelTester(object):
         def __init__(
