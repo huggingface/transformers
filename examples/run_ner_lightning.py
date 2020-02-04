@@ -215,6 +215,7 @@ class NERTransformer(pl.LightningModule):
     @pl.data_loader
     def test_dataloader(self):
         args = self.hparams
+        labels = get_labels(args.labels)
         eval_dataset = load_and_cache_examples(args, self.tokenizer, labels,
                                                self.pad_token_label_id, mode="test")
         eval_sampler = SequentialSampler(eval_dataset)
