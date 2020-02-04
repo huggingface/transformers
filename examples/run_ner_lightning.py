@@ -324,7 +324,6 @@ def main(hparams):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="parser for fast-neural-style")
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
     parser.add_argument(
         "--fp16",
