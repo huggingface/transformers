@@ -225,80 +225,6 @@ class BARTModel(nn.Module):
         """Maximum length supported by the decoder."""
         return self.decoder.max_positions()
 
-    @staticmethod
-    def add_args(parser):
-        """Add model-specific arguments to the parser."""
-        # fmt: off
-        parser.add_argument('--activation-fn',
-                            choices=available_activation_fns,
-                            help='activation function to use')
-        parser.add_argument('--dropout', type=float, metavar='D',
-                            help='dropout probability')
-        parser.add_argument('--attention-dropout', type=float, metavar='D',
-                            help='dropout probability for attention weights')
-        parser.add_argument('--activation-dropout', '--relu-dropout', type=float, metavar='D',
-                            help='dropout probability after activation in FFN.')
-        parser.add_argument('--encoder-embed-path', type=str, metavar='STR',
-                            help='path to pre-trained encoder embedding')
-        parser.add_argument('--encoder-embed-dim', type=int, metavar='N',
-                            help='encoder embedding dimension')
-        parser.add_argument('--encoder-ffn-embed-dim', type=int, metavar='N',
-                            help='encoder embedding dimension for FFN')
-        parser.add_argument('--encoder-layers', type=int, metavar='N',
-                            help='num encoder layers')
-        parser.add_argument('--encoder-attention-heads', type=int, metavar='N',
-                            help='num encoder attention heads')
-        parser.add_argument('--encoder-normalize-before', action='store_true',
-                            help='apply layernorm before each encoder block')
-        parser.add_argument('--encoder-learned-pos', action='store_true',
-                            help='use learned positional embeddings in the encoder')
-        parser.add_argument('--decoder-embed-path', type=str, metavar='STR',
-                            help='path to pre-trained decoder embedding')
-        parser.add_argument('--decoder-embed-dim', type=int, metavar='N',
-                            help='decoder embedding dimension')
-        parser.add_argument('--decoder-ffn-embed-dim', type=int, metavar='N',
-                            help='decoder embedding dimension for FFN')
-        parser.add_argument('--decoder-layers', type=int, metavar='N',
-                            help='num decoder layers')
-        parser.add_argument('--decoder-attention-heads', type=int, metavar='N',
-                            help='num decoder attention heads')
-        parser.add_argument('--decoder-learned-pos', action='store_true',
-                            help='use learned positional embeddings in the decoder')
-        parser.add_argument('--decoder-normalize-before', action='store_true',
-                            help='apply layernorm before each decoder block')
-        parser.add_argument('--share-decoder-input-output-embed', action='store_true',
-                            help='share decoder input and output embeddings')
-        parser.add_argument('--share-all-embeddings', action='store_true',
-                            help='share encoder, decoder and output embeddings'
-                                 ' (requires shared dictionary and embed dim)')
-        parser.add_argument('--no-token-positional-embeddings', default=False, action='store_true',
-                            help='if set, disables positional embeddings (outside self attention)')
-        parser.add_argument('--adaptive-softmax-cutoff', metavar='EXPR',
-                            help='comma separated list of adaptive softmax cutoff points. '
-                                 'Must be used with adaptive_loss criterion'),
-        parser.add_argument('--adaptive-softmax-dropout', type=float, metavar='D',
-                            help='sets adaptive softmax dropout for the tail projections')
-        # args for "Cross+Self-Attention for Transformer Models" (Peitz et al., 2019)
-        parser.add_argument('--no-cross-attention', default=False, action='store_true',
-                            help='do not perform cross-attention')
-        parser.add_argument('--cross-self-attention', default=False, action='store_true',
-                            help='perform cross+self-attention')
-        parser.add_argument('--layer-wise-attention', default=False, action='store_true',
-                            help='perform layer-wise attention (cross-attention or cross+self-attention)')
-        # args for "Reducing Transformer Depth on Demand with Structured Dropout" (Fan et al., 2019)
-        parser.add_argument('--encoder-layerdrop', type=float, metavar='D', default=0,
-                            help='LayerDrop probability for encoder')
-        parser.add_argument('--decoder-layerdrop', type=float, metavar='D', default=0,
-                            help='LayerDrop probability for decoder')
-        parser.add_argument('--encoder-layers-to-keep', default=None,
-                            help='which layers to *keep* when pruning as a comma-separated list')
-        parser.add_argument('--decoder-layers-to-keep', default=None,
-                            help='which layers to *keep* when pruning as a comma-separated list')
-        parser.add_argument('--layernorm-embedding', action='store_true',
-                            help='add layernorm to embedding')
-        parser.add_argument('--no-scale-embedding', action='store_true',
-                            help='if True, dont scale embeddings')
-
 
 class EncoderLayer(nn.Module):
     """Encoder layer block.
@@ -332,7 +258,6 @@ class EncoderLayer(nn.Module):
         self.fc1 = Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
-
 
     def forward(self, x, encoder_padding_mask, attn_mask=None):
         """
@@ -394,17 +319,14 @@ class DecoderLayer(nn.Module):
             (default: False).
     """
 
-    def __init__(self, config: BARTConfig, add_bias_kv=False, add_zero_attn=False):
+    def __init__(self, config: BARTConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.cross_self_attention = getattr(config, "cross_self_attention", False)
         self.self_attn = MultiheadAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            add_bias_kv=add_bias_kv,
-            add_zero_attn=add_zero_attn,
-            self_attention=not self.cross_self_attention,
+            self_attention=True,
         )
         self.dropout = config.dropout
         self.activation_fn = get_activation_fn(config.activation_fn)
@@ -465,29 +387,8 @@ class DecoderLayer(nn.Module):
             if len(prev_self_attn_state) >= 3:
                 saved_state["prev_key_padding_mask"] = prev_self_attn_state[2]
             self.self_attn._set_input_buffer(incremental_state, saved_state)
-        input_buffer = self.self_attn._get_input_buffer(incremental_state)
-        if self.cross_self_attention and not (
-            incremental_state is not None
-            and input_buffer is not None
-            and "prev_key" in input_buffer
-        ):
-            if self_attn_mask is not None:
-                self_attn_mask = torch.cat(
-                    (x.new(x.size(0), encoder_out.size(0)).zero_(), self_attn_mask),
-                    dim=1,
-                )
-            if self_attn_padding_mask is not None:
-                if encoder_padding_mask is None:
-                    encoder_padding_mask = self_attn_padding_mask.new(
-                        encoder_out.size(1), encoder_out.size(0)
-                    ).zero_()
-                self_attn_padding_mask = torch.cat(
-                    (encoder_padding_mask, self_attn_padding_mask), dim=1
-                )
-            y = torch.cat((encoder_out, x), dim=0)
-        else:
-            y = x
 
+        y = x  # TODO(SS): why
         x, self_attn_weights = self.self_attn(
             query=x,
             key=y,
@@ -497,7 +398,6 @@ class DecoderLayer(nn.Module):
             need_weights=need_attn,
             attn_mask=self_attn_mask,
         )
-        import ipdb; ipdb.set_trace()
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)

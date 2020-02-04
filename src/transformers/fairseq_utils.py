@@ -9,88 +9,197 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def prune_state_dict(state_dict, args):
-    """Prune the given state_dict if desired for LayerDrop
-    (https://arxiv.org/abs/1909.11556).
+def multi_head_attention_forward(query,                           # type: Tensor
+                                 key,                             # type: Tensor
+                                 value,                           # type: Tensor
+                                 embed_dim_to_check,              # type: int
+                                 num_heads,                       # type: int
+                                 in_proj_bias,                    # type: Tensor
+                                 bias_k,                          # type: Optional[Tensor]
+                                 bias_v,                          # type: Optional[Tensor]
+                                 add_zero_attn,                   # type: bool
+                                 dropout_p,                       # type: float
+                                 out_proj_weight,                 # type: Tensor
+                                 out_proj_bias,                   # type: Tensor
+                                 training=True,                   # type: bool
+                                 key_padding_mask=None,           # type: Optional[Tensor]
+                                 need_weights=True,               # type: bool
+                                 attn_mask=None,                  # type: Optional[Tensor]
+                                 use_separate_proj_weight=False,  # type: bool
+                                 q_proj_weight=None,              # type: Optional[Tensor]
+                                 k_proj_weight=None,              # type: Optional[Tensor]
+                                 v_proj_weight=None,              # type: Optional[Tensor]
+                                 static_k=None,                   # type: Optional[Tensor]
+                                 static_v=None                    # type: Optional[Tensor]
+                                 ):
+    # type: (...) -> Tuple[Tensor, Optional[Tensor]]
+    r"""
+    Args:
+        query, key, value: map a query and a set of key-value pairs to an output.
+            See "Attention Is All You Need" for more details.
+        embed_dim_to_check: total dimension of the model.
+        num_heads: parallel attention heads.
+        in_proj_weight, in_proj_bias: input projection weight and bias.
+        bias_k, bias_v: bias of the key and value sequences to be added at dim=0.
+        add_zero_attn: add a new batch of zeros to the key and
+                       value sequences at dim=1.
+        dropout_p: probability of an element to be zeroed.
+        out_proj_weight, out_proj_bias: the output projection weight and bias.
+        training: apply dropout if is ``True``.
+        key_padding_mask: if provided, specified padding elements in the key will
+            be ignored by the attention. This is an binary mask. When the value is True,
+            the corresponding value on the attention layer will be filled with -inf.
+        need_weights: output attn_output_weights.
+        attn_mask: mask that prevents attention to certain positions. This is an additive mask
+            (i.e. the values will be added to the attention layer).
+        use_separate_proj_weight: the function accept the proj. weights for query, key,
+            and value in differnt forms. If false, in_proj_weight will be used, which is
+            a combination of q_proj_weight, k_proj_weight, v_proj_weight.
+        q_proj_weight, k_proj_weight, v_proj_weight, in_proj_bias: input projection weight and bias.
+        static_k, static_v: static key and value used for attention operators.
 
-    Training with LayerDrop allows models to be robust to pruning at inference
-    time. This function prunes state_dict to allow smaller models to be loaded
-    from a larger model and re-maps the existing state_dict for this to occur.
 
-    It's called by functions that load models from checkpoints and does not
-    need to be called directly.
+    Shape:
+        Inputs:
+        - query: :math:`(L, N, E)` where L is the target sequence length, N is the batch size, E is
+          the embedding dimension.
+        - key: :math:`(S, N, E)`, where S is the source sequence length, N is the batch size, E is
+          the embedding dimension.
+        - value: :math:`(S, N, E)` where S is the source sequence length, N is the batch size, E is
+          the embedding dimension.
+        - key_padding_mask: :math:`(N, S)`, ByteTensor, where N is the batch size, S is the source sequence length.
+        - attn_mask: :math:`(L, S)` where L is the target sequence length, S is the source sequence length.
+        - static_k: :math:`(N*num_heads, S, E/num_heads)`, where S is the source sequence length,
+          N is the batch size, E is the embedding dimension. E/num_heads is the head dimension.
+        - static_v: :math:`(N*num_heads, S, E/num_heads)`, where S is the source sequence length,
+          N is the batch size, E is the embedding dimension. E/num_heads is the head dimension.
+
+        Outputs:
+        - attn_output: :math:`(L, N, E)` where L is the target sequence length, N is the batch size,
+          E is the embedding dimension.
+        - attn_output_weights: :math:`(N, L, S)` where N is the batch size,
+          L is the target sequence length, S is the source sequence length.
     """
-    if not args or args.arch == "ptt_transformer":
-        # args should not be none, but don't crash if it is.
-        return state_dict
 
-    encoder_layers_to_keep = (
-        args.encoder_layers_to_keep if "encoder_layers_to_keep" in vars(args) else None
-    )
-    decoder_layers_to_keep = (
-        args.decoder_layers_to_keep if "decoder_layers_to_keep" in vars(args) else None
-    )
+    tgt_len, bsz, embed_dim = query.size()
+    assert embed_dim == embed_dim_to_check
+    assert key.size() == value.size()
 
-    if not encoder_layers_to_keep and not decoder_layers_to_keep:
-        return state_dict
+    head_dim = embed_dim // num_heads
+    assert head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
+    scaling = float(head_dim) ** -0.5
 
-    # apply pruning
-    logger.info(
-        "Pruning model to specified layer configuration - this works best if the model was trained with LayerDrop"
-    )
 
-    def create_pruning_pass(layers_to_keep, layer_name):
-        keep_layers = sorted(
-            [int(layer_string) for layer_string in layers_to_keep.split(",")]
+
+    q_proj_weight_non_opt = torch.jit._unwrap_optional(q_proj_weight)
+    len1, len2 = q_proj_weight_non_opt.size()
+    assert len1 == embed_dim and len2 == query.size(-1)
+
+    k_proj_weight_non_opt = torch.jit._unwrap_optional(k_proj_weight)
+    len1, len2 = k_proj_weight_non_opt.size()
+    assert len1 == embed_dim and len2 == key.size(-1)
+
+    v_proj_weight_non_opt = torch.jit._unwrap_optional(v_proj_weight)
+    len1, len2 = v_proj_weight_non_opt.size()
+    assert len1 == embed_dim and len2 == value.size(-1)
+
+    if in_proj_bias is not None:
+        q = F.linear(query, q_proj_weight_non_opt, in_proj_bias[0:embed_dim])
+        k = F.linear(key, k_proj_weight_non_opt, in_proj_bias[embed_dim:(embed_dim * 2)])
+        v = F.linear(value, v_proj_weight_non_opt, in_proj_bias[(embed_dim * 2):])
+    else:
+        q = F.linear(query, q_proj_weight_non_opt, in_proj_bias)
+        k = F.linear(key, k_proj_weight_non_opt, in_proj_bias)
+        v = F.linear(value, v_proj_weight_non_opt, in_proj_bias)
+    q = q * scaling
+
+    if bias_k is not None and bias_v is not None:
+        if static_k is None and static_v is None:
+            k = torch.cat([k, bias_k.repeat(1, bsz, 1)])
+            v = torch.cat([v, bias_v.repeat(1, bsz, 1)])
+            if attn_mask is not None:
+                attn_mask = torch.cat([attn_mask,
+                                      torch.zeros((attn_mask.size(0), 1),
+                                                  dtype=attn_mask.dtype,
+                                                  device=attn_mask.device)], dim=1)
+            if key_padding_mask is not None:
+                key_padding_mask = torch.cat(
+                    [key_padding_mask, torch.zeros((key_padding_mask.size(0), 1),
+                                                   dtype=key_padding_mask.dtype,
+                                                   device=key_padding_mask.device)], dim=1)
+        else:
+            assert static_k is None, "bias cannot be added to static key."
+            assert static_v is None, "bias cannot be added to static value."
+    else:
+        assert bias_k is None
+        assert bias_v is None
+
+    q = q.contiguous().view(tgt_len, bsz * num_heads, head_dim).transpose(0, 1)
+    if k is not None:
+        k = k.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+    if v is not None:
+        v = v.contiguous().view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+
+    if static_k is not None:
+        assert static_k.size(0) == bsz * num_heads
+        assert static_k.size(2) == head_dim
+        k = static_k
+
+    if static_v is not None:
+        assert static_v.size(0) == bsz * num_heads
+        assert static_v.size(2) == head_dim
+        v = static_v
+
+    src_len = k.size(1)
+
+    if key_padding_mask is not None:
+        assert key_padding_mask.size(0) == bsz
+        assert key_padding_mask.size(1) == src_len
+
+    if add_zero_attn:
+        src_len += 1
+        k = torch.cat([k, torch.zeros((k.size(0), 1) + k.size()[2:], dtype=k.dtype, device=k.device)], dim=1)
+        v = torch.cat([v, torch.zeros((v.size(0), 1) + v.size()[2:], dtype=v.dtype, device=v.device)], dim=1)
+        if attn_mask is not None:
+            attn_mask = torch.cat([attn_mask, torch.zeros((attn_mask.size(0), 1),
+                                                          dtype=attn_mask.dtype,
+                                                          device=attn_mask.device)], dim=1)
+        if key_padding_mask is not None:
+            key_padding_mask = torch.cat(
+                [key_padding_mask, torch.zeros((key_padding_mask.size(0), 1),
+                                               dtype=key_padding_mask.dtype,
+                                               device=key_padding_mask.device)], dim=1)
+
+    attn_output_weights = torch.bmm(q, k.transpose(1, 2))
+    assert list(attn_output_weights.size()) == [bsz * num_heads, tgt_len, src_len]
+
+    if attn_mask is not None:
+        attn_mask = attn_mask.unsqueeze(0)
+        attn_output_weights += attn_mask
+
+    if key_padding_mask is not None:
+        attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
+        attn_output_weights = attn_output_weights.masked_fill(
+            key_padding_mask.unsqueeze(1).unsqueeze(2),
+            float('-inf'),
         )
-        mapping_dict = {}
-        for i in range(len(keep_layers)):
-            mapping_dict[str(keep_layers[i])] = str(i)
+        attn_output_weights = attn_output_weights.view(bsz * num_heads, tgt_len, src_len)
 
-        regex = re.compile("^{layer}.*\.layers\.(\d+)".format(layer=layer_name))
-        return {"substitution_regex": regex, "mapping_dict": mapping_dict}
+    attn_output_weights = softmax(
+        attn_output_weights, dim=-1)
+    attn_output_weights = F.dropout(attn_output_weights, p=dropout_p, training=training)
 
-    pruning_passes = []
-    if encoder_layers_to_keep:
-        pruning_passes.append(create_pruning_pass(encoder_layers_to_keep, "encoder"))
-    if decoder_layers_to_keep:
-        pruning_passes.append(create_pruning_pass(decoder_layers_to_keep, "decoder"))
+    attn_output = torch.bmm(attn_output_weights, v)
+    assert list(attn_output.size()) == [bsz * num_heads, tgt_len, head_dim]
+    attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
+    attn_output = F.linear(attn_output, out_proj_weight, out_proj_bias)
 
-    new_state_dict = {}
-    for layer_name in state_dict.keys():
-        match = re.search("\.layers\.(\d+)\.", layer_name)
-        # if layer has no number in it, it is a supporting layer, such as an
-        # embedding
-        if not match:
-            new_state_dict[layer_name] = state_dict[layer_name]
-            continue
-
-        # otherwise, layer should be pruned.
-        original_layer_number = match.group(1)
-        # figure out which mapping dict to replace from
-        for pruning_pass in pruning_passes:
-            if original_layer_number in pruning_pass["mapping_dict"] and pruning_pass[
-                "substitution_regex"
-            ].search(layer_name):
-                new_layer_number = pruning_pass["mapping_dict"][original_layer_number]
-                substitution_match = pruning_pass["substitution_regex"].search(
-                    layer_name
-                )
-                new_state_key = (
-                    layer_name[: substitution_match.start(1)]
-                    + new_layer_number
-                    + layer_name[substitution_match.end(1) :]
-                )
-                new_state_dict[new_state_key] = state_dict[layer_name]
-
-    # Since layers are now pruned, *_layers_to_keep are no longer needed.
-    # This is more of "It would make it work fix" rather than a proper fix.
-    if "encoder_layers_to_keep" in vars(args):
-        args.encoder_layers_to_keep = None
-    if "decoder_layers_to_keep" in vars(args):
-        args.decoder_layers_to_keep = None
-
-    return new_state_dict
+    if need_weights:
+        # average attention weights over heads
+        attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
+        return attn_output, attn_output_weights#sum(dim=1) / num_heads
+    else:
+        return attn_output, None
 
 def gelu_accurate(x):
     if not hasattr(gelu_accurate, "_a"):
@@ -115,7 +224,7 @@ def get_activation_fn(activation: str) -> Callable:
         return gelu_accurate
     elif activation == "tanh":
         return torch.tanh
-    elif activation == "linear":
+    elif activation == "F.linear":
         return lambda x: x
     else:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
@@ -137,7 +246,7 @@ def init_bert_params(module):
     """
     Initialize the weights specific to the BERT Model.
     This overrides the default initializations depending on the specified arguments.
-        1. If normal_init_linear_weights is set then weights of linear
+        1. If normal_init_F.linear_weights is set then weights of F.linear
            layer will be initialized using the normal distribution and
            bais will be set to the specified value.
         2. If normal_init_embed_weights is set then weights of embedding
@@ -266,7 +375,6 @@ class MultiheadAttention(nn.Module):
         vdim=None,
         dropout=0.0,
         bias=True,
-        add_bias_kv=False,
         add_zero_attn=False,
         self_attention=False,
         encoder_decoder_attention=False,
@@ -297,12 +405,7 @@ class MultiheadAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-        if add_bias_kv:
-            self.bias_k = Parameter(torch.Tensor(1, 1, embed_dim))
-            self.bias_v = Parameter(torch.Tensor(1, 1, embed_dim))
-        else:
-            self.bias_k = self.bias_v = None
+        self.bias_k = self.bias_v = None
 
         self.add_zero_attn = add_zero_attn
 
@@ -310,9 +413,6 @@ class MultiheadAttention(nn.Module):
 
         self.onnx_trace = False
         self.enable_torch_version = hasattr(F, "multi_head_attention_forward")
-
-    def prepare_for_onnx_export_(self):
-        self.onnx_trace = True
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
@@ -322,10 +422,6 @@ class MultiheadAttention(nn.Module):
         nn.init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
             nn.init.constant_(self.out_proj.bias, 0.)
-        if self.bias_k is not None:
-            nn.init.xavier_normal_(self.bias_k)
-        if self.bias_v is not None:
-            nn.init.xavier_normal_(self.bias_v)
 
     def forward(
         self,
@@ -370,13 +466,12 @@ class MultiheadAttention(nn.Module):
             and not static_kv
         ):  # This is what usually gets hit
             assert key is not None and value is not None
-            return F.multi_head_attention_forward(
+            return multi_head_attention_forward(
                 query,
                 key,
                 value,
                 self.embed_dim,
                 self.num_heads,
-                torch.empty([0]),
                 torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
                 self.bias_k,
                 self.bias_v,
