@@ -368,7 +368,7 @@ class MultiheadAttention(nn.Module):
             and not self.onnx_trace
             and incremental_state is None
             and not static_kv
-        ):  # if we kill incremental decoding, we always hit this block
+        ):  # This is what usually gets hit
             assert key is not None and value is not None
             return F.multi_head_attention_forward(
                 query,
@@ -393,7 +393,7 @@ class MultiheadAttention(nn.Module):
                 k_proj_weight=self.k_proj.weight,
                 v_proj_weight=self.v_proj.weight,
             )
-
+        # get here for encoder decoder cause of static_kv
         if incremental_state is not None:
             saved_state = self._get_input_buffer(incremental_state)
             if saved_state is not None and "prev_key" in saved_state:
@@ -421,10 +421,6 @@ class MultiheadAttention(nn.Module):
 
         else:
             raise NotImplementedError('IDT this is used')
-            assert key is not None and value is not None
-            q = self.q_proj(query)
-            k = self.k_proj(key)
-            v = self.v_proj(value)
         q *= self.scaling
 
         if self.bias_k is not None:
