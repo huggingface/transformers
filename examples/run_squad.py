@@ -220,8 +220,10 @@ def train(args, train_dataset, model, tokenizer):
                 if args.version_2_with_negative:
                     inputs.update({"is_impossible": batch[7]})
                 if hasattr(model, "config") and hasattr(model.config, "lang2id"):
-                    inputs.update({"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)})
-                
+                    inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
+                    )
+
             outputs = model(**inputs)
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
@@ -335,7 +337,9 @@ def evaluate(args, model, tokenizer, prefix=""):
                 inputs.update({"cls_index": batch[4], "p_mask": batch[5]})
                 # for lang_id-sensitive xlm models
                 if hasattr(model, "config") and hasattr(model.config, "lang2id"):
-                    inputs.update({"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)})
+                    inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
+                    )
 
             outputs = model(**inputs)
 
@@ -641,12 +645,11 @@ def main():
         help="If true, all of the warnings related to data processing will be printed. "
         "A number of warnings are expected for a normal SQuAD evaluation.",
     )
-    
     parser.add_argument(
         "--lang_id",
         default=0,
         type=int,
-        help="language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+        help="language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)",
     )
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
