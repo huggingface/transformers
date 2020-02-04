@@ -188,13 +188,14 @@ class NERTransformer(pl.LightningModule):
         return {'loss': loss, "log": tensorboard_logs}
 
 
+
     @pl.data_loader
     def train_dataloader(self):
         args = self.hparams
         labels = get_labels(args.labels)
         train_dataset = load_and_cache_examples(args, self.tokenizer, labels,
                                                 self.pad_token_label_id, mode="train")
-        train_sampler = RandomSampler(train_dataset, num_samples=None)
+        train_sampler = RandomSampler(train_dataset)
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler,
                                       batch_size=args.train_batch_size)
         return train_dataloader
@@ -203,6 +204,7 @@ class NERTransformer(pl.LightningModule):
     @pl.data_loader
     def val_dataloader(self):
         args = self.hparams
+        labels = get_labels(args.labels)
         eval_dataset = load_and_cache_examples(args, self.tokenizer, labels,
                                                self.pad_token_label_id, mode="dev")
         eval_sampler = SequentialSampler(eval_dataset)
