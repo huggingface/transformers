@@ -197,7 +197,7 @@ class NERTransformer(pl.LightningModule):
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
         tmp_eval_loss, logits = outputs[:2]
-        return tmp_eval_loss.item()
+        return tmp_eval_loss
 
     def validation_end(self, outputs):
          return torch.stack(outputs).mean()
