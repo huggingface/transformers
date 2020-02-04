@@ -81,7 +81,7 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
         n_batch = len(dataset)
         input_ids = np.zeros((n_batch, 2, input_len), dtype=np.int64)
         mc_token_ids = np.zeros((n_batch, 2), dtype=np.int64)
-        lm_labels = np.full((n_batch, 2, input_len), fill_value=-1, dtype=np.int64)
+        lm_labels = np.full((n_batch, 2, input_len), fill_value=-100, dtype=np.int64)
         mc_labels = np.zeros((n_batch,), dtype=np.int64)
         for i, (story, cont1, cont2, mc_label), in enumerate(dataset):
             with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
