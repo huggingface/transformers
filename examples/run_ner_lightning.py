@@ -315,7 +315,7 @@ def main(hparams):
 
     model = NERTransformer(hparams)
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
-                         gpus=hparams.gpus,
+                         gpus=hparams.n_gpu,
                          use_amp=hparams.fp16,
                          gradient_clip_val=args.max_grad_norm
     )
@@ -332,7 +332,7 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        "--gpus",
+        "--n_gpu",
         type=int, default=1
     )
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
