@@ -194,11 +194,65 @@ class NERTransformer(pl.LightningModule):
         labels = get_labels(args.labels)
         train_dataset = load_and_cache_examples(args, self.tokenizer, labels,
                                                 self.pad_token_label_id, mode="train")
-
         train_sampler = RandomSampler(train_dataset, num_samples=None)
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler,
                                       batch_size=args.train_batch_size)
         return train_dataloader
+
+
+    @pl.data_loader
+    def val_dataloader(self):
+        args = self.hparams
+        eval_dataset = load_and_cache_examples(args, self.tokenizer, labels,
+                                               self.pad_token_label_id, mode="dev")
+        eval_sampler = SequentialSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler,
+                                     batch_size=args.eval_batch_size)
+        return eval_dataloader
+
+    @pl.data_loader
+    def test_dataloader(self):
+        args = self.hparams
+        eval_dataset = load_and_cache_examples(args, self.tokenizer, labels,
+                                               self.pad_token_label_id, mode="test")
+        eval_sampler = SequentialSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler,
+                                     batch_size=args.eval_batch_size)
+        return eval_dataloader
+
+    def validation_step(self, batch, batch_nb):
+        # OPTIONAL
+        inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+        if args.model_type != "distilbert":
+            inputs["token_type_ids"] = (
+                batch[2] if args.model_type in ["bert", "xlnet"] else None
+            )  # XLM and RoBERTa don"t use segment_ids
+        outputs = model(**inputs)
+        tmp_eval_loss, logits = outputs[:2]
+        return {'val_loss': tmp_eval_loss.item()}
+
+    # def validation_end(self, outputs):
+    #     # OPTIONAL
+    #     eval_loss = eval_loss / nb_eval_steps
+    #     preds = np.argmax(preds, axis=2)
+
+    #     label_map = {i: label for i, label in enumerate(labels)}
+
+    #     out_label_list = [[] for _ in range(out_label_ids.shape[0])]
+    #     preds_list = [[] for _ in range(out_label_ids.shape[0])]
+
+    #     for i in range(out_label_ids.shape[0]):
+    #         for j in range(out_label_ids.shape[1]):
+    #             if out_label_ids[i, j] != pad_token_label_id:
+    #                 out_label_list[i].append(label_map[out_label_ids[i][j]])
+    #                 preds_list[i].append(label_map[preds[i][j]])
+
+    #     results = {
+    #         "loss": eval_loss,
+    #         "precision": precision_score(out_label_list, preds_list),
+    #         "recall": recall_score(out_label_list, preds_list),
+    #         "f1": f1_score(out_label_list, preds_list),
+    #     }
 
 
     @staticmethod
@@ -280,6 +334,19 @@ class NERTransformer(pl.LightningModule):
             default=32,
             type=int
         )
+        parser.add_argument(
+            "--eval_batch_size",
+            default=32,
+            type=int
+        )
+
+        parser.add_argument(
+            "--data_dir",
+            default=None,
+            type=str,
+            required=True,
+            help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
+        )
 
         return parser
 
@@ -332,18 +399,11 @@ if __name__ == '__main__':
         action="store_true",
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
+
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
-    # Required parameters
-    parser.add_argument(
-        "--data_dir",
-        default=None,
-        type=str,
-        required=True,
-        help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
-    )
+
 
     parser = NERTransformer.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
