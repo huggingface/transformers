@@ -211,17 +211,6 @@ def multi_head_attention_forward(
         return attn_output, None
 
 
-def gelu_accurate(x):
-    if not hasattr(gelu_accurate, "_a"):
-        gelu_accurate._a = math.sqrt(2 / math.pi)
-    return 0.5 * x * (1 + torch.tanh(gelu_accurate._a * (x + 0.044715 * torch.pow(x, 3))))
-
-
-def gelu(x: torch.Tensor) -> torch.Tensor:
-    if hasattr(F, "gelu"):
-        return F.gelu(x.float()).type_as(x)
-    else:
-        return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def get_activation_fn(activation: str) -> Callable:
@@ -229,12 +218,10 @@ def get_activation_fn(activation: str) -> Callable:
     if activation == "relu":
         return F.relu
     elif activation == "gelu":
-        return gelu
-    elif activation == "gelu_accurate":
-        return gelu_accurate
+        return F.gelu
     elif activation == "tanh":
         return torch.tanh
-    elif activation == "F.linear":
+    elif activation == "linear":
         return lambda x: x
     else:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
