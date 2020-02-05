@@ -38,8 +38,6 @@ class BARTConfig(PretrainedConfig):
                  encoder_ffn_dim=4096, encoder_layers=12, encoder_attention_heads=16,
                  decoder_ffn_dim=4096, decoder_layers=12, decoder_attention_heads=16,
                  encoder_layerdrop=0., decoder_layerdrop=0.,
-
-
                  attention_dropout=0.0,
                  dropout=0.1,
                  max_position_embeddings=1024,
@@ -58,7 +56,7 @@ class BARTConfig(PretrainedConfig):
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.decoder_ffn_embed_dim = decoder_ffn_dim
+        self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
@@ -73,3 +71,7 @@ class BARTConfig(PretrainedConfig):
     @property
     def num_attention_heads(self):
         return self.encoder_attention_heads
+
+
+    @property
+    def hidden_size(self): return self.d_model

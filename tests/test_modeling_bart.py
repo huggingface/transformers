@@ -15,7 +15,7 @@
 
 
 import unittest
-
+import tempfile
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
@@ -39,7 +39,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_torchscript = False
-    test_resize_embeddings = False
+    test_resize_embeddings = False  # TODO(SS): may want to fix thisf
     test_head_masking = False  # TODO(SS): may want to fix this
     is_encoder_decoder = True
 
@@ -48,27 +48,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
                 self,
                 parent,
-                batch_size=13,
-                seq_length=7,
-                is_training=True,
-                use_input_mask=True,
-                use_token_type_ids=True,
-                use_labels=True,
-                vocab_size=99,
-                hidden_size=32,
-                num_hidden_layers=5,
-                num_attention_heads=4,
-                intermediate_size=37,
-                hidden_act="gelu",
-                hidden_dropout_prob=0.1,
-                attention_probs_dropout_prob=0.1,
-                max_position_embeddings=512,
-                type_vocab_size=16,
-
-                initializer_range=0.02,
-                num_labels=3,
-                num_choices=4,
-                scope=None,
         ):
             self.parent = parent
             self.batch_size = 13
@@ -139,11 +118,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["loss"].size()), [])
 
 
-
-
     def setUp(self):
         self.model_tester = BARTModelTest.ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BARTConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BARTConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -163,6 +140,19 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
 
+    def test_save_load_strict(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            import ipdb; ipdb.set_trace()
+            self.assertEqual(info['missing_keys'], [])
+
     # def test_for_masked_lm(self):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
     #     self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
@@ -172,6 +162,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = BARTModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
 
 
 class BartModelIntegrationTest(unittest.TestCase):

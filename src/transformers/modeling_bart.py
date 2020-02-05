@@ -124,6 +124,7 @@ class BARTClassificationHead(nn.Module):
 class BARTModel(PreTrainedModel):
     """FIXME(SS)"""
     config_class = BARTConfig
+    base_model_prefix = "transformer"
 
     def __init__(self, config: BARTConfig):  # should take config
         super().__init__(config)
@@ -312,7 +313,7 @@ class EncoderLayer(nn.Module):
         # the attention weight (before softmax) for some padded element in query
         # will become -inf, which results in NaN in model parameters
         # TODO: to formally solve this problem, we need to change fairseq's MultiheadAttention.
-        x, attn_weights = self.self_attn.forward( # TODO(SS): delete forward
+        x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
             query=x, key=x, value=x, key_padding_mask=encoder_padding_mask,
             need_head_weights=self.output_attentions,
         )
@@ -368,9 +369,8 @@ class DecoderLayer(nn.Module):
             encoder_decoder_attention=True,
         )
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=False)
-
-        self.fc1 = Linear(self.embed_dim, config.decoder_ffn_embed_dim)
-        self.fc2 = Linear(config.decoder_ffn_embed_dim, self.embed_dim)
+        self.fc1 = Linear(self.embed_dim, config.decoder_ffn_dim)
+        self.fc2 = Linear(config.decoder_ffn_dim, self.embed_dim)
 
         self.final_layer_norm = LayerNorm(self.embed_dim, export=False)
         self.need_attn = True
