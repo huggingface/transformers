@@ -1678,7 +1678,21 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             self._pad_token,
         ):
 
-            tokens = self._tokenizer.encode_batch(batch_text_or_text_pairs)
+            if not isinstance(batch_text_or_text_pairs, list):
+                raise TypeError(
+                    "batch_text_or_text_pairs has to be a list (got {})"
+                        .format(type(batch_text_or_text_pairs))
+                )
+
+            # Avoid thread overhead if only one example.
+            if len(batch_text_or_text_pairs) == 1:
+                if isinstance(batch_text_or_text_pairs[0], tuple):
+                    tokens = self._tokenizer.encode(*batch_text_or_text_pairs[0])
+                else:
+                    tokens = self._tokenizer.encode(batch_text_or_text_pairs[0])
+                tokens = [tokens]
+            else:
+                tokens = self._tokenizer.encode_batch(batch_text_or_text_pairs)
 
         # Convert encoding to dict
         max_length = max(map(lambda e: len(e.ids), tokens))
@@ -1696,10 +1710,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             )
             for encoding in tokens
         ]
-
-        # Unwrap from the list if only on sample
-        if len(tokens) == 1:
-            return tokens[0]
 
         # Sanitize the output to have dict[list] from list[dict]
         sanitized = {}
