@@ -142,15 +142,12 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-
         for model_class in self.all_model_classes:
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            import ipdb; ipdb.set_trace()
             self.assertEqual(info['missing_keys'], [])
 
     # def test_for_masked_lm(self):
