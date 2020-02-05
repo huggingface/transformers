@@ -286,17 +286,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
 
 
 def softmax(x, dim: int, onnx_trace: bool = False):
-    if onnx_trace:
-        return F.softmax(x.float(), dim=dim)
-    else:
-        return F.softmax(x, dim=dim, dtype=torch.float32)
-
-
-def log_softmax(x, dim, onnx_trace=False):
-    if onnx_trace:
-        return F.log_softmax(x.float(), dim=dim)
-    else:
-        return F.log_softmax(x, dim=dim, dtype=torch.float32)
+    return F.softmax(x, dim=dim, dtype=torch.float32)
 
 
 def _get_full_incremental_state_key(module_instance, key: str) -> str:
@@ -306,14 +296,6 @@ def _get_full_incremental_state_key(module_instance, key: str) -> str:
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a tensor with -inf."""
     return t.float().fill_(float("-inf")).type_as(t)
-
-
-def _item(tensor):
-    if hasattr(tensor, "item"):
-        return tensor.item()
-    if hasattr(tensor, "__getitem__"):
-        return tensor[0]
-    return tensor
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):

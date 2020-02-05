@@ -32,8 +32,6 @@ from .fairseq_utils import (
     MultiheadAttention,
     fill_with_neg_inf,
     get_activation_fn,
-    log_softmax,
-    softmax,
     Linear
 )
 from .file_utils import add_start_docstrings
