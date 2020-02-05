@@ -183,6 +183,7 @@ def main():
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
+    parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -224,20 +225,39 @@ def main():
         top_p=args.p,
         repetition_penalty=args.repetition_penalty,
         do_sample=True,
+        num_return_sequences=args.num_return_sequences,
     )
 
-    # Batch size == 1. to add more examples please use num_return_sequences > 1
-    generated_sequence = output_sequences[0].tolist()
+    # Remove the batch dimension when returning multiple sequences
+    if len(output_sequences.shape) > 2:
+        output_sequences.squeeze_()
 
-    # Remove "-1" tokens
-    generated_sequence = [token for token in generated_sequence if token != -1]
+    generated_sequences = []
 
-    text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
-    text = text[: text.find(args.stop_token) if args.stop_token else None]
+    for generated_sequence in output_sequences:
+        print("=== GENERATED SEQUENCE ===")
+        generated_sequence = generated_sequence.tolist()
 
-    print(prompt_text + text[len(tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :])
+        # Remove "-1" tokens which are used for padding
+        generated_sequence = [token for token in generated_sequence if token != -1]
 
-    return text
+        # Decode text
+        text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
+
+        print("TEXT", text)
+
+        # Remove all text after the stop token
+        text = text[: text.find(args.stop_token) if args.stop_token else None]
+
+        # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
+        total_sequence = (
+            prompt_text + text[len(tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :]
+        )
+
+        generated_sequences.append(total_sequence)
+        print(total_sequence)
+
+    return generated_sequences if len(generated_sequences) > 1 else generated_sequences[0]
 
 
 if __name__ == "__main__":
