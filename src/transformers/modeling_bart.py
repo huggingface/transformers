@@ -29,10 +29,10 @@ from .fairseq_utils import (
     Embedding,
     LayerNorm,
     LearnedPositionalEmbedding,
+    Linear,
     MultiheadAttention,
     fill_with_neg_inf,
     get_activation_fn,
-    Linear
 )
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
