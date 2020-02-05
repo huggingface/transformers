@@ -195,6 +195,7 @@ def _rotate_checkpoints(args, checkpoint_prefix="checkpoint", use_mtime=False) -
 
 def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> Tuple[torch.Tensor, torch.Tensor]:
     """ Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. """
+    inputs = inputs.clone().type(dtype=torch.long)
     labels = inputs.clone()
     # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
     probability_matrix = torch.full(labels.shape, args.mlm_probability)
@@ -206,7 +207,7 @@ def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> T
         padding_mask = labels.eq(tokenizer.pad_token_id)
         probability_matrix.masked_fill_(padding_mask, value=0.0)
     masked_indices = torch.bernoulli(probability_matrix).bool()
-    labels[~masked_indices] = -1  # We only compute loss on masked tokens
+    labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
     indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
