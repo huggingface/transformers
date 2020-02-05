@@ -289,8 +289,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
 
 
 
-
-
 def softmax(x, dim: int, onnx_trace: bool = False):
     if onnx_trace:
         return F.softmax(x.float(), dim=dim)
