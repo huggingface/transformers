@@ -106,6 +106,8 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
             language = None
             while language not in available_languages:
                 language = input("Using XLM. Select language in " + str(list(available_languages)) + " >>> ")
+
+        model.config.lang_id = model.config.lang2id[language]
         # kwargs["language"] = tokenizer.lang2id[language]
 
     # TODO fix mask_token_id setup when configurations will be synchronized between models and tokenizers
@@ -243,8 +245,6 @@ def main():
 
         # Decode text
         text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
-
-        print("TEXT", text)
 
         # Remove all text after the stop token
         text = text[: text.find(args.stop_token) if args.stop_token else None]
