@@ -174,24 +174,27 @@ class BARTModel(PreTrainedModel):
         self.shared = value
 
     def forward(self, input_ids: torch.LongTensor = None, **kwargs):
-        if input_ids is None:
+        if input_ids is None:  # TODO(SS): Fixme before anyone sees this terrible code :)
             assert "encoder_input_ids" in kwargs, "must specify input_ids or encoder_input_ids"
             input_ids = kwargs["encoder_input_ids"]
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
-            raise ValueError(f"input_ids exceeds maximum length: {input_ids.size(-1)} > {self.max_positions()}")
+            raise ValueError("input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions()))
 
-        prev_output_tokens = input_ids.clone()
-        prev_output_tokens[:, 0] = input_ids.gather(
-            1, (input_ids.ne(self.config.pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
-        ).squeeze()
-        prev_output_tokens[:, 1:] = input_ids[:, :-1]
+
 
         encoder_out = self.encoder.forward(  # TODO(SS): delete forward later
             input_ids,
             # prev_output_tokens=prev_output_tokens,
         )
+
+        # prepare left to right decoder data
+        prev_output_tokens = input_ids.clone()
+        prev_output_tokens[:, 0] = input_ids.gather(
+            1, (input_ids.ne(self.config.pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
+        ).squeeze()
+        prev_output_tokens[:, 1:] = input_ids[:, :-1]
         dec_features, dec_hidden, dec_attn = self.decoder.forward(prev_output_tokens, encoder_out=encoder_out,)
         if self.output_hidden_states and self.output_attentions:
             return (

@@ -495,8 +495,7 @@ class MultiheadAttention(nn.Module):
                 k = self.k_proj(key)
                 v = self.v_proj(key)
 
-        else:
-            raise NotImplementedError("IDT this is used")
+        else: raise NotImplementedError("IDT this is used")
         q *= self.scaling
 
         if self.bias_k is not None:
@@ -510,6 +509,7 @@ class MultiheadAttention(nn.Module):
                 key_padding_mask = torch.cat(
                     [key_padding_mask, key_padding_mask.new_zeros(key_padding_mask.size(0), 1),], dim=1,
                 )
+
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
             k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
