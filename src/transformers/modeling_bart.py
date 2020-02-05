@@ -17,13 +17,15 @@
 
 import random
 from collections import namedtuple
+from typing import List
 
 import torch
 from .configuration_bart import BARTConfig
 from .file_utils import add_start_docstrings
 #import .f
 from .fairseq_utils import *
-from typing import List
+from .modeling_utils import PreTrainedModel
+
 available_activation_fns = ["relu", "gelu", "gelu_accurate", "tanh", "linear",]
 
 logger = logging.getLogger(__name__)
@@ -119,11 +121,12 @@ class BARTClassificationHead(nn.Module):
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
-class BARTModel(nn.Module):
+class BARTModel(PreTrainedModel):
     """FIXME(SS)"""
+    config_class = BARTConfig
 
     def __init__(self, config: BARTConfig):  # should take config
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self._is_generation_fast = False
         self.output_attentions = config.output_attentions
@@ -131,22 +134,46 @@ class BARTModel(nn.Module):
 
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        encoder_embed_tokens = Embedding(vocab_size, config.d_model, padding_idx)
-        decoder_embed_tokens = encoder_embed_tokens
+        self.shared = Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = BartEncoder(config, encoder_embed_tokens)
-        self.decoder = BartDecoder(
-            config,
-            decoder_embed_tokens,
-            no_encoder_attn=False,
-        )
-        # TODO(SS): paper says weight init slightly different than bert, but this is there code!
-        self.apply(init_bert_params)
+
+        self.encoder = BartEncoder(config, self.shared)
+        self.decoder = BartDecoder(config, self.shared)
+        # TODO(SS): paper says weight init slightly different than bert, but their code looks similar
+        self.initializer_factor = config.initializer_factor
+        self.reset_parameters()
         self._is_generation_fast = False # TODO(SS): this might need deletion
 
     #def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
-    def forward(self, input_ids: torch.LongTensor, **unused):
+    def reset_parameters(self):
+        std = self.initializer_factor  # used by init_params
+        def init_params(module):
+            if isinstance(module, nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=std)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            if isinstance(module, nn.Embedding):
+                module.weight.data.normal_(mean=0.0, std=std)
+                if module.padding_idx is not None:
+                    module.weight.data[module.padding_idx].zero_()
+            if isinstance(module, MultiheadAttention):
+                module.q_proj.weight.data.normal_(mean=0.0, std=std)
+                module.k_proj.weight.data.normal_(mean=0.0, std=std)
+                module.v_proj.weight.data.normal_(mean=0.0, std=std)
+
+        self.apply(init_params)
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, value):
+        self.shared = value
+
+    def forward(self, input_ids: torch.LongTensor=None, **kwargs):
+        if input_ids is None:
+            assert 'encoder_input_ids' in kwargs, 'must specify input_ids or encoder_input_ids'
+            input_ids = kwargs['encoder_input_ids']
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
@@ -610,7 +637,7 @@ class BartDecoder(nn.Module):
             (default: False).
     """
 
-    def __init__(self, config: BARTConfig, embed_tokens, no_encoder_attn=False):
+    def __init__(self, config: BARTConfig, embed_tokens):
         super().__init__()
         self.onnx_trace = False
         self.register_buffer('version', torch.Tensor([3]))

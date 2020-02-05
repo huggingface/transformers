@@ -46,29 +46,29 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     class ModelTester(object):
         def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
+                self,
+                parent,
+                batch_size=13,
+                seq_length=7,
+                is_training=True,
+                use_input_mask=True,
+                use_token_type_ids=True,
+                use_labels=True,
+                vocab_size=99,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
+                hidden_act="gelu",
+                hidden_dropout_prob=0.1,
+                attention_probs_dropout_prob=0.1,
+                max_position_embeddings=512,
+                type_vocab_size=16,
 
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+                initializer_range=0.02,
+                num_labels=3,
+                num_choices=4,
+                scope=None,
         ):
             self.parent = parent
             self.batch_size = 13
@@ -131,23 +131,12 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,) = config_and_inputs
-            return config, {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+            return config, {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask,
+                            'encoder_input_ids': input_ids, 'decoder_input_ids': input_ids  # HACK(SS): not clear which I'm supposed to do
+                            }
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(list(result["loss"].size()), [])
-
-        def create_and_check_bart_forward(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        ):
-            model = BARTModel(config=config)
-            model.to(torch_device)
-            model.eval()
-            _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
-            decoder_features, = model(input_ids)
-            self.assertTrue(isinstance(decoder_features, torch.Tensor)) # no hidden states or attentions
-            self.parent.assertEqual(
-                decoder_features.size(), (self.batch_size, self.seq_length, self.hidden_size,)
-            )
 
 
 
@@ -161,7 +150,18 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bart_forward(*config_and_inputs)
+        (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels,
+         choice_labels,) = config_and_inputs
+        model = BARTModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
+        decoder_features, enc_features = model(input_ids)
+        self.assertTrue(
+            isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
+        self.assertEqual(
+            decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
+        )
 
     # def test_for_masked_lm(self):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
