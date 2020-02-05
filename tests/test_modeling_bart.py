@@ -161,8 +161,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-
-
 class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
