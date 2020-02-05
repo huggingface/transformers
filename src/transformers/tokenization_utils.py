@@ -1648,10 +1648,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def tokenize(self, text, **kwargs):
         return self.tokenizer._tokenizer.encode(text).tokens
 
-    def encode_plus(
+    def batch_encode_plus(
         self,
-        text,
-        text_pair=None,
+        batch_text_or_text_pairs=None,
         add_special_tokens=True,
         max_length=None,
         stride=0,
@@ -1665,18 +1664,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_offsets_mapping=False,
         **kwargs
     ):
-        # Ensure we have text defined as [str]
-        if text is not None and not isinstance(text, list):
-            text = [text]
-
-        if text_pair is not None and not isinstance(text_pair, list):
-            text_pair = [text_pair]
-
-            # Ensure we have all the pairs
-            if len(text_pair) != len(text):
-                raise ValueError(
-                    "Number of text_pair ({}) doesn't match number of text ({})".format(len(text_pair), len(text))
-                )
 
         # Set the truncation and padding strategy and restore the initial configuration
         with truncate_and_pad(
@@ -1691,10 +1678,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             self._pad_token,
         ):
 
-            if text_pair is None:
-                tokens = self._tokenizer.encode_batch(text)
-            else:
-                tokens = self._tokenizer.encode_batch(list(zip(text, text_pair)))
+            tokens = self._tokenizer.encode_batch(batch_text_or_text_pairs)
 
         # Convert encoding to dict
         max_length = max(map(lambda e: len(e.ids), tokens))
@@ -1729,6 +1713,35 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
             sanitized[key] = stack
         return sanitized
+
+    def encode_plus(
+        self,
+        text,
+        text_pair=None,
+        add_special_tokens=False,
+        max_length=None,
+        stride=0,
+        truncation_strategy="longest_first",
+        return_tensors=None,
+        return_input_lengths=False,
+        return_attention_masks=False,
+        **kwargs
+    ):
+        # Ensure we have text defined as [str]
+        if text is not None and not isinstance(text, list):
+            text = [text]
+
+        if text_pair is not None and not isinstance(text_pair, list):
+            text_pair = [text_pair]
+
+            # Ensure we have all the pairs
+            if len(text_pair) != len(text):
+                raise ValueError(
+                    "Number of text_pair ({}) doesn't match number of text ({})".format(len(text_pair), len(text))
+                )
+
+        batched_input = (text, text_pair) if text_pair else text
+        return self.batch_encode_plus(batched_input)
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = self.tokenizer.decode(token_ids, skip_special_tokens)
