@@ -1733,25 +1733,30 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         stride=0,
         truncation_strategy="longest_first",
         return_tensors=None,
-        return_input_lengths=False,
-        return_attention_masks=False,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+        return_offsets_mapping=False,
         **kwargs
     ):
-        # Ensure we have text defined as [str]
-        if text is not None and not isinstance(text, list):
-            text = [text]
+        batched_input = [(text, text_pair)] if text_pair else [text]
+        batched_output = self.batch_encode_plus(
+            batched_input,
+            add_special_tokens=add_special_tokens,
+            max_length=max_length,
+            stride=stride,
+            truncation_strategy=truncation_strategy,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            **kwargs
+        )
 
-        if text_pair is not None and not isinstance(text_pair, list):
-            text_pair = [text_pair]
-
-            # Ensure we have all the pairs
-            if len(text_pair) != len(text):
-                raise ValueError(
-                    "Number of text_pair ({}) doesn't match number of text ({})".format(len(text_pair), len(text))
-                )
-
-        batched_input = (text, text_pair) if text_pair else text
-        return self.batch_encode_plus(batched_input)
+        return {key: value[0] for key, value in batched_output.items()}
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = self.tokenizer.decode(token_ids, skip_special_tokens)
