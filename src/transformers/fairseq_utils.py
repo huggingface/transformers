@@ -533,7 +533,7 @@ class MultiheadAttention(nn.Module):
                 else:
                     assert v is not None
                     v = torch.cat([prev_value, v], dim=1)
-            prev_key_padding_mask: Optional[Tensor] = None
+            prev_key_padding_mask = None  # type: Optional[Tensor]
             if "prev_key_padding_mask" in saved_state:
                 prev_key_padding_mask = saved_state["prev_key_padding_mask"]
             assert k is not None and v is not None
@@ -607,7 +607,7 @@ class MultiheadAttention(nn.Module):
         else:
             attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn = self.out_proj(attn)
-        attn_weights: Optional[Tensor] = None
+        attn_weights = None  # type: Optional[Tensor]
         if need_weights:
             attn_weights = attn_weights_float.view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
             if not need_head_weights:
@@ -659,7 +659,7 @@ class MultiheadAttention(nn.Module):
     def _get_input_buffer(
         self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
     ) -> Dict[str, Optional[Tensor]]:
-        empty_dict_annotated: Dict[str, Optional[Tensor]] = {}
+        empty_dict_annotated = {}  # type: Dict[str, Optional[Tensor]]
         if incremental_state is None:
             return empty_dict_annotated
         full_key = _get_full_incremental_state_key(self, "attn_state")
