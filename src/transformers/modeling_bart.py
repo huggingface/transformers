@@ -656,7 +656,9 @@ class BartDecoder(nn.Module):
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx,
         )
-        self.layers: List[DecoderLayer] = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [DecoderLayer(config) for _ in range(config.decoder_layers)]
+        )  # type: List[DecoderLayer]
         # deleted some unused:  adaptive softmax, self.layer_norm
         self.layernorm_embedding = LayerNorm(config.d_model)
 
