@@ -6,7 +6,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from fairseq.incremental_decoding_utils import with_incremental_state
+#from fairseq.incremental_decoding_utils import with_incremental_state
 from torch import Tensor, nn
 from torch.nn import Parameter
 
@@ -348,7 +348,7 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
     return m
 
 
-@with_incremental_state
+#@with_incremental_state
 class MultiheadAttention(nn.Module):
     """Multi-headed attention.
 
