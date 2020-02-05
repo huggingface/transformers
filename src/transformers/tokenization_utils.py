@@ -1680,8 +1680,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
             if not isinstance(batch_text_or_text_pairs, list):
                 raise TypeError(
-                    "batch_text_or_text_pairs has to be a list (got {})"
-                        .format(type(batch_text_or_text_pairs))
+                    "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
                 )
 
             # Avoid thread overhead if only one example.
@@ -1753,7 +1752,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-            **kwargs
+            **kwargs,
         )
 
         return {key: value[0] for key, value in batched_output.items()}
