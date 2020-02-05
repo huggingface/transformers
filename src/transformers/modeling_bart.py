@@ -15,25 +15,25 @@
 # limitations under the License.
 """PyTorch BART model, ported from the fairseq repo."""
 
+import logging
 import random
 from collections import namedtuple
 from typing import List
 
 import torch
-from torch import nn
 import torch.nn.functional as F
-import logging
+from torch import nn
 
 from .configuration_bart import BARTConfig
 from .fairseq_utils import (
-    fill_with_neg_inf,
+    Embedding,
     LayerNorm,
+    LearnedPositionalEmbedding,
+    MultiheadAttention,
+    fill_with_neg_inf,
+    get_activation_fn,
     log_softmax,
     softmax,
-    LearnedPositionalEmbedding,
-    Embedding,
-    MultiheadAttention,
-    get_activation_fn,
 )
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
