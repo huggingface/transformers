@@ -14,8 +14,9 @@
 # limitations under the License.
 
 
-import unittest
 import tempfile
+import unittest
+
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
@@ -43,11 +44,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False  # TODO(SS): may want to fix this
     is_encoder_decoder = True
 
-
     class ModelTester(object):
         def __init__(
-                self,
-                parent,
+            self, parent,
         ):
             self.parent = parent
             self.batch_size = 13
@@ -61,18 +60,18 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_hidden_layers = 5
             self.num_attention_heads = 4
             self.intermediate_size = 37
-            self.hidden_act = 'gelu'
+            self.hidden_act = "gelu"
             self.hidden_dropout_prob = 0.1
             self.attention_probs_dropout_prob = 0.1
             self.max_position_embeddings = 1024
 
-            #self.e
+            # self.e
 
-            #self.type_sequence_label_size = 16
-            #self.initializer_range = 0.02
-            #self.num_labels = 3
-            #self.num_choices = 4
-            #self.scope = None
+            # self.type_sequence_label_size = 16
+            # self.initializer_range = 0.02
+            # self.num_labels = 3
+            # self.num_choices = 4
+            # self.scope = None
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -84,7 +83,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             token_type_ids = None
             if self.use_token_type_ids:
                 token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
 
             config = BARTConfig(
                 vocab_size=self.vocab_size,
@@ -99,8 +97,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 dropout=self.hidden_dropout_prob,
                 attention_dropout=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
-                #type_vocab_size=self.type_vocab_size,
-                #initializer_range=self.initializer_range,
+                # type_vocab_size=self.type_vocab_size,
+                # initializer_range=self.initializer_range,
             )
             sequence_labels = None
             token_labels = None
@@ -109,14 +107,28 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,) = config_and_inputs
-            return config, {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask,
-                            'encoder_input_ids': input_ids, 'decoder_input_ids': input_ids  # HACK(SS): not clear which I'm supposed to do
-                            }
+            (
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = config_and_inputs
+            return (
+                config,
+                {
+                    "input_ids": input_ids,
+                    "token_type_ids": token_type_ids,
+                    "attention_mask": input_mask,
+                    "encoder_input_ids": input_ids,
+                    "decoder_input_ids": input_ids,  # HACK(SS): not clear which I'm supposed to do
+                },
+            )
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(list(result["loss"].size()), [])
-
 
     def setUp(self):
         self.model_tester = BARTModelTest.ModelTester(self)
@@ -127,15 +139,21 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        (config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels,
-         choice_labels,) = config_and_inputs
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
         model = BARTModel(config=config)
         model.to(torch_device)
         model.eval()
         _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
         decoder_features, enc_features = model(input_ids)
-        self.assertTrue(
-            isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
+        self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
@@ -148,7 +166,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info['missing_keys'], [])
+            self.assertEqual(info["missing_keys"], [])
 
     # def test_for_masked_lm(self):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()

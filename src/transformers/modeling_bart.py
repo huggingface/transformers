@@ -20,21 +20,28 @@ from collections import namedtuple
 from typing import List
 
 import torch
+
 from .configuration_bart import BARTConfig
-from .file_utils import add_start_docstrings
-#import .f
 from .fairseq_utils import *
+from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
 
-available_activation_fns = ["relu", "gelu", "gelu_accurate", "tanh", "linear",]
+
+available_activation_fns = [
+    "relu",
+    "gelu",
+    "gelu_accurate",
+    "tanh",
+    "linear",
+]
 
 logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
-    'bart.large': 'http://dl.fbaipublicfiles.com/fairseq/models/bart.large.tar.gz',
-    'bart.large.mnli': 'http://dl.fbaipublicfiles.com/fairseq/models/bart.large.mnli.tar.gz',
-    'bart.large.cnn': 'http://dl.fbaipublicfiles.com/fairseq/models/bart.large.cnn.tar.gz',
+    "bart.large": "http://dl.fbaipublicfiles.com/fairseq/models/bart.large.tar.gz",
+    "bart.large.mnli": "http://dl.fbaipublicfiles.com/fairseq/models/bart.large.mnli.tar.gz",
+    "bart.large.cnn": "http://dl.fbaipublicfiles.com/fairseq/models/bart.large.cnn.tar.gz",
 }
 
 
@@ -89,15 +96,11 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
 class BARTClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
+
     # copied from fairseq
 
     def __init__(
-        self,
-        input_dim,
-        inner_dim,
-        num_classes,
-        activation_fn,
-        pooler_dropout,
+        self, input_dim, inner_dim, num_classes, activation_fn, pooler_dropout,
     ):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
@@ -115,7 +118,6 @@ class BARTClassificationHead(nn.Module):
         return x
 
 
-
 @add_start_docstrings(
     "The bare BART Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
@@ -123,6 +125,7 @@ class BARTClassificationHead(nn.Module):
 )
 class BARTModel(PreTrainedModel):
     """FIXME(SS)"""
+
     config_class = BARTConfig
     base_model_prefix = "transformer"
 
@@ -133,22 +136,21 @@ class BARTModel(PreTrainedModel):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = Embedding(vocab_size, config.d_model, padding_idx)
-
 
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
         # TODO(SS): paper says weight init slightly different than bert, but their code looks similar
         self.initializer_factor = config.initializer_factor
         self.reset_parameters()
-        self._is_generation_fast = False # TODO(SS): this might need deletion
+        self._is_generation_fast = False  # TODO(SS): this might need deletion
 
-    #def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
+    # def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
     def reset_parameters(self):
         std = self.initializer_factor  # used by init_params
+
         def init_params(module):
             if isinstance(module, nn.Linear):
                 module.weight.data.normal_(mean=0.0, std=std)
@@ -171,19 +173,18 @@ class BARTModel(PreTrainedModel):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    def forward(self, input_ids: torch.LongTensor=None, **kwargs):
+    def forward(self, input_ids: torch.LongTensor = None, **kwargs):
         if input_ids is None:
-            assert 'encoder_input_ids' in kwargs, 'must specify input_ids or encoder_input_ids'
-            input_ids = kwargs['encoder_input_ids']
+            assert "encoder_input_ids" in kwargs, "must specify input_ids or encoder_input_ids"
+            input_ids = kwargs["encoder_input_ids"]
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
-            raise ValueError(f'input_ids exceeds maximum length: {input_ids.size(-1)} > {self.max_positions()}')
+            raise ValueError(f"input_ids exceeds maximum length: {input_ids.size(-1)} > {self.max_positions()}")
 
         prev_output_tokens = input_ids.clone()
         prev_output_tokens[:, 0] = input_ids.gather(
-            1,
-            (input_ids.ne(self.config.pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
+            1, (input_ids.ne(self.config.pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
         ).squeeze()
         prev_output_tokens[:, 1:] = input_ids[:, :-1]
 
@@ -191,15 +192,23 @@ class BARTModel(PreTrainedModel):
             input_ids,
             # prev_output_tokens=prev_output_tokens,
         )
-        dec_features, dec_hidden, dec_attn = self.decoder.forward(
-            prev_output_tokens,
-            encoder_out=encoder_out,
-        )
+        dec_features, dec_hidden, dec_attn = self.decoder.forward(prev_output_tokens, encoder_out=encoder_out,)
         if self.output_hidden_states and self.output_attentions:
-            return (dec_features, dec_hidden, dec_attn,
-                    encoder_out.encoder_out, encoder_out.encoder_states, encoder_out.encoder_attn)
+            return (
+                dec_features,
+                dec_hidden,
+                dec_attn,
+                encoder_out.encoder_out,
+                encoder_out.encoder_states,
+                encoder_out.encoder_attn,
+            )
         elif self.output_hidden_states:
-            return (dec_features, dec_hidden, encoder_out.encoder_out, encoder_out.encoder_states,)
+            return (
+                dec_features,
+                dec_hidden,
+                encoder_out.encoder_out,
+                encoder_out.encoder_states,
+            )
         elif self.output_attentions:
             return (dec_features, dec_attn, encoder_out.encoder_out, encoder_out.encoder_attn)
         else:
@@ -207,7 +216,7 @@ class BARTModel(PreTrainedModel):
 
     def get_targets(self, sample, net_output):
         """Get targets from either the sample or the net's output."""
-        return sample['target']
+        return sample["target"]
 
     def get_normalized_probs(self, net_output, log_probs, sample=None):
         """Get normalized probabilities (or log probs) from a net's output."""
@@ -231,8 +240,7 @@ class BARTModel(PreTrainedModel):
         seen = set()
 
         def apply_make_generation_fast_(module):
-            if module != self and hasattr(module, 'make_generation_fast_') \
-                    and module not in seen:
+            if module != self and hasattr(module, "make_generation_fast_") and module not in seen:
                 seen.add(module)
                 module.make_generation_fast_(**kwargs)
 
@@ -240,7 +248,7 @@ class BARTModel(PreTrainedModel):
 
         def train(mode=True):
             if mode:
-                raise RuntimeError('cannot train after make_generation_fast')
+                raise RuntimeError("cannot train after make_generation_fast")
 
         # this model should no longer be used for training
         self.eval()
@@ -275,10 +283,7 @@ class EncoderLayer(nn.Module):
         self.embed_dim = config.d_model
         self.output_attentions = config.output_attentions
         self.self_attn = MultiheadAttention(
-            self.embed_dim,
-            config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            self_attention=True,
+            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, self_attention=True,
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -306,7 +311,7 @@ class EncoderLayer(nn.Module):
         """
         residual = x
         if attn_mask is not None:
-            attn_mask = attn_mask.masked_fill(attn_mask.bool(), -1e8) # unused, asked why!
+            attn_mask = attn_mask.masked_fill(attn_mask.bool(), -1e8)  # unused, asked why!
         # anything in original attn_mask = 1, becomes -1e8
         # anything in original attn_mask = 0, becomes 0
         # Note that we cannot use -inf here, because at some edge cases,
@@ -314,8 +319,7 @@ class EncoderLayer(nn.Module):
         # will become -inf, which results in NaN in model parameters
         # TODO: to formally solve this problem, we need to change fairseq's MultiheadAttention.
         x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
-            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask,
-            need_head_weights=self.output_attentions,
+            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_head_weights=self.output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -475,15 +479,16 @@ class DecoderLayer(nn.Module):
         return x, self_attn_weights  # just self_attn weights for now, following t5
 
 
-
-EncoderOut = namedtuple('TransformerEncoderOut', [
-    'encoder_out',  # T x B x C
-    'encoder_padding_mask',  # B x T
-    'encoder_embedding',  # B x T x C
-    'encoder_states',  # List[T x B x C]
-    'encoder_attn',
-])
-from .configuration_bart import BARTConfig
+EncoderOut = namedtuple(
+    "TransformerEncoderOut",
+    [
+        "encoder_out",  # T x B x C
+        "encoder_padding_mask",  # B x T
+        "encoder_embedding",  # B x T x C
+        "encoder_states",  # List[T x B x C]
+        "encoder_attn",
+    ],
+)
 
 
 class BartEncoder(nn.Module):
@@ -497,9 +502,9 @@ class BartEncoder(nn.Module):
         embed_tokens (torch.nn.Embedding): input embedding
     """
 
-    def __init__(self, config:BARTConfig, embed_tokens):
+    def __init__(self, config: BARTConfig, embed_tokens):
         super().__init__()
-        self.register_buffer('version', torch.Tensor([3]))
+        self.register_buffer("version", torch.Tensor([3]))
 
         self.dropout = config.dropout
         self.encoder_layerdrop = config.encoder_layerdrop
@@ -512,9 +517,7 @@ class BartEncoder(nn.Module):
 
         self.embed_tokens = embed_tokens
 
-        self.embed_positions = LearnedPositionalEmbedding(
-            config.max_position_embeddings, embed_dim, self.padding_idx,
-        )
+        self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
 
@@ -580,7 +583,7 @@ class BartEncoder(nn.Module):
             encoder_padding_mask=encoder_padding_mask,  # B x T
             encoder_embedding=encoder_embedding,  # B x T x C
             encoder_states=encoder_states,  # List[T x B x C]
-            encoder_attn=all_attentions  # TODO(SS): document types
+            encoder_attn=all_attentions,  # TODO(SS): document types
         )
 
     def reorder_encoder_out(self, encoder_out, new_order):
@@ -595,9 +598,7 @@ class BartEncoder(nn.Module):
             *encoder_out* rearranged according to *new_order*
         """
         if encoder_out.encoder_out is not None:
-            encoder_out = encoder_out._replace(
-                encoder_out=encoder_out.encoder_out.index_select(1, new_order)
-            )
+            encoder_out = encoder_out._replace(encoder_out=encoder_out.encoder_out.index_select(1, new_order))
         if encoder_out.encoder_padding_mask is not None:
             encoder_out = encoder_out._replace(
                 encoder_padding_mask=encoder_out.encoder_padding_mask.index_select(0, new_order)
@@ -617,7 +618,7 @@ class BartEncoder(nn.Module):
 
     def buffered_future_mask(self, tensor):
         dim = tensor.size(0)
-        if not hasattr(self, '_future_mask') or self._future_mask is None or self._future_mask.device != tensor.device:
+        if not hasattr(self, "_future_mask") or self._future_mask is None or self._future_mask.device != tensor.device:
             self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
             if self._future_mask.size(0) < dim:
                 self._future_mask = torch.triu(fill_with_neg_inf(self._future_mask.resize_(dim, dim)), 1)
@@ -640,30 +641,24 @@ class BartDecoder(nn.Module):
     def __init__(self, config: BARTConfig, embed_tokens):
         super().__init__()
         self.onnx_trace = False
-        self.register_buffer('version', torch.Tensor([3]))
-        self.output_attentions =  config.output_attentions
+        self.register_buffer("version", torch.Tensor([3]))
+        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
         self.decoder_layerdrop = config.decoder_layerdrop
 
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
-        self.embed_tokens = embed_tokens # killed embed_scale = 1.0
+        self.embed_tokens = embed_tokens  # killed embed_scale = 1.0
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx,
         )
-        self.layers: List[DecoderLayer] = nn.ModuleList([
-            DecoderLayer(config) for _ in range(config.decoder_layers)
-        ])
+        self.layers: List[DecoderLayer] = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])
         # deleted some unused:  adaptive softmax, self.layer_norm
         self.layernorm_embedding = LayerNorm(config.d_model)
 
     def forward(
-        self,
-        prev_output_tokens,
-        encoder_out=None,
-        incremental_state=None,
-        full_context_alignment=False,
+        self, prev_output_tokens, encoder_out=None, incremental_state=None, full_context_alignment=False,
     ):
         """
         Includes several features from "Jointly Learning to Align and
@@ -690,13 +685,14 @@ class BartDecoder(nn.Module):
                 - hidden states
                 - attentions
         """
-        #if alignment_layer is None: alignment_layer = len(self.layers) - 1
+        # if alignment_layer is None: alignment_layer = len(self.layers) - 1
 
         # embed positions
-        positions = self.embed_positions(
-            prev_output_tokens,
-            incremental_state=incremental_state,
-        ) if self.embed_positions is not None else None
+        positions = (
+            self.embed_positions(prev_output_tokens, incremental_state=incremental_state,)
+            if self.embed_positions is not None
+            else None
+        )
 
         if incremental_state is not None:
             prev_output_tokens = prev_output_tokens[:, -1:]
@@ -708,7 +704,6 @@ class BartDecoder(nn.Module):
 
         if positions is not None:
             x += positions
-
 
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -736,29 +731,27 @@ class BartDecoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if not self.training or (dropout_probability > self.decoder_layerdrop):
-                x, layer_self_attn = layer.forward( # TODO(SS): remove forward
+                x, layer_self_attn = layer.forward(  # TODO(SS): remove forward
                     x,
                     encoder_state,
                     encoder_out.encoder_padding_mask if encoder_out is not None else None,
                     incremental_state,
                     self_attn_mask=self_attn_mask,
                     self_attn_padding_mask=self_attn_padding_mask,
-                    need_attn=True,#(i == alignment_layer),
+                    need_attn=True,  # (i == alignment_layer),
                 )
                 if self.output_hidden_states:
                     all_hidden_states += (x,)
                 if self.output_attentions:
-                    all_self_attns += (layer_self_attn, ) # .float?
-                #if layer_self_attn is not None and i == alignment_layer:
+                    all_self_attns += (layer_self_attn,)  # .float?
+                # if layer_self_attn is not None and i == alignment_layer:
                 #    attn = layer_self_attn.float()
-
 
         # T x B x C -> B x T x C
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
 
         return x, all_hidden_states, list(all_self_attns)
-
 
     def max_positions(self):
         """Maximum output length supported by the decoder."""
@@ -769,14 +762,13 @@ class BartDecoder(nn.Module):
     def buffered_future_mask(self, tensor):
         dim = tensor.size(0)
         if (
-            not hasattr(self, '_future_mask')
+            not hasattr(self, "_future_mask")
             or self._future_mask is None
             or self._future_mask.device != tensor.device
             or self._future_mask.size(0) < dim
         ):
             self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
         return self._future_mask[:dim, :dim]
-
 
     # Extra methods
     def get_normalized_probs(self, net_output, log_probs, sample):
@@ -801,8 +793,7 @@ class BartDecoder(nn.Module):
         seen = set()
 
         def apply_reorder_incremental_state(module):
-            if module != self and hasattr(module, 'reorder_incremental_state') \
-                    and module not in seen:
+            if module != self and hasattr(module, "reorder_incremental_state") and module not in seen:
                 seen.add(module)
                 module.reorder_incremental_state(incremental_state, new_order)
 
@@ -810,12 +801,11 @@ class BartDecoder(nn.Module):
 
     def set_beam_size(self, beam_size):
         """Sets the beam size in the decoder and all children."""
-        if getattr(self, '_beam_size', -1) != beam_size:
+        if getattr(self, "_beam_size", -1) != beam_size:
             seen = set()
 
             def apply_set_beam_size(module):
-                if module != self and hasattr(module, 'set_beam_size') \
-                        and module not in seen:
+                if module != self and hasattr(module, "set_beam_size") and module not in seen:
                     seen.add(module)
                     module.set_beam_size(beam_size)
 

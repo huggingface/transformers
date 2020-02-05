@@ -24,6 +24,4 @@ def init_incremental_state(obj):
     utils.INCREMENTAL_STATE_INSTANCE_ID[obj.module_name] = (
         utils.INCREMENTAL_STATE_INSTANCE_ID.get(obj.module_name, 0) + 1
     )
-    obj._fairseq_instance_id = utils.INCREMENTAL_STATE_INSTANCE_ID[
-        obj.module_name
-    ]
+    obj._fairseq_instance_id = utils.INCREMENTAL_STATE_INSTANCE_ID[obj.module_name]

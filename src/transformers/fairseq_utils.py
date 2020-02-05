@@ -1,37 +1,43 @@
 """"Taken from fairseq """
-import torch
-from torch import nn
-from typing import Callable
-
 import logging
+import math
 import re
+from typing import Callable, Dict, Optional, Tuple
+
+import torch
+import torch.nn.functional as F
+from fairseq.incremental_decoding_utils import with_incremental_state
+from torch import Tensor, nn
+from torch.nn import Parameter
+
 
 logger = logging.getLogger(__name__)
 
 
-def multi_head_attention_forward(query,                           # type: Tensor
-                                 key,                             # type: Tensor
-                                 value,                           # type: Tensor
-                                 embed_dim_to_check,              # type: int
-                                 num_heads,                       # type: int
-                                 in_proj_bias,                    # type: Tensor
-                                 bias_k,                          # type: Optional[Tensor]
-                                 bias_v,                          # type: Optional[Tensor]
-                                 add_zero_attn,                   # type: bool
-                                 dropout_p,                       # type: float
-                                 out_proj_weight,                 # type: Tensor
-                                 out_proj_bias,                   # type: Tensor
-                                 training=True,                   # type: bool
-                                 key_padding_mask=None,           # type: Optional[Tensor]
-                                 need_weights=True,               # type: bool
-                                 attn_mask=None,                  # type: Optional[Tensor]
-                                 use_separate_proj_weight=False,  # type: bool
-                                 q_proj_weight=None,              # type: Optional[Tensor]
-                                 k_proj_weight=None,              # type: Optional[Tensor]
-                                 v_proj_weight=None,              # type: Optional[Tensor]
-                                 static_k=None,                   # type: Optional[Tensor]
-                                 static_v=None                    # type: Optional[Tensor]
-                                 ):
+def multi_head_attention_forward(
+    query,  # type: Tensor
+    key,  # type: Tensor
+    value,  # type: Tensor
+    embed_dim_to_check,  # type: int
+    num_heads,  # type: int
+    in_proj_bias,  # type: Tensor
+    bias_k,  # type: Optional[Tensor]
+    bias_v,  # type: Optional[Tensor]
+    add_zero_attn,  # type: bool
+    dropout_p,  # type: float
+    out_proj_weight,  # type: Tensor
+    out_proj_bias,  # type: Tensor
+    training=True,  # type: bool
+    key_padding_mask=None,  # type: Optional[Tensor]
+    need_weights=True,  # type: bool
+    attn_mask=None,  # type: Optional[Tensor]
+    use_separate_proj_weight=False,  # type: bool
+    q_proj_weight=None,  # type: Optional[Tensor]
+    k_proj_weight=None,  # type: Optional[Tensor]
+    v_proj_weight=None,  # type: Optional[Tensor]
+    static_k=None,  # type: Optional[Tensor]
+    static_v=None,  # type: Optional[Tensor]
+):
     # type: (...) -> Tuple[Tensor, Optional[Tensor]]
     r"""
     Args:
@@ -89,8 +95,6 @@ def multi_head_attention_forward(query,                           # type: Tensor
     assert head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
     scaling = float(head_dim) ** -0.5
 
-
-
     q_proj_weight_non_opt = torch.jit._unwrap_optional(q_proj_weight)
     len1, len2 = q_proj_weight_non_opt.size()
     assert len1 == embed_dim and len2 == query.size(-1)
@@ -105,8 +109,8 @@ def multi_head_attention_forward(query,                           # type: Tensor
 
     if in_proj_bias is not None:
         q = F.linear(query, q_proj_weight_non_opt, in_proj_bias[0:embed_dim])
-        k = F.linear(key, k_proj_weight_non_opt, in_proj_bias[embed_dim:(embed_dim * 2)])
-        v = F.linear(value, v_proj_weight_non_opt, in_proj_bias[(embed_dim * 2):])
+        k = F.linear(key, k_proj_weight_non_opt, in_proj_bias[embed_dim : (embed_dim * 2)])
+        v = F.linear(value, v_proj_weight_non_opt, in_proj_bias[(embed_dim * 2) :])
     else:
         q = F.linear(query, q_proj_weight_non_opt, in_proj_bias)
         k = F.linear(key, k_proj_weight_non_opt, in_proj_bias)
@@ -118,15 +122,20 @@ def multi_head_attention_forward(query,                           # type: Tensor
             k = torch.cat([k, bias_k.repeat(1, bsz, 1)])
             v = torch.cat([v, bias_v.repeat(1, bsz, 1)])
             if attn_mask is not None:
-                attn_mask = torch.cat([attn_mask,
-                                      torch.zeros((attn_mask.size(0), 1),
-                                                  dtype=attn_mask.dtype,
-                                                  device=attn_mask.device)], dim=1)
+                attn_mask = torch.cat(
+                    [attn_mask, torch.zeros((attn_mask.size(0), 1), dtype=attn_mask.dtype, device=attn_mask.device)],
+                    dim=1,
+                )
             if key_padding_mask is not None:
                 key_padding_mask = torch.cat(
-                    [key_padding_mask, torch.zeros((key_padding_mask.size(0), 1),
-                                                   dtype=key_padding_mask.dtype,
-                                                   device=key_padding_mask.device)], dim=1)
+                    [
+                        key_padding_mask,
+                        torch.zeros(
+                            (key_padding_mask.size(0), 1), dtype=key_padding_mask.dtype, device=key_padding_mask.device
+                        ),
+                    ],
+                    dim=1,
+                )
         else:
             assert static_k is None, "bias cannot be added to static key."
             assert static_v is None, "bias cannot be added to static value."
@@ -161,14 +170,19 @@ def multi_head_attention_forward(query,                           # type: Tensor
         k = torch.cat([k, torch.zeros((k.size(0), 1) + k.size()[2:], dtype=k.dtype, device=k.device)], dim=1)
         v = torch.cat([v, torch.zeros((v.size(0), 1) + v.size()[2:], dtype=v.dtype, device=v.device)], dim=1)
         if attn_mask is not None:
-            attn_mask = torch.cat([attn_mask, torch.zeros((attn_mask.size(0), 1),
-                                                          dtype=attn_mask.dtype,
-                                                          device=attn_mask.device)], dim=1)
+            attn_mask = torch.cat(
+                [attn_mask, torch.zeros((attn_mask.size(0), 1), dtype=attn_mask.dtype, device=attn_mask.device)], dim=1
+            )
         if key_padding_mask is not None:
             key_padding_mask = torch.cat(
-                [key_padding_mask, torch.zeros((key_padding_mask.size(0), 1),
-                                               dtype=key_padding_mask.dtype,
-                                               device=key_padding_mask.device)], dim=1)
+                [
+                    key_padding_mask,
+                    torch.zeros(
+                        (key_padding_mask.size(0), 1), dtype=key_padding_mask.dtype, device=key_padding_mask.device
+                    ),
+                ],
+                dim=1,
+            )
 
     attn_output_weights = torch.bmm(q, k.transpose(1, 2))
     assert list(attn_output_weights.size()) == [bsz * num_heads, tgt_len, src_len]
@@ -180,13 +194,11 @@ def multi_head_attention_forward(query,                           # type: Tensor
     if key_padding_mask is not None:
         attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
         attn_output_weights = attn_output_weights.masked_fill(
-            key_padding_mask.unsqueeze(1).unsqueeze(2),
-            float('-inf'),
+            key_padding_mask.unsqueeze(1).unsqueeze(2), float("-inf"),
         )
         attn_output_weights = attn_output_weights.view(bsz * num_heads, tgt_len, src_len)
 
-    attn_output_weights = softmax(
-        attn_output_weights, dim=-1)
+    attn_output_weights = softmax(attn_output_weights, dim=-1)
     attn_output_weights = F.dropout(attn_output_weights, p=dropout_p, training=training)
 
     attn_output = torch.bmm(attn_output_weights, v)
@@ -197,9 +209,10 @@ def multi_head_attention_forward(query,                           # type: Tensor
     if need_weights:
         # average attention weights over heads
         attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
-        return attn_output, attn_output_weights#sum(dim=1) / num_heads
+        return attn_output, attn_output_weights  # sum(dim=1) / num_heads
     else:
         return attn_output, None
+
 
 def gelu_accurate(x):
     if not hasattr(gelu_accurate, "_a"):
@@ -208,7 +221,7 @@ def gelu_accurate(x):
 
 
 def gelu(x: torch.Tensor) -> torch.Tensor:
-    if hasattr(F, 'gelu'):
+    if hasattr(F, "gelu"):
         return F.gelu(x.float()).type_as(x)
     else:
         return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
@@ -228,6 +241,7 @@ def get_activation_fn(activation: str) -> Callable:
         return lambda x: x
     else:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
+
 
 def make_positions(tensor, padding_idx: int):
     """Replace non-padding symbols with their position numbers.
@@ -250,11 +264,13 @@ class LearnedPositionalEmbedding(nn.Embedding):
     position ids are passed to the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int,):
+    def __init__(
+        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
+    ):
         # if padding_idx is specified then offset the embedding ids by
         # this index and adjust num_embeddings appropriately
         assert padding_idx is not None
-        num_embeddings += (padding_idx + 1)  # WHY?
+        num_embeddings += padding_idx + 1  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
         self.max_positions = num_embeddings - self.padding_idx - 1
         self.onnx_trace = False
@@ -268,19 +284,11 @@ class LearnedPositionalEmbedding(nn.Embedding):
             # Without the int() cast, it doesn't work in some cases when exporting to ONNX
             positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
         else:
-            positions = make_positions(
-                input, self.padding_idx,
-            )
+            positions = make_positions(input, self.padding_idx,)
         return super().forward(positions)
 
-import math
-from typing import Dict, Optional, Tuple
 
-import torch
-import torch.nn.functional as F
-from torch import Tensor, nn
-from torch.nn import Parameter
-from fairseq.incremental_decoding_utils import with_incremental_state
+
 
 
 def softmax(x, dim: int, onnx_trace: bool = False):
@@ -295,14 +303,17 @@ def log_softmax(x, dim, onnx_trace=False):
         return F.log_softmax(x.float(), dim=dim)
     else:
         return F.log_softmax(x, dim=dim, dtype=torch.float32)
-def _get_full_incremental_state_key(module_instance, key: str
-) -> str:
-    return "{}.{}.{}".format(
-        module_instance.module_name, module_instance._fairseq_instance_id, key
-    )
+
+
+def _get_full_incremental_state_key(module_instance, key: str) -> str:
+    return "{}.{}.{}".format(module_instance.module_name, module_instance._fairseq_instance_id, key)
+
+
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a tensor with -inf."""
     return t.float().fill_(float("-inf")).type_as(t)
+
+
 def _item(tensor):
     if hasattr(tensor, "item"):
         return tensor.item()
@@ -310,14 +321,17 @@ def _item(tensor):
         return tensor[0]
     return tensor
 
+
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):
     if not export and torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
+
             return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
         except ImportError:
             pass
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
+
 
 def Linear(in_features, out_features, bias=True):
     m = nn.Linear(in_features, out_features, bias)
@@ -325,6 +339,8 @@ def Linear(in_features, out_features, bias=True):
     if bias:
         nn.init.constant_(m.bias, 0.0)
     return m
+
+
 def Embedding(num_embeddings, embedding_dim, padding_idx):
     m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
     nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
@@ -360,9 +376,7 @@ class MultiheadAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), "embed_dim must be divisible by num_heads"
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
 
         self.self_attention = self_attention
@@ -393,7 +407,7 @@ class MultiheadAttention(nn.Module):
 
         nn.init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
-            nn.init.constant_(self.out_proj.bias, 0.)
+            nn.init.constant_(self.out_proj.bias, 0.0)
 
     def forward(
         self,
@@ -432,10 +446,7 @@ class MultiheadAttention(nn.Module):
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
 
         if (
-            self.enable_torch_version
-            and not self.onnx_trace
-            and incremental_state is None
-            and not static_kv
+            self.enable_torch_version and not self.onnx_trace and incremental_state is None and not static_kv
         ):  # This is what usually gets hit
             assert key is not None and value is not None
             return multi_head_attention_forward(
@@ -487,7 +498,7 @@ class MultiheadAttention(nn.Module):
                 v = self.v_proj(key)
 
         else:
-            raise NotImplementedError('IDT this is used')
+            raise NotImplementedError("IDT this is used")
         q *= self.scaling
 
         if self.bias_k is not None:
@@ -496,34 +507,16 @@ class MultiheadAttention(nn.Module):
             k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
             v = torch.cat([v, self.bias_v.repeat(1, bsz, 1)])
             if attn_mask is not None:
-                attn_mask = torch.cat(
-                    [attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1
-                )
+                attn_mask = torch.cat([attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1)
             if key_padding_mask is not None:
                 key_padding_mask = torch.cat(
-                    [
-                        key_padding_mask,
-                        key_padding_mask.new_zeros(key_padding_mask.size(0), 1),
-                    ],
-                    dim=1,
+                    [key_padding_mask, key_padding_mask.new_zeros(key_padding_mask.size(0), 1),], dim=1,
                 )
-        q = (
-            q.contiguous()
-            .view(tgt_len, bsz * self.num_heads, self.head_dim)
-            .transpose(0, 1)
-        )
+        q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
-            k = (
-                k.contiguous()
-                .view(-1, bsz * self.num_heads, self.head_dim)
-                .transpose(0, 1)
-            )
+            k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if v is not None:
-            v = (
-                v.contiguous()
-                .view(-1, bsz * self.num_heads, self.head_dim)
-                .transpose(0, 1)
-            )
+            v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
         if saved_state is not None:
             # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
@@ -576,24 +569,16 @@ class MultiheadAttention(nn.Module):
             assert key_padding_mask.size(1) == src_len
 
         if self.add_zero_attn:
-            raise NotImplementedError('IDT this is used')
+            raise NotImplementedError("IDT this is used")
             assert v is not None
             src_len += 1
             k = torch.cat([k, k.new_zeros((k.size(0), 1) + k.size()[2:])], dim=1)
             v = torch.cat([v, v.new_zeros((v.size(0), 1) + v.size()[2:])], dim=1)
             if attn_mask is not None:
-                attn_mask = torch.cat(
-                    [attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1
-                )
+                attn_mask = torch.cat([attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1)
             if key_padding_mask is not None:
                 key_padding_mask = torch.cat(
-                    [
-                        key_padding_mask,
-                        torch.zeros(key_padding_mask.size(0), 1).type_as(
-                            key_padding_mask
-                        ),
-                    ],
-                    dim=1,
+                    [key_padding_mask, torch.zeros(key_padding_mask.size(0), 1).type_as(key_padding_mask),], dim=1,
                 )
 
         attn_weights = torch.bmm(q, k.transpose(1, 2))
@@ -614,15 +599,9 @@ class MultiheadAttention(nn.Module):
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights_float = softmax(
-            attn_weights, dim=-1, onnx_trace=self.onnx_trace
-        )
+        attn_weights_float = softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
         attn_weights = attn_weights_float.type_as(attn_weights)
-        attn_probs = F.dropout(
-            attn_weights_float.type_as(attn_weights),
-            p=self.dropout,
-            training=self.training,
-        )
+        attn_probs = F.dropout(attn_weights_float.type_as(attn_weights), p=self.dropout, training=self.training,)
         assert v is not None
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
@@ -635,9 +614,7 @@ class MultiheadAttention(nn.Module):
         attn = self.out_proj(attn)
         attn_weights: Optional[Tensor] = None
         if need_weights:
-            attn_weights = attn_weights_float.view(
-                bsz, self.num_heads, tgt_len, src_len
-            ).transpose(1, 0)
+            attn_weights = attn_weights_float.view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
             if not need_head_weights:
                 # average attention weights over heads
                 attn_weights = attn_weights.mean(dim=0)
@@ -656,9 +633,7 @@ class MultiheadAttention(nn.Module):
         if prev_key_padding_mask is not None and static_kv:
             new_key_padding_mask = prev_key_padding_mask
         elif prev_key_padding_mask is not None and key_padding_mask is not None:
-            new_key_padding_mask = torch.cat(
-                [prev_key_padding_mask.float(), key_padding_mask.float()], dim=1
-            )
+            new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), key_padding_mask.float()], dim=1)
         # During incremental decoding, as the padding token enters and
         # leaves the frame, there will be a time when prev or current
         # is None
@@ -667,23 +642,17 @@ class MultiheadAttention(nn.Module):
             filler = torch.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
             if prev_key_padding_mask.is_cuda:
                 filler = filler.cuda()
-            new_key_padding_mask = torch.cat(
-                [prev_key_padding_mask.float(), filler.float()], dim=1
-            )
+            new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), filler.float()], dim=1)
         elif key_padding_mask is not None:
             filler = torch.zeros(batch_size, src_len - key_padding_mask.size(1))
             if key_padding_mask.is_cuda:
                 filler = filler.cuda()
-            new_key_padding_mask = torch.cat(
-                [filler.float(), key_padding_mask.float()], dim=1
-            )
+            new_key_padding_mask = torch.cat([filler.float(), key_padding_mask.float()], dim=1)
         else:
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
 
-    def reorder_incremental_state(
-        self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], new_order
-    ):
+    def reorder_incremental_state(self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], new_order):
         """Reorder buffered internal state (for incremental generation)."""
         input_buffer = self._get_input_buffer(incremental_state)
         if input_buffer is not None:
@@ -704,11 +673,7 @@ class MultiheadAttention(nn.Module):
         return incremental_state[full_key]
 
     def _set_input_buffer(
-        self,
-        incremental_state: Dict[str, Dict[str, Optional[Tensor]]],
-        buffer: Dict[str, Optional[Tensor]],
+        self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], buffer: Dict[str, Optional[Tensor]],
     ):
-        full_key = _get_full_incremental_state_key(
-            self, "attn_state"
-        )
+        full_key = _get_full_incremental_state_key(self, "attn_state")
         incremental_state[full_key] = buffer

@@ -25,26 +25,33 @@ logger = logging.getLogger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/transformer-base-config.json",
-
 }
 
+
 class BARTConfig(PretrainedConfig):
-    model_type = 'bart'
-    def __init__(self,
-                 activation_dropout=0.,
-                 vocab_size=50265,  # bert's is 30522, why the difference
-                 pad_token_id=1,  # TODO(SS): feels like wrong place?
-                 d_model=1024,
-                 encoder_ffn_dim=4096, encoder_layers=12, encoder_attention_heads=16,
-                 decoder_ffn_dim=4096, decoder_layers=12, decoder_attention_heads=16,
-                 encoder_layerdrop=0., decoder_layerdrop=0.,
-                 attention_dropout=0.0,
-                 dropout=0.1,
-                 max_position_embeddings=1024,
-                 activation_fn='gelu',
-                 initializer_factor=.02,
-                 **common_kwargs
-                 ):
+    model_type = "bart"
+
+    def __init__(
+        self,
+        activation_dropout=0.0,
+        vocab_size=50265,  # bert's is 30522, why the difference
+        pad_token_id=1,  # TODO(SS): feels like wrong place?
+        d_model=1024,
+        encoder_ffn_dim=4096,
+        encoder_layers=12,
+        encoder_attention_heads=16,
+        decoder_ffn_dim=4096,
+        decoder_layers=12,
+        decoder_attention_heads=16,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
+        attention_dropout=0.0,
+        dropout=0.1,
+        max_position_embeddings=1024,
+        activation_fn="gelu",
+        initializer_factor=0.02,
+        **common_kwargs
+    ):
         super().__init__(**common_kwargs)
 
         self.vocab_size = vocab_size
@@ -72,6 +79,6 @@ class BARTConfig(PretrainedConfig):
     def num_attention_heads(self):
         return self.encoder_attention_heads
 
-
     @property
-    def hidden_size(self): return self.d_model
+    def hidden_size(self):
+        return self.d_model
