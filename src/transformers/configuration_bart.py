@@ -43,7 +43,7 @@ class BARTConfig(PretrainedConfig):
                  max_position_embeddings=1024,
                  activation_fn='gelu',
                  initializer_factor=.02,
-                 **common_kwargs,
+                 **common_kwargs
                  ):
         super().__init__(**common_kwargs)
 
