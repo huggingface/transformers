@@ -1,14 +1,11 @@
 """"Taken from fairseq """
 import logging
 import math
-import re
 from typing import Callable, Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-#from fairseq.incremental_decoding_utils import with_incremental_state
 from torch import Tensor, nn
-from torch.nn import Parameter
 
 
 logger = logging.getLogger(__name__)
@@ -288,7 +285,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
-
 def softmax(x, dim: int, onnx_trace: bool = False):
     if onnx_trace:
         return F.softmax(x.float(), dim=dim)
@@ -346,7 +342,7 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
     return m
 
 
-#@with_incremental_state
+# @with_incremental_state
 class MultiheadAttention(nn.Module):
     """Multi-headed attention.
 
@@ -495,7 +491,8 @@ class MultiheadAttention(nn.Module):
                 k = self.k_proj(key)
                 v = self.v_proj(key)
 
-        else: raise NotImplementedError("IDT this is used")
+        else:
+            raise NotImplementedError("IDT this is used")
         q *= self.scaling
 
         if self.bias_k is not None:

@@ -180,9 +180,9 @@ class BARTModel(PreTrainedModel):
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
-            raise ValueError("input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions()))
-
-
+            raise ValueError(
+                "input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions())
+            )
 
         encoder_out = self.encoder.forward(  # TODO(SS): delete forward later
             input_ids,
