@@ -34,6 +34,7 @@ from .fairseq_utils import (
     get_activation_fn,
     log_softmax,
     softmax,
+    Linear
 )
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
