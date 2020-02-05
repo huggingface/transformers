@@ -211,8 +211,6 @@ def multi_head_attention_forward(
         return attn_output, None
 
 
-
-
 def get_activation_fn(activation: str) -> Callable:
     """ Returns the activation function corresponding to `activation` """
     if activation == "relu":
@@ -286,7 +284,7 @@ def fill_with_neg_inf(t):
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):
-    if not export and torch.cuda.is_available():
+    if torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
 
@@ -311,11 +309,8 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
     return m
 
 
-# @with_incremental_state
 class MultiheadAttention(nn.Module):
-    """Multi-headed attention.
-
-    See "Attention Is All You Need" for more details.
+    """Multi-headed attention. See "Attention Is All You Need" for more details.
     """
 
     def __init__(
