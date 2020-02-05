@@ -712,10 +712,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
-        assert isinstance(bos_token_id, int) and bos_token_id >= 0, "`bos_token_id` should be a positive integer."
-        assert isinstance(pad_token_id, int) and pad_token_id >= 0, "`pad_token_id` should be a positive integer."
-        assert isinstance(eos_token_ids, (list, tuple)) and (
-            e >= 0 for e in eos_token_ids
+        assert bos_token_id is None or (
+            isinstance(bos_token_id, int) and bos_token_id >= 0
+        ), "`bos_token_id` should be a positive integer."
+        assert (
+            pad_token_id is None or isinstance(pad_token_id, int) and pad_token_id >= 0
+        ), "`pad_token_id` should be a positive integer."
+        assert (
+            eos_token_ids is None or isinstance(eos_token_ids, (list, tuple)) and (e >= 0 for e in eos_token_ids)
         ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
         assert (
@@ -728,6 +732,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )
         else:
             assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
+
+        if pad_token_id is None:
+            pad_token_id = -1
+        if eos_token_ids is None:
+            eos_token_ids = [-1]
+        if bos_token_id is None:
+            bos_token_id = -1
 
         # current position and vocab size
         cur_len = input_ids.shape[1]

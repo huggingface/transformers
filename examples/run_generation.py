@@ -119,12 +119,12 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
 
 def prepare_xlnet_input(args, _, tokenizer, prompt_text):
     prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
-    return prompt_text, {}
+    return prompt_text
 
 
 def prepare_transfoxl_input(args, _, tokenizer, prompt_text):
     prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
-    return prompt_text, {}
+    return prompt_text
 
 
 PREPROCESSING_FUNCTIONS = {
@@ -210,13 +210,15 @@ def main():
     requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS.keys()
     if requires_preprocessing:
         prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
-        prompt_text = prepare_input(args, model, tokenizer, prompt_text)
-    encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
+        preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)
+        encoded_prompt = tokenizer.encode(preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt")
+    else:
+        encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
     encoded_prompt = encoded_prompt.to(args.device)
 
     output_sequences = model.generate(
         input_ids=encoded_prompt,
-        max_length=args.length,
+        max_length=args.length + len(encoded_prompt[0]),
         temperature=args.temperature,
         top_k=args.k,
         top_p=args.p,
@@ -226,10 +228,14 @@ def main():
 
     # Batch size == 1. to add more examples please use num_return_sequences > 1
     generated_sequence = output_sequences[0].tolist()
+
+    # Remove "-1" tokens
+    generated_sequence = [token for token in generated_sequence if token != -1]
+
     text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
     text = text[: text.find(args.stop_token) if args.stop_token else None]
 
-    print(text)
+    print(prompt_text + text[len(tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :])
 
     return text
 
