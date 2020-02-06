@@ -577,3 +577,5 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
         self.max_len = max_len
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
