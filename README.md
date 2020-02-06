@@ -24,6 +24,8 @@
 
 🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
 
+[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/0)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/0)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/1)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/1)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/2)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/2)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/3)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/3)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/4)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/4)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/5)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/5)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/6)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/6)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/7)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/7)
+
 ### Features
 
 - As easy to use as pytorch-transformers
