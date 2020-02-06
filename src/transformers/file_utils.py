@@ -287,6 +287,8 @@ def cached_path(
                 tar_file = tarfile.open(output_path)
                 tar_file.extractall(output_path_extracted)
                 tar_file.close()
+            else:
+                raise EnvironmentError("Archive format of {} could not be identified".format(output_path))
 
         return output_path_extracted
 
