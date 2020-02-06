@@ -49,7 +49,7 @@ class BARTConfig(PretrainedConfig):
         dropout=0.1,
         max_position_embeddings=1024,
         activation_fn="gelu",
-        initializer_factor=0.02,
+        init_std=0.02,
         **common_kwargs
     ):
         super().__init__(**common_kwargs)
@@ -68,7 +68,7 @@ class BARTConfig(PretrainedConfig):
         self.decoder_attention_heads = decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.activation_fn = activation_fn
-        self.initializer_factor = initializer_factor
+        self.init_std = init_std  # Normal(0, this parameter)
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout

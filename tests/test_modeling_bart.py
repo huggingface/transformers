@@ -52,8 +52,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.batch_size = 13
             self.seq_length = 7
             self.is_training = True
-            self.use_input_mask = True
-            self.use_token_type_ids = False
+            #self.use_token_type_ids = False
             self.use_labels = False
             self.vocab_size = 99
             self.hidden_size = 32
@@ -75,14 +74,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
-            input_mask = None
-            if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-            token_type_ids = None
-            if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
             config = BARTConfig(
                 vocab_size=self.vocab_size,
@@ -103,6 +96,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             sequence_labels = None
             token_labels = None
             choice_labels = None
+            token_type_ids = None
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
         def prepare_config_and_inputs_for_common(self):
@@ -137,8 +131,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    #def test_initialization(self):
+
     def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
         (
             config,
             input_ids,
@@ -147,16 +142,25 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             sequence_labels,
             token_labels,
             choice_labels,
-        ) = config_and_inputs
+        ) = self.model_tester.prepare_config_and_inputs()
+        torch.manual_seed(0)
         model = BARTModel(config=config)
         model.to(torch_device)
         model.eval()
-        _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
+        # test init
+        self.assertAlmostEqual(torch.std(model.encoder.embed_tokens.weight).item(),
+                               config.init_std, 2)
+        self.assertAlmostEqual(torch.std(model.encoder.layers[0].self_attn.k_proj.weight).item(),
+                               config.init_std, 2)
+
+        decoder_features_with_mask, _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
         decoder_features, enc_features = model(input_ids)
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
+        self.assertTrue((decoder_features_with_mask == decoder_features).all().item())
+
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

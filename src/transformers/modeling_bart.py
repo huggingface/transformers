@@ -153,14 +153,14 @@ class BARTModel(PreTrainedModel):
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
         # TODO(SS): paper says weight init slightly different than bert, but their code looks similar
-        self.initializer_factor = config.initializer_factor
+        self.init_std = config.init_std
         self.reset_parameters()
         self._is_generation_fast = False  # TODO(SS): this might need deletion
 
     # def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
     def reset_parameters(self):
-        std = self.initializer_factor  # used by init_params
+        std = self.init_std  # used by init_params
 
         def init_params(module):
             if isinstance(module, nn.Linear):
