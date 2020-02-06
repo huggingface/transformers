@@ -63,7 +63,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.hidden_dropout_prob = 0.1
             self.attention_probs_dropout_prob = 0.1
             self.max_position_embeddings = 1024
-            #torch.manual_seed(0)
+            torch.manual_seed(0)
 
             # self.e
 
