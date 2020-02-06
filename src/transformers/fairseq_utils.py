@@ -1,6 +1,5 @@
 """"Taken from fairseq """
 import logging
-import math
 from typing import Callable, Dict, Optional, Tuple
 
 import torch

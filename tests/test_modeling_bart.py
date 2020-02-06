@@ -185,7 +185,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         model.eval()
         # test init
         self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
-        _check_var = lambda module: self.assertAlmostEqual(torch.std(module.weight).item(), config.init_std, 2)
+
+        def _check_var(module):
+            self.assertAlmostEqual(torch.std(module.weight).item(), config.init_std, 2)
+
         _check_var(model.encoder.embed_tokens)
         _check_var(model.encoder.layers[0].self_attn.k_proj)
         _check_var(model.encoder.layers[0].fc1)
