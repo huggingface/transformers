@@ -138,26 +138,23 @@ class BARTModel(PreTrainedModel):
         self.decoder = BartDecoder(config, self.shared)
         # TODO(SS): paper says weight init slightly different than bert, but their code looks similar
         self.init_std = config.init_std
-        self.reset_parameters()
+        self.init_weights()
         self._is_generation_fast = False  # TODO(SS): this might need deletion
 
     # def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
 
-    def reset_parameters(self):
+    def _init_weights(self, module):
         std = self.init_std  # used by init_params
 
-        def init_params(module):
-            # called init_bert_params in fairseq
-            if isinstance(module, nn.Linear):
-                module.weight.data.normal_(mean=0.0, std=std)
-                if module.bias is not None:
-                    module.bias.data.zero_()
-            if isinstance(module, nn.Embedding):
-                module.weight.data.normal_(mean=0.0, std=std)
-                if module.padding_idx is not None:
-                    module.weight.data[module.padding_idx].zero_()
-
-        self.apply(init_params)
+        # called init_bert_params in fairseq
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        if isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def get_input_embeddings(self):
         return self.shared

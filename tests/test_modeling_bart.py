@@ -41,7 +41,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_torchscript = False  # TODO(SS): may want to fix this
-    test_resize_embeddings = False  # TODO(SS): may want to fix this
+    test_resize_embeddings = True  # TODO(SS): may want to fix this
     test_head_masking = False  # TODO(SS): may want to fix this
     is_encoder_decoder = True
 
