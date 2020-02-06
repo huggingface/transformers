@@ -25,9 +25,6 @@ def get_activation_fn(activation: str) -> Callable:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
 
-
-
-
 class LearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -69,6 +66,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         mask = tensor.ne(padding_idx).int()
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
+
 def softmax(x, dim: int, onnx_trace: bool = False):
     return F.softmax(x, dim=dim, dtype=torch.float32)
 
@@ -82,7 +80,7 @@ def fill_with_neg_inf(t):
     return t.float().fill_(float("-inf")).type_as(t)
 
 
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):
+def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
     if torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
@@ -105,7 +103,6 @@ class SelfAttention(nn.Module):
         vdim=None,
         dropout=0.0,
         bias=True,
-        add_zero_attn=False,
         self_attention=False,
         encoder_decoder_attention=False,
     ):
@@ -113,7 +110,7 @@ class SelfAttention(nn.Module):
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
-
+        assert self_attention ^ encoder_decoder_attention
 
         self.num_heads = num_heads
         self.dropout = dropout
@@ -136,7 +133,7 @@ class SelfAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.onnx_trace = False
-        self.enable_torch_version = False #hasattr(F, "multi_head_attention_forward")
+        self.enable_torch_version = False  # hasattr(F, "multi_head_attention_forward")
 
     def forward(
         self,
@@ -185,7 +182,8 @@ class SelfAttention(nn.Module):
             q = self.q_proj(query)
             k = self.k_proj(query)
             v = self.v_proj(query)
-        elif self.encoder_decoder_attention:
+        else:
+            assert self.encoder_decoder_attention
             # encoder-decoder attention
             q = self.q_proj(query)
             if key is None:
@@ -194,8 +192,6 @@ class SelfAttention(nn.Module):
             else:
                 k = self.k_proj(key)
                 v = self.v_proj(key)
-        else:
-            raise NotImplementedError("IDT this is used")
         q *= self.scaling
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
@@ -205,7 +201,8 @@ class SelfAttention(nn.Module):
 
         if saved_state is not None:
             k, key_padding_mask, v = self._use_and_update_saved_state(
-                k, v, saved_state, key_padding_mask, incremental_state, static_kv, bsz)
+                k, v, saved_state, key_padding_mask, incremental_state, static_kv, bsz
+            )
         assert k is not None
         src_len = k.size(1)
 
