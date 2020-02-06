@@ -174,7 +174,7 @@ Happy distillation!
 
 ## Citation
 
-If you find the ressource useful, you should cite the following paper:
+If you find the resource useful, you should cite the following paper:
 
 ```
 @inproceedings{sanh2019distilbert,
