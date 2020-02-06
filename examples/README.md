@@ -24,8 +24,7 @@ pip install -r ./examples/requirements.txt
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. 
 | [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training.                                                                                  |
 | [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
-| [Adversarial evaluation of model performances](#adversarial-evaluation-of-model-performances) | Testing a model with adversarial evaluation of natural language
-inference on the Heuristic Analysis for NLI Systems (HANS) dataset (McCoy et al., 2019.) |
+| [Adversarial evaluation of model performances](#adversarial-evaluation-of-model-performances) | Testing a model with adversarial evaluation of natural language inference on the Heuristic Analysis for NLI Systems (HANS) dataset (McCoy et al., 2019.) |
 
 ## TensorFlow 2.0 Bert models on GLUE
 
