@@ -663,6 +663,7 @@ T5_START_DOCSTRING = r"""    The T5 model was proposed in
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
+
 T5_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -791,7 +792,7 @@ class T5Model(T5PreTrainedModel):
 
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
         kwargs_decoder["encoder_attention_mask"] = encoder_attention_mask
-        decoder_outputs = self.decoder.forward(hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
 
