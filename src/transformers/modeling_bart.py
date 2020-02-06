@@ -493,7 +493,7 @@ class BartEncoder(nn.Module):
         self.register_buffer("version", torch.Tensor([3]))
 
         self.dropout = config.dropout
-        self.encoder_layerdrop = config.encoder_layerdrop
+        self.layerdrop = config.encoder_layerdrop
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -553,7 +553,7 @@ class BartEncoder(nn.Module):
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.encoder_layerdrop):
+            if self.training and (dropout_probability < self.layerdrop):
                 continue  # NOTE(SS): this could break shape of attentions!
             x, attn = layer(x, encoder_padding_mask)
 
@@ -626,12 +626,11 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BARTConfig, embed_tokens):
         super().__init__()
-        self.onnx_trace = False
-        self.register_buffer("version", torch.Tensor([3]))
+        self.register_buffer("version", torch.Tensor([3]))  # TODO(SS): could delete this and pop from state_dict
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
-        self.decoder_layerdrop = config.decoder_layerdrop
+        self.layerdrop = config.decoder_layerdrop
 
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
@@ -676,12 +675,7 @@ class BartDecoder(nn.Module):
         # if alignment_layer is None: alignment_layer = len(self.layers) - 1
 
         # embed positions
-        positions = (
-            self.embed_positions(prev_output_tokens, incremental_state=incremental_state,)
-            if self.embed_positions is not None
-            else None
-        )
-
+        positions = self.embed_positions(prev_output_tokens, incremental_state=incremental_state)
         if incremental_state is not None:
             prev_output_tokens = prev_output_tokens[:, -1:]
             if positions is not None:
@@ -718,7 +712,7 @@ class BartDecoder(nn.Module):
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if not self.training or (dropout_probability > self.decoder_layerdrop):
+            if not self.training or (dropout_probability > self.layerdrop):
                 x, layer_self_attn = layer.forward(  # TODO(SS): remove forward
                     x,
                     encoder_state,
@@ -743,8 +737,6 @@ class BartDecoder(nn.Module):
 
     def max_positions(self):
         """Maximum output length supported by the decoder."""
-        if self.embed_positions is None:
-            return self.max_target_positions
         return min(self.max_target_positions, self.embed_positions.max_positions)
 
     def buffered_future_mask(self, tensor):

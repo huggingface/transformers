@@ -1,6 +1,6 @@
 """"Taken from fairseq """
 import logging
-from typing import Callable, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -50,10 +50,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
         # how to handle the dtype kwarg in cumsum.
         mask = tensor.ne(padding_idx).int()
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
-
-
-def softmax(x, dim: int, onnx_trace: bool = False):
-    return F.softmax(x, dim=dim, dtype=torch.float32)
 
 
 def _get_full_incremental_state_key(module_instance, key: str) -> str:

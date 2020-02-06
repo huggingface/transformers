@@ -21,7 +21,7 @@ import unittest
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
@@ -63,7 +63,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.hidden_act = "gelu"
             self.hidden_dropout_prob = 0.1
             self.attention_probs_dropout_prob = 0.1
-            self.max_position_embeddings = 1024
+            self.max_position_embeddings = 12
             torch.manual_seed(0)
 
             # self.e
@@ -124,7 +124,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 decoder_attention_heads=self.num_attention_heads,
                 encoder_ffn_dim=self.intermediate_size,
                 decoder_ffn_dim=self.intermediate_size,
-                hidden_act=self.hidden_act,
                 dropout=self.hidden_dropout_prob,
                 attention_dropout=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
@@ -203,10 +202,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
         self.assertTrue((decoder_features_with_mask == decoder_features).all().item())
-        # if :
 
-        import numpy as np
-
+        # import numpy as np
         # last_few_features = decoder_features_with_mask.detach().contiguous().view(-1,)[-3:].numpy()
         # expected_result = np.array([0.688, 0.533, -0.663])
         # np.testing.assert_almost_equal(last_few_features, expected_result, 3)
