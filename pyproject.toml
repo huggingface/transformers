@@ -1,0 +1,73 @@
+[tool.poetry]
+name = "transformers"
+version = "2.4.1"
+authors = ["Thomas Wolf <thomas@huggingface.co>", "Lysandre Debut", "Victor Sanh", "Julien Chaumond", "Google AI Language Team Authors", "Open AI team Authors", "Facebook AI Authors", "Carnegie Mellon University Authors"]
+description = "State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch"
+readme = "README.md"
+license = "Apache-2.0"
+homepage = "https://huggingface.co/transformers/"
+repository = "https://github.com/huggingface/transformers"
+keywords = ["NLP deep learning transformer pytorch tensorflow BERT GPT GPT-2 google openai CMU"]
+
+[tool.poetry.dependencies]
+# base
+python = "^3.5.0"  # 3.6 is needed for black
+numpy = "^1.18.1"
+tokenizers = "0.0.11"
+boto3 = "^1.11.11"
+filelock = "^3.0.12"
+requests = "^2.22.0"
+tqdm = ">=4.27"
+regex = "!=2019.12.17"
+sentencepiece = "^0.1.85"
+sacremoses = "^0.0.38"
+# examples
+tensorboardX = {version = "^2.0", optional = true}
+tensorboard = {version = "^2.1.0", optional = true}
+scikit-learn = {version = "^0.22.1", optional = true}
+seqeval = {version = "^0.0.12", optional = true}
+# torch
+# cpu: pip install torch==1.4.0+cpu torchvision==0.5.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+torch = {version = "^1.4.0", optional = true}
+torchvision = {version = "^0.5.0", optional = true}
+# tensorflow
+tensorflow = {version = "^2.1.0", optional = true}
+# mecab
+mecab-python3 = {version = "^0.996.3", optional = true}
+# serving
+pydantic = {version = "^1.4", optional = true}
+uvicorn = {version = "^0.11.2", optional = true}
+starlette = {version = "^0.12.9", optional = true}
+fastapi = {version = "^0.48.0", optional = true}
+# testing
+pytest = {version = "^5.3.5", optional = true}
+pytest-xdist = {version = "^1.31.0", optional = true}
+# quality
+black = {version = "^19.10b0", optional = true}
+isort = {version = "^4.3.21", optional = true}
+flake8 = {version = "^3.7.9", optional = true}
+# docs
+recommonmark = {version = "^0.6.0", optional = true}
+sphinx = {version = "^2.3.1", optional = true}
+sphinx-markdown-tables = {version = "^0.0.12", optional = true}
+sphinx-rtd-theme = {version = "^0.4.3", optional = true}
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.extras]
+examples = ["tensorboardX", "tensorboard", "scikit-learn", "seqeval"]
+mecab = ["mecab-python3"]
+sklearn = ["scikit-learn"]
+tf = ["tensorflow"]
+torch = ["torch"]
+serving = ["pydantic", "uvicorn", "fastapi", "starlette"]
+all = ["pydantic", "uvicorn", "fastapi", "starlette", "tensorflow", "torch"]
+testing = ["pytest", "pytest-xdist"]
+quality = ["black", "isort", "flake8"]
+docs = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
+dev = ["pytest", "pytest-xdist", "black", "isort", "flake8", "mecab-python3", "scikit-learn", "tensorflow", "torch"]
+
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
