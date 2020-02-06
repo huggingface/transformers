@@ -28,8 +28,7 @@ from .configuration_bart import BARTConfig
 from .fairseq_utils import (
     LayerNorm,
     LearnedPositionalEmbedding,
-    Linear,
-    MultiheadAttention,
+    SelfAttention,
     fill_with_neg_inf,
     get_activation_fn,
 )
@@ -162,6 +161,7 @@ class BARTModel(PreTrainedModel):
         std = self.init_std  # used by init_params
 
         def init_params(module):
+            # called init_bert_params in fairseq
             if isinstance(module, nn.Linear):
                 module.weight.data.normal_(mean=0.0, std=std)
                 if module.bias is not None:
@@ -170,11 +170,6 @@ class BARTModel(PreTrainedModel):
                 module.weight.data.normal_(mean=0.0, std=std)
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
-            if isinstance(module, MultiheadAttention): # redundant with linear
-                module.q_proj.weight.data.normal_(mean=0.0, std=std)
-                module.k_proj.weight.data.normal_(mean=0.0, std=std)
-                module.v_proj.weight.data.normal_(mean=0.0, std=std)
-
         self.apply(init_params)
 
     def get_input_embeddings(self):
@@ -295,15 +290,15 @@ class EncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.output_attentions = config.output_attentions
-        self.self_attn = MultiheadAttention(
+        self.self_attn = SelfAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, self_attention=True,
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = get_activation_fn(config.activation_fn)
         self.activation_dropout = config.activation_dropout
-        self.fc1 = Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(self, x, encoder_padding_mask, attn_mask=None):
@@ -330,9 +325,10 @@ class EncoderLayer(nn.Module):
         # Note that we cannot use -inf here, because at some edge cases,
         # the attention weight (before softmax) for some padded element in query
         # will become -inf, which results in NaN in model parameters
-        # TODO: to formally solve this problem, we need to change fairseq's MultiheadAttention.
+        # TODO: to formally solve this problem, we need to change fairseq's SelfAttention.
         x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
-            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_head_weights=self.output_attentions,
+            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions,
+
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -368,7 +364,7 @@ class DecoderLayer(nn.Module):
     def __init__(self, config: BARTConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = MultiheadAttention(
+        self.self_attn = SelfAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -379,20 +375,18 @@ class DecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim, export=False)
-        self.encoder_attn = MultiheadAttention(
+        self.encoder_attn = SelfAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             encoder_decoder_attention=True,
         )
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=False)
-        self.fc1 = Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = Linear(config.decoder_ffn_dim, self.embed_dim)
-
+        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim, export=False)
-        self.need_attn = True
 
-        self.onnx_trace = False
+
 
     def forward(
         self,
@@ -458,13 +452,12 @@ class DecoderLayer(nn.Module):
 
         x, encoder_attn_weights = self.encoder_attn(
             query=x,
-            key=encoder_out,
+            key=encoder_out, # could be None
             value=encoder_out,
             key_padding_mask=encoder_padding_mask,
             incremental_state=incremental_state,
             static_kv=True,
             need_weights=False,  # not returning it so why compute it
-            need_head_weights=False,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x

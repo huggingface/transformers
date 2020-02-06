@@ -294,15 +294,7 @@ def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False)
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
-def Linear(in_features, out_features, bias=True):
-    m = nn.Linear(in_features, out_features, bias)
-    nn.init.xavier_uniform_(m.weight)
-    if bias:
-        nn.init.constant_(m.bias, 0.0)
-    return m
-
-
-class MultiheadAttention(nn.Module):
+class SelfAttention(nn.Module):
     """Multi-headed attention. See "Attention Is All You Need" for more details.
     """
 
@@ -349,15 +341,6 @@ class MultiheadAttention(nn.Module):
         self.onnx_trace = False
         self.enable_torch_version = hasattr(F, "multi_head_attention_forward")
 
-    def reset_parameters(self):
-        nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
-        nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
-        nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
-
-        nn.init.xavier_uniform_(self.out_proj.weight)
-        if self.out_proj.bias is not None:
-            nn.init.constant_(self.out_proj.bias, 0.0)
-
     def forward(
         self,
         query,
@@ -365,10 +348,9 @@ class MultiheadAttention(nn.Module):
         value: Optional[Tensor],
         key_padding_mask: Optional[Tensor] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
-        need_weights: bool = True,
+        need_weights: bool = False,
         static_kv: bool = False,
         attn_mask: Optional[Tensor] = None,
-        need_head_weights: bool = False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
 
@@ -387,9 +369,6 @@ class MultiheadAttention(nn.Module):
                 weights for each head. Implies *need_weights*. Default:
                 return the average attention weights over all heads.
         """
-        if need_head_weights:
-            need_weights = True
-
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
@@ -432,7 +411,7 @@ class MultiheadAttention(nn.Module):
         else:
             saved_state = None
 
-        if self.self_attention:
+        if self.self_attention:  # never get here on my machine
             q = self.q_proj(query)
             k = self.k_proj(query)
             v = self.v_proj(query)
@@ -445,23 +424,9 @@ class MultiheadAttention(nn.Module):
             else:
                 k = self.k_proj(key)
                 v = self.v_proj(key)
-
         else:
             raise NotImplementedError("IDT this is used")
         q *= self.scaling
-
-        if self.bias_k is not None:
-            raise NotImplementedError("IDT this is used")
-            assert self.bias_v is not None
-            k = torch.cat([k, self.bias_k.repeat(1, bsz, 1)])
-            v = torch.cat([v, self.bias_v.repeat(1, bsz, 1)])
-            if attn_mask is not None:
-                attn_mask = torch.cat([attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1)
-            if key_padding_mask is not None:
-                key_padding_mask = torch.cat(
-                    [key_padding_mask, key_padding_mask.new_zeros(key_padding_mask.size(0), 1),], dim=1,
-                )
-
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
             k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -492,7 +457,7 @@ class MultiheadAttention(nn.Module):
             if "prev_key_padding_mask" in saved_state:
                 prev_key_padding_mask = saved_state["prev_key_padding_mask"]
             assert k is not None and v is not None
-            key_padding_mask = MultiheadAttention._append_prev_key_padding_mask(
+            key_padding_mask = SelfAttention._append_prev_key_padding_mask(
                 key_padding_mask=key_padding_mask,
                 prev_key_padding_mask=prev_key_padding_mask,
                 batch_size=bsz,
@@ -518,27 +483,12 @@ class MultiheadAttention(nn.Module):
             assert key_padding_mask.size(0) == bsz
             assert key_padding_mask.size(1) == src_len
 
-        if self.add_zero_attn:
-            raise NotImplementedError("IDT this is used")
-            assert v is not None
-            src_len += 1
-            k = torch.cat([k, k.new_zeros((k.size(0), 1) + k.size()[2:])], dim=1)
-            v = torch.cat([v, v.new_zeros((v.size(0), 1) + v.size()[2:])], dim=1)
-            if attn_mask is not None:
-                attn_mask = torch.cat([attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1)
-            if key_padding_mask is not None:
-                key_padding_mask = torch.cat(
-                    [key_padding_mask, torch.zeros(key_padding_mask.size(0), 1).type_as(key_padding_mask),], dim=1,
-                )
-
         attn_weights = torch.bmm(q, k.transpose(1, 2))
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
         if attn_mask is not None:
             attn_mask = attn_mask.unsqueeze(0)
-            if self.onnx_trace:
-                attn_mask = attn_mask.repeat(attn_weights.size(0), 1, 1)
             attn_weights += attn_mask
 
         if key_padding_mask is not None:
@@ -555,19 +505,11 @@ class MultiheadAttention(nn.Module):
         assert v is not None
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
-        if self.onnx_trace and attn.size(1) == 1:
-            # when ONNX tracing a single decoder step (sequence length == 1)
-            # the transpose is a no-op copy before view, thus unnecessary
-            attn = attn.contiguous().view(tgt_len, bsz, embed_dim)
-        else:
-            attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
+        attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn = self.out_proj(attn)
         attn_weights = None  # type: Optional[Tensor]
         if need_weights:
             attn_weights = attn_weights_float.view(bsz, self.num_heads, tgt_len, src_len).transpose(1, 0)
-            if not need_head_weights:
-                # average attention weights over heads
-                attn_weights = attn_weights.mean(dim=0)
 
         return attn, attn_weights
 
