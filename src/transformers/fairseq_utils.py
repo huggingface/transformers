@@ -25,17 +25,7 @@ def get_activation_fn(activation: str) -> Callable:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
 
-def make_positions(tensor, padding_idx: int):
-    """Replace non-padding symbols with their position numbers.
 
-    Position numbers begin at padding_idx+1. Padding symbols are ignored.
-    """
-    # The series of casts and type-conversions here are carefully
-    # balanced to both work with ONNX export and XLA. In particular XLA
-    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
-    # how to handle the dtype kwarg in cumsum.
-    mask = tensor.ne(padding_idx).int()
-    return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
 
 class LearnedPositionalEmbedding(nn.Embedding):
@@ -55,9 +45,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
         num_embeddings += padding_idx + 1  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
         self.max_positions = num_embeddings - self.padding_idx - 1
-        self.onnx_trace = False
-        nn.init.normal_(self.weight, mean=0, std=embedding_dim ** -0.5)
-        nn.init.constant_(self.weight[padding_idx], 0)
 
     def forward(self, input, incremental_state=None):
         """Input is expected to be of size [bsz x seqlen]."""
@@ -66,9 +53,21 @@ class LearnedPositionalEmbedding(nn.Embedding):
             # Without the int() cast, it doesn't work in some cases when exporting to ONNX
             positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
         else:
-            positions = make_positions(input, self.padding_idx,)
+            positions = self.make_positions(input, self.padding_idx)
         return super().forward(positions)
 
+    @staticmethod
+    def make_positions(tensor, padding_idx: int):
+        """Replace non-padding symbols with their position numbers.
+
+        Position numbers begin at padding_idx+1. Padding symbols are ignored.
+        """
+        # The series of casts and type-conversions here are carefully
+        # balanced to both work with ONNX export and XLA. In particular XLA
+        # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
+        # how to handle the dtype kwarg in cumsum.
+        mask = tensor.ne(padding_idx).int()
+        return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
 def softmax(x, dim: int, onnx_trace: bool = False):
     return F.softmax(x, dim=dim, dtype=torch.float32)
@@ -114,7 +113,7 @@ class SelfAttention(nn.Module):
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
-        self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim  # True for all BART
+
 
         self.num_heads = num_heads
         self.dropout = dropout
@@ -124,8 +123,9 @@ class SelfAttention(nn.Module):
 
         self.self_attention = self_attention
         self.encoder_decoder_attention = encoder_decoder_attention
+        qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim  # True for all BART
 
-        assert not self.self_attention or self.qkv_same_dim, (
+        assert not self.self_attention or qkv_same_dim, (
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
@@ -134,9 +134,6 @@ class SelfAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.bias_k = self.bias_v = None
-
-        self.add_zero_attn = add_zero_attn
 
         self.onnx_trace = False
         self.enable_torch_version = False #hasattr(F, "multi_head_attention_forward")
@@ -237,7 +234,7 @@ class SelfAttention(nn.Module):
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights_float = softmax(attn_weights, dim=-1, onnx_trace=self.onnx_trace)
+        attn_weights_float = softmax(attn_weights, dim=-1)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = F.dropout(attn_weights_float.type_as(attn_weights), p=self.dropout, training=self.training,)
         assert v is not None
