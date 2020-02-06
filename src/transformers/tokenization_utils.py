@@ -1624,7 +1624,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 )
             )
 
-        return {k: v if len(v) > 1 else v[0] for k, v in encoding_dict.items()}
+        return encoding_dict
 
     def _convert_token_to_id_with_added_voc(self, token):
         id = self._tokenizer.token_to_id(token)
@@ -1741,7 +1741,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         **kwargs
     ):
         batched_input = [(text, text_pair)] if text_pair else [text]
-        batched_output = self.batch_encode_plus(
+        return self.batch_encode_plus(
             batched_input,
             add_special_tokens=add_special_tokens,
             max_length=max_length,
@@ -1756,7 +1756,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             **kwargs,
         )
 
-        return {key: value[0] for key, value in batched_output.items()}
+        # return {key: value[0] for key, value in batched_output.items()}
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = self.tokenizer.decode(token_ids, skip_special_tokens)
