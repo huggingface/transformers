@@ -196,6 +196,11 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             vocab_file, merges_file, unk_token, bos_token, eos_token, add_prefix_space=add_prefix_space, **kwargs
         )
 
+        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
+
         self.tokenizer._tokenizer.post_processor = RobertaProcessing.new(
-            (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
+            (sep_token, self.sep_token_id),
+            (cls_token, self.cls_token_id)
         )
+

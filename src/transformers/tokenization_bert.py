@@ -550,10 +550,6 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         cls_token="[CLS]",
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
-        max_len=None,
-        pad_to_max_length=False,
-        stride=0,
-        truncation_strategy="longest_first",
         add_special_tokens=True,
         **kwargs
     ):
@@ -576,6 +572,5 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.do_lower_case = do_lower_case
-        self.max_len = max_len
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens

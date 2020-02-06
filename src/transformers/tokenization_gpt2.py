@@ -260,10 +260,6 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
-        pad_to_max_length=False,
-        max_length=None,
-        stride=0,
-        truncation_strategy="longest_first",
         add_prefix_space=False,
         **kwargs
     ):
