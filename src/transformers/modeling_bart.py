@@ -25,18 +25,10 @@ import torch.nn.functional as F
 from torch import nn
 
 from .configuration_bart import BARTConfig
-from .fairseq_utils import LayerNorm, LearnedPositionalEmbedding, SelfAttention, fill_with_neg_inf, get_activation_fn
+from .fairseq_utils import LayerNorm, LearnedPositionalEmbedding, SelfAttention, fill_with_neg_inf
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
 
-
-available_activation_fns = [
-    "relu",
-    "gelu",
-    "gelu_accurate",
-    "tanh",
-    "linear",
-]
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +99,7 @@ class BARTClassificationHead(nn.Module):
     ):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
-        self.activation_fn = get_activation_fn(activation_fn)
+        self.activation_fn = activation_fn
         self.dropout = nn.Dropout(p=pooler_dropout)
         self.out_proj = nn.Linear(inner_dim, num_classes)
 
@@ -290,7 +282,7 @@ class EncoderLayer(nn.Module):
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
-        self.activation_fn = get_activation_fn(config.activation_fn)
+        self.activation_fn = F.gelu
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
@@ -365,7 +357,7 @@ class DecoderLayer(nn.Module):
             self_attention=True,
         )
         self.dropout = config.dropout
-        self.activation_fn = get_activation_fn(config.activation_fn)
+        self.activation_fn = F.gelu
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)

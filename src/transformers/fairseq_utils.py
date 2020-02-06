@@ -10,20 +10,6 @@ from torch import Tensor, nn
 logger = logging.getLogger(__name__)
 
 
-def get_activation_fn(activation: str) -> Callable:
-    """ Returns the activation function corresponding to `activation` """
-    if activation == "relu":
-        return F.relu
-    elif activation == "gelu":
-        return F.gelu
-    elif activation == "tanh":
-        return torch.tanh
-    elif activation == "linear":
-        return lambda x: x
-    else:
-        raise RuntimeError("--activation-fn {} not supported".format(activation))
-
-
 class LearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -230,7 +216,7 @@ class SelfAttention(nn.Module):
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights_float = softmax(attn_weights, dim=-1)
+        attn_weights_float = F.softmax(attn_weights, dim=-1, dtype=torch.float32)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = F.dropout(attn_weights_float.type_as(attn_weights), p=self.dropout, training=self.training,)
         assert v is not None

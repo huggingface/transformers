@@ -228,6 +228,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     @unittest.skipUnless(os.path.exists("/Users/shleifer"), "Placeholder for pretrained check")
     def test_forward_pass_same(self):
+        # TODO(SS): delete this
         import numpy as np
 
         cfg = BARTConfig()
