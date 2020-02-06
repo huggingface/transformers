@@ -26,7 +26,6 @@ from torch import nn
 
 from .configuration_bart import BARTConfig
 from .fairseq_utils import (
-    Embedding,
     LayerNorm,
     LearnedPositionalEmbedding,
     Linear,
@@ -148,7 +147,7 @@ class BARTModel(PreTrainedModel):
         self.output_hidden_states = config.output_hidden_states
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = Embedding(vocab_size, config.d_model, padding_idx)
+        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
@@ -171,7 +170,7 @@ class BARTModel(PreTrainedModel):
                 module.weight.data.normal_(mean=0.0, std=std)
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
-            if isinstance(module, MultiheadAttention):
+            if isinstance(module, MultiheadAttention): # redundant with linear
                 module.q_proj.weight.data.normal_(mean=0.0, std=std)
                 module.k_proj.weight.data.normal_(mean=0.0, std=std)
                 module.v_proj.weight.data.normal_(mean=0.0, std=std)

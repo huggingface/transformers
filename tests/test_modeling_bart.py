@@ -90,8 +90,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 dropout=self.hidden_dropout_prob,
                 attention_dropout=self.attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
-                # type_vocab_size=self.type_vocab_size,
-                # initializer_range=self.initializer_range,
             )
             sequence_labels = None
             token_labels = None
@@ -148,10 +146,14 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         model.to(torch_device)
         model.eval()
         # test init
-        self.assertAlmostEqual(torch.std(model.encoder.embed_tokens.weight).item(),
-                               config.init_std, 2)
-        self.assertAlmostEqual(torch.std(model.encoder.layers[0].self_attn.k_proj.weight).item(),
-                               config.init_std, 2)
+        self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
+        _check_var = lambda module: self.assertAlmostEqual(torch.std(module.weight).item(), config.init_std, 2)
+        _check_var(model.encoder.embed_tokens)
+        _check_var(model.encoder.layers[0].self_attn.k_proj)
+        _check_var(model.encoder.layers[0].fc1)
+
+
+        #self.assertEqual()
 
         decoder_features_with_mask, _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
         decoder_features, enc_features = model(input_ids)

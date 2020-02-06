@@ -302,13 +302,6 @@ def Linear(in_features, out_features, bias=True):
     return m
 
 
-def Embedding(num_embeddings, embedding_dim, padding_idx):
-    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
-    nn.init.normal_(m.weight, mean=0, std=embedding_dim ** -0.5)
-    nn.init.constant_(m.weight[padding_idx], 0)
-    return m
-
-
 class MultiheadAttention(nn.Module):
     """Multi-headed attention. See "Attention Is All You Need" for more details.
     """
@@ -352,8 +345,6 @@ class MultiheadAttention(nn.Module):
         self.bias_k = self.bias_v = None
 
         self.add_zero_attn = add_zero_attn
-
-        self.reset_parameters()
 
         self.onnx_trace = False
         self.enable_torch_version = hasattr(F, "multi_head_attention_forward")
