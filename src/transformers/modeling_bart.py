@@ -25,13 +25,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from .configuration_bart import BARTConfig
-from .fairseq_utils import (
-    LayerNorm,
-    LearnedPositionalEmbedding,
-    SelfAttention,
-    fill_with_neg_inf,
-    get_activation_fn,
-)
+from .fairseq_utils import LayerNorm, LearnedPositionalEmbedding, SelfAttention, fill_with_neg_inf, get_activation_fn
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
 
@@ -170,6 +164,7 @@ class BARTModel(PreTrainedModel):
                 module.weight.data.normal_(mean=0.0, std=std)
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
+
         self.apply(init_params)
 
     def get_input_embeddings(self):
@@ -328,7 +323,6 @@ class EncoderLayer(nn.Module):
         # TODO: to formally solve this problem, we need to change fairseq's SelfAttention.
         x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
             query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions,
-
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -385,8 +379,6 @@ class DecoderLayer(nn.Module):
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim, export=False)
-
-
 
     def forward(
         self,
@@ -452,7 +444,7 @@ class DecoderLayer(nn.Module):
 
         x, encoder_attn_weights = self.encoder_attn(
             query=x,
-            key=encoder_out, # could be None
+            key=encoder_out,  # could be None
             value=encoder_out,
             key_padding_mask=encoder_padding_mask,
             incremental_state=incremental_state,

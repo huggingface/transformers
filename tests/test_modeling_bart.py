@@ -52,7 +52,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.batch_size = 13
             self.seq_length = 7
             self.is_training = True
-            #self.use_token_type_ids = False
+            # self.use_token_type_ids = False
             self.use_labels = False
             self.vocab_size = 99
             self.hidden_size = 32
@@ -63,7 +63,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.hidden_dropout_prob = 0.1
             self.attention_probs_dropout_prob = 0.1
             self.max_position_embeddings = 1024
-            torch.manual_seed(0)
+            #torch.manual_seed(0)
 
             # self.e
 
@@ -74,7 +74,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             # self.scope = None
 
         def prepare_config_and_inputs(self):
-            input_ids = torch.Tensor([[41, 82, 10, 2, 83, 74, 45],
+            input_ids = torch.Tensor(
+                [
+                    [41, 82, 10, 2, 83, 74, 45],
                     [15, 83, 19, 13, 44, 62, 18],
                     [61, 65, 92, 14, 18, 65, 13],
                     [6, 57, 89, 14, 54, 55, 54],
@@ -86,12 +88,16 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                     [42, 51, 24, 94, 40, 7, 6],
                     [37, 72, 79, 45, 5, 12, 17],
                     [2, 9, 64, 29, 28, 62, 31],
-                    [44, 7, 32, 39, 1, 43, 29]]).long()
+                    [44, 7, 32, 39, 1, 43, 29],
+                ]
+            ).long()
             self.parent.assertEqual(input_ids.size(), (self.batch_size, self.seq_length))
             self.parent.assertGreaterEqual(self.vocab_size, input_ids.max().item())
 
-            #input_ids = INPUT_IDS# ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_mask = torch.Tensor([[0, 0, 0, 0, 0, 0, 1],
+            # input_ids = INPUT_IDS# ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_mask = torch.Tensor(
+                [
+                    [0, 0, 0, 0, 0, 0, 1],
                     [1, 1, 0, 1, 1, 0, 1],
                     [0, 1, 0, 0, 0, 1, 1],
                     [1, 1, 1, 0, 0, 1, 0],
@@ -103,9 +109,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                     [0, 0, 1, 0, 1, 0, 0],
                     [1, 0, 1, 1, 1, 0, 1],
                     [1, 0, 0, 0, 0, 1, 1],
-                    [0, 0, 1, 0, 1, 0, 0]]).long()
-            #input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
+                    [0, 0, 1, 0, 1, 0, 0],
+                ]
+            ).long()
+            # input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
             config = BARTConfig(
                 vocab_size=self.vocab_size,
@@ -159,7 +166,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    #def test_initialization(self):
+    # def test_initialization(self):
 
     def test_model(self):
         (
@@ -182,7 +189,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.layers[0].self_attn.k_proj)
         _check_var(model.encoder.layers[0].fc1)
 
-        decoder_features_with_mask, _ = model(input_ids, attention_mask=input_mask)  # check that attention_mask doesnt break or something
+        decoder_features_with_mask, _ = model(
+            input_ids, attention_mask=input_mask
+        )  # check that attention_mask doesnt break or something
         decoder_features, enc_features = model(input_ids)
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
@@ -190,10 +199,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertTrue((decoder_features_with_mask == decoder_features).all().item())
         import numpy as np
-        last_few_features = decoder_features_with_mask.detach().contiguous().view(-1, )[-3: ].numpy()
-        expected_result = np.array([ 0.688,  0.533, -0.663])
-        np.testing.assert_almost_equal(last_few_features, expected_result, 3)
 
+        last_few_features = decoder_features_with_mask.detach().contiguous().view(-1,)[-3:].numpy()
+        expected_result = np.array([0.688, 0.533, -0.663])
+        np.testing.assert_almost_equal(last_few_features, expected_result, 3)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
