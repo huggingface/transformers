@@ -391,7 +391,6 @@ class DecoderLayer(nn.Module):
         self_attn_mask=None,
         self_attn_padding_mask=None,
         need_attn=False,
-        need_head_weights=False,
     ):
         """
         Args:
@@ -400,14 +399,11 @@ class DecoderLayer(nn.Module):
                 ByteTensor of shape `(batch, src_len)` where padding
                 elements are indicated by ``1``.
             need_attn (bool, optional): return attention weights
-            need_head_weights (bool, optional): return attention weights
                 for each head (default: return average over heads).
 
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-        if need_head_weights:
-            need_attn = True
 
         residual = x
         if prev_self_attn_state is not None:
@@ -738,7 +734,7 @@ class BartDecoder(nn.Module):
                     incremental_state,
                     self_attn_mask=self_attn_mask,
                     self_attn_padding_mask=self_attn_padding_mask,
-                    need_attn=True,  # (i == alignment_layer),
+                    need_attn=self.output_attentions,  # (i == alignment_layer),
                 )
                 if self.output_hidden_states:
                     all_hidden_states += (x,)
