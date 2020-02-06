@@ -20,20 +20,11 @@ import logging
 from pathlib import Path
 
 import fairseq
-import torch
 from fairseq.models.bart import BARTModel as FairseqBartModel
 from packaging import version
 
 from transformers.configuration_bart import BARTConfig
 from transformers.modeling_bart import BARTModel
-from transformers.modeling_bert import (
-    BertConfig,
-    BertIntermediate,
-    BertLayer,
-    BertOutput,
-    BertSelfAttention,
-    BertSelfOutput,
-)
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
