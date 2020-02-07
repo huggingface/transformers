@@ -26,13 +26,14 @@ logger = logging.getLogger(__name__)
 _bart_large_url = "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-config.json"
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bart-large": _bart_large_url,
-    "bart-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-config.json",
-    "bart-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-cnn-config.json",
+    "bart-mnli": _bart_large_url,  # fine as same
+    "bart-cnn": None,  # not done
 }
 
 
-class BARTConfig(PretrainedConfig):
+class BartConfig(PretrainedConfig):
     model_type = "bart"
+    pretrained_config_archive_map = BART_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
         self,

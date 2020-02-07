@@ -24,22 +24,22 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from .configuration_bart import BARTConfig
+from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings
-from .modeling_utils import ModuleUtilsMixin, PreTrainedModel
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
-    "bart.large": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-pytorch_model.bin",
-    "bart.large.mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-pytorch_model.bin",
-    "bart.large.cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-cnn-pytorch_model.bin",
+    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-pytorch_model.bin",
+    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-pytorch_model.bin",
+    "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-cnn-pytorch_model.bin",
 }
 
 
-BART_START_DOCSTRING = r"""  TODOSS: FIXME)"""
+BART_START_DOCSTRING = r"""  TODO(SS): FIXME"""
 
 ROBERTA_INPUTS_DOCSTRING = r"""
     Inputs:
@@ -88,9 +88,10 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 """
 
 
-class PretrainedBartModel(PreTrainedModel, ModuleUtilsMixin):
-    config_class = BARTConfig
+class PretrainedBartModel(PreTrainedModel):
+    config_class = BartConfig
     base_model_prefix = "model"
+    pretrained_model_archive_map = BART_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def _init_weights(self, module):
         std = self.init_std  # used by init_params
@@ -111,13 +112,13 @@ class PretrainedBartModel(PreTrainedModel, ModuleUtilsMixin):
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
-class BARTModel(PretrainedBartModel,):
+class BartModel(PretrainedBartModel,):
     """FIXME(SS)"""
 
-    config_class = BARTConfig
+    config_class = BartConfig
     base_model_prefix = "model"
 
-    def __init__(self, config: BARTConfig):  # should take config
+    def __init__(self, config: BartConfig):  # should take config
         super().__init__(config)
         self.config = config
         self._is_generation_fast = False
@@ -129,7 +130,7 @@ class BARTModel(PretrainedBartModel,):
 
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
-        # TODO(SS): paper says weight init slightly different than bert, but their code looks similar
+
         self.init_std = config.init_std
         self.init_weights()
         self._is_generation_fast = False  # TODO(SS): this might need deletion
@@ -237,7 +238,7 @@ class EncoderLayer(nn.Module):
         args (argparse.Namespace): parsed command-line arguments
     """
 
-    def __init__(self, config: BARTConfig):
+    def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
         self.output_attentions = config.output_attentions
@@ -311,7 +312,7 @@ class DecoderLayer(nn.Module):
             (default: False).
     """
 
-    def __init__(self, config: BARTConfig):
+    def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = SelfAttention(
@@ -441,7 +442,7 @@ class BartEncoder(nn.Module):
         embed_tokens (torch.nn.Embedding): input embedding
     """
 
-    def __init__(self, config: BARTConfig, embed_tokens):
+    def __init__(self, config: BartConfig, embed_tokens):
         super().__init__()
         self.register_buffer("version", torch.Tensor([3]))
 
@@ -577,7 +578,7 @@ class BartDecoder(nn.Module):
             (default: False).
     """
 
-    def __init__(self, config: BARTConfig, embed_tokens):
+    def __init__(self, config: BartConfig, embed_tokens):
         super().__init__()
         self.register_buffer("version", torch.Tensor([3]))  # TODO(SS): could delete this and pop from state_dict
         self.output_attentions = config.output_attentions
@@ -705,8 +706,8 @@ class BartDecoder(nn.Module):
 
 
 class BartWithLMHeadModel(nn.Module):
-    def __init__(self, config: BARTConfig):
-        self.transformer = BARTModel(config)
+    def __init__(self, config: BartConfig):
+        self.transformer = BartModel(config)
 
     def forward(self, *args, **kwargs):
         tfmr_output = self.transformer(*args, **kwargs)
@@ -741,9 +742,9 @@ class BARTClassificationHead(nn.Module):
 class BartForSequenceClassification(PretrainedBartModel):
     eos_token = 2
 
-    def __init__(self, config: BARTConfig, **kwargs):
+    def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
-        self.model = BARTModel(config)
+        self.model = BartModel(config)
         self.classification_head = BARTClassificationHead(
             config.d_model, config.d_model, config.num_labels, config.classif_dropout,
         )

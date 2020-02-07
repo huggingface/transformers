@@ -28,8 +28,8 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 if is_torch_available():
     import torch
     from transformers import (
-        BARTModel,
-        BARTConfig,
+        BartModel,
+        BartConfig,
     )
     from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -37,7 +37,7 @@ if is_torch_available():
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BARTModel,) if is_torch_available() else ()
+    all_model_classes = (BartModel,) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False  # TODO(SS): may want to fix this
@@ -115,7 +115,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             ).long()
             # input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
-            config = BARTConfig(
+            config = BartConfig(
                 vocab_size=self.vocab_size,
                 d_model=self.hidden_size,
                 encoder_layers=self.num_hidden_layers,
@@ -161,7 +161,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BARTModelTest.ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BARTConfig)
+        self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -179,7 +179,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             choice_labels,
         ) = self.model_tester.prepare_config_and_inputs()
 
-        model = BARTModel(config=config)
+        model = BartModel(config=config)
         model.to(torch_device)
         model.eval()
         # test init
@@ -228,8 +228,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         # TODO(SS): delete this
         import numpy as np
 
-        cfg = BARTConfig()
-        model = BARTModel(config=cfg)
+        cfg = BartConfig()
+        model = BartModel(config=cfg)
 
         model.load_state_dict(torch.load("/Users/shleifer/upgraded_bart_model.pt"))
         model.eval()
@@ -244,7 +244,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = BARTModel.from_pretrained("bart-large")
+        model = BartModel.from_pretrained("bart-large")
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 50265))
@@ -258,7 +258,7 @@ class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = BARTModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
     # @slow

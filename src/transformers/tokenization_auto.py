@@ -21,7 +21,7 @@ from collections import OrderedDict
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
-    BARTConfig,
+    BartConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
@@ -65,7 +65,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (AlbertConfig, AlbertTokenizer),
         (CamembertConfig, CamembertTokenizer),
         (XLMRobertaConfig, XLMRobertaTokenizer),
-        (BARTConfig, BartTokenizer),
+        (BartConfig, BartTokenizer),
         (RobertaConfig, RobertaTokenizer),
         (BertConfig, BertTokenizer),
         (OpenAIGPTConfig, OpenAIGPTTokenizer),

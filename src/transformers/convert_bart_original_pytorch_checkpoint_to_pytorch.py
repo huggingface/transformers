@@ -23,8 +23,8 @@ import fairseq
 import torch
 from packaging import version
 
-from transformers.configuration_bart import BARTConfig
-from transformers.modeling_bart import BartForSequenceClassification, BARTModel
+from transformers.configuration_bart import BartConfig
+from transformers.modeling_bart import BartForSequenceClassification, BartModel
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -56,7 +56,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     b2 = torch.hub.load("pytorch/fairseq", checkpoint_path)
     b2.eval()  # disable dropout
     b2.model.upgrade_state_dict(b2.model.state_dict())
-    config = BARTConfig()
+    config = BartConfig()
     tokens = b2.encode(SAMPLE_TEXT).unsqueeze(0)
     # TODO(SS): test BartTokenizer Equality
 
@@ -65,7 +65,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     if checkpoint_path == "bart.large":
         state_dict = b2.model.state_dict()
         state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-        model = BARTModel(config)
+        model = BartModel(config)
         their_output = b2.extract_features(tokens)
 
     else:  # MNLI Case
