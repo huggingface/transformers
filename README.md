@@ -195,7 +195,7 @@ MODELS = [(BertModel,       BertTokenizer,       'bert-base-uncased'),
           (TransfoXLModel,  TransfoXLTokenizer,  'transfo-xl-wt103'),
           (XLNetModel,      XLNetTokenizer,      'xlnet-base-cased'),
           (XLMModel,        XLMTokenizer,        'xlm-mlm-enfr-1024'),
-          (DistilBertModel, DistilBertTokenizer, 'distilbert-base-uncased'),
+          (DistilBertModel, DistilBertTokenizer, 'distilbert-base-cased'),
           (RobertaModel,    RobertaTokenizer,    'roberta-base'),
           (XLMRobertaModel, XLMRobertaTokenizer, 'xlm-roberta-base'),
          ]
