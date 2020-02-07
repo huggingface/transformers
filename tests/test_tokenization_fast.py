@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 
+from tests.utils import require_torch
 from transformers import (
     BertTokenizer,
     BertTokenizerFast,
@@ -83,6 +84,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Bert should match 100%
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
+    @require_torch
     def test_transfoxl(self):
         for tokenizer_name in TransfoXLTokenizer.pretrained_vocab_files_map["pretrained_vocab_file"].keys():
             tokenizer_p = TransfoXLTokenizer.from_pretrained(tokenizer_name)
