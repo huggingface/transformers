@@ -1655,7 +1655,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             max_length,
             stride,
             truncation_strategy,
-            pad_to_max_length,
+            pad_to_max_length or return_tensors,  # Need to pad to the max seq length if creating tensors
             self.padding_side,
             self.pad_token_id,
             self.pad_token_type_id,
