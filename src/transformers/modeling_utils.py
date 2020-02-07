@@ -421,7 +421,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
-                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME))
+                archive_file = hf_bucket_url(
+                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME)
+                )
 
             # redirect to the cache, if necessary
             try:
