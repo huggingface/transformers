@@ -53,7 +53,7 @@ class BARTConfig(PretrainedConfig):
         max_position_embeddings=1024,
         init_std=0.02,
         classifier_dropout=0.0,
-        num_labels = 3,
+        num_labels=3,
         **common_kwargs
     ):
         super().__init__(**common_kwargs)

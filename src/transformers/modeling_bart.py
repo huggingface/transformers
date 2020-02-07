@@ -88,30 +88,6 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 """
 
 
-class BARTClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    # copied from fairseq
-
-    def __init__(
-        self, input_dim, inner_dim, num_classes, activation_fn, pooler_dropout,
-    ):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.activation_fn = activation_fn
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, features, **kwargs):
-        x = features
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = self.activation_fn(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
 class PretrainedBartModel(PreTrainedModel, ModuleUtilsMixin):
     config_class = BARTConfig
     base_model_prefix = "model"
@@ -740,21 +716,44 @@ class BartWithLMHeadModel(nn.Module):
         return F.linear(x, self.transformer.shared.weight)
 
 
+class BARTClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    # This can trivially be shared with RobertaClassificationHead
+
+    def __init__(
+        self, input_dim, inner_dim, num_classes, pooler_dropout,
+    ):
+        super().__init__()
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
+
+    def forward(self, x, **unused):
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
+
 class BartForSequenceClassification(PretrainedBartModel):
-    def __init__(self, config: BARTConfig, num_classes=None, hidden_dim=None, activation_fn=torch.tanh, **kwargs):
+    eos_token = 2
+
+    def __init__(self, config: BARTConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BARTModel(config)
         self.classification_head = BARTClassificationHead(
-            config.d_model, config.d_model, config.num_labels, activation_fn, config.classif_dropout,
+            config.d_model, config.d_model, config.num_labels, config.classif_dropout,
         )
 
-    def forward(self, *args, **kwargs):
-        tfmr_output = self.model(*args, **kwargs)
-        preds = self.classification_head(tfmr_output[0])
+    def forward(self, input_ids, *args, **kwargs):
+        tfmr_output = self.model(input_ids, *args, **kwargs)
+        x = tfmr_output[0]  # last hidden state
+        sentence_representation = x[input_ids.eq(self.eos_token), :].view(x.size(0), -1, x.size(-1))[:, -1, :]
+        preds = self.classification_head(sentence_representation)
         return (preds,) + tfmr_output
-
-    def output_layer(self, x):
-        return F.linear(x, self.model.shared.weight)
 
 
 # Helper Modules
