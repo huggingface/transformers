@@ -63,13 +63,13 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
     )
 }
 
-FILL_MASK_FINETUNED_MODELS = {
-    ("distilroberta-base", "distilroberta-base", None),
-}
+FILL_MASK_FINETUNED_MODELS = [
+    (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
+]
 
-TF_FILL_MASK_FINETUNED_MODELS = {
-    ("distilroberta-base", "distilroberta-base", None),
-}
+TF_FILL_MASK_FINETUNED_MODELS = [
+    (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
+]
 
 
 class MonoColumnInputTestCase(unittest.TestCase):
