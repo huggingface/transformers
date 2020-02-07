@@ -154,6 +154,9 @@ class AutoTokenizer:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
 
+            use_fast: (`optional`) boolean, default True:
+                Indicate if transformers should try to load the fast version of the tokenizer (True) or use the Python one (False).
+
             inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
 
             kwargs: (`optional`) keyword arguments: will be passed to the Tokenizer ``__init__`` method. Can be used to set special tokens like ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``, ``additional_special_tokens``. See parameters in the doc string of :class:`~transformers.PreTrainedTokenizer` for details.
@@ -177,9 +180,10 @@ class AutoTokenizer:
         if "bert-base-japanese" in pretrained_model_name_or_path:
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+        use_fast = kwargs.pop("use_fast", True)
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
             if isinstance(config, config_class):
-                if tokenizer_class_fast:
+                if tokenizer_class_fast and use_fast:
                     return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
                     return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

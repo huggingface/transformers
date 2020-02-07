@@ -96,3 +96,8 @@ class AutoTokenizerTest(unittest.TestCase):
                         # Check for Fast tokenizer implementation if provided
                         if child_model_fast and parent_model_fast:
                             self.assertFalse(issubclass(child_model_fast, parent_model_fast))
+
+    def test_from_pretrained_use_fast_toggle(self):
+        self.assertIsInstance(AutoTokenizer.from_pretrained('bert-base-cased'), BertTokenizerFast)
+        self.assertIsInstance(AutoTokenizer.from_pretrained('bert-base-cased', use_fast=False), BertTokenizer)
+
