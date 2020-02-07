@@ -114,7 +114,7 @@ class BARTClassificationHead(nn.Module):
 
 class PretrainedBartModel(PreTrainedModel, ModuleUtilsMixin):
     config_class = BARTConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
 
     def _init_weights(self, module):
         std = self.init_std  # used by init_params
@@ -131,7 +131,7 @@ class PretrainedBartModel(PreTrainedModel, ModuleUtilsMixin):
 
 
 @add_start_docstrings(
-    "The bare BART Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare BART Model model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
@@ -139,7 +139,7 @@ class BARTModel(PretrainedBartModel,):
     """FIXME(SS)"""
 
     config_class = BARTConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
 
     def __init__(self, config: BARTConfig):  # should take config
         super().__init__(config)
@@ -740,24 +740,21 @@ class BartWithLMHeadModel(nn.Module):
         return F.linear(x, self.transformer.shared.weight)
 
 
-class BartForSequenceClassification(nn.Module):
-    def __init__(self, config: BARTConfig, num_classes, hidden_dim=None, activation_fn=torch.tanh):
-        self.transformer = BARTModel(config)
+class BartForSequenceClassification(PretrainedBartModel):
+    def __init__(self, config: BARTConfig, num_classes=None, hidden_dim=None, activation_fn=torch.tanh, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = BARTModel(config)
         self.classification_head = BARTClassificationHead(
-            config.d_model, hidden_dim or config.d_model, config.num_classes, activation_fn, config.pooler_dropout,
+            config.d_model, config.d_model, config.num_labels, activation_fn, config.classif_dropout,
         )
 
     def forward(self, *args, **kwargs):
-        tfmr_output = self.transformer(*args, **kwargs)
+        tfmr_output = self.model(*args, **kwargs)
         preds = self.classification_head(tfmr_output[0])
         return (preds,) + tfmr_output
 
     def output_layer(self, x):
-        return F.linear(x, self.transformer.shared.weight)
-
-
-# class BartForSentencePairClassification:
-#    pass
+        return F.linear(x, self.model.shared.weight)
 
 
 # Helper Modules

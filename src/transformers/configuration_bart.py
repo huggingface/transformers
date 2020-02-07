@@ -53,6 +53,7 @@ class BARTConfig(PretrainedConfig):
         max_position_embeddings=1024,
         init_std=0.02,
         classifier_dropout=0.0,
+        num_labels = 3,
         **common_kwargs
     ):
         super().__init__(**common_kwargs)
@@ -79,6 +80,7 @@ class BARTConfig(PretrainedConfig):
 
         # Classifier stuff
         self.classif_dropout = classifier_dropout
+        self.num_labels = num_labels
 
     @property
     def num_attention_heads(self):
