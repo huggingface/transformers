@@ -550,7 +550,7 @@ XLNET_INPUTS_DOCSTRING = r"""
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
+            corresponds to a `sentence B` token. The classifier token should be represented by a ``2``.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         input_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
