@@ -24,7 +24,7 @@ from fairseq.models.bart import BARTModel as FairseqBartModel
 from packaging import version
 
 from transformers.configuration_bart import BARTConfig
-from transformers.modeling_bart import BARTModel
+from transformers.modeling_bart import BARTModel, BartForSequenceClassification
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -36,29 +36,63 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 
+rename_keys = [('model.classification_heads.mnli.dense.weight',
+  'classification_head.dense.weight'),
+ ('model.classification_heads.mnli.dense.bias',
+  'classification_head.dense.bias'),
+ ('model.classification_heads.mnli.out_proj.weight',
+  'classification_head.out_proj.weight'),
+ ('model.classification_heads.mnli.out_proj.bias',
+  'classification_head.out_proj.bias')]
+
+
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
+
+import torch
 
 def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak transformer's weights to our BERT structure.
+    Copy/paste/tweak model's weights to our BERT structure.
     """
-    b2 = FairseqBartModel.from_pretrained(checkpoint_path)
+    #b2 = FairseqBartModel.from_pretrained(checkpoint_path)
+    b2 = torch.hub.load('pytorch/fairseq', checkpoint_path)
     b2.eval()  # disable dropout
     b2.model.upgrade_state_dict(b2.model.state_dict())
-    upgraded = b2.model.state_dict()
-    upgraded["shared.weight"] = upgraded["decoder.embed_tokens.weight"]
     config = BARTConfig()
-    model = BARTModel(config)
-    model.load_state_dict(upgraded)
-
     tokens = b2.encode(SAMPLE_TEXT)
     # TODO(SS): test BartTokenizer Equality
-    model.eval()
-    fairseq_features = b2.extract_features(tokens)
-    all_outputs = model.forward(tokens)
-    new_outputs = all_outputs[0]
+    their_output = b2.extract_features(tokens)
 
-    assert fairseq_features.shape == new_outputs.shape
-    assert (fairseq_features == new_outputs).all().item()
+
+    if checkpoint_path == 'bart.large':
+        state_dict = b2.model.state_dict()
+        state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
+        model = BARTModel(config)
+        their_output = b2.model.classification_heads["mnli"](their_output)
+
+    else:  # MNLI Case
+        state_dict = b2.state_dict()
+        state_dict["model.shared.weight"] = state_dict["model.decoder.embed_tokens.weight"]
+        for src, dest in rename_keys:
+            rename_key(state_dict, src, dest)
+        state_dict.pop('_float_tensor', None)
+        model = BartForSequenceClassification(config)
+
+
+    model.load_state_dict(state_dict)
+    model.eval()
+
+
+
+
+
+    all_outputs = model(tokens)
+    our_outputs = all_outputs[0]
+
+    assert their_output.shape == our_outputs.shape
+    assert (their_output == our_outputs).all().item()
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
 
