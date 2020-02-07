@@ -72,16 +72,16 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
 
-        if pad_to_max_length and pad_token:
-            tokenizer.enable_padding(
-                max_length=max_length,
-                direction=padding_side,
-                pad_id=pad_token_id,
-                pad_type_id=pad_token_type_id,
-                pad_token=pad_token,
-            )
-        else:
-            logger.warning("Disabled padding. No padding token set")
+    if pad_to_max_length and pad_token:
+        tokenizer.enable_padding(
+            max_length=max_length,
+            direction=padding_side,
+            pad_id=pad_token_id,
+            pad_type_id=pad_token_type_id,
+            pad_token=pad_token,
+        )
+    else:
+        logger.warning("Disabled padding. No padding token set")
 
     yield
 
@@ -1565,8 +1565,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_overflowing_tokens=False,
         return_special_tokens_mask=False,
         return_offsets_mapping=False,
-        pad_token_id: int = 0,
-        pad_to_length: int = -1,
     ):
         if return_overflowing_tokens and encoding.overflowing is not None:
             encodings = [encoding] + encoding.overflowing
@@ -1585,21 +1583,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             encoding_dict["special_tokens_mask"] = [e.special_tokens_mask for e in encodings]
         if return_offsets_mapping:
             encoding_dict["offset_mapping"] = [e.offsets for e in encodings]
-
-        if pad_to_length > 0:
-            for i in range(len(encoding_dict["input_ids"])):
-                if len(encoding_dict["input_ids"][i]) < pad_to_length:
-                    padding = pad_to_length - len(encoding_dict["input_ids"][i])
-                    encoding_dict["input_ids"][i] += [pad_token_id] * padding
-
-                    if return_attention_mask:
-                        encoding_dict["attention_mask"][i] += [0] * padding
-
-                    if return_special_tokens_mask:
-                        encoding_dict["special_tokens_mask"][i] += [1] * padding
-
-                    if return_token_type_ids:
-                        encoding_dict["token_type_ids"][i] += [1] * padding
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
