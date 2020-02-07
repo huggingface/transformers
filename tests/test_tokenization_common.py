@@ -204,7 +204,7 @@ class TokenizerTesterMixin:
         encoded = tokenizer.encode(text, add_special_tokens=False)
 
         input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
-        output_encoded = tokenizer.encode(output_text, add_special_tokens=False)
+        output_encoded = tokenizer.encode(output_text, add_special_tokens=False, add_prefix_space=True)
         special_token_id = tokenizer.encode(special_token, add_special_tokens=False)
         assert encoded == input_encoded + special_token_id + output_encoded
 
@@ -263,7 +263,7 @@ class TokenizerTesterMixin:
         seq_0 = "Test this method."
         seq_1 = "With these inputs."
 
-        sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=False)
+        sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=False, add_prefix_space=True)
         attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
 
         # Method is implemented (e.g. not GPT-2)
@@ -276,7 +276,7 @@ class TokenizerTesterMixin:
         seq_0 = "This is a sentence to be encoded."
         stride = 2
 
-        sequence = tokenizer.encode(seq_0, add_special_tokens=False)
+        sequence = tokenizer.encode(seq_0, add_special_tokens=False, add_prefix_space=True)
         num_added_tokens = tokenizer.num_added_tokens()
         total_length = len(sequence) + num_added_tokens
         information = tokenizer.encode_plus(
@@ -298,12 +298,13 @@ class TokenizerTesterMixin:
         seq_1 = "This is another sentence to be encoded."
         stride = 2
 
-        sequence_0_no_special_tokens = tokenizer.encode(seq_0, add_special_tokens=False)
-        sequence_1_no_special_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
+        sequence_0_no_special_tokens = tokenizer.encode(seq_0, add_special_tokens=False, add_prefix_space=True)
+        sequence_1_no_special_tokens = tokenizer.encode(seq_1, add_special_tokens=False, add_prefix_space=True)
 
         sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
         truncated_second_sequence = tokenizer.build_inputs_with_special_tokens(
-            tokenizer.encode(seq_0, add_special_tokens=False), tokenizer.encode(seq_1, add_special_tokens=False)[:-2],
+            tokenizer.encode(seq_0, add_special_tokens=False, add_prefix_space=True),
+            tokenizer.encode(seq_1, add_special_tokens=False, add_prefix_space=True)[:-2],
         )
 
         information = tokenizer.encode_plus(
@@ -340,12 +341,40 @@ class TokenizerTesterMixin:
 
         sequence = "Let's encode this sequence"
 
-        tokens = tokenizer.tokenize(sequence)
+        tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
         formatted_input = tokenizer.encode(sequence, add_special_tokens=True)
 
         self.assertEqual(tokenizer.encode(tokens, add_special_tokens=True), formatted_input)
         self.assertEqual(tokenizer.encode(input_ids, add_special_tokens=True), formatted_input)
+
+    def test_swap_special_token(self):
+        tokenizer = self.get_tokenizer()
+
+        mask = "<mask>"
+        sequence = "Encode this sequence"
+        sequence_masked_0 = "Encode <mask> sequence"
+        sequence_masked_1 = "<mask> this sequence"
+
+        # Add tokens so that masked token isn't split
+        tokenizer.add_tokens(sequence.split())
+        tokenizer.add_special_tokens({"mask_token": mask})
+        mask_ind = tokenizer.convert_tokens_to_ids(mask)
+        encoded = tokenizer.encode(sequence, add_special_tokens=False)
+
+        # Test first masked sequence
+        encoded_masked = tokenizer.encode(sequence_masked_0, add_special_tokens=False)
+        mask_loc = encoded_masked.index(mask_ind)
+        encoded_masked[mask_loc] = encoded[mask_loc]
+
+        self.assertEqual(encoded_masked, encoded)
+
+        # Test second masked sequence
+        encoded_masked = tokenizer.encode(sequence_masked_0, add_special_tokens=False)
+        mask_loc = encoded_masked.index(mask_ind)
+        encoded_masked[mask_loc] = encoded[mask_loc]
+
+        self.assertEqual(encoded_masked, encoded)
 
     def test_special_tokens_mask(self):
         tokenizer = self.get_tokenizer()
@@ -354,7 +383,7 @@ class TokenizerTesterMixin:
         sequence_1 = "This one too please."
 
         # Testing single inputs
-        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
+        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False, add_prefix_space=True)
         encoded_sequence_dict = tokenizer.encode_plus(
             sequence_0, add_special_tokens=True, return_special_tokens_mask=True
         )
@@ -369,9 +398,8 @@ class TokenizerTesterMixin:
         self.assertEqual(encoded_sequence, filtered_sequence)
 
         # Testing inputs pairs
-        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False) + tokenizer.encode(
-            sequence_1, add_special_tokens=False
-        )
+        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False, add_prefix_space=True)
+        encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False, add_prefix_space=True)
         encoded_sequence_dict = tokenizer.encode_plus(
             sequence_0, sequence_1, add_special_tokens=True, return_special_tokens_mask=True
         )

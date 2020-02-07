@@ -176,14 +176,18 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [None]
         expected_multi_result = [
             [
-                {"score": 0.008698059245944023, "sequence": "<s>My name is John</s>", "token": 610},
-                {"score": 0.007750614080578089, "sequence": "<s>My name is Chris</s>", "token": 1573},
+                {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
+                {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
             ],
             [
-                {"score": 0.2721288502216339, "sequence": "<s>The largest city in France is Paris</s>", "token": 2201},
                 {
-                    "score": 0.19764970242977142,
-                    "sequence": "<s>The largest city in France is Lyon</s>",
+                    "sequence": "<s> The largest city in France is Paris</s>",
+                    "score": 0.3185044229030609,
+                    "token": 2201,
+                },
+                {
+                    "sequence": "<s> The largest city in France is Lyon</s>",
+                    "score": 0.21112334728240967,
                     "token": 12790,
                 },
             ],
@@ -209,14 +213,18 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [None]
         expected_multi_result = [
             [
-                {"score": 0.008698059245944023, "sequence": "<s>My name is John</s>", "token": 610},
-                {"score": 0.007750614080578089, "sequence": "<s>My name is Chris</s>", "token": 1573},
+                {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
+                {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
             ],
             [
-                {"score": 0.2721288502216339, "sequence": "<s>The largest city in France is Paris</s>", "token": 2201},
                 {
-                    "score": 0.19764970242977142,
-                    "sequence": "<s>The largest city in France is Lyon</s>",
+                    "sequence": "<s> The largest city in France is Paris</s>",
+                    "score": 0.3185044229030609,
+                    "token": 2201,
+                },
+                {
+                    "sequence": "<s> The largest city in France is Lyon</s>",
+                    "score": 0.21112334728240967,
                     "token": 12790,
                 },
             ],

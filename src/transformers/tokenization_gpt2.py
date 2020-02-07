@@ -191,15 +191,13 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text, add_prefix_space=False):
-        """ Tokenize a string.
-            Args:
-                - add_prefix_space (boolean, default False):
-                    Begin the sentence with at least one space to get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
-        """
-        if add_prefix_space:
+    def tokenize(self, text, add_prefix_space=False, **kwargs):
+        if not text[0].isspace() and add_prefix_space:
             text = " " + text
+        return super().tokenize(text, **kwargs)
 
+    def _tokenize(self, text):
+        """ Tokenize a string. """
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             token = "".join(
