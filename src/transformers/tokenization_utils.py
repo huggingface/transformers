@@ -74,7 +74,7 @@ def truncate_and_pad(
 
     if pad_to_max_length and pad_token:
         tokenizer.enable_padding(
-            max_length=max_length,
+            max_length=None,
             direction=padding_side,
             pad_id=pad_token_id,
             pad_type_id=pad_token_type_id,
@@ -1678,7 +1678,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 tokens = self._tokenizer.encode_batch(batch_text_or_text_pairs)
 
         # Convert encoding to dict
-        max_length = max(map(lambda e: len(e.ids), tokens))
         tokens = [
             self._convert_encoding(
                 encoding,
@@ -1722,7 +1721,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         **kwargs
     ):
         batched_input = [(text, text_pair)] if text_pair else [text]
-        return self.batch_encode_plus(
+        batched_output = self.batch_encode_plus(
             batched_input,
             add_special_tokens=add_special_tokens,
             max_length=max_length,
