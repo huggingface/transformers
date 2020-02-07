@@ -27,16 +27,16 @@ from torch import nn
 from .configuration_bart import BARTConfig
 from .fairseq_utils import LayerNorm, LearnedPositionalEmbedding, SelfAttention, fill_with_neg_inf
 from .file_utils import add_start_docstrings
-from .modeling_utils import PreTrainedModel
+from .modeling_utils import ModuleUtilsMixin, PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
-    "bart.large": "http://dl.fbaipublicfiles.com/fairseq/models/bart.large.tar.gz",
-    "bart.large.mnli": "http://dl.fbaipublicfiles.com/fairseq/models/bart.large.mnli.tar.gz",
-    "bart.large.cnn": "http://dl.fbaipublicfiles.com/fairseq/models/bart.large.cnn.tar.gz",
+    "bart.large": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-pytorch_model.bin",
+    "bart.large.mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-pytorch_model.bin",
+    "bart.large.cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-cnn-pytorch_model.bin",
 }
 
 
@@ -113,12 +113,30 @@ class BARTClassificationHead(nn.Module):
         return x
 
 
+class PretrainedBartModel(PreTrainedModel, ModuleUtilsMixin):
+    config_class = BARTConfig
+    base_model_prefix = "transformer"
+
+    def _init_weights(self, module):
+        std = self.init_std  # used by init_params
+
+        # called init_bert_params in fairseq
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        if isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 @add_start_docstrings(
     "The bare BART Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
     ROBERTA_INPUTS_DOCSTRING,
 )
-class BARTModel(PreTrainedModel):
+class BARTModel(PretrainedBartModel,):
     """FIXME(SS)"""
 
     config_class = BARTConfig
@@ -141,26 +159,15 @@ class BARTModel(PreTrainedModel):
         self.init_weights()
         self._is_generation_fast = False  # TODO(SS): this might need deletion
 
-    # def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
-
-    def _init_weights(self, module):
-        std = self.init_std  # used by init_params
-
-        # called init_bert_params in fairseq
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
     def get_input_embeddings(self):
         return self.shared
 
     def set_input_embeddings(self, value):
         self.shared = value
+
+    def __call__(self, *input, **kwargs):
+        """Allows IDEs to figure out relationship between forward and __call__ for nn.Module"""
+        return super().__call__(*input, **kwargs)
 
     def forward(self, input_ids: torch.LongTensor = None, **kwargs):
         if input_ids is None:  # TODO(SS): Fixme before anyone sees this terrible code :)
@@ -173,10 +180,7 @@ class BARTModel(PreTrainedModel):
                 "input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions())
             )
 
-        encoder_out = self.encoder.forward(  # TODO(SS): delete forward later
-            input_ids,
-            # prev_output_tokens=prev_output_tokens,
-        )
+        encoder_out = self.encoder.forward(input_ids,)  # TODO(SS): delete forward later
 
         # prepare left to right decoder data
         prev_output_tokens = input_ids.clone()
@@ -205,14 +209,6 @@ class BARTModel(PreTrainedModel):
             return (dec_features, dec_attn, encoder_out.encoder_out, encoder_out.encoder_attn)
         else:
             return (dec_features, encoder_out.encoder_out)
-
-    def get_targets(self, sample, net_output):
-        """Get targets from either the sample or the net's output."""
-        return sample["target"]
-
-    def get_normalized_probs(self, net_output, log_probs, sample=None):
-        """Get normalized probabilities (or log probs) from a net's output."""
-        return self.decoder.get_normalized_probs(net_output, log_probs, sample)
 
     def make_generation_fast_(self, **kwargs):
         """Optimize model for faster generation."""
@@ -249,10 +245,6 @@ class BARTModel(PreTrainedModel):
     def max_positions(self):
         """Maximum length supported by the model."""
         return (self.encoder.max_positions(), self.decoder.max_positions())
-
-    def max_decoder_positions(self):
-        """Maximum length supported by the decoder."""
-        return self.decoder.max_positions()
 
 
 class EncoderLayer(nn.Module):
@@ -448,17 +440,6 @@ class DecoderLayer(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
-        # if self.onnx_trace and incremental_state is not None:
-        #     saved_state = self.self_attn._get_input_buffer(incremental_state)
-        #     if self_attn_padding_mask is not None:
-        #         self_attn_state = (
-        #             saved_state["prev_key"],
-        #             saved_state["prev_value"],
-        #             saved_state["prev_key_padding_mask"],
-        #         )
-        #     else:
-        #         self_attn_state = saved_state["prev_key"], saved_state["prev_value"]
-        #     return x, encoder_attn_weights, self_attn_state
         return x, self_attn_weights  # just self_attn weights for now, following t5
 
 
@@ -746,3 +727,35 @@ class BartDecoder(nn.Module):
         ):
             self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
         return self._future_mask[:dim, :dim]
+
+
+class BartWithLMHeadModel(nn.Module):
+    def __init__(self, config: BARTConfig):
+        self.transformer = BARTModel(config)
+
+    def forward(self, *args, **kwargs):
+        tfmr_output = self.transformer(*args, **kwargs)
+        return self.output_layer(tfmr_output[0])
+
+    def output_layer(self, x):
+        return F.linear(x, self.transformer.shared.weight)
+
+
+class BartForSequenceClassification(nn.Module):
+    def __init__(self, config: BARTConfig, num_classes, hidden_dim=None, activation_fn=torch.tanh):
+        self.transformer = BARTModel(config)
+        self.classification_head = BARTClassificationHead(
+            config.d_model, hidden_dim or config.d_model, config.num_classes, activation_fn, config.pooler_dropout,
+        )
+
+    def forward(self, *args, **kwargs):
+        tfmr_output = self.transformer(*args, **kwargs)
+        preds = self.classification_head(tfmr_output[0])
+        return (preds,) + tfmr_output
+
+    def output_layer(self, x):
+        return F.linear(x, self.transformer.shared.weight)
+
+
+# class BartForSentencePairClassification:
+#    pass

@@ -49,6 +49,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     config = BARTConfig()
     model = BARTModel(config)
     model.load_state_dict(upgraded)
+
     tokens = b2.encode(SAMPLE_TEXT)
     # TODO(SS): test BartTokenizer Equality
     model.eval()

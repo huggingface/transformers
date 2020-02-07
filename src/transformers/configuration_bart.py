@@ -23,8 +23,11 @@ from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
+_bart_large_url = "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-config.json"
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/transformer-base-config.json",
+    "bart-large": _bart_large_url,
+    "bart-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-config.json",
+    "bart-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-cnn-config.json",
 }
 
 
@@ -49,6 +52,7 @@ class BARTConfig(PretrainedConfig):
         dropout=0.1,
         max_position_embeddings=1024,
         init_std=0.02,
+        classifier_dropout=0.0,
         **common_kwargs
     ):
         super().__init__(**common_kwargs)
@@ -72,6 +76,9 @@ class BARTConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.dropout = dropout
+
+        # Classifier stuff
+        self.classif_dropout = classifier_dropout
 
     @property
     def num_attention_heads(self):

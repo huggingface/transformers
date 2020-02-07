@@ -21,6 +21,7 @@ from collections import OrderedDict
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
+    BARTConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
@@ -37,6 +38,7 @@ from .configuration_auto import (
 )
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
+from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BertTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -64,6 +66,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (CamembertConfig, CamembertTokenizer),
         (XLMRobertaConfig, XLMRobertaTokenizer),
         (RobertaConfig, RobertaTokenizer),
+        (BARTConfig, BartTokenizer),
         (BertConfig, BertTokenizer),
         (OpenAIGPTConfig, OpenAIGPTTokenizer),
         (GPT2Config, GPT2Tokenizer),
