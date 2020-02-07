@@ -22,6 +22,9 @@ and XNLI benchmarks. We will make XLM-R code, data, and models publicly availabl
 
 Tips:
 
+- XLM-R is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does
+  not require `lang` tensors to understand which language is used, and should be able to determine the correct
+  language from the input ids.
 - This implementation is the same as RoBERTa. Refer to the `documentation of RoBERTa <./roberta.html>`__ for usage
   examples as well as the information relative to the inputs and outputs.
 
