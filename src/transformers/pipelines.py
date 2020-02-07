@@ -977,7 +977,7 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModelForQuestionAnswering if is_tf_available() else None,
         "pt": AutoModelForQuestionAnswering if is_torch_available() else None,
         "default": {
-            "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad",},
+            "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
             "config": None,
             "tokenizer": "distilbert-base-cased",
         },
