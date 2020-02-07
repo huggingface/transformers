@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-pytorch_model.bin",
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-pytorch_model.bin",
-    # "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-cnn-pytorch_model.bin",
 }
 
 
