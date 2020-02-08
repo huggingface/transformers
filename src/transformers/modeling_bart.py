@@ -278,8 +278,12 @@ class EncoderLayer(nn.Module):
         # will become -inf, which results in NaN in model parameters
         # TODO: to formally solve this problem, we need to change fairseq's SelfAttention.
         x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
-            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions,
-            attn_mask=attn_mask
+            query=x,
+            key=x,
+            value=x,
+            key_padding_mask=encoder_padding_mask,
+            need_weights=self.output_attentions,
+            attn_mask=attn_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -316,9 +320,7 @@ class DecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = SelfAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
+            embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
         self.activation_fn = F.gelu
@@ -846,8 +848,6 @@ class SelfAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-
-
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
@@ -894,10 +894,8 @@ class SelfAttention(nn.Module):
         else:
             saved_state = None
 
-
+        q = self.q_proj(query) * self.scaling
         if self.encoder_decoder_attention:
-            # encoder-decoder attention
-            q = self.q_proj(query)
             if key is None:
                 assert value is None
                 k = v = None
@@ -905,19 +903,14 @@ class SelfAttention(nn.Module):
                 k = self.k_proj(key)
                 v = self.v_proj(key)
         else:
-            q = self.q_proj(query)
             k = self.k_proj(query)
             v = self.v_proj(query)
 
-        q *= self.scaling
-        # q = self._shape(q, tgt_len, bsz)  # .view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-        # k = self._shape(k, -1, bsz)
-        # v = self._shape(v, -1, bsz)
-        q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        q = self._shape(q, tgt_len, bsz)  # .view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
-            k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+            k = self._shape(k, -1, bsz)
         if v is not None:
-            v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+            v = self._shape(v, -1, bsz)
 
         if saved_state is not None:
             k, key_padding_mask, v = self._use_and_update_saved_state(
@@ -930,40 +923,32 @@ class SelfAttention(nn.Module):
         # not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-
-        if key_padding_mask is not None:
-            assert key_padding_mask.size(0) == bsz
-            assert key_padding_mask.size(1) == src_len
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len)
 
         attn_weights = torch.bmm(q, k.transpose(1, 2))
 
-        assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
+        assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
             attn_mask = attn_mask.unsqueeze(0)
             attn_weights += attn_mask
 
-        if key_padding_mask is not None:
-            # don't attend to padding symbols
+        if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         attn_weights_float = F.softmax(attn_weights, dim=-1, dtype=torch.float32)
         attn_weights = attn_weights_float.type_as(attn_weights)
-        attn_probs = F.dropout(attn_weights_float.type_as(attn_weights), p=self.dropout, training=self.training,)
+        attn_probs = F.dropout(attn_weights_float, p=self.dropout, training=self.training,)
         assert v is not None
-        attn = torch.bmm(attn_probs, v)
-        assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
-        attn = attn.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
-        attn = self.out_proj(attn)
-        attn_weights = None  # type: Optional[Tensor]
-        if need_weights:
-            attn_weights = attn_weights_float.view(bsz, self.num_heads, tgt_len, src_len)
-
-        return attn, attn_weights
+        attn_output = torch.bmm(attn_probs, v)
+        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
+        attn_output = self.out_proj(attn_output)
+        attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        return attn_output, attn_weights
 
     def _use_and_update_saved_state(self, k, v, saved_state, key_padding_mask, incremental_state, static_kv, bsz):
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)

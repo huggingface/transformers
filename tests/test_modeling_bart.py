@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import os
 import tempfile
 import unittest
 
@@ -149,6 +148,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
 
         def _check_var(module):
+            """Check that we initialized various parameters from N(0, config.init_std)."""
             self.assertAlmostEqual(torch.std(module.weight).item(), config.init_std, 2)
 
         _check_var(model.encoder.embed_tokens)
@@ -164,12 +164,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
-        self.assertTrue((decoder_features_with_mask == decoder_features).all().item())
-
-        # import numpy as np
-        # last_few_features = decoder_features_with_mask.detach().contiguous().view(-1,)[-3:].numpy()
-        # expected_result = np.array([0.688, 0.533, -0.663])
-        # np.testing.assert_almost_equal(last_few_features, expected_result, 3)
+        self.assertTrue((decoder_features_with_mask == decoder_features).all().item())  # TODO(SS): BUG?
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -185,24 +180,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
     #     self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
-    @slow
-    @unittest.skipUnless(os.path.exists("/Users/shleifer"), "Placeholder for pretrained check")
-    def test_forward_pass_same(self):
-        # TODO(SS): delete this
-        import numpy as np
-
-        cfg = BartConfig()
-        model = BartModel(config=cfg)
-
-        model.load_state_dict(torch.load("/Users/shleifer/upgraded_bart_model.pt"))
-        model.eval()
-        tokens = torch.Tensor([0, 30086, 38, 437, 13049, 2]).long()
-        decoder_features = model(tokens)[0]
-        # expected_result = [0.688, 0.533, -0.663])
-        last_few_features = decoder_features.detach().contiguous().view(-1,)[:5].numpy()
-        expected_result = np.array([0.3997, 0.8051, -1.5407, -0.0942, 0.2665])
-        np.testing.assert_almost_equal(last_few_features, expected_result, 3)
-
 
 class BartModelIntegrationTest(unittest.TestCase):
     @slow
@@ -210,11 +187,10 @@ class BartModelIntegrationTest(unittest.TestCase):
         model = BartModel.from_pretrained("bart-large")
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 50265))
+        expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
-        # compare the actual values for a slice.
         expected_slice = torch.Tensor(
-            [[[33.8843, -4.3107, 22.7779], [4.6533, -2.8099, 13.6252], [1.8222, -3.6898, 8.8600]]]
+            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]]
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
