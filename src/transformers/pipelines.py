@@ -941,9 +941,9 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModel if is_tf_available() else None,
         "pt": AutoModel if is_torch_available() else None,
         "default": {
-            "model": {"pt": "distilbert-base-uncased", "tf": "distilbert-base-uncased"},
+            "model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"},
             "config": None,
-            "tokenizer": "distilbert-base-uncased",
+            "tokenizer": "distilbert-base-cased",
         },
     },
     "sentiment-analysis": {
@@ -977,12 +977,9 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModelForQuestionAnswering if is_tf_available() else None,
         "pt": AutoModelForQuestionAnswering if is_torch_available() else None,
         "default": {
-            "model": {
-                "pt": "distilbert-base-uncased-distilled-squad",
-                "tf": "distilbert-base-uncased-distilled-squad",
-            },
+            "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
             "config": None,
-            "tokenizer": "distilbert-base-uncased",
+            "tokenizer": "distilbert-base-cased",
         },
     },
     "fill-mask": {
@@ -1015,7 +1012,7 @@ def pipeline(
 
     Examples:
         pipeline('sentiment-analysis')
-        pipeline('question-answering', model='distilbert-base-uncased-distilled-squad', tokenizer='bert-base-cased')
+        pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
         pipeline('ner', model=AutoModel.from_pretrained(...), tokenizer=AutoTokenizer.from_pretrained(...)
         pipeline('ner', model='dbmdz/bert-large-cased-finetuned-conll03-english', tokenizer='bert-base-cased')
         pipeline('ner', model='https://...pytorch-model.bin', config='https://...config.json', tokenizer='bert-base-cased')

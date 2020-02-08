@@ -28,6 +28,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
         "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt",
+        "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-vocab.txt",
         "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-vocab.txt",
         "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
     }
@@ -36,6 +38,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "distilbert-base-uncased": 512,
     "distilbert-base-uncased-distilled-squad": 512,
+    "distilbert-base-cased": 512,
+    "distilbert-base-cased-distilled-squad": 512,
     "distilbert-base-german-cased": 512,
     "distilbert-base-multilingual-cased": 512,
 }
@@ -44,6 +48,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 PRETRAINED_INIT_CONFIGURATION = {
     "distilbert-base-uncased": {"do_lower_case": True},
     "distilbert-base-uncased-distilled-squad": {"do_lower_case": True},
+    "distilbert-base-cased": {"do_lower_case": False},
+    "distilbert-base-cased-distilled-squad": {"do_lower_case": False},
     "distilbert-base-german-cased": {"do_lower_case": False},
     "distilbert-base-multilingual-cased": {"do_lower_case": False},
 }

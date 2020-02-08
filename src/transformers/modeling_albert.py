@@ -117,7 +117,13 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         name = name.split("/")
 
         # Ignore the gradients applied by the LAMB/ADAM optimizers.
-        if "adam_m" in name or "adam_v" in name or "global_step" in name:
+        if (
+            "adam_m" in name
+            or "adam_v" in name
+            or "AdamWeightDecayOptimizer" in name
+            or "AdamWeightDecayOptimizer_1" in name
+            or "global_step" in name
+        ):
             logger.info("Skipping {}".format("/".join(name)))
             continue
 

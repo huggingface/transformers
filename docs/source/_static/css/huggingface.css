@@ -194,3 +194,41 @@ h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
     src: url(./Calibre-Thin.otf);
     font-weight:400;
 }
+
+
+/**
+ * Nav Links to other parts of huggingface.co
+ */
+ div.menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding-top: 20px;
+    padding-right: 20px;
+    z-index: 1000;
+}
+div.menu a {
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: white;
+    -webkit-font-smoothing: antialiased;
+    background: linear-gradient(0deg, #6671ffb8, #9a66ffb8 50%);
+    padding: 10px 16px 6px 16px;
+    border-radius: 3px;
+    margin-left: 12px;
+    position: relative;
+}
+div.menu a:active {
+    top: 1px;
+}
+@media (min-width: 768px) and (max-width: 1750px) {
+    .wy-breadcrumbs {
+        margin-top: 32px;
+    }
+}
+@media (max-width: 768px) {
+    div.menu {
+        display: none;
+    }
+}
