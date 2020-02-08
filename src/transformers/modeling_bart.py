@@ -242,7 +242,7 @@ class EncoderLayer(nn.Module):
         self.embed_dim = config.d_model
         self.output_attentions = config.output_attentions
         self.self_attn = SelfAttention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, self_attention=True,
+            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -279,6 +279,7 @@ class EncoderLayer(nn.Module):
         # TODO: to formally solve this problem, we need to change fairseq's SelfAttention.
         x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
             query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions,
+            attn_mask=attn_mask
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -318,7 +319,6 @@ class DecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            self_attention=True,
         )
         self.dropout = config.dropout
         self.activation_fn = F.gelu
@@ -822,14 +822,12 @@ class SelfAttention(nn.Module):
         vdim=None,
         dropout=0.0,
         bias=True,
-        self_attention=False,
-        encoder_decoder_attention=False,
+        encoder_decoder_attention=False,  # otherwise self_attention
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
         self.vdim = vdim if vdim is not None else embed_dim
-        assert self_attention ^ encoder_decoder_attention
 
         self.num_heads = num_heads
         self.dropout = dropout
@@ -837,22 +835,21 @@ class SelfAttention(nn.Module):
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
 
-        self.self_attention = self_attention
         self.encoder_decoder_attention = encoder_decoder_attention
         qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim  # True for all BART
 
-        assert not self.self_attention or qkv_same_dim, (
+        assert self.encoder_decoder_attention or qkv_same_dim, (
             "Self-attention requires query, key and " "value to be of the same size"
         )
-
         self.k_proj = nn.Linear(self.kdim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-        self.onnx_trace = False
-        self.enable_torch_version = False  # hasattr(F, "multi_head_attention_forward")
+
+
+    def _shape(self, tensor, dim_0, bsz):
+        return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
     def forward(
         self,
@@ -897,12 +894,8 @@ class SelfAttention(nn.Module):
         else:
             saved_state = None
 
-        if self.self_attention:  # never get here on my machine
-            q = self.q_proj(query)
-            k = self.k_proj(query)
-            v = self.v_proj(query)
-        else:
-            assert self.encoder_decoder_attention
+
+        if self.encoder_decoder_attention:
             # encoder-decoder attention
             q = self.q_proj(query)
             if key is None:
@@ -911,7 +904,15 @@ class SelfAttention(nn.Module):
             else:
                 k = self.k_proj(key)
                 v = self.v_proj(key)
+        else:
+            q = self.q_proj(query)
+            k = self.k_proj(query)
+            v = self.v_proj(query)
+
         q *= self.scaling
+        # q = self._shape(q, tgt_len, bsz)  # .view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        # k = self._shape(k, -1, bsz)
+        # v = self._shape(v, -1, bsz)
         q = q.contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         if k is not None:
             k = k.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)

@@ -21,7 +21,7 @@ import unittest
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
@@ -75,45 +75,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             # self.scope = None
 
         def prepare_config_and_inputs(self):
-            input_ids = torch.Tensor(
-                [
-                    [41, 82, 10, 2, 83, 74, 45],
-                    [15, 83, 19, 13, 44, 62, 18],
-                    [61, 65, 92, 14, 18, 65, 13],
-                    [6, 57, 89, 14, 54, 55, 54],
-                    [95, 0, 47, 28, 71, 77, 86],
-                    [52, 29, 51, 91, 12, 52, 57],
-                    [23, 88, 28, 21, 47, 80, 0],
-                    [96, 59, 49, 54, 0, 47, 8],
-                    [59, 9, 90, 0, 93, 44, 92],
-                    [42, 51, 24, 94, 40, 7, 6],
-                    [37, 72, 79, 45, 5, 12, 17],
-                    [2, 9, 64, 29, 28, 62, 31],
-                    [44, 7, 32, 39, 1, 43, 29],
-                ]
-            ).long()
-            self.parent.assertEqual(input_ids.size(), (self.batch_size, self.seq_length))
-            self.parent.assertGreaterEqual(self.vocab_size, input_ids.max().item())
-
-            # input_ids = INPUT_IDS# ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_mask = torch.Tensor(
-                [
-                    [0, 0, 0, 0, 0, 0, 1],
-                    [1, 1, 0, 1, 1, 0, 1],
-                    [0, 1, 0, 0, 0, 1, 1],
-                    [1, 1, 1, 0, 0, 1, 0],
-                    [1, 1, 1, 0, 1, 0, 0],
-                    [0, 1, 1, 0, 0, 1, 1],
-                    [1, 0, 1, 0, 1, 1, 0],
-                    [1, 0, 1, 0, 1, 0, 0],
-                    [0, 0, 1, 1, 1, 0, 1],
-                    [0, 0, 1, 0, 1, 0, 0],
-                    [1, 0, 1, 1, 1, 0, 1],
-                    [1, 0, 0, 0, 0, 1, 1],
-                    [0, 0, 1, 0, 1, 0, 0],
-                ]
-            ).long()
-            # input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
             config = BartConfig(
                 vocab_size=self.vocab_size,
