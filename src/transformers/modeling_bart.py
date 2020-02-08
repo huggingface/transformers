@@ -32,7 +32,7 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 
-BART_PRETRAINED_MODEL_ARCHIVE_MAP = {  # TODO(SS): copy to S3
+BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-pytorch_model.bin",
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-pytorch_model.bin",
 }
@@ -113,9 +113,6 @@ class PretrainedBartModel(PreTrainedModel):
 )
 class BartModel(PretrainedBartModel,):
     """FIXME(SS)"""
-
-    config_class = BartConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):  # should take config
         super().__init__(config)
@@ -509,8 +506,9 @@ class BartEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
-                continue  # NOTE(SS): this could break shape of attentions!
-            x, attn = layer(x, encoder_padding_mask)
+                attn = None
+            else:
+                x, attn = layer(x, encoder_padding_mask)
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -706,8 +704,9 @@ class BartDecoder(nn.Module):
         return self._future_mask[:dim, :dim]
 
 
-class BartWithLMHeadModel(nn.Module):
+class BartWithLMHeadModel(PretrainedBartModel):
     def __init__(self, config: BartConfig):
+        super().__init__(config)
         self.transformer = BartModel(config)
 
     def forward(self, *args, **kwargs):
@@ -751,6 +750,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
 
     def forward(self, input_ids, *args, **kwargs):
+        if input_ids.ndim == 1: input_ids = input_ids.unsqueeze(0)
         tfmr_output = self.model(input_ids, *args, **kwargs)
         x = tfmr_output[0]  # last hidden state
         sentence_representation = x[input_ids.eq(self.eos_token), :].view(x.size(0), -1, x.size(-1))[:, -1, :]

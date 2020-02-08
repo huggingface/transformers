@@ -44,7 +44,12 @@ from .modeling_albert import (
     AlbertForSequenceClassification,
     AlbertModel,
 )
-from .modeling_bart import BartForSequenceClassification, BartModel, BartWithLMHeadModel
+from .modeling_bart import (
+    BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+    BartForSequenceClassification,
+    BartModel,
+    BartWithLMHeadModel,
+)
 from .modeling_bert import (
     BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertForMaskedLM,
@@ -120,6 +125,7 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
         GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
