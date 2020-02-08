@@ -28,6 +28,7 @@ if is_torch_available():
     import torch
     from transformers import AutoModel, BartModel, BartWithLMHeadModel, BartForSequenceClassification, BartConfig
     from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.tokenization_bart import BartTokenizer
 
 
 @require_torch
@@ -63,7 +64,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             torch.manual_seed(0)
 
         def prepare_config_and_inputs(self):
+
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids[:, -1] = BartForSequenceClassification.eos_token
+
             input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
             config = BartConfig(
@@ -159,7 +163,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)

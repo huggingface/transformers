@@ -137,10 +137,6 @@ class BartModel(PretrainedBartModel,):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    def __call__(self, *input, **kwargs):
-        """Allows IDEs to figure out relationship between forward and __call__ for nn.Module"""
-        return super().__call__(*input, **kwargs)
-
     def forward(self, input_ids: torch.LongTensor = None, **kwargs):
         if input_ids is None:  # TODO(SS): Fixme before anyone sees this terrible code :)
             assert "encoder_input_ids" in kwargs, "must specify input_ids or encoder_input_ids"
@@ -151,16 +147,9 @@ class BartModel(PretrainedBartModel,):
             raise ValueError(
                 "input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions())
             )
-
-        encoder_out = self.encoder.forward(input_ids,)  # TODO(SS): delete forward later
-
-        # prepare left to right decoder data
-        prev_output_tokens = input_ids.clone()
-        prev_output_tokens[:, 0] = input_ids.gather(
-            1, (input_ids.ne(self.config.pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
-        ).squeeze()
-        prev_output_tokens[:, 1:] = input_ids[:, :-1]
-        dec_features, dec_hidden, dec_attn = self.decoder.forward(prev_output_tokens, encoder_out=encoder_out,)
+        encoder_out = self.encoder(input_ids)
+        prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
+        dec_features, dec_hidden, dec_attn = self.decoder(prev_output_tokens, encoder_out=encoder_out,)
         if self.output_hidden_states and self.output_attentions:
             return (
                 dec_features,
@@ -181,6 +170,16 @@ class BartModel(PretrainedBartModel,):
             return (dec_features, dec_attn, encoder_out.encoder_out, encoder_out.encoder_attn)
         else:
             return (dec_features, encoder_out.encoder_out)
+
+    @staticmethod
+    def shift_tokens_left(input_ids, pad_token_id):
+        """Shift input ids one token to the left"""
+        prev_output_tokens = input_ids.clone()
+        prev_output_tokens[:, 0] = input_ids.gather(
+            1, (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1),
+        ).squeeze()
+        prev_output_tokens[:, 1:] = input_ids[:, :-1]
+        return prev_output_tokens
 
     def make_generation_fast_(self, **kwargs):
         """Optimize model for faster generation."""
@@ -750,10 +749,13 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
 
     def forward(self, input_ids, *args, **kwargs):
-        if input_ids.ndim == 1: input_ids = input_ids.unsqueeze(0)
+        if input_ids.ndim == 1:
+            input_ids = input_ids.unsqueeze(0)
         tfmr_output = self.model(input_ids, *args, **kwargs)
         x = tfmr_output[0]  # last hidden state
-        sentence_representation = x[input_ids.eq(self.eos_token), :].view(x.size(0), -1, x.size(-1))[:, -1, :]
+        eos_mask = input_ids.eq(self.eos_token)
+        assert eos_mask.any(), "Could not find eos_token in input_ids. Make sure to use tokenizer.encode"
+        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
         preds = self.classification_head(sentence_representation)
         return (preds,) + tfmr_output
 
