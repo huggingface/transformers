@@ -727,9 +727,7 @@ class BartWithLMHeadModel(PretrainedBartModel):
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss = self.calc_lm_loss(lm_labels, lm_logits)
-            decoder_outputs = (
-                loss,
-            ) + decoder_outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+            decoder_outputs = (loss,) + decoder_outputs
         return decoder_outputs + encoder_outputs
 
     @staticmethod
@@ -777,18 +775,33 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
 
     def forward(self, input_ids, *args, **kwargs):
+
         if input_ids.ndim == 1:
             input_ids = input_ids.unsqueeze(0)
-        tfmr_output = self.model(input_ids, *args, **kwargs)
-        x = tfmr_output[0]  # last hidden state
+        kwargs["return_for_head"] = True
+        labels = kwargs.pop("labels", None)
+        decoder_outputs, encoder_outputs = self.model(input_ids, *args, **kwargs)
+        x = decoder_outputs[0]  # last hidden state
 
         eos_mask = input_ids.eq(self.eos_token)
         if torch.unique(eos_mask.sum(1)) > 1:
             # TODO(SS): we can probably code our way around this if it happens.
             raise ValueError("All examples must have the same number of EOS tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
-        preds = self.classification_head(sentence_representation)
-        return (preds,) + tfmr_output
+        logits = self.classification_head(sentence_representation)
+        # Prepend logits
+        decoder_outputs = (logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
+        if labels is not None:  # prepend loss to output
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = nn.MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            decoder_outputs = (loss,) + decoder_outputs
+
+        return decoder_outputs + encoder_outputs
 
 
 # Helper Modules
