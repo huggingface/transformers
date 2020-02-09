@@ -60,7 +60,7 @@
 
 ### Inferencing / prediction works with the current Transformers v2.4.1
 
-### Access this albert_xxlargev1_sqd2_512 fine-tuned model with my "tried & true" code:
+### Access this albert_xxlargev1_sqd2_512 fine-tuned model with "tried & true" code:
 
     config_class, model_class, tokenizer_class = \
             AlbertConfig, AlbertForQuestionAnswering, AlbertTokenizer
