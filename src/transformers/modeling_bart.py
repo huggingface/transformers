@@ -106,6 +106,10 @@ class PretrainedBartModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+def _filter_out_nones(*tup):
+    return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
+
+
 @add_start_docstrings(
     "The bare BART Model model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
@@ -137,7 +141,7 @@ class BartModel(PretrainedBartModel,):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    def forward(self, input_ids: torch.LongTensor = None, **kwargs):
+    def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
         if input_ids is None:  # TODO(SS): Fixme before anyone sees this terrible code :)
             assert "encoder_input_ids" in kwargs, "must specify input_ids or encoder_input_ids"
             input_ids = kwargs["encoder_input_ids"]
@@ -150,6 +154,11 @@ class BartModel(PretrainedBartModel,):
         encoder_out = self.encoder(input_ids)
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
         dec_features, dec_hidden, dec_attn = self.decoder(prev_output_tokens, encoder_out=encoder_out,)
+        if return_for_head:  # split encoder and decoder outputs nicely
+            return (
+                _filter_out_nones(dec_features, dec_hidden, dec_attn),
+                _filter_out_nones(encoder_out.encoder_out, encoder_out.encoder_states, encoder_out.encoder_attn),
+            )
         if self.output_hidden_states and self.output_attentions:
             return (
                 dec_features,
@@ -704,13 +713,32 @@ class BartDecoder(nn.Module):
 
 
 class BartWithLMHeadModel(PretrainedBartModel):
+    base_model_prefix = "transformer"
+
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.transformer = BartModel(config)
 
-    def forward(self, *args, **kwargs):
-        tfmr_output = self.transformer(*args, **kwargs)
-        return self.output_layer(tfmr_output[0])
+    def forward(self, *args, **kwargs):  # TODO(SS): maybe use split kwargs?
+        kwargs["return_for_head"] = True
+        lm_labels = kwargs.pop("lm_labels", None)
+        decoder_outputs, encoder_outputs = self.transformer(*args, **kwargs)
+        lm_logits = self.output_layer(decoder_outputs[0])
+        decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
+        if lm_labels is not None:
+            loss = self.calc_lm_loss(lm_labels, lm_logits)
+            decoder_outputs = (
+                loss,
+            ) + decoder_outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+        return decoder_outputs + encoder_outputs
+
+    @staticmethod
+    def calc_lm_loss(lm_labels, lm_logits):
+        shift_logits = lm_logits[..., :-1, :].contiguous()
+        shift_labels = lm_labels[..., 1:].contiguous()
+        loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        return loss
 
     def output_layer(self, x):
         return F.linear(x, self.transformer.shared.weight)

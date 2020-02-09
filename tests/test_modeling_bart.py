@@ -34,7 +34,7 @@ if is_torch_available():
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel,) if is_torch_available() else ()
+    all_model_classes = (BartModel, BartWithLMHeadModel) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = True
     # TODO(SS): fix the below in a separate PR
@@ -84,7 +84,17 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels = None
             choice_labels = None
             token_type_ids = None
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            decoder_lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            return (
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+                decoder_lm_labels,
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -96,6 +106,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 sequence_labels,
                 token_labels,
                 choice_labels,
+                decoder_lm_labels,
             ) = config_and_inputs
             return (
                 config,
@@ -104,7 +115,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                     "token_type_ids": token_type_ids,
                     "attention_mask": input_mask,
                     "encoder_input_ids": input_ids,
-                    "decoder_input_ids": input_ids,  # HACK(SS): not clear which I'm supposed to do
+                    "decoder_input_ids": input_ids,  # TODO(SS): use split_kwargs
+                    "decoder_lm_labels": decoder_lm_labels,
                 },
             )
 
@@ -119,15 +131,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
+        (config, input_ids, token_type_ids, input_mask, *unused) = self.model_tester.prepare_config_and_inputs()
 
         model = BartModel(config)
         model.to(torch_device)
@@ -163,6 +167,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
+
 
 @require_torch
 class BartSequenceClassifTest(unittest.TestCase):
