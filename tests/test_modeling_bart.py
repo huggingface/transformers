@@ -118,8 +118,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # def test_initialization(self):
-
     def test_model(self):
         (
             config,
@@ -166,11 +164,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    # def test_for_masked_lm(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
-
-
 @require_torch
 class BartSequenceClassifTest(unittest.TestCase):
     batch_size = 13
@@ -194,8 +187,6 @@ class BartSequenceClassifTest(unittest.TestCase):
                 [70, 70, 50, 9, 28, 0, 2],
             ]
         ).long()
-
-        input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
         config = BartConfig(
             vocab_size=99,
