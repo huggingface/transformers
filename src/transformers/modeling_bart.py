@@ -753,8 +753,11 @@ class BartForSequenceClassification(PretrainedBartModel):
             input_ids = input_ids.unsqueeze(0)
         tfmr_output = self.model(input_ids, *args, **kwargs)
         x = tfmr_output[0]  # last hidden state
+
         eos_mask = input_ids.eq(self.eos_token)
-        assert eos_mask.any(), "Could not find eos_token in input_ids. Make sure to use tokenizer.encode"
+        if torch.unique(eos_mask.sum(1)) > 1:
+            # TODO(SS): we can probably code our way around this if it happens.
+            raise ValueError("All examples must have the same number of EOS tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
         preds = self.classification_head(sentence_representation)
         return (preds,) + tfmr_output

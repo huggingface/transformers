@@ -34,10 +34,10 @@ if is_torch_available():
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel, BartForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (BartModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = True
-    # TODO: fix the below in a separate PR
+    # TODO(SS): fix the below in a separate PR
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
@@ -64,10 +64,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             torch.manual_seed(0)
 
         def prepare_config_and_inputs(self):
-
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_ids[:, -1] = BartForSequenceClassification.eos_token
-
             input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
             config = BartConfig(
@@ -134,7 +131,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             choice_labels,
         ) = self.model_tester.prepare_config_and_inputs()
 
-        model = BartModel(config=config)
+        model = BartModel(config)
         model.to(torch_device)
         model.eval()
         # test init
@@ -174,6 +171,50 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     #     self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
 
 
+@require_torch
+class BartSequenceClassifTest(unittest.TestCase):
+    batch_size = 13
+    seq_length = 5
+
+    def test_forward(self):
+        input_ids = torch.Tensor(
+            [
+                [71, 82, 18, 33, 46, 91, 2],
+                [68, 34, 26, 58, 30, 82, 2],
+                [5, 97, 17, 39, 94, 40, 2],
+                [76, 83, 94, 25, 70, 78, 2],
+                [87, 59, 41, 35, 48, 66, 2],
+                [55, 13, 16, 58, 5, 2, 1],  # note padding
+                [64, 27, 31, 51, 12, 75, 2],
+                [52, 64, 86, 17, 83, 39, 2],
+                [48, 61, 9, 24, 71, 82, 2],
+                [26, 1, 60, 48, 22, 13, 2],
+                [21, 5, 62, 28, 14, 76, 2],
+                [45, 98, 37, 86, 59, 48, 2],
+                [70, 70, 50, 9, 28, 0, 2],
+            ]
+        ).long()
+
+        input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        config = BartConfig(
+            vocab_size=99,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+        )
+        model = BartForSequenceClassification(config)
+        outputs = model(input_ids)
+        logits = outputs[0]
+        expected_shape = torch.Size((self.batch_size, config.num_labels))
+        self.assertEqual(logits.shape, expected_shape)
+
+
 class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
@@ -187,6 +228,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
+    @slow
     def test_mnli_inference(self):
         model = AutoModel.from_pretrained("bart-large-mnli")
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])

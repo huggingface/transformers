@@ -910,13 +910,10 @@ class T5WithLMHeadModel(T5PreTrainedModel):
 def split_kwargs(kwargs):
     """Keys that start with encoder_, decoder_ sent to encoder, decoder respectively. Others shared."""
     kwargs_common = dict(
-        (k, v) for k, v in kwargs.items() if
-        not k.startswith("encoder_") and not k.startswith("decoder_")
+        (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
     )
     kwargs_encoder = kwargs_common.copy()
     kwargs_decoder = kwargs_common.copy()
-    kwargs_encoder.update(
-        dict((k[len("encoder_"):], v) for k, v in kwargs.items() if k.startswith("encoder_")))
-    kwargs_decoder.update(
-        dict((k[len("decoder_"):], v) for k, v in kwargs.items() if k.startswith("decoder_")))
+    kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
+    kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
     return kwargs_decoder, kwargs_encoder
