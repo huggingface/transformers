@@ -421,11 +421,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
-                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
-                if from_tf:
-                    raise EnvironmentError(
-                        "Loading a PyTorch model from a TF checkpoint is not supported when using a model identifier name."
-                    )
+                archive_file = hf_bucket_url(
+                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME)
+                )
 
             # redirect to the cache, if necessary
             try:
