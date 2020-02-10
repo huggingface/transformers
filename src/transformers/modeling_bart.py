@@ -18,11 +18,20 @@
 import logging
 import random
 from collections import namedtuple
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import (
+    Tensor,
+    nn,
+)
+
+from typing import (
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings
@@ -106,10 +115,8 @@ class PretrainedBartModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-
-
-
 # Public API
+
 
 @add_start_docstrings(
     "The bare BART Model model outputting raw hidden-states without any specific head on top.",
@@ -142,14 +149,14 @@ class BartModel(PretrainedBartModel,):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    def forward(self, input_ids: torch.LongTensor = None, attention_mask=None, return_for_head=False, **kwargs):
+    def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
             raise ValueError(
                 "input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions())
             )
-        encoder_out = self.encoder(input_ids, attention_mask=attention_mask)
+        encoder_out = self.encoder(input_ids)
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
         dec_features, dec_hidden, dec_attn = self.decoder(prev_output_tokens, encoder_out=encoder_out,)
         if return_for_head:  # split encoder and decoder outputs nicely
@@ -188,6 +195,11 @@ class BartModel(PretrainedBartModel,):
         prev_output_tokens[:, 1:] = input_ids[:, :-1]
         return prev_output_tokens
 
+    def max_positions(self):
+        """Maximum length supported by the model."""
+        return (self.encoder.max_positions(), self.decoder.max_positions())
+
+    # unused
     def make_generation_fast_(self, **kwargs):
         """Optimize model for faster generation."""
         if self._is_generation_fast:
@@ -219,10 +231,6 @@ class BartModel(PretrainedBartModel,):
         # this model should no longer be used for training
         self.eval()
         self.train = train
-
-    def max_positions(self):
-        """Maximum length supported by the model."""
-        return (self.encoder.max_positions(), self.decoder.max_positions())
 
 
 class BartWithLMHeadModel(PretrainedBartModel):
@@ -546,7 +554,7 @@ class BartEncoder(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         return x, embedded_tokens
 
-    def forward(self, input_ids, attention_mask=None, **unused):  # TODO(SS): this will need more
+    def forward(self, input_ids, **unused):  # TODO(SS): this will need more
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -584,10 +592,10 @@ class BartEncoder(nn.Module):
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
+            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
-                x, attn = layer(x, encoder_padding_mask, attention_mask=attention_mask)
+                x, attn = layer(x, encoder_padding_mask)
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -604,6 +612,11 @@ class BartEncoder(nn.Module):
             encoder_attn=all_attentions,  # TODO(SS): document types
         )
 
+    def max_positions(self):
+        """Maximum input length supported by the encoder."""
+        return min(self.max_source_positions, self.embed_positions.max_positions)
+
+    # Unused
     def reorder_encoder_out(self, encoder_out, new_order):
         """
         Reorder encoder output according to *new_order*.
@@ -629,18 +642,6 @@ class BartEncoder(nn.Module):
             for idx, state in enumerate(encoder_out.encoder_states):
                 encoder_out.encoder_states[idx] = state.index_select(1, new_order)
         return encoder_out
-
-    def max_positions(self):
-        """Maximum input length supported by the encoder."""
-        return min(self.max_source_positions, self.embed_positions.max_positions)
-
-    def buffered_future_mask(self, tensor):
-        dim = tensor.size(0)
-        if not hasattr(self, "_future_mask") or self._future_mask is None or self._future_mask.device != tensor.device:
-            self._future_mask = torch.triu(fill_with_neg_inf(tensor.new(dim, dim)), 1)
-            if self._future_mask.size(0) < dim:
-                self._future_mask = torch.triu(fill_with_neg_inf(self._future_mask.resize_(dim, dim)), 1)
-        return self._future_mask[:dim, :dim]
 
 
 class BartDecoder(nn.Module):
@@ -769,6 +770,7 @@ class BartDecoder(nn.Module):
 
     def buffered_future_mask(self, tensor):
         """Upper triangular matrix filled with negative inf for masking."""
+        # TODO(SS): identical to encoder code
         dim = tensor.size(0)
         if (
             not hasattr(self, "_future_mask")

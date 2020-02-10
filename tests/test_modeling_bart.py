@@ -20,15 +20,22 @@ import unittest
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .test_modeling_common import (
+    ModelTesterMixin,
+    ids_tensor,
+)
+from .utils import (
+    CACHE_DIR,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
     import torch
     from transformers import AutoModel, BartModel, BartWithLMHeadModel, BartForSequenceClassification, BartConfig
     from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP
-    from transformers.tokenization_bart import BartTokenizer
 
 
 @require_torch
@@ -167,6 +174,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
+
+    def test_incremental_state(self):
+        pass
+        # TODO(SS), separate PR: try to generate with model using incremental state
 
 
 @require_torch
