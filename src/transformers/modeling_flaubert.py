@@ -231,7 +231,7 @@ class FlaubertModel(XLMModel):
             inputs_embeds = self.embeddings(input_ids)
 
         tensor = inputs_embeds + self.position_embeddings(position_ids).expand_as(inputs_embeds)
-        if langs is not None and self.use_lang_emb:
+        if langs is not None and self.use_lang_emb and self.config.n_langs > 1:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
