@@ -1,3 +1,7 @@
+---
+language: italian
+---
+
 # 🤗 + 📚 dbmdz BERT models
 
 In this repository the MDZ Digital Library team (dbmdz) at the Bavarian State
