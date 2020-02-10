@@ -1,5 +1,5 @@
 ---
-thumbnail: https://github.com/JetRunner/BERT-of-Theseus/blob/master/bert-of-theseus.png?raw=true
+thumbnail: https://raw.githubusercontent.com/JetRunner/BERT-of-Theseus/master/bert-of-theseus.png
 ---
 
 # BERT-of-Theseus
