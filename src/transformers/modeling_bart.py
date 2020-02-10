@@ -18,20 +18,12 @@
 import logging
 import random
 from collections import namedtuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch import (
-    Tensor,
-    nn,
-)
+from torch import nn, Tensor
 
-from typing import (
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings
@@ -48,52 +40,6 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 
 BART_START_DOCSTRING = r"""  TODO(SS): FIXME"""
-
-ROBERTA_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-            To match pre-training, RoBERTa input sequence should be formatted with <s> and </s> tokens as follows:
-
-            (a) For sequence pairs:
-
-                ``tokens:         <s> Is this Jacksonville ? </s> </s> No it is not . </s>``
-
-            (b) For single sequences:
-
-                ``tokens:         <s> the dog is hairy . </s>``
-
-            Fully encoded sequences or sequence pairs can be obtained using the RobertaTokenizer.encode function with
-            the ``add_special_tokens`` parameter set to ``True``.
-
-            RoBERTa is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
-
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional` need to be trained) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Optional segment token indices to indicate first and second portions of the inputs.
-            This embedding matrice is not trained (not pretrained during RoBERTa pretraining), you will have to train it
-            during finetuning.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-            (see `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1[``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
-            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-"""
 
 
 class PretrainedBartModel(PreTrainedModel):
@@ -121,7 +67,7 @@ class PretrainedBartModel(PreTrainedModel):
 @add_start_docstrings(
     "The bare BART Model model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
-    ROBERTA_INPUTS_DOCSTRING,
+    "FIXME(SS)",
 )
 class BartModel(PretrainedBartModel,):
     """FIXME(SS)"""
