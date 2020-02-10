@@ -145,54 +145,21 @@ class BartModel(PretrainedBartModel,):
         """Maximum length supported by the model."""
         return (self.encoder.max_positions(), self.decoder.max_positions())
 
-    # unused
-    def make_generation_fast_(self, **kwargs):
-        """Optimize model for faster generation."""
-        if self._is_generation_fast:
-            return  # only apply once
-        self._is_generation_fast = True
-
-        # remove weight norm from all modules in the network
-        def apply_remove_weight_norm(module):
-            try:
-                nn.utils.remove_weight_norm(module)
-            except ValueError:  # this module didn't have weight norm
-                return
-
-        self.apply(apply_remove_weight_norm)
-
-        seen = set()
-
-        def apply_make_generation_fast_(module):
-            if module != self and hasattr(module, "make_generation_fast_") and module not in seen:
-                seen.add(module)
-                module.make_generation_fast_(**kwargs)
-
-        self.apply(apply_make_generation_fast_)
-
-        def train(mode=True):
-            if mode:
-                raise RuntimeError("cannot train after make_generation_fast")
-
-        # this model should no longer be used for training
-        self.eval()
-        self.train = train
-
 
 class BartWithLMHeadModel(PretrainedBartModel):
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
-        self.transformer = BartModel(config)
+        self.model = BartModel(config)
 
     def forward(self, *args, **kwargs):  # TODO(SS): maybe use split kwargs?
         kwargs["return_for_head"] = True
         lm_labels = kwargs.pop("lm_labels", None)
-        decoder_outputs, encoder_outputs = self.transformer(*args, **kwargs)
+        decoder_outputs, encoder_outputs = self.model(*args, **kwargs)
         lm_logits = self.output_layer(decoder_outputs[0])
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:
+        if lm_labels is not None:  # TODO(SS): do we need to know mask_token_ids?
             loss = self.calc_lm_loss(lm_labels, lm_logits)
             decoder_outputs = (loss,) + decoder_outputs
         return decoder_outputs + encoder_outputs
@@ -206,7 +173,7 @@ class BartWithLMHeadModel(PretrainedBartModel):
         return loss
 
     def output_layer(self, x):
-        return F.linear(x, self.transformer.shared.weight)
+        return F.linear(x, self.model.shared.weight)
 
 
 class BartForSequenceClassification(PretrainedBartModel):
@@ -303,11 +270,7 @@ class EncoderLayer(nn.Module):
             attention_mask = attention_mask.masked_fill(attention_mask.bool(), -1e8)  # unused, asked why!
         # anything in original attention_mask = 1, becomes -1e8
         # anything in original attention_mask = 0, becomes 0
-        # Note that we cannot use -inf here, because at some edge cases,
-        # the attention weight (before softmax) for some padded element in query
-        # will become -inf, which results in NaN in model parameters
-        # TODO: to formally solve this problem, we need to change fairseq's SelfAttention.
-        x, attn_weights = self.self_attn.forward(  # TODO(SS): delete forward
+        x, attn_weights = self.self_attn(
             query=x,
             key=x,
             value=x,
@@ -464,11 +427,11 @@ EncoderOut = namedtuple(
 
 class BartEncoder(nn.Module):
     """
-    Transformer encoder consisting of *args.encoder_layers* layers. Each layer
+    Transformer encoder consisting of *config.encoder_layers* layers. Each layer
     is a :class:`EncoderLayer`.
 
     Args:
-        args (argparse.Namespace): parsed command-line arguments
+        config (argparse.Namespace): parsed command-line arguments
         dictionary (~fairseq.data.Dictionary): encoding dictionary
         embed_tokens (torch.nn.Embedding): input embedding
     """
@@ -592,31 +555,29 @@ class BartEncoder(nn.Module):
 
 class BartDecoder(nn.Module):
     """
-    Transformer decoder consisting of *args.decoder_layers* layers. Each layer
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer
     is a :class:`DecoderLayer`.
     Args:
         config: BartConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BartConfig, embed_tokens):
+    def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
         self.register_buffer("version", torch.Tensor([3]))  # TODO(SS): could delete this and pop from state_dict
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
-        self.embed_tokens = embed_tokens  # killed embed_scale = 1.0
+        self.embed_tokens = embed_tokens
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx,
         )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
-        # deleted some unused:  adaptive softmax, self.layer_norm
         self.layernorm_embedding = LayerNorm(config.d_model)
 
     def forward(
@@ -636,10 +597,6 @@ class BartDecoder(nn.Module):
                 :ref:`Incremental decoding`
             full_context_alignment (bool, optional): don't apply
                 auto-regressive mask to self-attention (default: False).
-            alignment_layer (int, optional): return mean alignment over
-                heads at this layer (default: last layer).
-            alignment_heads (int, optional): only average alignment over
-                this many heads (default: all heads).
 
         Returns:
             tuple:
@@ -675,7 +632,7 @@ class BartDecoder(nn.Module):
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
-        for i, layer in enumerate(self.layers):
+        for layer in self.layers:
             # layer: DecoderLayer
             encoder_state = None if encoder_out is None else encoder_out.encoder_out
 
@@ -688,7 +645,7 @@ class BartDecoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if not self.training or (dropout_probability > self.layerdrop):
-                x, layer_self_attn = layer.forward(  # TODO(SS): remove forward
+                x, layer_self_attn = layer(  # TODO(SS): remove forward
                     x,
                     encoder_state,
                     encoder_out.encoder_padding_mask if encoder_out is not None else None,
