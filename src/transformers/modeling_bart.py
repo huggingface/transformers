@@ -146,7 +146,7 @@ class BartModel(PretrainedBartModel,):
         return (self.encoder.max_positions(), self.decoder.max_positions())
 
 
-class BartWithLMHeadModel(PretrainedBartModel):
+class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):

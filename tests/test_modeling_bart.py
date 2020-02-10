@@ -29,7 +29,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForSequenceClassification,
         BartModel,
-        BartWithLMHeadModel,
+        BartForMaskedLM,
         BartForSequenceClassification,
         BartConfig,
     )
@@ -39,7 +39,7 @@ if is_torch_available():
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel, BartWithLMHeadModel) if is_torch_available() else ()
+    all_model_classes = (BartModel, BartForMaskedLM) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = True
     # TODO(SS): fix the below in a separate PR
@@ -181,7 +181,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class BartSequenceClassifTest(unittest.TestCase):
     batch_size = 13
-    seq_length = 5
 
     def test_forward(self):
         input_ids = torch.Tensor(
@@ -219,9 +218,9 @@ class BartSequenceClassifTest(unittest.TestCase):
         expected_shape = torch.Size((self.batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
-        lm_model = BartWithLMHeadModel(config)
+        lm_model = BartForMaskedLM(config)
         output = lm_model(input_ids)[0]
-        expected_shape = (1, 11, 99)
+        expected_shape = (self.batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(output.shape, expected_shape)
 
 
@@ -255,5 +254,3 @@ class BartModelIntegrationTest(unittest.TestCase):
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
-
-

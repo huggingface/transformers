@@ -48,7 +48,7 @@ from .modeling_bart import (
     BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     BartForSequenceClassification,
     BartModel,
-    BartWithLMHeadModel,
+    BartForMaskedLM,
 )
 from .modeling_bert import (
     BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -170,7 +170,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (BartConfig, BartWithLMHeadModel),
+        (BartConfig, BartForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
@@ -190,7 +190,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (BartConfig, BartWithLMHeadModel),
+        (BartConfig, BartForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForMaskedLM),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
