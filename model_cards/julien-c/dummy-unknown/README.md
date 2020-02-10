@@ -1,7 +1,6 @@
 ---
 tags:
 - ci
-- julien-c
 ---
 
 ## Dummy model used for unit testing and CI
