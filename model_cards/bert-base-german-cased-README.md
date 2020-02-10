@@ -1,3 +1,8 @@
+---
+language: german
+thumbnail: https://thumb.tildacdn.com/tild3330-3735-4461-b133-656238643834/-/format/webp/deepset_performance.png
+---
+
 # German BERT
 
 ## Overview
@@ -33,7 +38,7 @@ During training we monitored the loss and evaluated different model checkpoints 
 
 - germEval18Fine: Macro f1 score for multiclass sentiment classification
 - germEval18coarse: Macro f1 score for binary sentiment classification
-- germEval14: Seq f1 score for NER (file names deuutf.*)
+- germEval14: Seq f1 score for NER (file names deuutf.\*)
 - CONLL03: Seq f1 score for NER
 - 10kGNAD: Accuracy for document classification
 
