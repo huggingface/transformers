@@ -153,24 +153,18 @@ class BartForMaskedLM(PretrainedBartModel):
         super().__init__(config)
         self.model = BartModel(config)
 
-    def forward(self, *args, **kwargs):  # TODO(SS): maybe use split kwargs?
+    def forward(self, *args, **kwargs):  # TODO(SS): better signature when base API decided
         kwargs["return_for_head"] = True
         lm_labels = kwargs.pop("lm_labels", None)
         decoder_outputs, encoder_outputs = self.model(*args, **kwargs)
         lm_logits = self.output_layer(decoder_outputs[0])
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:  # TODO(SS): do we need to know mask_token_ids?
-            loss = self.calc_lm_loss(lm_labels, lm_logits)
-            decoder_outputs = (loss,) + decoder_outputs
-        return decoder_outputs + encoder_outputs
 
-    @staticmethod
-    def calc_lm_loss(lm_labels, lm_logits):
-        shift_logits = lm_logits[..., :-1, :].contiguous()
-        shift_labels = lm_labels[..., 1:].contiguous()
-        loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-        return loss
+        if lm_labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            decoder_outputs = (masked_lm_loss,) + decoder_outputs
+        return decoder_outputs + encoder_outputs
 
     def output_layer(self, x):
         return F.linear(x, self.model.shared.weight)
@@ -965,3 +959,12 @@ def fill_with_neg_inf(t):
 
 def _filter_out_nones(*tup):
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
+
+
+def calc_causal_lm_loss(lm_labels, lm_logits):
+    """Unused"""
+    shift_logits = lm_logits[..., :-1, :].contiguous()
+    shift_labels = lm_labels[..., 1:].contiguous()
+    loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+    return loss
