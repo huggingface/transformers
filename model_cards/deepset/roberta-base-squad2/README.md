@@ -7,6 +7,7 @@
 **Training data:** SQuAD 2.0  
 **Eval data:** SQuAD 2.0  
 **Code:**  See [example](https://github.com/deepset-ai/FARM/blob/master/examples/question_answering.py) in [FARM](https://github.com/deepset-ai/FARM/blob/master/examples/question_answering.py)  
+**Infrastructure**: 4x Tesla v100
 
 ## Hyperparameters
 
@@ -82,10 +83,10 @@ reader = TransformersReader(model="deepset/roberta-base-squad2",tokenizer="deeps
 
 
 ## Authors
-**Branden Chan**: `branden.chan [at] deepset.ai` <br>
-**Timo Möller**: `timo.moeller [at] deepset.ai` <br>
-**Malte Pietsch**: `malte.pietsch [at] deepset.ai` <br> 
-**Tanay Soni**: `tanay.soni [at] deepset.ai` <br>
+Branden Chan: `branden.chan [at] deepset.ai` <br>
+Timo Möller: `timo.moeller [at] deepset.ai` <br>
+Malte Pietsch: `malte.pietsch [at] deepset.ai` <br> 
+Tanay Soni: `tanay.soni [at] deepset.ai` <br>
 
 ## About us
 ![deepset logo](https://raw.githubusercontent.com/deepset-ai/FARM/master/docs/img/deepset_logo.png)<br>
