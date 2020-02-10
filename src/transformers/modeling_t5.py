@@ -758,8 +758,13 @@ class T5Model(T5PreTrainedModel):
         # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
         # that apply to the model as whole.
         # We let the specific kwargs override the common ones in case of conflict.
-
-        kwargs_decoder, kwargs_encoder = split_kwargs(kwargs)
+        kwargs_common = dict(
+            (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
+        )
+        kwargs_encoder = kwargs_common.copy()
+        kwargs_decoder = kwargs_common.copy()
+        kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
+        kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
 
         # Encode if needed (training, first prediction pass)
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
@@ -861,7 +866,13 @@ class T5WithLMHeadModel(T5PreTrainedModel):
 
         lm_labels = kwargs.pop("decoder_lm_labels", None)
 
-        kwargs_decoder, kwargs_encoder = split_kwargs(kwargs)
+        kwargs_common = dict(
+            (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
+        )
+        kwargs_encoder = kwargs_common.copy()
+        kwargs_decoder = kwargs_common.copy()
+        kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
+        kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
 
         # Encode if needed (training, first prediction pass)
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
@@ -905,15 +916,3 @@ class T5WithLMHeadModel(T5PreTrainedModel):
             ) + decoder_outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         return decoder_outputs + encoder_outputs
-
-
-def split_kwargs(kwargs):
-    """Keys that start with encoder_, decoder_ sent to encoder, decoder respectively. Others shared."""
-    kwargs_common = dict(
-        (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
-    )
-    kwargs_encoder = kwargs_common.copy()
-    kwargs_decoder = kwargs_common.copy()
-    kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
-    kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
-    return kwargs_decoder, kwargs_encoder

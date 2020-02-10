@@ -114,8 +114,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                     "input_ids": input_ids,
                     "token_type_ids": token_type_ids,
                     "attention_mask": input_mask,
-                    "encoder_input_ids": input_ids,
-                    "decoder_input_ids": input_ids,  # TODO(SS): use split_kwargs
+                    # "encoder_input_ids": input_ids,
+                    # "decoder_input_ids": input_ids,  # TODO(SS): use split_kwargs
                     "decoder_lm_labels": decoder_lm_labels,
                 },
             )
