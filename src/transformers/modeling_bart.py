@@ -214,12 +214,6 @@ class BartForSequenceClassification(PretrainedBartModel):
 
 
 class EncoderLayer(nn.Module):
-    """Encoder layer block.
-
-    Args:
-        config (BartConfig)
-    """
-
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -241,10 +235,8 @@ class EncoderLayer(nn.Module):
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_padding_mask (ByteTensor): binary ByteTensor of shape
                 `(batch, src_len)` where padding elements are indicated by ``1``.
-            attention_mask (ByteTensor): binary tensor of shape (T_tgt, T_src), where
-            T_tgt is the length of query, while T_src is the length of key,
-            though here both query and key is x here,
-            attn_mask[t_tgt, t_src] = 1 means when calculating embedding
+            attention_mask (ByteTensor): binary tensor of shape (seq_len, seq_len)
+                attn_mask[t_tgt, t_src] = 1 means when calculating embedding
             for t_tgt, t_src is excluded (or masked out), =0 means it is
             included in attention
 
@@ -279,22 +271,6 @@ class EncoderLayer(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-    """Decoder layer block.
-
-    In the original paper each operation (multi-head attention, encoder
-    attention or FFN) is postprocessed with: `dropout -> add residual ->
-    layernorm`. In the tensor2tensor code they suggest that learning is more
-    robust when preprocessing each layer with layernorm and postprocessing with:
-    `dropout -> add residual`. We default to the approach in the paper, but the
-    tensor2tensor approach can be enabled by setting
-    *args.decoder_normalize_before* to ``True``.
-
-    Args:
-        args (argparse.Namespace): parsed command-line arguments
-        no_encoder_attn (bool, optional): whether to attend to encoder outputs
-            (default: False).
-    """
-
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -750,8 +726,7 @@ def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
 
 
 class SelfAttention(nn.Module):
-    """Multi-headed attention. See "Attention Is All You Need" for more details.
-    """
+    """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
         self,
@@ -810,11 +785,6 @@ class SelfAttention(nn.Module):
             attn_mask (ByteTensor, optional): typically used to
                 implement causal attention, where the mask prevents the
                 attention from looking forward in time (default: None).
-            before_softmax (bool, optional): return the raw attention
-                weights and values before the attention softmax.
-            need_head_weights (bool, optional): return the attention
-                weights for each head. Implies *need_weights*. Default:
-                return the average attention weights over all heads.
         """
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
@@ -856,8 +826,7 @@ class SelfAttention(nn.Module):
         assert k is not None
         src_len = k.size(1)
 
-        # This is part of a workaround to get around fork/join parallelism
-        # not supporting Optional types.
+        # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
         assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len)
@@ -959,7 +928,7 @@ class SelfAttention(nn.Module):
 
     def reorder_incremental_state(self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], new_order):
         """Reorder buffered internal state (for incremental generation)."""
-        # TODO(SS): delete me?
+        # TODO(SS): Where is this used?
         input_buffer = self._get_input_buffer(incremental_state)
         if input_buffer is not None:
             for k in input_buffer.keys():
