@@ -147,7 +147,14 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
         )
 
         if tokenizer.pad_token_id in encoded_dict["input_ids"]:
-            non_padded_ids = encoded_dict["input_ids"][: encoded_dict["input_ids"].index(tokenizer.pad_token_id)]
+            if tokenizer.padding_side == "right":
+                non_padded_ids = encoded_dict["input_ids"][: encoded_dict["input_ids"].index(tokenizer.pad_token_id)]
+            else:
+                last_padding_id_position = (
+                    len(encoded_dict["input_ids"]) - 1 - encoded_dict["input_ids"][::-1].index(tokenizer.pad_token_id)
+                )
+                non_padded_ids = encoded_dict["input_ids"][last_padding_id_position + 1 :]
+
         else:
             non_padded_ids = encoded_dict["input_ids"]
 
