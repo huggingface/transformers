@@ -185,6 +185,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         self.classification_head = BARTClassificationHead(
             config.d_model, config.d_model, config.num_labels, config.classif_dropout,
         )
+        self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, input_ids, *args, **kwargs):
 
@@ -196,21 +197,14 @@ class BartForSequenceClassification(PretrainedBartModel):
         x = decoder_outputs[0]  # last hidden state
 
         eos_mask = input_ids.eq(self.eos_token)
-        if torch.unique(eos_mask.sum(1)) > 1:
-            # TODO(SS): we can probably code our way around this if it happens.
-            raise ValueError("All examples must have the same number of EOS tokens.")
+        if len(torch.unique(eos_mask.sum(1))) > 1:
+            raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
         # Prepend logits
         decoder_outputs = (logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
         if labels is not None:  # prepend loss to output
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = nn.MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = self.loss_fn(logits.view(-1, self.num_labels), labels.view(-1))
             decoder_outputs = (loss,) + decoder_outputs
 
         return decoder_outputs + encoder_outputs

@@ -26,7 +26,13 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import AutoModel, BartModel, BartWithLMHeadModel, BartForSequenceClassification, BartConfig
+    from transformers import (
+        AutoModelForSequenceClassification,
+        BartModel,
+        BartWithLMHeadModel,
+        BartForSequenceClassification,
+        BartConfig,
+    )
     from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
@@ -219,7 +225,8 @@ class BartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large")
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.Tensor(
@@ -229,12 +236,13 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_mnli_inference(self):
-        model = AutoModel.from_pretrained("bart-large-mnli")
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        logits = model(input_ids)[0]
+        model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")
+        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        with torch.no_grad():
+            logits = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))
         self.assertEqual(logits.shape, expected_shape)
-        expected_slice = torch.Tensor([[0.7144, 0.8143, -1.2813]])
+        expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]])
         self.assertTrue(torch.allclose(logits, expected_slice, atol=1e-3))
 
     @slow
