@@ -26,20 +26,11 @@ from datetime import datetime
 
 import numpy as np
 import torch
-from torch.utils.data import (
-    DataLoader,
-    SequentialSampler,
-    Subset,
-)
+from torch.utils.data import DataLoader, SequentialSampler, Subset
 from torch.utils.data.distributed import DistributedSampler
-
-from run_glue import (
-    ALL_MODELS,
-    MODEL_CLASSES,
-    load_and_cache_examples,
-    set_seed,
-)
 from tqdm import tqdm
+
+from run_glue import ALL_MODELS, MODEL_CLASSES, load_and_cache_examples, set_seed
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors

@@ -2,17 +2,12 @@ import os
 import sys
 from argparse import ArgumentParser
 from getpass import getpass
+from typing import List, Union
 
 from requests.exceptions import HTTPError
+
 from transformers.commands import BaseTransformersCLICommand
-from transformers.hf_api import (
-    HfApi,
-    HfFolder,
-)
-from typing import (
-    List,
-    Union,
-)
+from transformers.hf_api import HfApi, HfFolder
 
 
 UPLOAD_MAX_FILES = 15

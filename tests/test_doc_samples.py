@@ -15,17 +15,9 @@
 
 import os
 import unittest
+from typing import List, Union
 
-from typing import (
-    List,
-    Union,
-)
-
-from .utils import (
-    require_tf,
-    require_torch,
-    slow,
-)
+from .utils import require_tf, require_torch, slow
 
 
 def get_examples_from_file(file):

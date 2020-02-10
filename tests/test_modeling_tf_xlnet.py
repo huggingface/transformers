@@ -17,21 +17,11 @@
 import random
 import unittest
 
-from transformers import (
-    XLNetConfig,
-    is_tf_available,
-)
+from transformers import XLNetConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import (
-    TFModelTesterMixin,
-    ids_tensor,
-)
-from .utils import (
-    CACHE_DIR,
-    require_tf,
-    slow,
-)
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():

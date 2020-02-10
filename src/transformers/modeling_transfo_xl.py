@@ -26,15 +26,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_callable,
-)
-from .modeling_transfo_xl_utilities import (
-    LogUniformSampler,
-    ProjectedAdaptiveLogSoftmax,
-    sample_logits,
-)
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_transfo_xl_utilities import LogUniformSampler, ProjectedAdaptiveLogSoftmax, sample_logits
 from .modeling_utils import PreTrainedModel
 
 

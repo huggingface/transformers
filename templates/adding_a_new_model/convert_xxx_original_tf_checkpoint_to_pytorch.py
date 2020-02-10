@@ -20,11 +20,7 @@ import logging
 
 import torch
 
-from transformers import (
-    XxxConfig,
-    XxxForPreTraining,
-    load_tf_weights_in_xxx,
-)
+from transformers import XxxConfig, XxxForPreTraining, load_tf_weights_in_xxx
 
 
 logging.basicConfig(level=logging.INFO)

@@ -11,11 +11,9 @@ import os
 import sys
 import tempfile
 from contextlib import contextmanager
-from functools import (
-    partial,
-    wraps,
-)
+from functools import partial, wraps
 from hashlib import sha256
+from typing import Optional
 from urllib.parse import urlparse
 
 import boto3
@@ -24,7 +22,6 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from filelock import FileLock
 from tqdm.auto import tqdm
-from typing import Optional
 
 from . import __version__
 

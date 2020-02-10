@@ -22,10 +22,7 @@ import torch
 from torch.nn import functional as F
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_callable,
-)
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_xlm import (
     XLMForQuestionAnswering,
     XLMForQuestionAnsweringSimple,

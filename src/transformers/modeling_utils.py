@@ -21,8 +21,8 @@ import os
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss
+from torch.nn import functional as F
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (

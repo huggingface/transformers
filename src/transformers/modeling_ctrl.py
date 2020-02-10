@@ -24,14 +24,8 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_callable,
-)
-from .modeling_utils import (
-    Conv1D,
-    PreTrainedModel,
-)
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_utils import Conv1D, PreTrainedModel
 
 
 logger = logging.getLogger(__name__)

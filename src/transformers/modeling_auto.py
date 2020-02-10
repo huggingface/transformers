@@ -66,11 +66,7 @@ from .modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
-from .modeling_ctrl import (
-    CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-    CTRLLMHeadModel,
-    CTRLModel,
-)
+from .modeling_ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel, CTRLModel
 from .modeling_distilbert import (
     DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     DistilBertForMaskedLM,
@@ -86,16 +82,8 @@ from .modeling_flaubert import (
     FlaubertModel,
     FlaubertWithLMHeadModel,
 )
-from .modeling_gpt2 import (
-    GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
-    GPT2LMHeadModel,
-    GPT2Model,
-)
-from .modeling_openai import (
-    OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-    OpenAIGPTLMHeadModel,
-    OpenAIGPTModel,
-)
+from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
+from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_roberta import (
     ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     RobertaForMaskedLM,
@@ -104,16 +92,8 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from .modeling_t5 import (
-    T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-    T5Model,
-    T5WithLMHeadModel,
-)
-from .modeling_transfo_xl import (
-    TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TransfoXLLMHeadModel,
-    TransfoXLModel,
-)
+from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadModel
+from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMForQuestionAnswering,

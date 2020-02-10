@@ -15,11 +15,7 @@
 # limitations under the License.
 """ Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa)."""
 
-from __future__ import (
-    absolute_import,
-    division,
-    print_function,
-)
+from __future__ import absolute_import, division, print_function
 
 import argparse
 import glob
@@ -29,21 +25,13 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import (
-    DataLoader,
-    RandomSampler,
-    SequentialSampler,
-    TensorDataset,
-)
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
 
 from hans_processors import glue_output_modes as output_modes
 from hans_processors import glue_processors as processors
 from hans_processors import hans_convert_examples_to_features as convert_examples_to_features
-from tqdm import (
-    tqdm,
-    trange,
-)
 from transformers import (
     WEIGHTS_NAME,
     AdamW,

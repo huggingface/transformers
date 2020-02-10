@@ -26,17 +26,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import (
-    DataLoader,
-    RandomSampler,
-    SequentialSampler,
-)
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
 
-from tqdm import (
-    tqdm,
-    trange,
-)
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -60,11 +53,7 @@ from transformers.data.metrics.squad_metrics import (
     compute_predictions_logits,
     squad_evaluate,
 )
-from transformers.data.processors.squad import (
-    SquadResult,
-    SquadV1Processor,
-    SquadV2Processor,
-)
+from transformers.data.processors.squad import SquadResult, SquadV1Processor, SquadV2Processor
 
 
 try:

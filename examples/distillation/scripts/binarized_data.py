@@ -23,11 +23,7 @@ import time
 
 import numpy as np
 
-from transformers import (
-    BertTokenizer,
-    GPT2Tokenizer,
-    RobertaTokenizer,
-)
+from transformers import BertTokenizer, GPT2Tokenizer, RobertaTokenizer
 
 
 logging.basicConfig(

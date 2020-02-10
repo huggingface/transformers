@@ -28,10 +28,7 @@ import time
 
 import torch
 
-from transformers import (
-    TransfoXLCorpus,
-    TransfoXLLMHeadModel,
-)
+from transformers import TransfoXLCorpus, TransfoXLLMHeadModel
 
 
 logging.basicConfig(

@@ -26,23 +26,18 @@ python examples/run_pplm.py -D sentiment --class_label 3 --cond_text "The lake" 
 import argparse
 import json
 from operator import add
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
+from tqdm import trange
 
 from pplm_classification_head import ClassificationHead
-from tqdm import trange
 from transformers import GPT2Tokenizer
 from transformers.file_utils import cached_path
 from transformers.modeling_gpt2 import GPT2LMHeadModel
-from typing import (
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
 
 
 PPLM_BOW = 1

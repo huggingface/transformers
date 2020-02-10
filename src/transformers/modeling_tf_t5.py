@@ -24,16 +24,8 @@ import math
 import tensorflow as tf
 
 from .configuration_t5 import T5Config
-from .file_utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    add_start_docstrings,
-)
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    TFSharedEmbeddings,
-    shape_list,
-)
+from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
 
 
 logger = logging.getLogger(__name__)

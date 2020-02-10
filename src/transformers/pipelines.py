@@ -20,42 +20,20 @@ import logging
 import os
 import pickle
 import sys
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from os.path import (
-    abspath,
-    exists,
-)
+from os.path import abspath, exists
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from typing import (
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
-
-from .configuration_auto import (
-    ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    AutoConfig,
-)
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_distilbert import DistilBertConfig
 from .configuration_roberta import RobertaConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLMConfig
-from .data import (
-    SquadExample,
-    squad_convert_examples_to_features,
-)
-from .file_utils import (
-    is_tf_available,
-    is_torch_available,
-)
+from .data import SquadExample, squad_convert_examples_to_features
+from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer

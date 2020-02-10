@@ -16,10 +16,7 @@
 import os
 import unittest
 
-from transformers.configuration_auto import (
-    CONFIG_MAPPING,
-    AutoConfig,
-)
+from transformers.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.configuration_bert import BertConfig
 from transformers.configuration_roberta import RobertaConfig
 

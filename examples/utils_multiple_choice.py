@@ -21,10 +21,11 @@ import glob
 import json
 import logging
 import os
+from typing import List
 
 import tqdm
+
 from transformers import PreTrainedTokenizer
-from typing import List
 
 
 logger = logging.getLogger(__name__)

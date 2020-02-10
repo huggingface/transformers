@@ -22,10 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_openai import OpenAIGPTConfig
-from .file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_callable,
-)
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFConv1D,
     TFPreTrainedModel,

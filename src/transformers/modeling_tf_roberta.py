@@ -21,20 +21,9 @@ import logging
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
-from .file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_callable,
-)
-from .modeling_tf_bert import (
-    TFBertEmbeddings,
-    TFBertMainLayer,
-    gelu,
-)
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    get_initializer,
-    shape_list,
-)
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 
 
 logger = logging.getLogger(__name__)

@@ -26,11 +26,7 @@ import tensorflow as tf
 
 from .configuration_xxx import XxxConfig
 from .file_utils import add_start_docstrings
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    get_initializer,
-    shape_list,
-)
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 
 
 logger = logging.getLogger(__name__)

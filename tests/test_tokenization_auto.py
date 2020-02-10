@@ -27,11 +27,7 @@ from transformers import (
 )
 from transformers.tokenization_auto import TOKENIZER_MAPPING
 
-from .utils import (  # noqa: F401
-    DUMMY_UNKWOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
-    slow,
-)
+from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
 
 
 class AutoTokenizerTest(unittest.TestCase):

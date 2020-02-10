@@ -22,14 +22,9 @@ import argparse
 import csv
 import timeit
 from time import time
-
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    is_tf_available,
-    is_torch_available,
-)
 from typing import List
+
+from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
 
 
 if is_tf_available():

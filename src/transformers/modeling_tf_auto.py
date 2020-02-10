@@ -48,11 +48,7 @@ from .modeling_tf_bert import (
     TFBertForTokenClassification,
     TFBertModel,
 )
-from .modeling_tf_ctrl import (
-    TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFCTRLLMHeadModel,
-    TFCTRLModel,
-)
+from .modeling_tf_ctrl import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, TFCTRLLMHeadModel, TFCTRLModel
 from .modeling_tf_distilbert import (
     TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFDistilBertForMaskedLM,
@@ -61,16 +57,8 @@ from .modeling_tf_distilbert import (
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
 )
-from .modeling_tf_gpt2 import (
-    TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFGPT2LMHeadModel,
-    TFGPT2Model,
-)
-from .modeling_tf_openai import (
-    TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFOpenAIGPTLMHeadModel,
-    TFOpenAIGPTModel,
-)
+from .modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from .modeling_tf_roberta import (
     TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFRobertaForMaskedLM,
@@ -78,11 +66,7 @@ from .modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from .modeling_tf_t5 import (
-    TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFT5Model,
-    TFT5WithLMHeadModel,
-)
+from .modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP, TFT5Model, TFT5WithLMHeadModel
 from .modeling_tf_transfo_xl import (
     TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFTransfoXLLMHeadModel,

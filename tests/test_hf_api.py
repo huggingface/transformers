@@ -20,12 +20,8 @@ import unittest
 
 import requests
 from requests.exceptions import HTTPError
-from transformers.hf_api import (
-    HfApi,
-    HfFolder,
-    PresignedUrl,
-    S3Obj,
-)
+
+from transformers.hf_api import HfApi, HfFolder, PresignedUrl, S3Obj
 
 
 USER = "__DUMMY_TRANSFORMERS_USER__"

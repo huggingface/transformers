@@ -20,10 +20,7 @@ import logging
 
 import torch
 import torch.nn as nn
-from torch.nn import (
-    CrossEntropyLoss,
-    MSELoss,
-)
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import add_start_docstrings
 

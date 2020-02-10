@@ -24,18 +24,10 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import (
-    DataLoader,
-    RandomSampler,
-    SequentialSampler,
-    TensorDataset,
-)
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
+from tqdm import tqdm, trange
 
-from tqdm import (
-    tqdm,
-    trange,
-)
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -50,10 +42,7 @@ from transformers import (
     XLNetTokenizer,
     get_linear_schedule_with_warmup,
 )
-from utils_multiple_choice import (
-    convert_examples_to_features,
-    processors,
-)
+from utils_multiple_choice import convert_examples_to_features, processors
 
 
 try:

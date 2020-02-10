@@ -22,10 +22,7 @@ import logging
 import numpy
 import torch
 
-from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-)
+from transformers import CONFIG_NAME, WEIGHTS_NAME
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
 

@@ -20,13 +20,7 @@ import logging
 
 import torch
 
-from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    OpenAIGPTConfig,
-    OpenAIGPTModel,
-    load_tf_weights_in_openai_gpt,
-)
+from transformers import CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
 
 
 logging.basicConfig(level=logging.INFO)
