@@ -130,9 +130,9 @@ class LineByLineTextDataset(Dataset):
         logger.info("Creating features from dataset file at %s", file_path)
 
         with open(file_path, encoding="utf-8") as f:
-            lines = [line for line in f.read().splitlines() if len(line) > 0]
+            lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
 
-        self.examples = tokenizer.batch_encode_plus(lines, max_length=block_size)["input_ids"]
+        self.examples = tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
 
     def __len__(self):
         return len(self.examples)
@@ -704,10 +704,10 @@ def main():
         )
 
     if args.block_size <= 0:
-        args.block_size = tokenizer.max_len_single_sentence
+        args.block_size = tokenizer.max_len
         # Our input block size will be the max possible for the model
     else:
-        args.block_size = min(args.block_size, tokenizer.max_len_single_sentence)
+        args.block_size = min(args.block_size, tokenizer.max_len)
 
     if args.model_name_or_path:
         model = model_class.from_pretrained(
