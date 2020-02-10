@@ -5,8 +5,9 @@
 **Language:** German  
 **Training data:** Wiki, OpenLegalData, News (~ 12GB)  
 **Eval data:** Conll03 (NER), GermEval14 (NER), GermEval18 (Classification), GNAD (Classification)  
-**Infrastructure**: 1x TPU v2
-
+**Infrastructure**: 1x TPU v2  
+**Published**: Jun 14th, 2019
+ 
 ## Details
 - We trained using Google's Tensorflow code on a single cloud TPU v2 with standard settings.
 - We trained 810k steps with a batch size of 1024 for sequence length 128 and 30k steps with sequence length 512. Training took about 9 days.
