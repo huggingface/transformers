@@ -2,12 +2,19 @@ import json
 import logging
 import os
 from functools import partial
-from multiprocessing import Pool, cpu_count
+from multiprocessing import (
+    Pool,
+    cpu_count,
+)
 
 import numpy as np
+
 from tqdm import tqdm
 
-from ...file_utils import is_tf_available, is_torch_available
+from ...file_utils import (
+    is_tf_available,
+    is_torch_available,
+)
 from ...tokenization_bert import whitespace_tokenize
 from .utils import DataProcessor
 

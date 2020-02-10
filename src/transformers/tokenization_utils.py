@@ -22,7 +22,13 @@ import logging
 import os
 import re
 
-from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
+from .file_utils import (
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 if is_tf_available():

@@ -29,10 +29,16 @@ import torch.utils.data as data
 from nltk.tokenize.treebank import TreebankWordDetokenizer
 from torchtext import data as torchtext_data
 from torchtext import datasets
-from tqdm import tqdm, trange
 
 from pplm_classification_head import ClassificationHead
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from tqdm import (
+    tqdm,
+    trange,
+)
+from transformers import (
+    GPT2LMHeadModel,
+    GPT2Tokenizer,
+)
 
 
 torch.manual_seed(0)

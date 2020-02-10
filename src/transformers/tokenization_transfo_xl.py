@@ -22,11 +22,17 @@ import glob
 import logging
 import os
 import pickle
-from collections import Counter, OrderedDict
+from collections import (
+    Counter,
+    OrderedDict,
+)
 
 import numpy as np
 
-from .file_utils import cached_path, is_torch_available
+from .file_utils import (
+    cached_path,
+    is_torch_available,
+)
 from .tokenization_utils import PreTrainedTokenizer
 
 

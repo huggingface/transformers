@@ -28,15 +28,22 @@ import pickle
 import random
 import re
 import shutil
-from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    RandomSampler,
+    SequentialSampler,
+)
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
 
+from tqdm import (
+    tqdm,
+    trange,
+)
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -61,6 +68,11 @@ from transformers import (
     RobertaForMaskedLM,
     RobertaTokenizer,
     get_linear_schedule_with_warmup,
+)
+from typing import (
+    Dict,
+    List,
+    Tuple,
 )
 
 

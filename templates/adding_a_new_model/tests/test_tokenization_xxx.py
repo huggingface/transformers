@@ -17,7 +17,10 @@
 import os
 import unittest
 
-from transformers.tokenization_bert import VOCAB_FILES_NAMES, XxxTokenizer
+from transformers.tokenization_bert import (
+    VOCAB_FILES_NAMES,
+    XxxTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 

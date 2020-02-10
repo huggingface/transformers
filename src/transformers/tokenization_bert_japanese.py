@@ -20,7 +20,12 @@ import logging
 import os
 import unicodedata
 
-from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+from .tokenization_bert import (
+    BasicTokenizer,
+    BertTokenizer,
+    WordpieceTokenizer,
+    load_vocab,
+)
 
 
 logger = logging.getLogger(__name__)

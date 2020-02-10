@@ -24,7 +24,10 @@ import os
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import (
+    CrossEntropyLoss,
+    MSELoss,
+)
 
 from .configuration_xxx import XxxConfig
 from .file_utils import add_start_docstrings

@@ -1,10 +1,17 @@
 import unittest
-from typing import Iterable, List, Optional
 
 from transformers import pipeline
 from transformers.pipelines import Pipeline
+from typing import (
+    Iterable,
+    List,
+    Optional,
+)
 
-from .utils import require_tf, require_torch
+from .utils import (
+    require_tf,
+    require_torch,
+)
 
 
 QA_FINETUNED_MODELS = {

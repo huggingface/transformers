@@ -24,7 +24,10 @@ import torch
 from packaging import version
 
 from transformers.configuration_bart import BartConfig
-from transformers.modeling_bart import BartForSequenceClassification, BartModel
+from transformers.modeling_bart import (
+    BartForSequenceClassification,
+    BartModel,
+)
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):

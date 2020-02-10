@@ -1,9 +1,16 @@
 import os
-from argparse import ArgumentParser, Namespace
+from argparse import (
+    ArgumentParser,
+    Namespace,
+)
 from logging import getLogger
 
 from transformers import SingleSentenceClassificationProcessor as Processor
-from transformers import TextClassificationPipeline, is_tf_available, is_torch_available
+from transformers import (
+    TextClassificationPipeline,
+    is_tf_available,
+    is_torch_available,
+)
 from transformers.commands import BaseTransformersCLICommand
 
 

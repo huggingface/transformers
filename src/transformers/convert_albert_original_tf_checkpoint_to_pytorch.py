@@ -20,7 +20,11 @@ import logging
 
 import torch
 
-from transformers import AlbertConfig, AlbertForMaskedLM, load_tf_weights_in_albert
+from transformers import (
+    AlbertConfig,
+    AlbertForMaskedLM,
+    load_tf_weights_in_albert,
+)
 
 
 logging.basicConfig(level=logging.INFO)

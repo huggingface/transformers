@@ -21,7 +21,10 @@ import os
 import torch
 from torch import nn
 
-from .modeling_auto import AutoModel, AutoModelWithLMHead
+from .modeling_auto import (
+    AutoModel,
+    AutoModelWithLMHead,
+)
 
 
 logger = logging.getLogger(__name__)

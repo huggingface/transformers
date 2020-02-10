@@ -20,7 +20,11 @@ import logging
 
 import torch
 
-from transformers import T5Config, T5Model, load_tf_weights_in_t5
+from transformers import (
+    T5Config,
+    T5Model,
+    load_tf_weights_in_t5,
+)
 
 
 logging.basicConfig(level=logging.INFO)

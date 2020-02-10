@@ -17,10 +17,10 @@
 import io
 import os
 from os.path import expanduser
-from typing import List
 
 import requests
 from tqdm import tqdm
+from typing import List
 
 
 ENDPOINT = "https://huggingface.co"

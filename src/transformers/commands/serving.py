@@ -1,10 +1,20 @@
 import logging
-from argparse import ArgumentParser, Namespace
-from typing import Any, List, Optional
+from argparse import (
+    ArgumentParser,
+    Namespace,
+)
 
 from transformers import Pipeline
 from transformers.commands import BaseTransformersCLICommand
-from transformers.pipelines import SUPPORTED_TASKS, pipeline
+from transformers.pipelines import (
+    SUPPORTED_TASKS,
+    pipeline,
+)
+from typing import (
+    Any,
+    List,
+    Optional,
+)
 
 
 try:

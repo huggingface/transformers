@@ -22,12 +22,24 @@ import math
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
+from torch.nn import (
+    CrossEntropyLoss,
+    MSELoss,
+)
 
 from .configuration_xlnet import XLNetConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
+from .file_utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
+from .modeling_utils import (
+    PoolerAnswerClass,
+    PoolerEndLogits,
+    PoolerStartLogits,
+    PreTrainedModel,
+    SequenceSummary,
+)
 
 
 logger = logging.getLogger(__name__)

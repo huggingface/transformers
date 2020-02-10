@@ -8,7 +8,11 @@ import re
 
 import numpy as np
 import tensorflow as tf
-from absl import app, flags, logging
+from absl import (
+    app,
+    flags,
+    logging,
+)
 from seqeval import metrics
 
 from transformers import (
@@ -25,7 +29,11 @@ from transformers import (
     TFRobertaForTokenClassification,
     create_optimizer,
 )
-from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
+from utils_ner import (
+    convert_examples_to_features,
+    get_labels,
+    read_examples_from_file,
+)
 
 
 try:

@@ -23,7 +23,10 @@ from functools import lru_cache
 import regex as re
 import tokenizers as tk
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+)
 
 
 logger = logging.getLogger(__name__)

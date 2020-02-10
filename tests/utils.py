@@ -3,7 +3,10 @@ import tempfile
 import unittest
 from distutils.util import strtobool
 
-from transformers.file_utils import _tf_available, _torch_available
+from transformers.file_utils import (
+    _tf_available,
+    _torch_available,
+)
 
 
 CACHE_DIR = os.path.join(tempfile.gettempdir(), "transformers_test")

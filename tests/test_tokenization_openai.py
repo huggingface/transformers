@@ -18,7 +18,10 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
+from transformers.tokenization_openai import (
+    VOCAB_FILES_NAMES,
+    OpenAIGPTTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 

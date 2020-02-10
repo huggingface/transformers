@@ -24,12 +24,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
-from torch.utils.data import BatchSampler, DataLoader, RandomSampler
+from torch.utils.data import (
+    BatchSampler,
+    DataLoader,
+    RandomSampler,
+)
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm
 
-from grouped_batch_sampler import GroupedBatchSampler, create_lengths_groups
+from grouped_batch_sampler import (
+    GroupedBatchSampler,
+    create_lengths_groups,
+)
 from lm_seqs_dataset import LmSeqsDataset
+from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 from utils import logger
 

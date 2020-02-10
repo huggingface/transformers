@@ -18,7 +18,10 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
+from transformers.tokenization_roberta import (
+    VOCAB_FILES_NAMES,
+    RobertaTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow

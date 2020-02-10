@@ -23,12 +23,23 @@ import math
 import numpy as np
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
+from torch.nn import (
+    CrossEntropyLoss,
+    MSELoss,
+)
 
 from .configuration_xlm import XLMConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_linear_layer
+from .file_utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
+from .modeling_utils import (
+    PreTrainedModel,
+    SequenceSummary,
+    SQuADHead,
+    prune_linear_layer,
+)
 
 
 logger = logging.getLogger(__name__)

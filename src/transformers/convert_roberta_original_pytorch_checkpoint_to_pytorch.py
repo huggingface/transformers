@@ -33,7 +33,10 @@ from transformers.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
-from transformers.modeling_roberta import RobertaForMaskedLM, RobertaForSequenceClassification
+from transformers.modeling_roberta import (
+    RobertaForMaskedLM,
+    RobertaForSequenceClassification,
+)
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):

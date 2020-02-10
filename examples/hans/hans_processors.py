@@ -19,7 +19,11 @@ import logging
 import os
 
 from transformers.file_utils import is_tf_available
-from utils_hans import DataProcessor, InputExample, InputFeatures
+from utils_hans import (
+    DataProcessor,
+    InputExample,
+    InputFeatures,
+)
 
 
 if is_tf_available():

@@ -19,7 +19,10 @@ import os
 import random
 import tempfile
 
-from transformers import is_tf_available, is_torch_available
+from transformers import (
+    is_tf_available,
+    is_torch_available,
+)
 
 from .utils import require_tf
 

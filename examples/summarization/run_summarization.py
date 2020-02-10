@@ -6,10 +6,16 @@ import sys
 from collections import namedtuple
 
 import torch
-from torch.utils.data import DataLoader, SequentialSampler
-from tqdm import tqdm
+from torch.utils.data import (
+    DataLoader,
+    SequentialSampler,
+)
 
-from modeling_bertabs import BertAbs, build_predictor
+from modeling_bertabs import (
+    BertAbs,
+    build_predictor,
+)
+from tqdm import tqdm
 from transformers import BertTokenizer
 from utils_summarization import (
     SummarizationDataset,

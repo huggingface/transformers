@@ -22,9 +22,16 @@ import logging
 import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    get_initializer,
+    shape_list,
+)
 
 
 logger = logging.getLogger(__name__)

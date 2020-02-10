@@ -27,10 +27,17 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
+from torch.utils.data import (
+    DataLoader,
+    RandomSampler,
+    SequentialSampler,
+)
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
 
+from tqdm import (
+    tqdm,
+    trange,
+)
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -56,7 +63,13 @@ from transformers import (
     XLNetTokenizer,
     get_linear_schedule_with_warmup,
 )
-from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
+from utils_mmimdb import (
+    ImageEncoder,
+    JsonlDataset,
+    collate_fn,
+    get_image_transforms,
+    get_mmimdb_labels,
+)
 
 
 try:

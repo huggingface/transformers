@@ -25,10 +25,22 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data import (
+    DataLoader,
+    RandomSampler,
+    SequentialSampler,
+    TensorDataset,
+)
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
 
+from tqdm import (
+    tqdm,
+    trange,
+)
+from transformers import glue_convert_examples_to_features as convert_examples_to_features
+from transformers import xnli_compute_metrics as compute_metrics
+from transformers import xnli_output_modes as output_modes
+from transformers import xnli_processors as processors
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -43,10 +55,6 @@ from transformers import (
     XLMTokenizer,
     get_linear_schedule_with_warmup,
 )
-from transformers import glue_convert_examples_to_features as convert_examples_to_features
-from transformers import xnli_compute_metrics as compute_metrics
-from transformers import xnli_output_modes as output_modes
-from transformers import xnli_processors as processors
 
 
 try:

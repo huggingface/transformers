@@ -26,7 +26,10 @@ from transformers.tokenization_bert_japanese import (
 )
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import custom_tokenizers, slow
+from .utils import (
+    custom_tokenizers,
+    slow,
+)
 
 
 @custom_tokenizers

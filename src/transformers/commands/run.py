@@ -2,7 +2,12 @@ import logging
 from argparse import ArgumentParser
 
 from transformers.commands import BaseTransformersCLICommand
-from transformers.pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
+from transformers.pipelines import (
+    SUPPORTED_TASKS,
+    Pipeline,
+    PipelineDataFormat,
+    pipeline,
+)
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
