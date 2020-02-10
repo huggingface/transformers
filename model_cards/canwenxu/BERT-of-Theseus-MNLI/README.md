@@ -1,3 +1,7 @@
+---
+thumbnail: https://github.com/JetRunner/BERT-of-Theseus/blob/master/bert-of-theseus.png?raw=true
+---
+
 # BERT-of-Theseus
 See our paper ["BERT-of-Theseus: Compressing BERT by Progressive Module Replacing"](http://arxiv.org/abs/2002.02925).
 
