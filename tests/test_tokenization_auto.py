@@ -22,9 +22,12 @@ from transformers import (
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AutoTokenizer,
     BertTokenizer,
+    BertTokenizerFast,
     GPT2Tokenizer,
+    GPT2TokenizerFast,
     RobertaTokenizer,
-    BertTokenizerFast, GPT2TokenizerFast, RobertaTokenizerFast)
+    RobertaTokenizerFast,
+)
 from transformers.tokenization_auto import TOKENIZER_MAPPING
 
 from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
@@ -98,6 +101,5 @@ class AutoTokenizerTest(unittest.TestCase):
                             self.assertFalse(issubclass(child_model_fast, parent_model_fast))
 
     def test_from_pretrained_use_fast_toggle(self):
-        self.assertIsInstance(AutoTokenizer.from_pretrained('bert-base-cased'), BertTokenizerFast)
-        self.assertIsInstance(AutoTokenizer.from_pretrained('bert-base-cased', use_fast=False), BertTokenizer)
-
+        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased"), BertTokenizerFast)
+        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False), BertTokenizer)

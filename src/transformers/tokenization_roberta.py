@@ -200,10 +200,10 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
         self.tokenizer._tokenizer.post_processor = RobertaProcessing.new(
-            (sep_token, self.sep_token_id),
-            (cls_token, self.cls_token_id)
+            (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
         )
 
-        logger.warning('RobertaTokenizerFast has an issue when working on mask language modeling '
-                       'where it introduces an extra encoded space before the mask token.')
-
+        logger.warning(
+            "RobertaTokenizerFast has an issue when working on mask language modeling "
+            "where it introduces an extra encoded space before the mask token."
+        )
