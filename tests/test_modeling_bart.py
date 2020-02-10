@@ -237,7 +237,7 @@ class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_mnli_inference(self):
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")
-        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
         with torch.no_grad():
             logits = model(input_ids)[0]
         expected_shape = torch.Size((1, 3))

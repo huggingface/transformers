@@ -216,16 +216,8 @@ class BartForSequenceClassification(PretrainedBartModel):
 class EncoderLayer(nn.Module):
     """Encoder layer block.
 
-    In the original paper each operation (multi-head attention or FFN) is
-    postprocessed with: `dropout -> add residual -> layernorm`. In the
-    tensor2tensor code they suggest that learning is more robust when
-    preprocessing each layer with layernorm and postprocessing with:
-    `dropout -> add residual`. We default to the approach in the paper, but the
-    tensor2tensor approach can be enabled by setting
-    *args.encoder_normalize_before* to ``True``.
-
     Args:
-        args (argparse.Namespace): parsed command-line arguments
+        config (BartConfig)
     """
 
     def __init__(self, config: BartConfig):
