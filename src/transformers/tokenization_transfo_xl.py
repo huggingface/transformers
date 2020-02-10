@@ -322,13 +322,13 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
             normalizer += [Lowercase()]
 
         if len(normalizer) > 0:
-            tokenizer.normalizer = Sequence.new(normalizer) if len(normalizer) > 1 else normalizer[0]
+            tokenizer.normalizer = Sequence(normalizer) if len(normalizer) > 1 else normalizer[0]
 
         # Setup the splitter
-        tokenizer.pre_tokenizer = CharDelimiterSplit.new(delimiter) if delimiter else WhitespaceSplit.new()
+        tokenizer.pre_tokenizer = CharDelimiterSplit(delimiter) if delimiter else WhitespaceSplit()
 
         if add_double_eos:
-            tokenizer.post_processor = BertProcessing.new(
+            tokenizer.post_processor = BertProcessing(
                 (eos_token, tokenizer.token_to_id(eos_token)), (eos_token, tokenizer.token_to_id(eos_token))
             )
 

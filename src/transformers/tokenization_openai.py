@@ -254,17 +254,17 @@ class _OpenAIGPTCharBPETokenizer(BaseTokenizer):
             normalizers += [unicode_normalizer_from_str(unicode_normalizer)]
 
         # OpenAI normalization is the same as Bert
-        normalizers += [BertNormalizer.new()]
+        normalizers += [BertNormalizer()]
 
         # Create the normalizer structure
         if len(normalizers) > 0:
             if len(normalizers) > 1:
-                tokenizer.normalizer = Sequence.new(normalizers)
+                tokenizer.normalizer = Sequence(normalizers)
             else:
                 tokenizer.normalizer = normalizers[0]
 
-        tokenizer.pre_tokenizer = BertPreTokenizer.new()
-        tokenizer.decoder = BPEDecoder.new(suffix=suffix)
+        tokenizer.pre_tokenizer = BertPreTokenizer()
+        tokenizer.decoder = BPEDecoder(suffix=suffix)
 
         parameters = {
             "model": "BPE",
@@ -288,7 +288,7 @@ class _OpenAIGPTCharBPETokenizer(BaseTokenizer):
     ):
         """ Train the model using the given files """
 
-        trainer = BpeTrainer.new(
+        trainer = BpeTrainer(
             vocab_size=vocab_size,
             min_frequency=min_frequency,
             special_tokens=special_tokens,
