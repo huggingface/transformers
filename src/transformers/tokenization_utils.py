@@ -1738,7 +1738,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             **kwargs,
         )
 
-        return {key: value[0] for key, value in batched_output.items()}
+        # Return tensor is None, then we can remove the leading batch axis
+        if not return_tensors:
+            return {key: value[0] for key, value in batched_output.items()}
+        else:
+            return batched_output
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = self.tokenizer.decode(token_ids, skip_special_tokens)
