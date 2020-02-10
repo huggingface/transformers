@@ -219,6 +219,11 @@ class BartSequenceClassifTest(unittest.TestCase):
         expected_shape = torch.Size((self.batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
+        lm_model = BartWithLMHeadModel(config)
+        output = lm_model(input_ids)[0]
+        expected_shape = (1, 11, 99)
+        self.assertEqual(output.shape, expected_shape)
+
 
 class BartModelIntegrationTest(unittest.TestCase):
     @slow
@@ -250,3 +255,5 @@ class BartModelIntegrationTest(unittest.TestCase):
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
