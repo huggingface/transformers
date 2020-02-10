@@ -191,11 +191,6 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def tokenize(self, text, add_prefix_space=False, **kwargs):
-        if not text[0].isspace() and add_prefix_space:
-            text = " " + text
-        return super().tokenize(text, **kwargs)
-
     def _tokenize(self, text):
         """ Tokenize a string. """
         bpe_tokens = []
@@ -245,6 +240,11 @@ class GPT2Tokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    def prepare_for_tokenization(self, text, **kwargs):
+        if "add_prefix_space" in kwargs and kwargs["add_prefix_space"]:
+            return " " + text
+        return text
 
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):

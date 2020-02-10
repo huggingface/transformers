@@ -204,7 +204,7 @@ class TokenizerTesterMixin:
         encoded = tokenizer.encode(text, add_special_tokens=False)
 
         input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
-        output_encoded = tokenizer.encode(output_text, add_special_tokens=False, add_prefix_space=True)
+        output_encoded = tokenizer.encode(" " + output_text, add_special_tokens=False)
         special_token_id = tokenizer.encode(special_token, add_special_tokens=False)
         assert encoded == input_encoded + special_token_id + output_encoded
 
@@ -263,8 +263,8 @@ class TokenizerTesterMixin:
         seq_0 = "Test this method."
         seq_1 = "With these inputs."
 
-        sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=False, add_prefix_space=True)
-        attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
+        sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=False)
+        attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True, add_prefix_space=False)
 
         # Method is implemented (e.g. not GPT-2)
         if len(attached_sequences) != 2:
@@ -276,11 +276,16 @@ class TokenizerTesterMixin:
         seq_0 = "This is a sentence to be encoded."
         stride = 2
 
-        sequence = tokenizer.encode(seq_0, add_special_tokens=False, add_prefix_space=True)
+        sequence = tokenizer.encode(seq_0, add_special_tokens=False)
         num_added_tokens = tokenizer.num_added_tokens()
         total_length = len(sequence) + num_added_tokens
         information = tokenizer.encode_plus(
-            seq_0, max_length=total_length - 2, add_special_tokens=True, stride=stride, return_overflowing_tokens=True,
+            seq_0,
+            max_length=total_length - 2,
+            add_special_tokens=True,
+            stride=stride,
+            return_overflowing_tokens=True,
+            add_prefix_space=False,
         )
 
         truncated_sequence = information["input_ids"]
@@ -298,13 +303,12 @@ class TokenizerTesterMixin:
         seq_1 = "This is another sentence to be encoded."
         stride = 2
 
-        sequence_0_no_special_tokens = tokenizer.encode(seq_0, add_special_tokens=False, add_prefix_space=True)
-        sequence_1_no_special_tokens = tokenizer.encode(seq_1, add_special_tokens=False, add_prefix_space=True)
+        sequence_0_no_special_tokens = tokenizer.encode(seq_0, add_special_tokens=False)
+        sequence_1_no_special_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
-        sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
+        sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=True, add_prefix_space=False)
         truncated_second_sequence = tokenizer.build_inputs_with_special_tokens(
-            tokenizer.encode(seq_0, add_special_tokens=False, add_prefix_space=True),
-            tokenizer.encode(seq_1, add_special_tokens=False, add_prefix_space=True)[:-2],
+            tokenizer.encode(seq_0, add_special_tokens=False), tokenizer.encode(seq_1, add_special_tokens=False)[:-2],
         )
 
         information = tokenizer.encode_plus(
@@ -315,6 +319,7 @@ class TokenizerTesterMixin:
             stride=stride,
             truncation_strategy="only_second",
             return_overflowing_tokens=True,
+            add_prefix_space=False,
         )
         information_first_truncated = tokenizer.encode_plus(
             seq_0,
@@ -324,6 +329,7 @@ class TokenizerTesterMixin:
             stride=stride,
             truncation_strategy="only_first",
             return_overflowing_tokens=True,
+            add_prefix_space=False,
         )
 
         truncated_sequence = information["input_ids"]
@@ -341,9 +347,9 @@ class TokenizerTesterMixin:
 
         sequence = "Let's encode this sequence"
 
-        tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
+        tokens = tokenizer.tokenize(sequence)
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        formatted_input = tokenizer.encode(sequence, add_special_tokens=True)
+        formatted_input = tokenizer.encode(sequence, add_special_tokens=True, add_prefix_space=False)
 
         self.assertEqual(tokenizer.encode(tokens, add_special_tokens=True), formatted_input)
         self.assertEqual(tokenizer.encode(input_ids, add_special_tokens=True), formatted_input)
@@ -370,7 +376,7 @@ class TokenizerTesterMixin:
         self.assertEqual(encoded_masked, encoded)
 
         # Test second masked sequence
-        encoded_masked = tokenizer.encode(sequence_masked_0, add_special_tokens=False)
+        encoded_masked = tokenizer.encode(sequence_masked_1, add_special_tokens=False)
         mask_loc = encoded_masked.index(mask_ind)
         encoded_masked[mask_loc] = encoded[mask_loc]
 
@@ -383,9 +389,9 @@ class TokenizerTesterMixin:
         sequence_1 = "This one too please."
 
         # Testing single inputs
-        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False, add_prefix_space=True)
+        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
         encoded_sequence_dict = tokenizer.encode_plus(
-            sequence_0, add_special_tokens=True, return_special_tokens_mask=True
+            sequence_0, add_special_tokens=True, return_special_tokens_mask=True, add_prefix_space=False
         )
         encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
         special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
@@ -398,10 +404,10 @@ class TokenizerTesterMixin:
         self.assertEqual(encoded_sequence, filtered_sequence)
 
         # Testing inputs pairs
-        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False, add_prefix_space=True)
-        encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False, add_prefix_space=True)
+        encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
+        encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
         encoded_sequence_dict = tokenizer.encode_plus(
-            sequence_0, sequence_1, add_special_tokens=True, return_special_tokens_mask=True
+            sequence_0, sequence_1, add_special_tokens=True, return_special_tokens_mask=True, add_prefix_space=False
         )
         encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
         special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]

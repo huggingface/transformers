@@ -662,9 +662,12 @@ class PreTrainedTokenizer(object):
             Take care of added tokens.
 
             text: The sequence to be encoded.
-            **kwargs: passed to the child `self.tokenize()` method
+            add_prefix_space: Only applies to GPT-2 and RoBERTa tokenizers. When `True`, this ensures that the sequence
+                begins with an empty space. False by default except for when using RoBERTa with `add_special_tokens=True`.
+            **kwargs: passed to the `prepare_for_tokenization` preprocessing method.
         """
         all_special_tokens = self.all_special_tokens
+        text = self.prepare_for_tokenization(text, **kwargs)
 
         def lowercase_text(t):
             # convert non-special tokens to lowercase
@@ -803,7 +806,7 @@ class PreTrainedTokenizer(object):
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             add_prefix_space: Only applies to GPT-2 and RoBERTa tokenizers. When `True`, this ensures that the sequence
-                begins with an empty space. Defaults to `True` when `add_special_tokens=True`, otherwise `False`.
+                begins with an empty space. False by default except for when using RoBERTa with `add_special_tokens=True`.
             **kwargs: passed to the `self.tokenize()` method
         """
         encoded_inputs = self.encode_plus(
@@ -868,7 +871,7 @@ class PreTrainedTokenizer(object):
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             add_prefix_space: Only applies to GPT-2 and RoBERTa tokenizers. When `True`, this ensures that the sequence
-                begins with an empty space. Defaults to `True` when `add_special_tokens=True`, otherwise `False`.
+                begins with an empty space. False by default except for when using RoBERTa with `add_special_tokens=True`.
             return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default True).
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default True)
             return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
@@ -899,9 +902,8 @@ class PreTrainedTokenizer(object):
 
         def get_input_ids(text):
             if isinstance(text, str):
-                if "add_prefix_space" not in kwargs:
-                    kwargs["add_prefix_space"] = add_special_tokens
-                return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))
+                tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
+                return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
@@ -1220,6 +1222,10 @@ class PreTrainedTokenizer(object):
             )
 
         return encoded_inputs
+
+    def prepare_for_tokenization(self, text, **kwargs):
+        """ Performs any necessary transformations before tokenization """
+        return text
 
     def truncate_sequences(
         self, ids, pair_ids=None, num_tokens_to_remove=0, truncation_strategy="longest_first", stride=0
