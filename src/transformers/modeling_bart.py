@@ -150,6 +150,7 @@ class BartModel(PretrainedBartModel,):
         self.shared = value
 
     def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
+        input_ids = input_ids if input_ids is not None else kwargs['encoder_input_ids']  # TODO(SS): decide on API
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
         if input_ids.size(-1) > min(self.max_positions()):
