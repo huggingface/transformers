@@ -982,7 +982,7 @@ SUPPORTED_TASKS = {
         "default": {
             "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
             "config": None,
-            "tokenizer": "distilbert-base-cased",
+            "tokenizer": ("distilbert-base-uncased", {"use_fast": False})
         },
     },
     "fill-mask": {
