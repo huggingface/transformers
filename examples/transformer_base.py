@@ -46,7 +46,8 @@ class ExampleLogger(LightningLoggerBase):
     def log_metrics(self, metrics, step):
         # metrics is a dictionary of metric names and values
         # your code to record metrics goes here
-        if step % self.params.logging_steps
+        # if step % self.params.logging_steps
+        pass
 
     def save(self):
         # Optional. Any code necessary to save logger data goes here
