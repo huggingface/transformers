@@ -1,4 +1,4 @@
-export MAX_LENGTH=10
+export MAX_LENGTH=128
 export BERT_MODEL=bert-base-multilingual-cased
 export OUTPUT_DIR=germeval-model
 export BATCH_SIZE=32
