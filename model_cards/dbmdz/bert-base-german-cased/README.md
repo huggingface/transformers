@@ -1,3 +1,7 @@
+---
+language: german
+---
+
 # 🤗 + 📚 dbmdz German BERT models
 
 In this repository the MDZ Digital Library team (dbmdz) at the Bavarian State

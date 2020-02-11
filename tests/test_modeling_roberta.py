@@ -32,7 +32,7 @@ if is_torch_available():
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
     )
-    from transformers.modeling_roberta import RobertaEmbeddings
+    from transformers.modeling_roberta import RobertaEmbeddings, RobertaForMultipleChoice, RobertaForQuestionAnswering
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
@@ -184,6 +184,51 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_roberta_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = RobertaForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            loss, logits = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.check_loss_output(result)
+
+        def create_and_check_roberta_for_question_answering(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = RobertaForQuestionAnswering(config=config)
+            model.to(torch_device)
+            model.eval()
+            loss, start_logits, end_logits = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+            )
+            result = {
+                "loss": loss,
+                "start_logits": start_logits,
+                "end_logits": end_logits,
+            }
+            self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -212,6 +257,18 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_masked_lm(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_roberta_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_roberta_for_multiple_choice(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_roberta_for_question_answering(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

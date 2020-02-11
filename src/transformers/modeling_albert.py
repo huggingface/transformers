@@ -117,7 +117,13 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         name = name.split("/")
 
         # Ignore the gradients applied by the LAMB/ADAM optimizers.
-        if "adam_m" in name or "adam_v" in name or "global_step" in name:
+        if (
+            "adam_m" in name
+            or "adam_v" in name
+            or "AdamWeightDecayOptimizer" in name
+            or "AdamWeightDecayOptimizer_1" in name
+            or "global_step" in name
+        ):
             logger.info("Skipping {}".format("/".join(name)))
             continue
 
@@ -632,8 +638,8 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
-            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with
             labels in ``[0, ..., config.vocab_size]``
 
     Returns:

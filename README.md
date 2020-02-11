@@ -24,6 +24,8 @@
 
 🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
 
+[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/0)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/0)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/1)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/1)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/2)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/2)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/3)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/3)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/4)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/4)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/5)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/5)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/6)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/6)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/7)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/7)
+
 ### Features
 
 - As easy to use as pytorch-transformers
@@ -193,7 +195,7 @@ MODELS = [(BertModel,       BertTokenizer,       'bert-base-uncased'),
           (TransfoXLModel,  TransfoXLTokenizer,  'transfo-xl-wt103'),
           (XLNetModel,      XLNetTokenizer,      'xlnet-base-cased'),
           (XLMModel,        XLMTokenizer,        'xlm-mlm-enfr-1024'),
-          (DistilBertModel, DistilBertTokenizer, 'distilbert-base-uncased'),
+          (DistilBertModel, DistilBertTokenizer, 'distilbert-base-cased'),
           (RobertaModel,    RobertaTokenizer,    'roberta-base'),
           (XLMRobertaModel, XLMRobertaTokenizer, 'xlm-roberta-base'),
          ]
@@ -493,19 +495,22 @@ Your model will then be accessible through its identifier, a concatenation of yo
 "username/pretrained_model"
 ```
 
+**Please add a README.md model card** to the repo under `model_cards/` with: model description, training params (dataset, preprocessing, hyperparameters), evaluation results, intended uses & limitations, etc.
+
+Your model now has a page on huggingface.co/models 🔥
+
 Anyone can load it from code:
 ```python
 tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")
 model = AutoModel.from_pretrained("username/pretrained_model")
 ```
 
-Finally, list all your files on S3:
+List all your files on S3:
 ```shell
 transformers-cli s3 ls
-# List all your S3 objects.
 ```
 
-You can also delete files:
+You can also delete unneeded files:
 
 ```shell
 transformers-cli s3 rm …

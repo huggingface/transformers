@@ -209,7 +209,7 @@ past = None
 for i in range(100):
     print(i)
     output, past = model(context, past=past)
-    token = torch.argmax(output[0, :])
+    token = torch.argmax(output[..., -1, :])
 
     generated += [token.tolist()]
     context = token.unsqueeze(0)
@@ -299,8 +299,8 @@ model = Model2Model.from_pretrained('fine-tuned-weights')
 model.eval()
 
 # If you have a GPU, put everything on cuda
-question_tensor = encoded_question.to('cuda')
-answer_tensor = encoded_answer.to('cuda')
+question_tensor = question_tensor.to('cuda')
+answer_tensor = answer_tensor.to('cuda')
 model.to('cuda')
 
 # Predict all tokens
