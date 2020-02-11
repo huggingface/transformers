@@ -114,6 +114,12 @@ class BaseTransformer(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
+    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx,
+                       second_order_closure=None):
+        scheduler.step()
+        optimizer.step()
+        optimizer.zero_grad()
+
     def get_tqdm_dict(self):
         tqdm_dict = {
             'loss': '{:.3f}'.format(self.trainer.avg_loss),
