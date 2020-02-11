@@ -308,6 +308,5 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        kwargs.setdefault('unk_token', unk_token)
+        kwargs.setdefault("unk_token", unk_token)
         super().__init__(_OpenAIGPTCharBPETokenizer(vocab_file, merges_file, unk_token), **kwargs)
-

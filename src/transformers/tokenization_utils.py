@@ -81,8 +81,9 @@ def truncate_and_pad(
             pad_token=pad_token,
         )
     else:
-        logger.warning("Disabled padding. No padding token set (pad_token: {}, pad_token_id: {})"
-                       .format(pad_token, pad_token_id))
+        logger.warning(
+            "Disabled padding. No padding token set (pad_token: {}, pad_token_id: {})".format(pad_token, pad_token_id)
+        )
 
     yield
 
