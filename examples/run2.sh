@@ -13,6 +13,7 @@ python3 run_ner_lightning.py --data_dir ./ \
 --output_dir $OUTPUT_DIR \
 --max_seq_length  $MAX_LENGTH \
 --num_train_epochs $NUM_EPOCHS \
+--train_batch_size 32 \
 --save_steps $SAVE_STEPS \
 --seed $SEED \
 --do_train \
