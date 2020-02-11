@@ -277,6 +277,3 @@ def generic_train(model, args):
     )
     if args.do_train:
         trainer.fit(model)
-    if args.do_predict:
-        #model.load_from_checkpoint(args.output_dir)
-        trainer.test(model)
