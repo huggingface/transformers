@@ -33,29 +33,6 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-# class ExampleLogger(LightningLoggerBase):
-#     @rank_zero_only
-#     def log_hyperparams(self, params):
-#         # params is an argparse.Namespace
-#         # your code to record hyperparameters goes here
-#         self.params = params
-
-#     @rank_zero_only
-#     def log_metrics(self, metrics, step):
-#         # metrics is a dictionary of metric names and values
-#         # your code to record metrics goes here
-#         # if step % self.params.logging_steps
-#         pass
-
-#     def save(self):
-#         # Optional. Any code necessary to save logger data goes here
-#         pass
-
-#     @rank_zero_only
-#     def finalize(self, status):
-#         # Optional. Any code that needs to be run after training
-#         # finishes goes here
-#         pass
 
 class BaseTransformer(pl.LightningModule):
     def __init__(self, hparams, num_labels=None):
@@ -111,16 +88,17 @@ class BaseTransformer(pl.LightningModule):
             num_warmup_steps=args.warmup_steps,
             num_training_steps=t_total
         )
-        return [optimizer], [scheduler]
+        self.lr_scheduler = scheduler
+        return [optimizer]
 
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx,
                        second_order_closure=None):
 
         # Step each time.
-        self.trainer.lr_schedulers[0].step()
         optimizer.step()
         optimizer.zero_grad()
+        self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
         tqdm_dict = {
@@ -274,7 +252,6 @@ def generic_train(model, args):
         ptvsd.wait_for_attach()
 
 
-
     if (os.path.exists(args.output_dir)
         and os.listdir(args.output_dir)
         and args.do_train
@@ -284,7 +261,6 @@ def generic_train(model, args):
                 args.output_dir
             )
         )
-
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir,
