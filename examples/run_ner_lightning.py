@@ -111,7 +111,7 @@ class NERTransformer(BaseTransformer):
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
-        # Add base transformer options
+        # Add NER specific options
         BaseTransformer.add_model_specific_args(parser, root_dir)
         parser.add_argument(
             "--max_seq_length",
