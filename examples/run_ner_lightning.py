@@ -148,7 +148,7 @@ class NERTransformer(pl.LightningModule):
 
     def validation_end(self, outputs):
         "Task specific validation"
-         return torch.stack(outputs).mean()
+        return torch.stack(outputs).mean()
 
 
     @staticmethod
