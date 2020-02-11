@@ -99,7 +99,7 @@ class NERTransformer(BaseTransformer):
                     preds_list[i].append(label_map[preds[i][j]])
 
         results = {
-            "loss": val_loss_mean,
+            "val_loss": val_loss_mean,
             "precision": precision_score(out_label_list, preds_list),
             "recall": recall_score(out_label_list, preds_list),
             "f1": f1_score(out_label_list, preds_list),
