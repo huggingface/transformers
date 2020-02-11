@@ -73,9 +73,8 @@ class NERTransformer(pl.LightningModule):
         "Prepare optimizer and schedule (linear warmup and decay)"
         args = self.hparams
         model = self.model
-        t_total = args.max_steps
 
-
+        t_total = len(self.train_dataloader()) // args.gradient_accumulation_steps * args.num_train_epochs
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
@@ -83,7 +82,8 @@ class NERTransformer(pl.LightningModule):
                            if not any(nd in n for nd in no_decay)],
                 "weight_decay": args.weight_decay,
             },
-            {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            {"params": [p for n, p in model.named_parameters()
+                        if any(nd in n for nd in no_decay)],
              "weight_decay": 0.0},
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
@@ -211,9 +211,6 @@ class NERTransformer(pl.LightningModule):
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-        parser.add_argument(
-            "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform."
-    )
         parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
 
         # Other parameters
