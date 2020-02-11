@@ -51,11 +51,11 @@ class NERTransformer(BaseTransformer):
     def load_dataset(self, mode, batch_size):
         args = self.hparams
         labels = get_labels(args.labels)
-        pad_token_label_id = CrossEntropyLoss().ignore_index
+        self.pad_token_label_id = CrossEntropyLoss().ignore_index
         dataset = load_and_cache_examples(args,
                                           self.tokenizer,
                                           labels,
-                                          pad_token_label_id,
+                                          self.pad_token_label_id,
                                           mode=mode)
         sampler = RandomSampler(dataset)
         dataloader = DataLoader(dataset,
@@ -94,7 +94,7 @@ class NERTransformer(BaseTransformer):
 
         for i in range(out_label_ids.shape[0]):
             for j in range(out_label_ids.shape[1]):
-                if out_label_ids[i, j] != pad_token_label_id:
+                if out_label_ids[i, j] != self.pad_token_label_id:
                     out_label_list[i].append(label_map[out_label_ids[i][j]])
                     preds_list[i].append(label_map[preds[i][j]])
 
