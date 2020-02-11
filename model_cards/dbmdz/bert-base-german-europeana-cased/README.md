@@ -1,9 +1,7 @@
 ---
-tags:
-- german
-- historic german
-- dbmdz
 language: german
+tags:
+  - "historic german"
 ---
 
 # 🤗 + 📚 dbmdz BERT models
