@@ -68,7 +68,7 @@ class NERTransformer(BaseTransformer):
 
         return {"val_loss": tmp_eval_loss, "pred": preds, "target": out_label_ids}
 
-    def eval(self, outputs):
+    def _eval_end(self, outputs):
         "Task specific validation"
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
         preds = np.concatenate([x["pred"] for x in outputs], axis=0)
@@ -102,11 +102,11 @@ class NERTransformer(BaseTransformer):
         return ret, preds_list, out_label_list
 
     def validation_end(self, outputs):
-        ret, preds, targets =  self.eval(outputs)
+        ret, preds, targets =  self._eval_end(outputs)
         return ret
 
     def test_end(self, outputs):
-        ret, predictions, targets =  self.eval(outputs)
+        ret, predictions, targets =  self._eval_end(outputs)
 
         # Write output to a file:
         # Save results
