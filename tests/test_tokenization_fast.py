@@ -76,6 +76,23 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         self.assertSequenceEqual(input_p["token_type_ids"], input_r["token_type_ids"])
         self.assertSequenceEqual(input_p["attention_mask"], input_r["attention_mask"])
 
+    def assert_add_tokens(self, tokenizer_r):
+        vocab_size = tokenizer_r.vocab_size
+        self.assertEqual(tokenizer_r.add_tokens(""), 0)
+        self.assertEqual(tokenizer_r.add_tokens("testoken"), 1)
+        self.assertEqual(tokenizer_r.add_tokens(["testoken1", "testtoken2"]), 2)
+        self.assertEqual(len(tokenizer_r), vocab_size + 3)
+
+        self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
+        self.assertRaises(
+            AssertionError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"}
+        )
+        self.assertEqual(tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
+        self.assertEqual(
+            tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
+        )
+        self.assertEqual(len(tokenizer_r), vocab_size + 6)
+
     def test_bert(self):
         for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
@@ -90,6 +107,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
+
+            # Ensure add_tokens and add_special_tokens return the correct vocab size
+            self.assert_add_tokens(tokenizer_r)
 
     @require_torch
     def test_transfoxl(self):
@@ -107,6 +127,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
+            # Ensure add_tokens and add_special_tokens return the correct vocab size
+            self.assert_add_tokens(tokenizer_r)
+
     def test_distilbert(self):
         for tokenizer_name in DistilBertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = DistilBertTokenizer.from_pretrained(tokenizer_name)
@@ -123,6 +146,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
+            # Ensure add_tokens and add_special_tokens return the correct vocab size
+            self.assert_add_tokens(tokenizer_r)
+
     def test_gpt2(self):
         for tokenizer_name in GPT2Tokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
@@ -137,6 +163,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
+
+            # Ensure add_tokens and add_special_tokens return the correct vocab size
+            self.assert_add_tokens(tokenizer_r)
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -153,6 +182,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
+            # Ensure add_tokens and add_special_tokens return the correct vocab size
+            self.assert_add_tokens(tokenizer_r)
+
     def test_openai(self):
         for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
@@ -167,6 +199,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
+
+            # Ensure add_tokens and add_special_tokens return the correct vocab size
+            self.assert_add_tokens(tokenizer_r)
 
 
 if __name__ == "__main__":
