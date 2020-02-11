@@ -51,7 +51,10 @@ class NERTransformer(BaseTransformer):
         labels = get_labels(self.hparams.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
         dataset = load_and_cache_examples(args, self.tokenizer, labels, self.pad_token_label_id, mode=mode)
-        sampler = RandomSampler(dataset)
+        if mode == "train":
+            sampler = RandomSampler(dataset)
+        else:
+            sampler = SequentialSampler(dataset)
         dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
         return dataloader
 
