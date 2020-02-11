@@ -25,8 +25,8 @@ class NERTransformer(BaseTransformer):
     """
     def __init__(self, hparams):
         # Prepare CONLL-2003 task
-        labels = get_labels(hparams.labels)
-        num_labels = len(labels)
+        self.labels = get_labels(hparams.labels)
+        num_labels = len(self.labels)
         super(NERTransformer, self).__init__(hparams, num_labels)
 
     def forward(self, **inputs):
@@ -72,12 +72,40 @@ class NERTransformer(BaseTransformer):
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
         tmp_eval_loss, logits = outputs[:2]
-        return {"val_loss": tmp_eval_loss}
+        preds = logits.detach().cpu().numpy()
+        out_label_ids = inputs["labels"].detach().cpu().numpy()
+
+        return {"val_loss": tmp_eval_loss,
+                "pred" : preds,
+                "target" : out_label_ids
+        }
 
     def validation_end(self, outputs):
         "Task specific validation"
         val_loss_mean = torch.stack([x['val_loss'] for x in outputs]).mean()
-        return {'val_loss': val_loss_mean}
+        preds = np.cat([x['pred'] for x in outputs], axis=0)
+        preds = np.argmax(preds, axis=2)
+        out_label_ids = np.cat([x['target'] for x in outputs], axis=0)
+
+
+        label_map = {i: label for i, label in enumerate(self.labels)}
+        out_label_list = [[] for _ in range(out_label_ids.shape[0])]
+        preds_list = [[] for _ in range(out_label_ids.shape[0])]
+
+        for i in range(out_label_ids.shape[0]):
+            for j in range(out_label_ids.shape[1]):
+                if out_label_ids[i, j] != pad_token_label_id:
+                    out_label_list[i].append(label_map[out_label_ids[i][j]])
+                    preds_list[i].append(label_map[preds[i][j]])
+
+        results = {
+            "loss": val_loss_mean,
+            "precision": precision_score(out_label_list, preds_list),
+            "recall": recall_score(out_label_list, preds_list),
+            "f1": f1_score(out_label_list, preds_list),
+        }
+
+        return results
 
 
     @staticmethod
