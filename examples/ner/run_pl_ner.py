@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import sys
+
 sys.path.append("..")
 import numpy as np
 import torch
@@ -12,12 +13,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 
-from transformer_base import (
-    BaseTransformer,
-    set_seed,
-    add_generic_args,
-    generic_train,
-)
+from transformer_base import BaseTransformer, set_seed, add_generic_args, generic_train
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 import pytorch_lightning as pl
 
@@ -55,9 +51,7 @@ class NERTransformer(BaseTransformer):
         args = self.hparams
         labels = get_labels(args.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        dataset = load_and_cache_examples(
-            args, self.tokenizer, labels, self.pad_token_label_id, mode=mode
-        )
+        dataset = load_and_cache_examples(args, self.tokenizer, labels, self.pad_token_label_id, mode=mode)
         sampler = RandomSampler(dataset)
         dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
         return dataloader
@@ -136,9 +130,7 @@ class NERTransformer(BaseTransformer):
         )
 
         parser.add_argument(
-            "--overwrite_cache",
-            action="store_true",
-            help="Overwrite the cached training and evaluation sets",
+            "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
         )
 
         return parser
@@ -152,9 +144,7 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
     cached_features_file = os.path.join(
         args.data_dir,
         "cached_{}_{}_{}".format(
-            mode,
-            list(filter(None, args.model_name_or_path.split("/"))).pop(),
-            str(args.max_seq_length),
+            mode, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length)
         ),
     )
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
@@ -191,9 +181,7 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
 
-    dataset = TensorDataset(
-        all_input_ids, all_input_mask, all_segment_ids, all_label_ids
-    )
+    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
     return dataset
 
 
