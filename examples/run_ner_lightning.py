@@ -121,9 +121,9 @@ class NERTransformer(pl.LightningModule):
                                           mode=mode)
         sampler = RandomSampler(dataset)
         dataloader = DataLoader(dataset,
-                                sampler=train_sampler,
+                                sampler=sampler,
                                 batch_size=batch_size)
-        return train_dataloader
+        return dataloader
 
     @pl.data_loader
     def train_dataloader(self):
