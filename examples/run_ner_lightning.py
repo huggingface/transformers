@@ -24,7 +24,10 @@ class NERTransformer(BaseTransformer):
     A training module for NER. See BaseTransformer for the core options.
     """
     def __init__(self, hparams):
-        super(NERTransformer, self).__init__(hparams)
+        # Prepare CONLL-2003 task
+        labels = get_labels(hparams.labels)
+        num_labels = len(labels)
+        super(NERTransformer, self).__init__(hparams, num_labels)
 
     def forward(self, **inputs):
         return self.model(**inputs)

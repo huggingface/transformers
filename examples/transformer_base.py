@@ -32,7 +32,7 @@ def set_seed(args):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams):
+    def __init__(self, hparams, num_labels=None):
         "Initialize a model."
 
         super(BaseTransformer, self).__init__()
@@ -40,9 +40,6 @@ class BaseTransformer(pl.LightningModule):
         args = self.hparams
         args.model_type = args.model_type.lower()
 
-        # Prepare CONLL-2003 task
-        labels = get_labels(args.labels)
-        num_labels = len(labels)
 
 
         config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
