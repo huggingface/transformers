@@ -72,7 +72,7 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
 
-    if pad_to_max_length and pad_token:
+    if pad_token and pad_token_id >= 0:
         tokenizer.enable_padding(
             max_length=None,
             direction=padding_side,
@@ -81,7 +81,8 @@ def truncate_and_pad(
             pad_token=pad_token,
         )
     else:
-        logger.warning("Disabled padding. No padding token set")
+        logger.warning("Disabled padding. No padding token set (pad_token: {}, pad_token_id: {})"
+                       .format(pad_token, pad_token_id))
 
     yield
 
