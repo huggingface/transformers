@@ -1,4 +1,4 @@
-export MAX_LENGTH=128
+export MAX_LENGTH=10
 export BERT_MODEL=bert-base-multilingual-cased
 export OUTPUT_DIR=germeval-model
 export BATCH_SIZE=32
@@ -16,4 +16,5 @@ python3 run_pl_ner.py --data_dir ./ \
 --train_batch_size 32 \
 --save_steps $SAVE_STEPS \
 --seed $SEED \
+--do_train \
 --do_predict
