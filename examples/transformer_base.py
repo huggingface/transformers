@@ -263,9 +263,8 @@ def generic_train(model, args):
         )
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=args.output_dir,
-        save_top_k=5,
-        prefix="checkpoint-{epoch:02d}-{val_loss:.2f}.hdf5")
+        filepath=args.output_dir + "/checkpoint-{epoch:02d}-{val_loss:.2f}.ckpt",
+        save_top_k=5)
 
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=args.n_gpu,
@@ -277,3 +276,7 @@ def generic_train(model, args):
     )
     if args.do_train:
         trainer.fit(model)
+
+    if args.do_predict:
+        MyLightningModule.load_from_checkpoint(args.output_dir)
+        trainer.test(model)
