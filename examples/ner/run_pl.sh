@@ -16,5 +16,4 @@ python3 run_pl_ner.py --data_dir ./ \
 --train_batch_size 32 \
 --save_steps $SAVE_STEPS \
 --seed $SEED \
---do_train \
 --do_predict
