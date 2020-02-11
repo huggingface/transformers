@@ -318,9 +318,9 @@ def main(hparams):
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
-    checkpoint_callback = ModelCheckpoint(filepath=args.output_dir,
-                                          prefix="checkpoint",
-                                          period=args.save_steps)
+    checkpoint_callback = pl.ModelCheckpoint(filepath=args.output_dir,
+                                             prefix="checkpoint",
+                                             period=args.save_steps)
 
     model = NERTransformer(hparams)
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
