@@ -144,7 +144,7 @@ class NERTransformer(pl.LightningModule):
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
         tmp_eval_loss, logits = outputs[:2]
-        return {"val_loss", tmp_eval_loss}
+        return {"val_loss": tmp_eval_loss}
 
     def validation_end(self, outputs):
         "Task specific validation"
